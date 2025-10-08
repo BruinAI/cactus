@@ -7,7 +7,7 @@ import argparse
 from pathlib import Path
 
 try:
-    from transformers import AutoTokenizer, AutoModelForCausalLM
+    from transformers import AutoTokenizer, AutoModelForCausalLM, AutoModel
     import torch
 except ImportError:
     print("Please install required packages: pip install torch transformers")
@@ -175,14 +175,16 @@ def convert_hf_model_weights(model, output_dir, precision='INT8', args=None):
     
     
     tie_word_embeddings = getattr(config, 'tie_word_embeddings', False)
-    
     model_type_str = getattr(config, 'model_type', '').lower()
+
     if 'gemma' in model_type_str:
         detected_model_type = 'gemma'
     elif 'qwen' in model_type_str:
         detected_model_type = 'qwen'
     elif 'llama' in model_type_str:
         detected_model_type = 'llama'
+    elif 'bert' in model_type_str:
+        detected_model_type = 'bert'
     else:
         detected_model_type = 'qwen'
         print(f"  Warning: Unknown model type '{model_type_str}', defaulting to 'qwen'")
@@ -195,29 +197,49 @@ def convert_hf_model_weights(model, output_dir, precision='INT8', args=None):
         'attention_kv_heads': getattr(config, 'num_key_value_heads', getattr(config, 'num_attention_heads', 0)),
         'ffn_intermediate_dim': getattr(config, 'intermediate_size', 0),
         'context_length': getattr(config, 'max_position_embeddings', getattr(config, 'max_sequence_length', 0)),
-        'rope_theta': getattr(config, 'rope_theta', 10000.0),
+        'rope_theta': getattr(config, 'rope_theta', getattr(config, 'rotary_emb_base', 10000.0)),
         'attention_head_dim': getattr(config, 'head_dim', getattr(config, 'hidden_size', 0) // getattr(config, 'num_attention_heads', 1)),
         'tie_word_embeddings': tie_word_embeddings,
         'model_type': detected_model_type
     }
-    
+    used_weight_names = set()  # TODO: remove, only for debugging
     embed_names = ['model.embed_tokens.weight', 'embed_tokens.weight', 'embeddings.weight', 'transformer.wte.weight']
     embedding_found = False
-    embedding_tensor = None
     for name in embed_names:
         if name in state_dict:
+            print(f"Found embedding tensor: {name}")
             embedding_tensor = state_dict[name]
             save_tensor_with_header(embedding_tensor, output_dir / "token_embeddings.weights", precision, transpose=False, stats_tracker=quantization_stats, args=args, model_type=detected_model_type)
             embedding_found = True
             break
+    if model_type_str == 'nomic_bert':
+        if 'embeddings.word_embeddings.weight' in state_dict:
+            used_weight_names.add('embeddings.word_embeddings.weight')
+            used_weight_names.add('embeddings.token_type_embeddings.weight')
+            # Nomic BERT has two separate embedding tensors for word and token type, but since there's only 1 token type (shape is [1, 768]), we can add it to the word embedding tensor
+            fused_embedding_tensor = state_dict['embeddings.word_embeddings.weight'] + state_dict.get('embeddings.token_type_embeddings.weight', torch.zeros([1]))
+            save_tensor_with_header(fused_embedding_tensor, output_dir / "token_embeddings.weights", precision, transpose=False, stats_tracker=quantization_stats, args=args, model_type=detected_model_type)
+            embedding_found = True
     
-    if not embedding_found:
+    if embedding_found:
+        # Nomic BERT also has a layer norm after the embedding
+        embedding_norm_names = ['emb_ln.bias', 'emb_ln.weight']
+        for name in embedding_norm_names:
+            suffix = "bias" if "bias" in name else "weight"
+            if name in state_dict:
+                used_weight_names.add(name)
+                print(f"Found embedding norm tensor: {name}")
+                tensor = state_dict[name]
+                save_tensor_with_header(tensor, output_dir / f"embedding_norm.{suffix}", precision, stats_tracker=quantization_stats, args=args, model_type=detected_model_type)
+    else:
         pass
     
     if not tie_word_embeddings:
         output_names = ['lm_head.weight', 'output.weight', 'transformer.lm_head.weight']
         for name in output_names:
             if name in state_dict:
+                used_weight_names.add(name)
+                print(f"Found output weight tensor: {name}")
                 tensor = state_dict[name]
                 save_tensor_with_header(tensor, output_dir / "output_weight.weights", precision, transpose=False, stats_tracker=quantization_stats, args=args, model_type=detected_model_type)
                 break
@@ -225,6 +247,8 @@ def convert_hf_model_weights(model, output_dir, precision='INT8', args=None):
     output_norm_names = ['model.norm.weight', 'norm.weight', 'final_layernorm.weight', 'transformer.ln_f.weight']
     for name in output_norm_names:
         if name in state_dict:
+            used_weight_names.add(name)
+            print(f"Found output norm tensor: {name}")
             tensor = state_dict[name]
             save_tensor_with_header(tensor, output_dir / "output_norm.weights", precision, stats_tracker=quantization_stats, args=args, model_type=detected_model_type)
             break
@@ -232,7 +256,7 @@ def convert_hf_model_weights(model, output_dir, precision='INT8', args=None):
     num_layers = model_config['num_layers']
     for i in range(num_layers):
         
-        layer_prefixes = [f'model.layers.{i}.', f'layers.{i}.', f'transformer.h.{i}.']
+        layer_prefixes = [f'model.layers.{i}.', f'layers.{i}.', f'transformer.h.{i}.', f'encoder.layers.{i}.']
         
         layer_prefix = None
         for prefix in layer_prefixes:
@@ -243,6 +267,10 @@ def convert_hf_model_weights(model, output_dir, precision='INT8', args=None):
         if not layer_prefix:
             continue
         
+        '''
+        TODO: Remove this and other unnecessary comments, prints, and debugging code
+        'encoder.layers.0.attn.Wqkv.bias', 'encoder.layers.0.attn.Wqkv.weight', 'encoder.layers.0.attn.out_proj.bias', 'encoder.layers.0.attn.out_proj.weight', 'encoder.layers.0.mlp.fc1.bias', 'encoder.layers.0.mlp.fc1.weight', 'encoder.layers.0.mlp.fc2.bias', 'encoder.layers.0.mlp.fc2.weight', 'encoder.layers.0.norm1.bias', 'encoder.layers.0.norm1.weight', 'encoder.layers.0.norm2.bias', 'encoder.layers.0.norm2.weight'
+        '''
         weight_patterns = [
             (['self_attn.q_proj.weight', 'attn.q_proj.weight', 'attn.c_attn.weight'], precision, f'layer_{i}_attn_q.weights', False),
             (['self_attn.k_proj.weight', 'attn.k_proj.weight'], precision, f'layer_{i}_attn_k.weights', False),
@@ -258,6 +286,24 @@ def convert_hf_model_weights(model, output_dir, precision='INT8', args=None):
             # Gemma3 specific layer norms 
             (['pre_feedforward_layernorm.weight'], precision, f'layer_{i}_pre_ffn_norm.weights', False),
             (['post_feedforward_layernorm.weight'], precision, f'layer_{i}_post_ffn_norm.weights', False),
+            # Nomic BERT specific combined weight matrices
+            (['attn.Wqkv.bias'], precision, f'layer_{i}_attn_qkv.bias', False),
+            (['attn.Wqkv.weight'], precision, f'layer_{i}_attn_qkv.weight', False),
+            (['attn.out_proj.bias'], precision, f'layer_{i}_attn_output.bias', False),
+            (['attn.out_proj.weight'], precision, f'layer_{i}_attn_output.weight', False),
+            (['mlp.fc1.bias'], precision, f'layer_{i}_mlp_fc1.bias', False),
+            (['mlp.fc1.weight'], precision, f'layer_{i}_mlp_fc1.weight', False),
+            (['mlp.fc2.bias'], precision, f'layer_{i}_mlp_fc2.bias', False),
+            (['mlp.fc2.weight'], precision, f'layer_{i}_mlp_fc2.weight', False),
+            (['norm1.bias'], precision, f'layer_{i}_norm1.bias', False),
+            (['norm1.weight'], precision, f'layer_{i}_norm1.weight', False),
+            (['norm2.bias'], precision, f'layer_{i}_norm2.bias', False),
+            (['norm2.weight'], precision, f'layer_{i}_norm2.weight', False),
+            # MoE specific weight matrices for Nomic
+            (['mlp.experts.bias'], precision, f'layer_{i}_mlp_experts.bias', False),
+            (['mlp.experts.mlp.w1'], precision, f'layer_{i}_mlp_experts.mlp.w1', False),
+            (['mlp.experts.mlp.w2'], precision, f'layer_{i}_mlp_experts.mlp.w2', False),
+            (['mlp.router.layer.weight'], precision, f'layer_{i}_mlp_router.layer.weight', False),
         ]
         
         for name_patterns, tensor_precision, output_name, should_transpose in weight_patterns:
@@ -265,6 +311,7 @@ def convert_hf_model_weights(model, output_dir, precision='INT8', args=None):
             for pattern in name_patterns:
                 full_name = layer_prefix + pattern
                 if full_name in state_dict:
+                    used_weight_names.add(full_name)
                     tensor = state_dict[full_name]
                     save_tensor_with_header(tensor, output_dir / output_name, tensor_precision, transpose=should_transpose, stats_tracker=quantization_stats, args=args, model_type=detected_model_type)
                     found = True
@@ -273,6 +320,7 @@ def convert_hf_model_weights(model, output_dir, precision='INT8', args=None):
             if not found and 'c_attn.weight' in name_patterns[0]:
                 attn_name = layer_prefix + 'attn.c_attn.weight'
                 if attn_name in state_dict:
+                    used_weight_names.add(attn_name)
                     combined_weight = state_dict[attn_name]
                     hidden_size = combined_weight.shape[0]
                     q_weight = combined_weight[:, :hidden_size]
@@ -283,7 +331,9 @@ def convert_hf_model_weights(model, output_dir, precision='INT8', args=None):
                     save_tensor_with_header(k_weight, output_dir / f'layer_{i}_attn_k.weights', precision, transpose=False, stats_tracker=quantization_stats, args=args, model_type=detected_model_type)
                     save_tensor_with_header(v_weight, output_dir / f'layer_{i}_attn_v.weights', precision, transpose=False, stats_tracker=quantization_stats, args=args, model_type=detected_model_type)
                     found = True
-            
+    
+    print(f"Used weight names: {sorted(used_weight_names)}")
+    print(f"Remaining weight names: {sorted(set(state_dict.keys()) - used_weight_names)}")
     
     if quantization_stats['quantized_tensors'] > 0:
         mse_values = np.array(quantization_stats['mse_values'])
@@ -510,12 +560,21 @@ def convert_hf_to_cactus(model_name, output_dir, precision='INT8', cache_dir=Non
             cache_dir=cache_dir,
             trust_remote_code=True
         )
-        model = AutoModelForCausalLM.from_pretrained(
-            model_name,
-            cache_dir=cache_dir,
-            trust_remote_code=True,
-            torch_dtype=torch.float32
-        )
+        try:
+            model = AutoModelForCausalLM.from_pretrained(
+                model_name,
+                cache_dir=cache_dir,
+                trust_remote_code=True,
+                dtype=torch.float32
+            )
+        except ValueError:
+            # Fallback for non-causal models, like embedding models
+            model = AutoModel.from_pretrained(
+                model_name,
+                cache_dir=cache_dir,
+                trust_remote_code=True,
+                dtype=torch.float32
+            )
     except Exception as e:
         print(f"Error: {e}")
         sys.exit(1)
