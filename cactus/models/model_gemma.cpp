@@ -71,8 +71,9 @@ size_t GemmaModel::build_attention(CactusGraph* gb, size_t normalized_input, uin
     auto k_proj_4d = gb->reshape(k_proj, {1, seq_len, config_.attention_kv_heads, config_.attention_head_dim});
     auto v_proj_4d = gb->reshape(v_proj, {1, seq_len, config_.attention_kv_heads, config_.attention_head_dim});
 
+    bool is_global_attention = ((layer_idx + 1) % 6) == 0;
+
     if (config_.rope_theta > 0) {
-        bool is_global_attention = ((layer_idx + 1) % 6) == 0;
         float rope_freq = is_global_attention ? 1000000.0f : 10000.0f;
 
         q_proj_4d = gb->rope(q_proj_4d, rope_freq, position_offset);
@@ -112,8 +113,8 @@ size_t GemmaModel::build_attention(CactusGraph* gb, size_t normalized_input, uin
         cache_v_output_nodes_[layer_idx] = final_v;
     }
 
-
-    auto attn_output_4d = gb->attention(q_proj_4d, final_k, final_v, attention_scale_, position_offset);
+    size_t window_size = is_global_attention ? 0 : 512;
+    auto attn_output_4d = gb->attention(q_proj_4d, final_k, final_v, attention_scale_, position_offset, window_size);
     auto attn_output = gb->reshape(attn_output_4d, {seq_len, config_.attention_head_dim * config_.attention_heads});
     return gb->matmul(attn_output, layer.attn_output_weight, true, backend);
 }
@@ -138,13 +139,15 @@ size_t GemmaModel::build_transformer_block(CactusGraph* gb, size_t hidden, uint3
     auto attn_output = build_attention(gb, normalized_input, layer_idx, backend, use_cache, position_offset);
 
     auto normalized_attn = gb->rms_norm(attn_output, layer.post_attention_layernorm_weight, config_.layer_norm_eps);
-    auto after_attention = gb->add(hidden, normalized_attn);
+
+    auto after_attention = gb->add_clipped(hidden, normalized_attn);
 
     auto pre_mlp_norm = gb->rms_norm(after_attention, layer.pre_feedforward_layernorm_weight, config_.layer_norm_eps);
     auto mlp_output = build_mlp(gb, pre_mlp_norm, layer_idx, backend);
 
     auto normalized_mlp = gb->rms_norm(mlp_output, layer.post_feedforward_layernorm_weight, config_.layer_norm_eps);
-    return gb->add(after_attention, normalized_mlp);
+
+    return gb->add_clipped(after_attention, normalized_mlp);
 }
 
 

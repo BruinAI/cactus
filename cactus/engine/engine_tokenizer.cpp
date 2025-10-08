@@ -109,44 +109,27 @@ std::string Tokenizer::format_qwen_style(const std::vector<ChatMessage>& message
 }
 
 std::string Tokenizer::format_gemma_style(const std::vector<ChatMessage>& messages, bool add_generation_prompt, const std::string& tools_json) const {
-    std::string result;
 
     if (!tools_json.empty()) {
-        result += "<start_of_turn>system\n";
+        return "ERROR: Tool calls are not supported for Gemma models";
+    }
 
-        bool has_system_msg = false;
-        for (const auto& msg : messages) {
-            if (msg.role == "system") {
-                result += msg.content;
-                result += "\n\n";
-                has_system_msg = true;
-                break;
-            }
-        }
+    std::string result;
 
-        result += "You can respond normally to the user's request. If you need to call tools, respond with a JSON object containing tool_calls.\n";
-        result += "Available tools: ";
-        result += tools_json;
-        result += "<end_of_turn>\n";
+    result = "<bos>";
 
-        for (const auto& msg : messages) {
-            if (msg.role == "system" && has_system_msg) {
-                continue; 
-            } else if (msg.role == "user") {
-                result += "<start_of_turn>user\n" + msg.content + "<end_of_turn>\n";
-            } else if (msg.role == "assistant") {
-                result += "<start_of_turn>model\n" + msg.content + "<end_of_turn>\n";
-            }
-        }
-    } else {
-        for (const auto& msg : messages) {
-            if (msg.role == "system") {
-                result += "<start_of_turn>system\n" + msg.content + "<end_of_turn>\n";
-            } else if (msg.role == "user") {
-                result += "<start_of_turn>user\n" + msg.content + "<end_of_turn>\n";
-            } else if (msg.role == "assistant") {
-                result += "<start_of_turn>model\n" + msg.content + "<end_of_turn>\n";
-            }
+
+    for (const auto& msg : messages) {
+        if (msg.role == "system") {
+            continue;  
+        } else if (msg.role == "user") {
+            result += "<start_of_turn>user\n";
+            result += msg.content;
+            result += "<end_of_turn>\n";
+        } else if (msg.role == "assistant") {
+            result += "<start_of_turn>model\n";
+            result += msg.content;
+            result += "<end_of_turn>\n";
         }
     }
 

@@ -7,11 +7,11 @@
 
 static const char* op_type_names[] = {
     "INPUT", "PRECISION_CAST",
-    "ADD", "SUBTRACT", "MULTIPLY", "DIVIDE", 
+    "ADD", "ADD_CLIPPED", "SUBTRACT", "MULTIPLY", "DIVIDE",
     "MATMUL", "TRANSPOSE", "RESHAPE", "GATHER", "EMBEDDING",
     "SUM", "MEAN", "VARIANCE", "MIN", "MAX",
     "RMS_NORM", "ROPE", "SOFTMAX", "ATTENTION",
-    "SCALAR_ADD", "SCALAR_SUBTRACT", "SCALAR_MULTIPLY", "SCALAR_DIVIDE", 
+    "SCALAR_ADD", "SCALAR_SUBTRACT", "SCALAR_MULTIPLY", "SCALAR_DIVIDE",
     "SCALAR_EXP", "SCALAR_SQRT", "SCALAR_COS", "SCALAR_SIN",
     "SILU", "GELU", "SAMPLE", "CONCAT"
 };
@@ -47,11 +47,21 @@ size_t CactusGraph::input(const std::vector<size_t>& shape, Precision precision)
 size_t CactusGraph::add(size_t input1, size_t input2) {
     const auto& lhs_buffer = get_output_buffer(input1);
     const auto& rhs_buffer = get_output_buffer(input2);
-    
+
     BroadcastInfo broadcast_info = BroadcastInfo::compute(lhs_buffer.shape, rhs_buffer.shape);
     OpParams params{.broadcast_info = broadcast_info};
-    
+
     return add_node(OpType::ADD, {input1, input2}, broadcast_info.output_shape, params);
+}
+
+size_t CactusGraph::add_clipped(size_t input1, size_t input2) {
+    const auto& lhs_buffer = get_output_buffer(input1);
+    const auto& rhs_buffer = get_output_buffer(input2);
+
+    BroadcastInfo broadcast_info = BroadcastInfo::compute(lhs_buffer.shape, rhs_buffer.shape);
+    OpParams params{.broadcast_info = broadcast_info};
+
+    return add_node(OpType::ADD_CLIPPED, {input1, input2}, broadcast_info.output_shape, params);
 }
 
 size_t CactusGraph::subtract(size_t input1, size_t input2) {
@@ -245,6 +255,11 @@ size_t CactusGraph::attention(size_t query, size_t key, size_t value, float scal
 
 size_t CactusGraph::attention(size_t query, size_t key, size_t value, float scale, size_t position_offset, ComputeBackend backend) {
     OpParams params{.scale = scale, .position_offset = position_offset, .backend = backend};
+    return add_node(OpType::ATTENTION, {query, key, value}, {}, params);
+}
+
+size_t CactusGraph::attention(size_t query, size_t key, size_t value, float scale, size_t position_offset, size_t window_size, ComputeBackend backend) {
+    OpParams params{.scale = scale, .position_offset = position_offset, .window_size = window_size, .backend = backend};
     return add_node(OpType::ATTENTION, {query, key, value}, {}, params);
 }
 

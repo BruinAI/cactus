@@ -23,6 +23,7 @@ void cactus_divide_int8(const int8_t* a, const int8_t* b, int8_t* output, size_t
 
 
 void cactus_add_f16(const __fp16* a, const __fp16* b, __fp16* output, size_t num_elements);
+void cactus_add_f16_clipped(const __fp16* a, const __fp16* b, __fp16* output, size_t num_elements);
 void cactus_subtract_f16(const __fp16* a, const __fp16* b, __fp16* output, size_t num_elements);
 void cactus_multiply_f16(const __fp16* a, const __fp16* b, __fp16* output, size_t num_elements);
 void cactus_divide_f16(const __fp16* a, const __fp16* b, __fp16* output, size_t num_elements);
@@ -177,15 +178,15 @@ void cactus_gelu_int8(const int8_t* input, int8_t* output, size_t num_elements,
 void cactus_attention_int8(const int8_t* queries, const int8_t* keys, const int8_t* values, int8_t* output,
                             size_t batch_size, size_t seq_len, size_t kv_seq_len, size_t num_q_heads, size_t num_kv_heads,
                             size_t head_dim, float scale, const int8_t* mask,
-                            float q_scale, float k_scale, float v_scale, float output_scale, size_t position_offset = 0);
+                            float q_scale, float k_scale, float v_scale, float output_scale, size_t position_offset = 0, size_t window_size = 0);
 
 void cactus_attention_f16(const __fp16* queries, const __fp16* keys, const __fp16* values, __fp16* output,
                           size_t batch_size, size_t seq_len, size_t kv_seq_len, size_t num_q_heads, size_t num_kv_heads,
-                          size_t head_dim, float scale, const __fp16* mask, size_t position_offset = 0);
+                          size_t head_dim, float scale, const __fp16* mask, size_t position_offset = 0, size_t window_size = 0);
 
 void cactus_attention_f32(const float* queries, const float* keys, const float* values, float* output,
                           size_t batch_size, size_t seq_len, size_t kv_seq_len, size_t num_q_heads, size_t num_kv_heads,
-                          size_t head_dim, float scale, const float* mask, size_t position_offset = 0);
+                          size_t head_dim, float scale, const float* mask, size_t position_offset = 0, size_t window_size = 0);
 
 
 void cactus_sample_f32(const float* logits, uint32_t* output, size_t vocab_size,
