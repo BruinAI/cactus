@@ -132,5 +132,12 @@ private:
     } weight_nodes_;
 };
 
+class llama3 : public Model{
+public:
+    llama3();
+    explicit llama3(const Config& config);
+    ~llama3() override = default;
+};
+
 }
 }
