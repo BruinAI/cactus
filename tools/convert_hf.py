@@ -182,7 +182,10 @@ def convert_hf_model_weights(model, output_dir, precision='INT8', args=None):
     elif 'qwen' in model_type_str:
         detected_model_type = 'qwen'
     elif 'llama' in model_type_str:
-        detected_model_type = 'llama'
+        if('smol' in str(output_dir)):
+            detected_model_type = 'smol'
+        else:
+            detected_model_type = 'llama'
     else:
         detected_model_type = 'qwen'
         print(f"  Warning: Unknown model type '{model_type_str}', defaulting to 'qwen'")
