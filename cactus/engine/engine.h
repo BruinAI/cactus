@@ -26,6 +26,10 @@ struct Config {
     uint32_t attention_head_dim = 128;
     float layer_norm_eps = 1e-6f;
     float rope_theta = 1000000.0f;
+    uint32_t num_experts = 0;
+    uint32_t num_shared_experts = 0;
+    uint32_t num_top_experts = 0;
+    uint32_t moe_every_n_layers = 0;
     bool tie_word_embeddings = true;
 
     enum class ModelType {QWEN = 0, GEMMA = 1};
