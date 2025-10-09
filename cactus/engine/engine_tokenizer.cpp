@@ -25,6 +25,9 @@ void Tokenizer::detect_model_type(const std::string& config_path) {
             } else if (line.find("gemma") != std::string::npos) {
                 model_type_ = ModelType::GEMMA;
                 break;
+            } else if (line.find("smol") != std::string::npos) {
+                model_type_ = ModelType::SMOL;
+                break;
             }
         }
     }
@@ -42,6 +45,8 @@ std::string Tokenizer::format_chat_prompt(const std::vector<ChatMessage>& messag
             return format_qwen_style(messages, add_generation_prompt, tools_json);
         case ModelType::GEMMA:
             return format_gemma_style(messages, add_generation_prompt, tools_json);
+        case ModelType::SMOL:
+            return format_smol_style(messages, add_generation_prompt, tools_json);
         default:
             return format_qwen_style(messages, add_generation_prompt, tools_json);
     }
@@ -112,6 +117,37 @@ std::string Tokenizer::format_gemma_style(const std::vector<ChatMessage>& messag
 
     if (!tools_json.empty()) {
         return "ERROR: Tool calls are not supported for Gemma models";
+    }
+
+    std::string result;
+
+    result = "<bos>";
+
+
+    for (const auto& msg : messages) {
+        if (msg.role == "system") {
+            continue;  
+        } else if (msg.role == "user") {
+            result += "<start_of_turn>user\n";
+            result += msg.content;
+            result += "<end_of_turn>\n";
+        } else if (msg.role == "assistant") {
+            result += "<start_of_turn>model\n";
+            result += msg.content;
+            result += "<end_of_turn>\n";
+        }
+    }
+
+    if (add_generation_prompt) {
+        result += "<start_of_turn>model\n";
+    }
+
+    return result;
+}
+
+std::string Tokenizer::format_smol_style(const std::vector<ChatMessage>& messages, bool add_generation_prompt, const std::string& tools_json) const {
+    if (!tools_json.empty()) {
+        return "ERROR: Tool calls are currently not supported for Smol models";
     }
 
     std::string result;
