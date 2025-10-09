@@ -41,7 +41,7 @@ void SmolModel::load_weights_to_graph(CactusGraph* gb) {
 }
 
 size_t SmolModel::SmolModel::build_attention(CactusGraph* gb, size_t normalized_input, uint32_t layer_idx,
-                                            ComputeBackend backend, bool use_cache = false, size_t position_offset = 0) {
+                                            ComputeBackend backend, bool use_cache, size_t position_offset) {
     const auto& layer = weight_nodes_.layers[layer_idx];
 
     auto q_proj = gb->matmul(normalized_input, layer.attn_q_weight, true, backend);
@@ -120,7 +120,7 @@ size_t SmolModel::build_mlp(CactusGraph* gb, size_t normalized_h, uint32_t layer
 }
 
 size_t SmolModel::build_transformer_block(CactusGraph* gb, size_t hidden, uint32_t layer_idx,
-                                        ComputeBackend backend, bool use_cache = false, size_t position_offset = 0) {
+                                        ComputeBackend backend, bool use_cache, size_t position_offset) {
     const auto& layer = weight_nodes_.layers[layer_idx];
     auto normalized_input = gb->rms_norm(hidden, layer.input_layernorm_weight, config_.layer_norm_eps);
     auto attn_output = build_attention(gb, normalized_input, layer_idx, backend, use_cache, position_offset);
@@ -130,7 +130,7 @@ size_t SmolModel::build_transformer_block(CactusGraph* gb, size_t hidden, uint32
     return gb->add(after_attention, mlp_output);
 }
 
-size_t SmolModel::forward(const std::vector<uint32_t>& tokens, bool use_cache = false) {
+size_t SmolModel::forward(const std::vector<uint32_t>& tokens, bool use_cache) {
     if (!initialized_ || !graph_handle_) {
         throw std::runtime_error("Model not initialized - call init() first");
     }
