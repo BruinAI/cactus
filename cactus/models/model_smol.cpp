@@ -49,17 +49,7 @@ size_t SmolModel::SmolModel::build_attention(CactusGraph* gb, size_t normalized_
     auto v_proj = gb->matmul(normalized_input, layer.attn_v_weight, true, backend);
 
     const auto& q_shape = gb->get_output_buffer(q_proj).shape;
-    size_t batch_seq = q_shape[0];
-    size_t num_heads = config_.attention_heads;
-    size_t head_dim = config_.attention_head_dim;
-    q_proj = gb->reshape(q_proj, {batch_seq * num_heads, head_dim});
-    q_proj = gb->reshape(q_proj, {batch_seq, num_heads * head_dim});
-
-    size_t num_kv_heads = config_.attention_kv_heads;
-    k_proj = gb->reshape(k_proj, {batch_seq * num_kv_heads, head_dim});
-    k_proj = gb->reshape(k_proj, {batch_seq, num_kv_heads * head_dim});
-
-    size_t seq_len = batch_seq;
+    size_t seq_len = q_shape[0];
 
     auto q_proj_4d = gb->reshape(q_proj, {1, seq_len, config_.attention_heads, config_.attention_head_dim});
     auto k_proj_4d = gb->reshape(k_proj, {1, seq_len, config_.attention_kv_heads, config_.attention_head_dim});

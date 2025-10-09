@@ -284,9 +284,9 @@ bool Config::from_json(const std::string& config_path) {
         default_top_p = 0.95f;
         default_top_k = 64;
     } else if (model_type == ModelType::SMOL) {
-        default_temperature = 1.0f;
-        default_top_p = 0.95f;
-        default_top_k = 40;
+        default_temperature = 0.2f;
+        default_top_p = 0.9f;
+        default_top_k = 50;
     } else if (model_type == ModelType::QWEN) {
         default_temperature = 0.6f;
         default_top_p = 0.95f;
