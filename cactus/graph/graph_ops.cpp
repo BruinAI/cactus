@@ -53,6 +53,9 @@ void compute_reduce_node(GraphNode& node, const std::vector<std::unique_ptr<Grap
                 if (input_buffer.precision == Precision::INT8) {
                     int64_t result = cactus_sum_all_int8(input_buffer.data_as<int8_t>(), input_buffer.total_size);
                     node.output_buffer.data_as<int8_t>()[0] = static_cast<int8_t>(std::max(static_cast<int64_t>(-128), std::min(static_cast<int64_t>(127), result)));
+                } else if (input_buffer.precision == Precision::FP16) {
+                    double result = cactus_sum_all_f16(input_buffer.data_as<__fp16>(), input_buffer.total_size);
+                    node.output_buffer.data_as<__fp16>()[0] = static_cast<__fp16>(result);
                 } else {
                     double result = cactus_sum_all_f32(input_buffer.data_as<float>(), input_buffer.total_size);
                     node.output_buffer.data_as<float>()[0] = static_cast<float>(result);
@@ -120,6 +123,9 @@ void compute_reduce_node(GraphNode& node, const std::vector<std::unique_ptr<Grap
             case OpType::SUM:
                 if (input_buffer.precision == Precision::INT8) {
                     cactus_sum_axis_int8(input_buffer.data_as<int8_t>(), node.output_buffer.data_as<int8_t>(), 
+                                        outer_size, axis_size, inner_size);
+                } else if (input_buffer.precision == Precision::FP16) {
+                    cactus_sum_axis_f16(input_buffer.data_as<__fp16>(), node.output_buffer.data_as<__fp16>(), 
                                         outer_size, axis_size, inner_size);
                 } else {
                     cactus_sum_axis_f32(input_buffer.data_as<float>(), node.output_buffer.data_as<float>(), 
@@ -549,12 +555,19 @@ void compute_transpose_node(GraphNode& node, const std::vector<std::unique_ptr<G
                                  0, input_buffer.total_size);
             break;
         case Precision::FP16: {
+            // FP16 transpose: convert to FP32, transpose, convert back
+            // TODO: implement native FP16 transpose for better performance
             const __fp16* input = input_buffer.data_as<__fp16>();
             __fp16* output = node.output_buffer.data_as<__fp16>();
-            cactus_transpose_f32(reinterpret_cast<const float*>(input), 
-                                reinterpret_cast<float*>(output), 
+            
+            std::vector<float> input_f32(input_buffer.total_size);
+            std::vector<float> output_f32(input_buffer.total_size);
+            
+            Quantization::fp16_to_fp32(input, input_f32.data(), input_buffer.total_size);
+            cactus_transpose_f32(input_f32.data(), output_f32.data(), 
                                 input_buffer.shape.data(), permutation.data(), permutation.size(), 
                                 0, input_buffer.total_size);
+            Quantization::fp32_to_fp16(output_f32.data(), output, input_buffer.total_size);
             break;
         }
         case Precision::FP32: {

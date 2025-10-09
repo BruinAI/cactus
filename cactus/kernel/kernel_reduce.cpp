@@ -455,6 +455,21 @@ void cactus_max_axis_int8(const int8_t* input, int8_t* output, size_t outer_size
         });
 }
 
+double cactus_sum_all_f16(const __fp16* data, size_t num_elements) {
+    return CactusThreading::parallel_reduce(
+        num_elements, CactusThreading::Thresholds::ALL_REDUCE,
+        [&](size_t start_idx, size_t end_idx) -> double {
+            double thread_sum = 0.0;
+            for (size_t i = start_idx; i < end_idx; ++i) {
+                thread_sum += static_cast<double>(data[i]);
+            }
+            return thread_sum;
+        },
+        0.0,
+        [](double a, double b) { return a + b; }
+    );
+}
+
 double cactus_sum_all_f32(const float* data, size_t num_elements) {
     return CactusThreading::parallel_reduce(
         num_elements, CactusThreading::Thresholds::ALL_REDUCE,
@@ -508,6 +523,21 @@ void cactus_sum_axis_f32(const float* input, float* output, size_t outer_size, s
             
             size_t output_idx = outer * inner_size + inner;
             output[output_idx] = total_sum;
+        });
+}
+
+void cactus_sum_axis_f16(const __fp16* input, __fp16* output, size_t outer_size, size_t axis_size, size_t inner_size) {
+    CactusThreading::parallel_for_2d(outer_size, inner_size, CactusThreading::Thresholds::AXIS_REDUCE,
+        [&](size_t outer, size_t inner) {
+            float total_sum = 0.0f;
+            
+            for (size_t a = 0; a < axis_size; a++) {
+                size_t idx = outer * axis_size * inner_size + a * inner_size + inner;
+                total_sum += static_cast<float>(input[idx]);
+            }
+            
+            size_t output_idx = outer * inner_size + inner;
+            output[output_idx] = static_cast<__fp16>(total_sum);
         });
 }
 

@@ -225,7 +225,7 @@ size_t NomicModel::build_transformer_block(CactusGraph* gb, size_t hidden, uint3
     auto residual = gb->add(hidden, attn_output);
     auto normalized_residual = gb->layernorm(residual, layer.ffn_norm_1_weight, layer.ffn_norm_1_bias, config_.layer_norm_eps);
     auto mlp_output = build_mlp(gb, normalized_residual, layer_idx, backend);
-    auto final_residual = gb->add(residual, mlp_output);
+    auto final_residual = gb->add(normalized_residual, mlp_output);
     auto normalized_final_residual = gb->layernorm(final_residual, layer.ffn_norm_2_weight, layer.ffn_norm_2_bias, config_.layer_norm_eps);
     return normalized_final_residual;
 }
