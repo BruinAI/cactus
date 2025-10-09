@@ -248,6 +248,31 @@ size_t CactusGraph::softmax(size_t input, int axis) {
     return add_node(OpType::SOFTMAX, {input}, {}, params);
 }
 
+// TODO: Claude generated - optimize this, get rid of "axis" which causes code to be ran twice
+std::pair<size_t, size_t> CactusGraph::topk(size_t input, size_t k) {
+    const auto& input_buffer = get_output_buffer(input);
+    
+    if (input_buffer.shape.empty()) {
+        throw std::runtime_error("TopK requires non-empty input tensor");
+    }
+    
+    std::vector<size_t> output_shape = input_buffer.shape;
+    output_shape.back() = k;
+    
+    OpParams indices_params{.top_k = k, .output_precision = Precision::FP32};
+    OpParams values_params{.top_k = k, .output_precision = Precision::FP32, .axis = 1};
+
+    size_t indices_node = add_node(OpType::TOPK, {input}, output_shape, indices_params);
+    size_t values_node = add_node(OpType::TOPK, {input}, output_shape, values_params);
+    
+    return {indices_node, values_node};
+}
+
+size_t CactusGraph::layernorm(size_t input, size_t weight, size_t bias, float epsilon) {
+    OpParams params{.epsilon = epsilon};
+    return add_node(OpType::LAYERNORM, {input, weight, bias}, {}, params);
+}
+
 size_t CactusGraph::attention(size_t query, size_t key, size_t value, float scale, ComputeBackend backend) {
     OpParams params{.scale = scale, .backend = backend};
     return add_node(OpType::ATTENTION, {query, key, value}, {}, params);

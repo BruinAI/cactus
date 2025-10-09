@@ -730,3 +730,178 @@ void compute_sample_node(GraphNode& node, const std::vector<std::unique_ptr<Grap
                          vocab_size, temperature, top_p, top_k, random_seed);
     }
 }
+
+// TODO: Claude generated - optimize this, get rid of "axis" which causes code to be ran twice
+void compute_topk_node(GraphNode& node, const std::vector<std::unique_ptr<GraphNode>>& nodes, const std::unordered_map<size_t, size_t>& node_index_map) {
+    const auto& input_buffer = nodes[node_index_map.at(node.input_ids[0])]->output_buffer;
+    size_t k = node.params.top_k;
+    int axis_flag = node.params.axis;  // 0 for indices, 1 for values
+    
+    if (input_buffer.shape.size() != 2) {
+        throw std::runtime_error("TopK currently only supports 2D tensors [batch, features]");
+    }
+    
+    size_t batch_size = input_buffer.shape[0];
+    size_t feature_size = input_buffer.shape[1];
+    
+    // Convert input to float for processing
+    std::vector<float> input_float(input_buffer.total_size);
+    if (input_buffer.precision == Precision::INT8) {
+        const int8_t* input_int8 = input_buffer.data_as<int8_t>();
+        float scale = input_buffer.quantization_scale;
+        for (size_t i = 0; i < input_buffer.total_size; ++i) {
+            input_float[i] = input_int8[i] * scale;
+        }
+    } else if (input_buffer.precision == Precision::FP16) {
+        const __fp16* input_fp16 = input_buffer.data_as<__fp16>();
+        for (size_t i = 0; i < input_buffer.total_size; ++i) {
+            input_float[i] = static_cast<float>(input_fp16[i]);
+        }
+    } else {
+        const float* input_fp32 = input_buffer.data_as<float>();
+        std::memcpy(input_float.data(), input_fp32, input_buffer.total_size * sizeof(float));
+    }
+    
+    float* output = node.output_buffer.data_as<float>();
+    
+    // For each batch, find top-k values/indices
+    for (size_t b = 0; b < batch_size; ++b) {
+        const float* row = input_float.data() + b * feature_size;
+        
+        // Create index-value pairs
+        std::vector<std::pair<size_t, float>> indexed_values(feature_size);
+        for (size_t i = 0; i < feature_size; ++i) {
+            indexed_values[i] = {i, row[i]};
+        }
+        
+        // Partial sort to get top-k
+        std::partial_sort(indexed_values.begin(), 
+                         indexed_values.begin() + k, 
+                         indexed_values.end(),
+                         [](const auto& a, const auto& b) { return a.second > b.second; });
+        
+        // Write output based on axis_flag
+        float* out_row = output + b * k;
+        for (size_t i = 0; i < k; ++i) {
+            if (axis_flag == 0) {
+                // Return indices
+                out_row[i] = static_cast<float>(indexed_values[i].first);
+            } else {
+                // Return values
+                out_row[i] = indexed_values[i].second;
+            }
+        }
+    }
+}
+
+void compute_layernorm_node(GraphNode& node, const std::vector<std::unique_ptr<GraphNode>>& nodes, const std::unordered_map<size_t, size_t>& node_index_map) {
+    const auto& input_buffer = nodes[node_index_map.at(node.input_ids[0])]->output_buffer;
+    const auto& weight_buffer = nodes[node_index_map.at(node.input_ids[1])]->output_buffer;
+    const auto& bias_buffer = nodes[node_index_map.at(node.input_ids[2])]->output_buffer;
+    float epsilon = node.params.epsilon;
+    
+    if (input_buffer.shape.empty()) {
+        throw std::runtime_error("LayerNorm requires non-empty input tensor");
+    }
+    
+    // LayerNorm normalizes over the last dimension
+    size_t feature_size = input_buffer.shape.back();
+    size_t batch_size = input_buffer.total_size / feature_size;
+    
+    // For simplicity, work in FP32
+    std::vector<float> input_float(input_buffer.total_size);
+    std::vector<float> weight_float(feature_size);
+    std::vector<float> bias_float(feature_size);
+    
+    // Convert input to float
+    if (input_buffer.precision == Precision::INT8) {
+        const int8_t* input_int8 = input_buffer.data_as<int8_t>();
+        float scale = input_buffer.quantization_scale;
+        for (size_t i = 0; i < input_buffer.total_size; ++i) {
+            input_float[i] = input_int8[i] * scale;
+        }
+    } else if (input_buffer.precision == Precision::FP16) {
+        const __fp16* input_fp16 = input_buffer.data_as<__fp16>();
+        for (size_t i = 0; i < input_buffer.total_size; ++i) {
+            input_float[i] = static_cast<float>(input_fp16[i]);
+        }
+    } else {
+        std::memcpy(input_float.data(), input_buffer.data_as<float>(), input_buffer.total_size * sizeof(float));
+    }
+    
+    // Convert weight to float
+    if (weight_buffer.precision == Precision::INT8) {
+        const int8_t* weight_int8 = weight_buffer.data_as<int8_t>();
+        float scale = weight_buffer.quantization_scale;
+        for (size_t i = 0; i < feature_size; ++i) {
+            weight_float[i] = weight_int8[i] * scale;
+        }
+    } else if (weight_buffer.precision == Precision::FP16) {
+        const __fp16* weight_fp16 = weight_buffer.data_as<__fp16>();
+        for (size_t i = 0; i < feature_size; ++i) {
+            weight_float[i] = static_cast<float>(weight_fp16[i]);
+        }
+    } else {
+        std::memcpy(weight_float.data(), weight_buffer.data_as<float>(), feature_size * sizeof(float));
+    }
+    
+    // Convert bias to float
+    if (bias_buffer.precision == Precision::INT8) {
+        const int8_t* bias_int8 = bias_buffer.data_as<int8_t>();
+        float scale = bias_buffer.quantization_scale;
+        for (size_t i = 0; i < feature_size; ++i) {
+            bias_float[i] = bias_int8[i] * scale;
+        }
+    } else if (bias_buffer.precision == Precision::FP16) {
+        const __fp16* bias_fp16 = bias_buffer.data_as<__fp16>();
+        for (size_t i = 0; i < feature_size; ++i) {
+            bias_float[i] = static_cast<float>(bias_fp16[i]);
+        }
+    } else {
+        std::memcpy(bias_float.data(), bias_buffer.data_as<float>(), feature_size * sizeof(float));
+    }
+    
+    // Compute layernorm for each batch
+    std::vector<float> output_float(input_buffer.total_size);
+    for (size_t b = 0; b < batch_size; ++b) {
+        const float* input_row = input_float.data() + b * feature_size;
+        float* output_row = output_float.data() + b * feature_size;
+        
+        // Compute mean
+        float mean = 0.0f;
+        for (size_t i = 0; i < feature_size; ++i) {
+            mean += input_row[i];
+        }
+        mean /= feature_size;
+        
+        // Compute variance
+        float variance = 0.0f;
+        for (size_t i = 0; i < feature_size; ++i) {
+            float diff = input_row[i] - mean;
+            variance += diff * diff;
+        }
+        variance /= feature_size;
+        
+        // Normalize and apply affine transform
+        float std_inv = 1.0f / std::sqrt(variance + epsilon);
+        for (size_t i = 0; i < feature_size; ++i) {
+            output_row[i] = (input_row[i] - mean) * std_inv * weight_float[i] + bias_float[i];
+        }
+    }
+    
+    // Convert output back to target precision
+    if (node.output_buffer.precision == Precision::INT8) {
+        int8_t* output_int8 = node.output_buffer.data_as<int8_t>();
+        float scale = node.output_buffer.quantization_scale;
+        for (size_t i = 0; i < input_buffer.total_size; ++i) {
+            output_int8[i] = static_cast<int8_t>(std::max(-128.0f, std::min(127.0f, output_float[i] / scale)));
+        }
+    } else if (node.output_buffer.precision == Precision::FP16) {
+        __fp16* output_fp16 = node.output_buffer.data_as<__fp16>();
+        for (size_t i = 0; i < input_buffer.total_size; ++i) {
+            output_fp16[i] = static_cast<__fp16>(output_float[i]);
+        }
+    } else {
+        std::memcpy(node.output_buffer.data_as<float>(), output_float.data(), input_buffer.total_size * sizeof(float));
+    }
+}
