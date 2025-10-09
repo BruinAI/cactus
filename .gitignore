@@ -21,4 +21,4 @@ apple/libcactus.a
 # IDE files
 pyproject.toml
 uv.lock
-cactus/.cache/
+.cache/

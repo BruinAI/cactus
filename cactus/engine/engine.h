@@ -32,7 +32,7 @@ struct Config {
     uint32_t moe_every_n_layers = 0;
     bool tie_word_embeddings = true;
 
-    enum class ModelType {QWEN = 0, GEMMA = 1};
+    enum class ModelType {QWEN = 0, GEMMA = 1, NOMIC = 2};
     ModelType model_type = ModelType::QWEN;
 
     enum class Activation {GELU = 0, SILU = 1};

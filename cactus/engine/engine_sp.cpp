@@ -59,11 +59,27 @@ bool SPTokenizer::load_vocabulary_with_config(const std::string& vocab_file, con
             std::istringstream iss(line);
             uint32_t id;
             std::string token;
+            float score = 0.0f;
 
             if (iss >> id) {
-                std::getline(iss, token);
-                if (!token.empty() && token[0] == '\t') {
-                    token = token.substr(1);
+                // Read token (may contain tabs, so read up to next tab)
+                char c;
+                if (iss.get(c) && c == '\t') {  // Skip first tab
+                    std::string remaining;
+                    std::getline(iss, remaining);
+                    
+                    // Split remaining into token and score
+                    size_t last_tab = remaining.rfind('\t');
+                    if (last_tab != std::string::npos) {
+                        token = remaining.substr(0, last_tab);
+                        try {
+                            score = std::stof(remaining.substr(last_tab + 1));
+                        } catch (...) {
+                            score = 0.0f;
+                        }
+                    } else {
+                        token = remaining;
+                    }
                 }
 
                 token_to_id_[token] = id;
@@ -72,7 +88,7 @@ bool SPTokenizer::load_vocabulary_with_config(const std::string& vocab_file, con
                     token_scores_.resize(id + 1, 0.0f);
                 }
                 id_to_token_[id] = token;
-                token_scores_[id] = 0.0f;
+                token_scores_[id] = score;
             }
         }
         vocab_size_ = id_to_token_.size();
@@ -198,7 +214,7 @@ void SPTokenizer::build_trie() {
 std::string SPTokenizer::preprocess_text(const std::string& text) const {
     if (text.empty()) return text;
 
-    std::string processed;
+    std::string processed = "▁";  // Add leading space marker (XLMRoberta-style)
     for (size_t i = 0; i < text.length(); i++) {
         char c = text[i];
 

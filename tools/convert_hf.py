@@ -199,6 +199,7 @@ def convert_hf_model_weights(model, output_dir, precision='INT8', args=None):
         'context_length': getattr(config, 'max_position_embeddings', getattr(config, 'max_sequence_length', 0)),
         'rope_theta': getattr(config, 'rope_theta', getattr(config, 'rotary_emb_base', 10000.0)),
         'attention_head_dim': getattr(config, 'head_dim', getattr(config, 'hidden_size', 0) // getattr(config, 'num_attention_heads', 1)),
+        'layer_norm_eps': getattr(config, 'layer_norm_eps', getattr(config, 'layer_norm_epsilon', getattr(config, 'rms_norm_eps', 1e-6))),
         'num_experts': getattr(config, 'num_experts', 0),
         'num_shared_experts': getattr(config, 'num_shared_experts', 0),
         'num_top_experts': getattr(config, 'num_top_experts', 0),
@@ -560,6 +561,7 @@ def convert_hf_to_cactus(model_name, output_dir, precision='INT8', cache_dir=Non
                 trust_remote_code=True,
                 dtype=torch.float32
             )
+            import ipdb; ipdb.set_trace()
     except Exception as e:
         print(f"Error: {e}")
         sys.exit(1)
