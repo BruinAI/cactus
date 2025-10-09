@@ -17,3 +17,8 @@ apple/build-static/
 apple/*.xcframework
 apple/libcactus.a
 *.a
+
+# IDE files
+pyproject.toml
+uv.lock
+cactus/.cache/
