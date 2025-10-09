@@ -273,18 +273,18 @@ size_t CactusGraph::layernorm(size_t input, size_t weight, size_t bias, float ep
     return add_node(OpType::LAYERNORM, {input, weight, bias}, {}, params);
 }
 
-size_t CactusGraph::attention(size_t query, size_t key, size_t value, float scale, ComputeBackend backend) {
-    OpParams params{.scale = scale, .backend = backend};
+size_t CactusGraph::attention(size_t query, size_t key, size_t value, float scale, bool is_causal, ComputeBackend backend) {
+    OpParams params{.scale = scale, .is_causal = is_causal, .backend = backend};
     return add_node(OpType::ATTENTION, {query, key, value}, {}, params);
 }
 
-size_t CactusGraph::attention(size_t query, size_t key, size_t value, float scale, size_t position_offset, ComputeBackend backend) {
-    OpParams params{.scale = scale, .position_offset = position_offset, .backend = backend};
+size_t CactusGraph::attention(size_t query, size_t key, size_t value, float scale, size_t position_offset, bool is_causal, ComputeBackend backend) {
+    OpParams params{.scale = scale, .position_offset = position_offset, .is_causal = is_causal, .backend = backend};
     return add_node(OpType::ATTENTION, {query, key, value}, {}, params);
 }
 
-size_t CactusGraph::attention(size_t query, size_t key, size_t value, float scale, size_t position_offset, size_t window_size, ComputeBackend backend) {
-    OpParams params{.scale = scale, .position_offset = position_offset, .window_size = window_size, .backend = backend};
+size_t CactusGraph::attention(size_t query, size_t key, size_t value, float scale, size_t position_offset, size_t window_size, bool is_causal, ComputeBackend backend) {
+    OpParams params{.scale = scale, .position_offset = position_offset, .window_size = window_size, .is_causal = is_causal, .backend = backend};
     return add_node(OpType::ATTENTION, {query, key, value}, {}, params);
 }
 

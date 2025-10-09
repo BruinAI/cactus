@@ -117,7 +117,7 @@ size_t NomicModel::build_attention(CactusGraph* gb, size_t normalized_input, uin
         k_proj_4d = gb->rope(k_proj_4d, config_.rope_theta, position_offset);
     }
 
-    auto attn_output_4d = gb->attention(q_proj_4d, k_proj_4d, v_proj_4d, attention_scale_, position_offset);
+    auto attn_output_4d = gb->attention(q_proj_4d, k_proj_4d, v_proj_4d, attention_scale_, position_offset, false);  // is_causal=false for bidirectional attention
     auto attn_output = gb->reshape(attn_output_4d, {seq_len, num_heads * head_dim});
 
     auto output = gb->matmul(attn_output, layer.attn_output_weight, true, backend);

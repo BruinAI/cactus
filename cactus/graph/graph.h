@@ -126,7 +126,8 @@ struct OpParams {
     int axis = -1;
     bool pretransposed_rhs = false;
     size_t position_offset = 0;
-    size_t window_size = 0; 
+    size_t window_size = 0;
+    bool is_causal = true;  // Default to causal for backward compatibility
     std::vector<size_t> new_shape;
     std::vector<size_t> permutation;
     Precision output_precision = Precision::INT8;
@@ -221,9 +222,9 @@ public:
     size_t rms_norm(size_t input, size_t weight, float epsilon = 1e-5f);
     size_t rope(size_t input, float theta, size_t position_offset = 0, ComputeBackend backend = ComputeBackend::CPU);
     size_t softmax(size_t input, int axis = -1);
-    size_t attention(size_t query, size_t key, size_t value, float scale, ComputeBackend backend = ComputeBackend::CPU);
-    size_t attention(size_t query, size_t key, size_t value, float scale, size_t position_offset, ComputeBackend backend = ComputeBackend::CPU);
-    size_t attention(size_t query, size_t key, size_t value, float scale, size_t position_offset, size_t window_size, ComputeBackend backend = ComputeBackend::CPU);
+    size_t attention(size_t query, size_t key, size_t value, float scale, bool is_causal = true, ComputeBackend backend = ComputeBackend::CPU);
+    size_t attention(size_t query, size_t key, size_t value, float scale, size_t position_offset, bool is_causal = true, ComputeBackend backend = ComputeBackend::CPU);
+    size_t attention(size_t query, size_t key, size_t value, float scale, size_t position_offset, size_t window_size, bool is_causal = true, ComputeBackend backend = ComputeBackend::CPU);
     
     size_t sample(size_t logits, float temperature = 0.6f, float top_p = 0.95f, size_t top_k = 20);
     
