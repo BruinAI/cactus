@@ -138,33 +138,30 @@ size_t llama3Model::forward(const std::vector<uint32_t>& tokens, bool use_cache)
     auto* gb = static_cast<CactusGraph*>(graph_handle_);
     gb->soft_reset();
 
-    auto seq_len = static_cast<size_t>(tokens.size());
-
+    size_t seq_len = tokens.size();
     size_t position_offset = use_cache ? kv_cache_.get_total_seq_len() : 0;
 
-    auto backend = config_.default_backend == Config::Backend::CPU
+    auto backend = (config_.default_backend == Config::Backend::CPU)
         ? ComputeBackend::CPU
         : ComputeBackend::NPU;
 
     auto input_node_id = gb->input({seq_len}, Precision::FP32);
-    auto hidden = gb->embedding(embedding_node_id_, input_node_id);
-
-    static std::set<uint32_t> skip_layers = {};
-    for (uint32_t layer_idx = 0; layer_idx < config_.num_layers; layer_idx++) {
-        if (skip_layers.count(layer_idx)) {
-            continue;
-        }
-        hidden = build_transformer_block(gb, hidden, layer_idx, backend, use_cache, position_offset);
-    }
-
-    auto final_hidden = gb->rms_norm(hidden, weight_nodes_.output_norm_weight, config_.layer_norm_eps);
 
     std::vector<float> input_data(seq_len);
     for (size_t i = 0; i < seq_len; i++) {
         input_data[i] = static_cast<float>(tokens[i]);
     }
-    gb->set_input(input_node_id, input_data.data(), Precision::FP32);
 
+    gb->set_input(input_node_id, input_data.data(), Precision::FP32);
+    auto hidden = gb->embedding(embedding_node_id_, input_node_id);
+
+    static std::set<uint32_t> skip_layers = {};
+    for (uint32_t layer_idx = 0; layer_idx < config_.num_layers; layer_idx++) {
+        if (skip_layers.count(layer_idx)) continue;
+        hidden = build_transformer_block(gb, hidden, layer_idx, backend, use_cache, position_offset);
+    }
+
+    auto final_hidden = gb->rms_norm(hidden, weight_nodes_.output_norm_weight, config_.layer_norm_eps);
     return final_hidden;
 }
 }
