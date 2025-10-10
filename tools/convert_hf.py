@@ -262,6 +262,9 @@ def convert_hf_model_weights(model, output_dir, precision='INT8', args=None):
         
         for name_patterns, tensor_precision, output_name, should_transpose in weight_patterns:
             found = False
+            if detected_model_type == 'llama' and ('attn_q_norm' in output_name or 'attn_k_norm' in output_name):
+                print(f"  Skipping {output_name} for LLaMA model")
+                continue
             for pattern in name_patterns:
                 full_name = layer_prefix + pattern
                 if full_name in state_dict:
@@ -269,8 +272,6 @@ def convert_hf_model_weights(model, output_dir, precision='INT8', args=None):
                     save_tensor_with_header(tensor, output_dir / output_name, tensor_precision, transpose=should_transpose, stats_tracker=quantization_stats, args=args, model_type=detected_model_type)
                     found = True
                     break
-            if not found:
-                print(f"  Warning: Weight {output_name} not found in state_dict, skipping.")
             
             if not found and 'c_attn.weight' in name_patterns[0]:
                 attn_name = layer_prefix + 'attn.c_attn.weight'

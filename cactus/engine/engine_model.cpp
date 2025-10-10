@@ -274,6 +274,7 @@ bool Config::from_json(const std::string& config_path) {
         }
         else if (key == "model_type") {
             if (value == "gemma" || value == "GEMMA") model_type = ModelType::GEMMA;
+            else if(value == "llama" || value == "LLAMA") model_type = ModelType::LLAMA;
             else model_type = ModelType::QWEN;
         }
     }
@@ -286,6 +287,10 @@ bool Config::from_json(const std::string& config_path) {
         default_temperature = 0.6f;
         default_top_p = 0.95f;
         default_top_k = 20;
+    } else if (model_type == ModelType::LLAMA) {
+        default_temperature = 0.7f;
+        default_top_p = 0.9f;
+        default_top_k = 40;
     }
 
     return true;
@@ -308,6 +313,8 @@ std::unique_ptr<Model> create_model(const std::string& model_folder) {
             return std::make_unique<QwenModel>(config);
         case Config::ModelType::GEMMA:
             return std::make_unique<GemmaModel>(config);
+        case Config::ModelType::LLAMA:
+            return std::make_unique<llama3Model>(config);
         default:
             return std::make_unique<QwenModel>(config);
     }

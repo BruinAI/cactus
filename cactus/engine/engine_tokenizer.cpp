@@ -25,7 +25,10 @@ void Tokenizer::detect_model_type(const std::string& config_path) {
             } else if (line.find("gemma") != std::string::npos) {
                 model_type_ = ModelType::GEMMA;
                 break;
-            }
+            } else if (line.find("llama") != std::string::npos) {
+                model_type_ = ModelType::LLAMA;
+                break;
+            }  
         }
     }
     file.close();
@@ -42,12 +45,75 @@ std::string Tokenizer::format_chat_prompt(const std::vector<ChatMessage>& messag
             return format_qwen_style(messages, add_generation_prompt, tools_json);
         case ModelType::GEMMA:
             return format_gemma_style(messages, add_generation_prompt, tools_json);
+        case ModelType::LLAMA:
+            return format_llama_style(messages, add_generation_prompt, tools_json);
         default:
             return format_qwen_style(messages, add_generation_prompt, tools_json);
     }
 }
 
 std::string Tokenizer::format_qwen_style(const std::vector<ChatMessage>& messages, bool add_generation_prompt, const std::string& tools_json) const {
+    std::string result;
+
+    if (!tools_json.empty()) {
+        result += "<|im_start|>system\n";
+
+        bool has_system_msg = false;
+        for (const auto& msg : messages) {
+            if (msg.role == "system") {
+                result += msg.content;
+                result += "\n\n";
+                has_system_msg = true;
+                break;
+            }
+        }
+
+        result += "You can call any of the following tools to satisfy the user's requests: [\n";
+        result += tools_json;
+        result += "\n]\n";
+        result += "Example tool call syntax:\n";
+        result += "{\n";
+        result += "  \"tool_calls\": [\n";
+        result += "    {\n";
+        result += "      \"name\": \"tool_name\",\n";
+        result += "      \"arguments\": {\n";
+        result += "        \"arg1\": \"some_value\"\n";
+        result += "      },\n";
+        result += "      \"id\": \"call_1___\"\n";
+        result += "    }\n";
+        result += "  ]\n";
+        result += "}";
+        result += "<|im_end|>\n";
+
+        for (const auto& msg : messages) {
+            if (msg.role == "system" && has_system_msg) {
+                continue; 
+            } else if (msg.role == "user") {
+                result += "<|im_start|>user\n" + msg.content + "<|im_end|>\n";
+            } else if (msg.role == "assistant") {
+                result += "<|im_start|>assistant\n" + msg.content + "<|im_end|>\n";
+            }
+        }
+    } else {
+        for (const auto& msg : messages) {
+            if (msg.role == "system") {
+                result += "<|im_start|>system\n" + msg.content + "<|im_end|>\n";
+            } else if (msg.role == "user") {
+                result += "<|im_start|>user\n" + msg.content + "<|im_end|>\n";
+            } else if (msg.role == "assistant") {
+                result += "<|im_start|>assistant\n" + msg.content + "<|im_end|>\n";
+            }
+        }
+    }
+
+    if (add_generation_prompt) {
+        result += "<|im_start|>assistant\n";
+    }
+
+    return result;
+}
+
+std::string Tokenizer::format_llama_style(const std::vector<ChatMessage>& messages, bool add_generation_prompt, const std::string& tools_json) const {
     std::string result;
 
     if (!tools_json.empty()) {

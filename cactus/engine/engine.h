@@ -28,7 +28,7 @@ struct Config {
     float rope_theta = 1000000.0f;
     bool tie_word_embeddings = true;
 
-    enum class ModelType {QWEN = 0, GEMMA = 1};
+    enum class ModelType {QWEN = 0, GEMMA = 1, LLAMA = 2};
     ModelType model_type = ModelType::QWEN;
 
     enum class Activation {GELU = 0, SILU = 1};
@@ -86,7 +86,7 @@ public:
     virtual bool load_vocabulary_with_config(const std::string& vocab_file, const std::string& merges_file, const std::string& config_file) = 0;
 
 protected:
-    enum class ModelType { UNKNOWN, QWEN, GEMMA };
+    enum class ModelType { UNKNOWN, QWEN, GEMMA, LLAMA };
     ModelType model_type_ = ModelType::UNKNOWN;
     bool has_chat_template_ = false;
     std::string chat_template_;
@@ -94,6 +94,7 @@ protected:
     void detect_model_type(const std::string& config_path);
     std::string format_qwen_style(const std::vector<ChatMessage>& messages, bool add_generation_prompt, const std::string& tools_json) const;
     std::string format_gemma_style(const std::vector<ChatMessage>& messages, bool add_generation_prompt, const std::string& tools_json) const;
+    std::string format_llama_style(const std::vector<ChatMessage>& messages, bool add_generation_prompt, const std::string& tools_json) const;
 };
 
 class BPETokenizer : public Tokenizer {
