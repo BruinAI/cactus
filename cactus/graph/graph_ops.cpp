@@ -193,15 +193,26 @@ void compute_fused_node(GraphNode& node, const std::vector<std::unique_ptr<Graph
             
             if (tensor_buffer.precision == Precision::INT8) {
                 const int8_t* tensor_data = tensor_buffer.data_as<int8_t>();
-                const int8_t* indices = indices_buffer.data_as<int8_t>();
                 int8_t* output = node.output_buffer.data_as<int8_t>();
                 
-                for (size_t i = 0; i < num_indices; i++) {
-                    size_t idx = static_cast<size_t>(indices[i]);
-                    if (idx >= first_dim) {
-                        throw std::runtime_error("Gather index " + std::to_string(idx) + " out of bounds for dimension " + std::to_string(first_dim));
+                if (indices_buffer.precision == Precision::INT8) {
+                    const int8_t* indices = indices_buffer.data_as<int8_t>();
+                    for (size_t i = 0; i < num_indices; i++) {
+                        size_t idx = static_cast<size_t>(indices[i]);
+                        if (idx >= first_dim) {
+                            throw std::runtime_error("Gather index " + std::to_string(idx) + " out of bounds for dimension " + std::to_string(first_dim));
+                        }
+                        std::memcpy(output + i * element_size, tensor_data + idx * element_size, bytes_per_element);
                     }
-                    std::memcpy(output + i * element_size, tensor_data + idx * element_size, bytes_per_element);
+                } else {
+                    const float* indices = indices_buffer.data_as<float>();
+                    for (size_t i = 0; i < num_indices; i++) {
+                        size_t idx = static_cast<size_t>(indices[i]);
+                        if (idx >= first_dim) {
+                            throw std::runtime_error("Gather index " + std::to_string(idx) + " out of bounds for dimension " + std::to_string(first_dim));
+                        }
+                        std::memcpy(output + i * element_size, tensor_data + idx * element_size, bytes_per_element);
+                    }
                 }
             } else if (tensor_buffer.precision == Precision::FP16) {
                 const __fp16* tensor_data = tensor_buffer.data_as<__fp16>();

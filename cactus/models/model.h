@@ -215,7 +215,7 @@ print(inspect.getsource(model.encoder._modules['layers'][1].mlp.__class__))
         - only 2 top weights are used as multipliers for the experts though
 2. NomicExperts: experts(x, weights, top_weights, top_experts) -> output
     print(inspect.getsource(model.encoder._modules['layers'][1].mlp.experts.__class__))
-    a. For each token, run the MLP for each of its top 2 experts and add the result times its weight to the output
+    a. For each token, run the MLP for each of its top 2 experts and add the result times its weight to the output (with Gelu activation)
     b. add bias
 
 NomicBertEncoder(

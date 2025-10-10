@@ -259,7 +259,7 @@ std::pair<size_t, size_t> CactusGraph::topk(size_t input, size_t k) {
     std::vector<size_t> output_shape = input_buffer.shape;
     output_shape.back() = k;
     
-    OpParams indices_params{.top_k = k, .output_precision = Precision::FP32};
+    OpParams indices_params{.top_k = k, .output_precision = Precision::FP32, .axis = 0};
     OpParams values_params{.top_k = k, .output_precision = Precision::FP32, .axis = 1};
 
     size_t indices_node = add_node(OpType::TOPK, {input}, output_shape, indices_params);
@@ -761,5 +761,3 @@ void CactusGraph::soft_reset() {
     
     next_node_id_ = max_preserved_id + 1;
 }
-
-

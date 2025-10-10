@@ -1,8 +1,8 @@
 #include "model.h"
 #include "../graph/graph.h"
+#include <algorithm>
 #include <cstddef>
 #include <set>
-#include <iostream>
 
 namespace cactus {
 namespace engine {
@@ -48,6 +48,8 @@ size_t NomicModel::build_attention(CactusGraph* gb, size_t normalized_input, uin
     if (use_cache) {
         throw std::runtime_error("NomicModel does not support cache, it's an encoder model");
     }
+    (void)position_offset;
+
     const auto& layer = weight_nodes_.layers[layer_idx];
     const auto& weight_shape = gb->get_output_buffer(layer.attn_qkv_weight).shape;
     if (weight_shape.size() != 2) {
@@ -58,6 +60,12 @@ size_t NomicModel::build_attention(CactusGraph* gb, size_t normalized_input, uin
     const size_t total_qkv_dim = weight_shape[0];
     if (total_qkv_dim % 3 != 0) {
         throw std::runtime_error("QKV weight first dimension must be divisible by 3");
+    }
+
+    const Precision input_precision = gb->get_output_buffer(normalized_input).precision;
+    size_t normalized_fp32 = normalized_input;
+    if (input_precision != Precision::FP32) {
+        normalized_fp32 = gb->precision_cast(normalized_input, Precision::FP32);
     }
 
     auto make_range_input = [&](size_t start, size_t length) {
@@ -113,11 +121,11 @@ size_t NomicModel::build_attention(CactusGraph* gb, size_t normalized_input, uin
     auto v_proj_4d = reshape_to_heads(v_proj);
 
     if (config_.rope_theta > 0) {
-        q_proj_4d = gb->rope(q_proj_4d, config_.rope_theta, position_offset);
-        k_proj_4d = gb->rope(k_proj_4d, config_.rope_theta, position_offset);
+        q_proj_4d = gb->rope(q_proj_4d, config_.rope_theta, 0);
+        k_proj_4d = gb->rope(k_proj_4d, config_.rope_theta, 0);
     }
 
-    auto attn_output_4d = gb->attention(q_proj_4d, k_proj_4d, v_proj_4d, attention_scale_, position_offset, false);  // is_causal=false for bidirectional attention
+    auto attn_output_4d = gb->attention(q_proj_4d, k_proj_4d, v_proj_4d, attention_scale_, 0, false);  // is_causal=false for bidirectional attention
     auto attn_output = gb->reshape(attn_output_4d, {seq_len, num_heads * head_dim});
 
     auto output = gb->matmul(attn_output, layer.attn_output_weight, true, backend);
@@ -153,65 +161,34 @@ size_t NomicModel::build_moe_mlp(CactusGraph* gb, size_t normalized_h, uint32_t 
         throw std::runtime_error("MoE router weight must be 2D");
     }
 
-    size_t num_experts = config_.num_experts != 0
-        ? static_cast<size_t>(config_.num_experts)
-        : router_shape[0];
-    if (num_experts == 0) {
-        throw std::runtime_error("Nomic MoE requires at least one expert");
-    }
-
-    auto make_range_input = [&](size_t start, size_t length) {
-        auto indices_node = gb->input({length}, Precision::FP32);
-        std::vector<float> indices(length);
-        for (size_t i = 0; i < length; ++i) {
-            indices[i] = static_cast<float>(start + i);
-        }
-        gb->set_input(indices_node, indices.data(), Precision::FP32);
-        return indices_node;
-    };
-
+    const size_t num_experts = config_.num_experts != 0 ? config_.num_experts : router_shape[0];
     const auto& w1_shape = gb->get_output_buffer(layer.mlp_experts_mlp_w1).shape;
-    if (w1_shape.size() != 2 || w1_shape[0] % num_experts != 0) {
-        throw std::runtime_error("MoE expert projection has unexpected shape");
-    }
-
     const size_t expert_dim = w1_shape[0] / num_experts;
-    const size_t hidden_dim_size = w1_shape[1];
-    const auto& hidden_shape = gb->get_output_buffer(normalized_h).shape;
-    if (hidden_shape.empty()) {
-        throw std::runtime_error("Normalized hidden state must be at least 1D");
-    }
-    const size_t seq_len = hidden_shape[0];
+    const size_t hidden_dim = w1_shape[1];
+    const size_t seq_len = gb->get_output_buffer(normalized_h).shape[0];
 
-    auto router_logits = gb->matmul(normalized_h, layer.mlp_router_layer_weight, true, backend);
-    auto router_probs = gb->softmax(router_logits);
+    /*
+    MOE Logic:
+    # X: [T_total, H]
+    G = X @ W_gate                         # [T_total, E]
+    G = softmax(G)
+    topk_idx, topk_w = topk(G, k)          # routing map & weights
 
-    size_t stacked_outputs = 0;
-    for (size_t expert_idx = 0; expert_idx < num_experts; ++expert_idx) {
-        size_t start = expert_idx * expert_dim;
-        auto expert_indices = make_range_input(start, expert_dim);
+    # Build per-expert views
+    buckets = bucketize_tokens(topk_idx)   # list of token indices per expert
 
-        auto w1 = gb->gather(layer.mlp_experts_mlp_w1, expert_indices);
-        auto hidden = gb->matmul(normalized_h, w1, true, backend);
-        hidden = gb->gelu(hidden);
+    # === Dispatch ===
+    # Option A: all-to-all (experts sharded)
+    X_by_expert = all_to_all_pack(X, buckets)  # permute+send; contiguous per-expert
 
-        auto w2_rows = gb->gather(layer.mlp_experts_mlp_w2, expert_indices);
-        auto w2 = gb->transpose(w2_rows, backend);
-        auto expert_output = gb->matmul(hidden, w2, true, backend);
+    # Grouped GEMM: for each expert e on this GPU
+    Y_by_expert = grouped_mlp(X_by_expert, experts_params_local)
 
-        auto expert_output_shaped = gb->reshape(expert_output, {seq_len, 1, hidden_dim_size});
-        if (expert_idx == 0) {
-            stacked_outputs = expert_output_shaped;
-        } else {
-            stacked_outputs = gb->concat(stacked_outputs, expert_output_shaped, 1);
-        }
-    }
-
-    auto router_expanded = gb->reshape(router_probs, {seq_len, num_experts, 1});
-    auto weighted_outputs = gb->multiply(stacked_outputs, router_expanded);
-    auto combined = gb->sum(weighted_outputs, 1);
-    combined = gb->add(combined, layer.mlp_experts_bias);
-    return combined;
+    # === Combine ===
+    Y_perm = all_to_all_unpack(Y_by_expert)    # bring results back, inverse permute
+    Y = combine_topk(Y_perm, topk_idx, topk_w) # if k=2, weighted sum; else assign
+    */
+    return normalized_h;
 }
 
 size_t NomicModel::build_transformer_block(CactusGraph* gb, size_t hidden, uint32_t layer_idx,
