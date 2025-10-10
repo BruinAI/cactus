@@ -132,13 +132,13 @@ private:
     } weight_nodes_;
 };
 
-class llama3 : public Model{
+class llama3Model : public Model{
 public:
-    llama3();
-    explicit llama3(const Config& config);
-    ~llama3() override = default;
+    llama3Model();
+    explicit llama3Model(const Config& config);
+    ~llama3Model() override = default;
 
-    protected:
+protected:
     size_t build_attention(CactusGraph* gb, size_t normalized_input, uint32_t layer_idx,
                           ComputeBackend backend, bool use_cache = false, size_t position_offset = 0) override;
 
@@ -150,6 +150,26 @@ public:
 
     size_t forward(const std::vector<uint32_t>& tokens, bool use_cache = false) override;
     void load_weights_to_graph(CactusGraph* gb) override;
+
+private:
+    struct WeightNodeIDs {
+        size_t output_weight;
+        size_t output_norm_weight;
+
+        struct LayerWeights {
+            size_t attn_q_weight;
+            size_t attn_k_weight;
+            size_t attn_v_weight;
+            size_t attn_output_weight;
+            size_t input_layernorm_weight;
+            size_t ffn_gate_weight;
+            size_t ffn_up_weight;
+            size_t ffn_down_weight;
+            size_t post_attention_layernorm_weight;
+        };
+
+        std::vector<LayerWeights> layers;
+    } weight_nodes_;
 
 };
 
