@@ -161,7 +161,7 @@ uint32_t Model::generate(const std::vector<uint32_t>& tokens, float temperature,
     } else {
         gb->execute();
     }
-    
+
     update_kv_cache(gb, tokens.size());
     
     auto* output_ptr = gb->get_output(sampled_token_id);
@@ -285,8 +285,8 @@ bool Config::from_json(const std::string& config_path) {
         default_top_k = 64;
     } else if (model_type == ModelType::SMOL) {
         default_temperature = 0.2f;
-        default_top_p = 0.9f;
-        default_top_k = 50;
+        default_top_p = 0.95f;
+        default_top_k = 20;
     } else if (model_type == ModelType::QWEN) {
         default_temperature = 0.6f;
         default_top_p = 0.95f;

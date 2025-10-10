@@ -154,16 +154,20 @@ std::string Tokenizer::format_smol_style(const std::vector<ChatMessage>& message
 
     for (const auto& msg : messages) {
         if (msg.role == "system") {
-            result += "<|im_start|>system\n" + msg.content + "<|im_end|>\n";
+            result += msg.content + "\n";
         } else if (msg.role == "user") {
-            result += "<|im_start|>user\n" + msg.content + "<|im_end|>\n";
+            result += "User: ";
+            result += msg.content;
+            result += "\n";
         } else if (msg.role == "assistant") {
-            result += "<|im_start|>assistant\n" + msg.content + "<|im_end|>\n";
+            result += "Assistant: ";
+            result += msg.content;
+            result += "\n";
         }
     }
 
     if (add_generation_prompt) {
-        result += "<|im_start|>assistant\n";
+        result += "Assistant: ";
     }
 
     return result;
