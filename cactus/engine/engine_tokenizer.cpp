@@ -113,52 +113,30 @@ std::string Tokenizer::format_qwen_style(const std::vector<ChatMessage>& message
     return result;
 }
 
-std::string Tokenizer::format_llama_style(
-    const std::vector<ChatMessage>& messages,
-    bool add_generation_prompt,          // optional tools list
-    const std::string& date_string = "") const
-{
+std::string Tokenizer::format_llama_style(const std::vector<ChatMessage>& messages, bool add_generation_prompt, const std::string& tools_json) const {
+    if (!tools_json.empty()) {
+        return "ERROR: Tool calls are currently not supported for Llama models";
+    }
+
+    // if first message isn't system, add one
     std::string result;
 
-    // --- system message ---
-    std::string system_message;
-    size_t start_idx = 0;
-    if (!messages.empty() && messages[0].role == "system") {
-        system_message = messages[0].content;
-        start_idx = 1;
+    if (!messages.empty() && messages.front().role != "system") {
+        result += "<|im_start|>system\n";
+        result += "You are a helpful AI assistant named Llama, trained by Hugging Face";
+        result += "<|im_end|>\n";
     }
 
-    result += "<|start_header_id|>system<|end_header_id|>\n";
-    result += "Cutting Knowledge Date: December 2023\n";
-    if (!date_string.empty()) {
-        result += "Today Date: " + date_string + "\n";
-    } else {
-        result += "Today Date: 09 Oct 2025\n";
+    for (const auto& msg : messages) {
+        result += "<|im_start|>";
+        result += msg.role;
+        result += "\n";
+        result += msg.content;
+        result += "<|im_end|>\n";
     }
 
-    // --- tools in system block ---
-
-    if (!system_message.empty()) {
-        result += system_message + "\n";
-    }
-    result += "<|eot_id|>\n\n";
-
-    // --- tools in first user message ---
-    size_t first_user_idx = start_idx;
-
-    // --- remaining messages ---
-    for (size_t i = start_idx; i < messages.size(); i++) {
-
-        const auto& msg = messages[i];
-        if (msg.role == "user" || msg.role == "assistant") {
-            result += "<|start_header_id|>" + msg.role + "<|end_header_id|>\n";
-            result += msg.content + "<|eot_id|>\n\n";
-        }
-    }
-
-    // --- add generation prompt ---
     if (add_generation_prompt) {
-        result += "<|start_header_id|>assistant<|end_header_id|>\n";
+        result += "<|im_start|>assistant\n";
     }
 
     return result;
