@@ -150,24 +150,25 @@ std::string Tokenizer::format_smol_style(const std::vector<ChatMessage>& message
         return "ERROR: Tool calls are currently not supported for Smol models";
     }
 
+    // if first message isn't system, add one
     std::string result;
 
+    if (!messages.empty() && messages.front().role != "system") {
+        result += "<|im_start|>system\n";
+        result += "You are a helpful AI assistant named SmolLM, trained by Hugging Face";
+        result += "<|im_end|>\n";
+    }
+
     for (const auto& msg : messages) {
-        if (msg.role == "system") {
-            result += msg.content + "\n";
-        } else if (msg.role == "user") {
-            result += "User: ";
-            result += msg.content;
-            result += "\n";
-        } else if (msg.role == "assistant") {
-            result += "Assistant: ";
-            result += msg.content;
-            result += "\n";
-        }
+        result += "<|im_start|>";
+        result += msg.role;
+        result += "\n";
+        result += msg.content;
+        result += "<|im_end|>\n";
     }
 
     if (add_generation_prompt) {
-        result += "Assistant: ";
+        result += "<|im_start|>assistant\n";
     }
 
     return result;
