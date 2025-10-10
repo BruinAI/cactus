@@ -113,62 +113,52 @@ std::string Tokenizer::format_qwen_style(const std::vector<ChatMessage>& message
     return result;
 }
 
-std::string Tokenizer::format_llama_style(const std::vector<ChatMessage>& messages, bool add_generation_prompt, const std::string& tools_json) const {
+std::string Tokenizer::format_llama_style(
+    const std::vector<ChatMessage>& messages,
+    bool add_generation_prompt,          // optional tools list
+    const std::string& date_string = "") const
+{
     std::string result;
 
-    if (!tools_json.empty()) {
-        result += "<|im_start|>system\n";
+    // --- system message ---
+    std::string system_message;
+    size_t start_idx = 0;
+    if (!messages.empty() && messages[0].role == "system") {
+        system_message = messages[0].content;
+        start_idx = 1;
+    }
 
-        bool has_system_msg = false;
-        for (const auto& msg : messages) {
-            if (msg.role == "system") {
-                result += msg.content;
-                result += "\n\n";
-                has_system_msg = true;
-                break;
-            }
-        }
-
-        result += "You can call any of the following tools to satisfy the user's requests: [\n";
-        result += tools_json;
-        result += "\n]\n";
-        result += "Example tool call syntax:\n";
-        result += "{\n";
-        result += "  \"tool_calls\": [\n";
-        result += "    {\n";
-        result += "      \"name\": \"tool_name\",\n";
-        result += "      \"arguments\": {\n";
-        result += "        \"arg1\": \"some_value\"\n";
-        result += "      },\n";
-        result += "      \"id\": \"call_1___\"\n";
-        result += "    }\n";
-        result += "  ]\n";
-        result += "}";
-        result += "<|im_end|>\n";
-
-        for (const auto& msg : messages) {
-            if (msg.role == "system" && has_system_msg) {
-                continue; 
-            } else if (msg.role == "user") {
-                result += "<|im_start|>user\n" + msg.content + "<|im_end|>\n";
-            } else if (msg.role == "assistant") {
-                result += "<|im_start|>assistant\n" + msg.content + "<|im_end|>\n";
-            }
-        }
+    result += "<|start_header_id|>system<|end_header_id|>\n";
+    result += "Cutting Knowledge Date: December 2023\n";
+    if (!date_string.empty()) {
+        result += "Today Date: " + date_string + "\n";
     } else {
-        for (const auto& msg : messages) {
-            if (msg.role == "system") {
-                result += "<|im_start|>system\n" + msg.content + "<|im_end|>\n";
-            } else if (msg.role == "user") {
-                result += "<|im_start|>user\n" + msg.content + "<|im_end|>\n";
-            } else if (msg.role == "assistant") {
-                result += "<|im_start|>assistant\n" + msg.content + "<|im_end|>\n";
-            }
+        result += "Today Date: 09 Oct 2025\n";
+    }
+
+    // --- tools in system block ---
+
+    if (!system_message.empty()) {
+        result += system_message + "\n";
+    }
+    result += "<|eot_id|>\n\n";
+
+    // --- tools in first user message ---
+    size_t first_user_idx = start_idx;
+
+    // --- remaining messages ---
+    for (size_t i = start_idx; i < messages.size(); i++) {
+
+        const auto& msg = messages[i];
+        if (msg.role == "user" || msg.role == "assistant") {
+            result += "<|start_header_id|>" + msg.role + "<|end_header_id|>\n";
+            result += msg.content + "<|eot_id|>\n\n";
         }
     }
 
+    // --- add generation prompt ---
     if (add_generation_prompt) {
-        result += "<|im_start|>assistant\n";
+        result += "<|start_header_id|>assistant<|end_header_id|>\n";
     }
 
     return result;
