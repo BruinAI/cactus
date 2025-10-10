@@ -246,6 +246,34 @@ void compute_fused_node(GraphNode& node, const std::vector<std::unique_ptr<Graph
             }
             break;
         }
+        case OpType::SLICE: {
+            const auto& tensor_buffer = nodes[node_index_map.at(node.input_ids[0])]->output_buffer;
+
+            size_t axis_index = static_cast<size_t>(node.params.axis);
+            size_t slice_start = node.params.slice_start;
+            size_t slice_length = node.params.slice_length;
+
+            size_t axis_size = tensor_buffer.shape[axis_index];
+            
+            size_t stride = 1;
+            for (size_t i = axis_index + 1; i < tensor_buffer.shape.size(); ++i) {
+                stride *= tensor_buffer.shape[i];
+            }
+
+            size_t element_size = PrecisionTraits::size_of(tensor_buffer.precision);
+            size_t byte_stride = stride * element_size;
+            size_t byte_offset = slice_start * byte_stride;
+
+            char* base_ptr = static_cast<char*>(tensor_buffer.get_data());
+            if (!base_ptr) {
+                throw std::runtime_error("Slice input buffer is not available");
+            }
+
+            node.output_buffer.set_external(base_ptr + byte_offset);
+            node.output_buffer.precision = tensor_buffer.precision;
+            node.output_buffer.quantization_scale = tensor_buffer.quantization_scale;
+            break;
+        }
         case OpType::EMBEDDING: {
             const auto& embeddings_buffer = nodes[node_index_map.at(node.input_ids[0])]->output_buffer;
             const auto& indices_buffer = nodes[node_index_map.at(node.input_ids[1])]->output_buffer;

@@ -376,6 +376,32 @@ size_t CactusGraph::gather(size_t tensor, size_t indices) {
     return add_node(OpType::GATHER, {tensor, indices}, output_shape, params);
 }
 
+size_t CactusGraph::slice(size_t input, int axis, size_t start, size_t length) {
+    const auto& input_buffer = get_output_buffer(input);
+    if (input_buffer.shape.empty()) {
+        throw std::runtime_error("Cannot slice a scalar tensor");
+    }
+
+    size_t axis_index = static_cast<size_t>(axis);
+    size_t axis_size = input_buffer.shape[axis_index];
+
+    if (start + length > axis_size) {
+        throw std::runtime_error("Slice range extends beyond axis size");
+    }
+
+    std::vector<size_t> output_shape = input_buffer.shape;
+    output_shape[axis_index] = length;
+
+    OpParams params;
+    params.axis = axis_index;
+    params.slice_start = start;
+    params.slice_length = length;
+    params.output_precision = input_buffer.precision;
+
+    return add_node(OpType::SLICE, {input}, output_shape, params);
+}
+
+
 size_t CactusGraph::mmap_embeddings(const std::string& filename) {
     auto mapped_file = std::make_unique<GraphFile::MappedFile>(filename);
     

@@ -27,7 +27,7 @@ enum class ComputeBackend {
 enum class OpType {
     INPUT, PRECISION_CAST,
     ADD, ADD_CLIPPED, SUBTRACT, MULTIPLY, DIVIDE,
-    MATMUL, TRANSPOSE, RESHAPE, GATHER, EMBEDDING,
+    MATMUL, TRANSPOSE, RESHAPE, SLICE, GATHER, EMBEDDING,
     SUM, MEAN, VARIANCE, MIN, MAX,
     RMS_NORM, ROPE, SOFTMAX, ATTENTION,
     SCALAR_ADD, SCALAR_SUBTRACT, SCALAR_MULTIPLY, SCALAR_DIVIDE, SCALAR_EXP, SCALAR_SQRT, SCALAR_COS, SCALAR_SIN,
@@ -126,6 +126,8 @@ struct OpParams {
     bool pretransposed_rhs = false;
     size_t position_offset = 0;
     size_t window_size = 0; 
+    size_t slice_start = 0;
+    size_t slice_length = 0;
     std::vector<size_t> new_shape;
     std::vector<size_t> permutation;
     Precision output_precision = Precision::INT8;
@@ -199,6 +201,7 @@ public:
     size_t matmul(size_t input1, size_t input2, bool pretransposed_rhs = false, ComputeBackend backend = ComputeBackend::CPU);
     size_t transpose(size_t input, ComputeBackend backend = ComputeBackend::CPU);
     size_t reshape(size_t input, const std::vector<size_t>& new_shape);
+    size_t slice(size_t input, int axis, size_t start, size_t length);
     
     size_t sum(size_t input, int axis);
     size_t mean(size_t input, int axis);
@@ -207,6 +210,7 @@ public:
     size_t max(size_t input, int axis);
     
     size_t gather(size_t embeddings, size_t indices);
+    size_t slice(size_t input, int axis, size_t start, size_t length);
     size_t mmap_embeddings(const std::string& filename);
     size_t mmap_weights(const std::string& filename);
     void set_quantization_scale(size_t node_id, float scale);
