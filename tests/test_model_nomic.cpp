@@ -61,6 +61,7 @@ std::string op_type_to_string(OpType type) {
         case OpType::CONCAT: return "CONCAT";
         case OpType::TOPK: return "TOPK";
         case OpType::LAYERNORM: return "LAYERNORM";
+        case OpType::INDEX: return "INDEX";
     }
     return "UNKNOWN";
 }

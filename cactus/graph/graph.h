@@ -34,6 +34,7 @@ enum class OpType {
     SILU, GELU,
     SAMPLE, CONCAT,
     TOPK, LAYERNORM,
+    INDEX,
 };
 
 struct PrecisionTraits {
@@ -138,6 +139,8 @@ struct OpParams {
     float top_p = 1.0f;
     size_t top_k = 0;
     size_t random_seed = 0;
+    
+    size_t index_value = 0;  // For INDEX operation
 };
 
 struct GraphNode {
@@ -166,6 +169,7 @@ void compute_precision_cast_node(GraphNode& node, const std::vector<std::unique_
 void compute_sample_node(GraphNode& node, const std::vector<std::unique_ptr<GraphNode>>& nodes, const std::unordered_map<size_t, size_t>& node_index_map);
 void compute_topk_node(GraphNode& node, const std::vector<std::unique_ptr<GraphNode>>& nodes, const std::unordered_map<size_t, size_t>& node_index_map);
 void compute_layernorm_node(GraphNode& node, const std::vector<std::unique_ptr<GraphNode>>& nodes, const std::unordered_map<size_t, size_t>& node_index_map);
+void compute_index_node(GraphNode& node, const std::vector<std::unique_ptr<GraphNode>>& nodes, const std::unordered_map<size_t, size_t>& node_index_map);
 
 namespace ValidationUtils {
     void validate_tensor_dims(const std::vector<size_t>& shape, size_t required_dims, const std::string& op_name);
@@ -203,6 +207,7 @@ public:
     size_t matmul(size_t input1, size_t input2, bool pretransposed_rhs = false, ComputeBackend backend = ComputeBackend::CPU);
     size_t transpose(size_t input, ComputeBackend backend = ComputeBackend::CPU);
     size_t reshape(size_t input, const std::vector<size_t>& new_shape);
+    size_t index(size_t input, size_t index_value, int dim);
     
     size_t sum(size_t input, int axis);
     size_t mean(size_t input, int axis);

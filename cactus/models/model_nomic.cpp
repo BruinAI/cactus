@@ -176,42 +176,35 @@ size_t NomicModel::build_moe_mlp(CactusGraph* gb, size_t normalized_h, uint32_t 
 
     // Getting expert outputs
     auto expert_outputs = 0;  // -> [N, E, D_h]
+    
+    // Reshape expert weights from [E*D_e, D_h] to [E, D_e, D_h] once
+    auto expert_weights1_reshaped = gb->reshape(layer.mlp_experts_mlp_w1, {num_experts, expert_dim, hidden_dim});
+    auto expert_weights2_reshaped = gb->reshape(layer.mlp_experts_mlp_w2, {num_experts, expert_dim, hidden_dim});
+    
+    // Pre-compute expert-token weights matrix [N, E]
+    auto expert_token_weights_matrix = gb->input({seq_len, num_experts}, Precision::FP32);
+    std::vector<float> expert_token_weights_data(seq_len * num_experts, 0.0f);
+    for (size_t i = 0; i < seq_len; i++) {
+        for (size_t j = 0; j < config_.num_top_experts; j++) {
+            size_t idx_offset = i * config_.num_top_experts + j;
+            size_t expert_idx = static_cast<size_t>(topk_idx_data[idx_offset]);
+            float weight = topk_w_data[idx_offset];
+            expert_token_weights_data[i * num_experts + expert_idx] = weight;
+        }
+    }
+    gb->set_input(expert_token_weights_matrix, expert_token_weights_data.data(), Precision::FP32);
+    
     for (size_t e = 0; e < num_experts; e++) {
-        // auto expert_index = make_scalar_index(e);
-        auto expert_index = gb->input({1}, Precision::FP32);
-        float e_float = static_cast<float>(e);
-        gb->set_input(expert_index, &e_float, Precision::FP32);
-
-        auto expert_weights1 = gb->reshape(layer.mlp_experts_mlp_w1, {num_experts, expert_dim * hidden_dim});
-        auto expert_weights2 = gb->reshape(layer.mlp_experts_mlp_w2, {num_experts, expert_dim * hidden_dim});
-        
-        auto expert_weight1 = gb->gather(expert_weights1, expert_index);
-        auto expert_weight2 = gb->gather(expert_weights2, expert_index);
-        
-        expert_weight1 = gb->reshape(expert_weight1, {expert_dim, hidden_dim});
-        expert_weight2 = gb->reshape(expert_weight2, {expert_dim, hidden_dim});
+        // Use index to slice the expert weights: index(tensor, e, dim=0) is equivalent to tensor[e, :, :]
+        auto expert_weight1 = gb->index(expert_weights1_reshaped, e, 0);  // [D_e, D_h]
+        auto expert_weight2 = gb->index(expert_weights2_reshaped, e, 0);  // [D_e, D_h]
         
         auto new_expert_output = gb->matmul(normalized_h, expert_weight1, true, backend);  // [N, D_h] @ [D_h, D_e] = [N, D_e]
         new_expert_output = gb->gelu(new_expert_output);
         new_expert_output = gb->matmul(new_expert_output, expert_weight2, false, backend);  // [N, D_e] @ [D_h, D_e] (pretransposed) = [N, D_h]
 
-        auto expert_token_weights = gb->input({seq_len}, Precision::FP32);
-        std::vector<float> expert_token_weights_data(seq_len);
-        for (size_t i = 0; i < seq_len; i++) {
-            bool found = false;
-            for (size_t j = 0; j < config_.num_top_experts; j++) {
-                size_t idx_offset = i * config_.num_top_experts + j;
-                if (static_cast<size_t>(topk_idx_data[idx_offset]) == e) {
-                    expert_token_weights_data[i] = topk_w_data[idx_offset];
-                    found = true;
-                    break;
-                }
-            }
-            if (!found) {
-                expert_token_weights_data[i] = 0.0f;
-            }
-        }
-        gb->set_input(expert_token_weights, expert_token_weights_data.data(), Precision::FP32);
+        // Use index to slice expert-specific weights: index(matrix, e, dim=1) is equivalent to matrix[:, e]
+        auto expert_token_weights = gb->index(expert_token_weights_matrix, e, 1);  // [N]
         expert_token_weights = gb->reshape(expert_token_weights, {seq_len, 1});
         
         new_expert_output = gb->multiply(new_expert_output, expert_token_weights);  // [N, D_h] * [N, 1] = [N, D_h]

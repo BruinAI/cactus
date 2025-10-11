@@ -929,3 +929,60 @@ void compute_layernorm_node(GraphNode& node, const std::vector<std::unique_ptr<G
         std::memcpy(node.output_buffer.data_as<float>(), output_float.data(), input_buffer.total_size * sizeof(float));
     }
 }
+
+void compute_index_node(GraphNode& node, const std::vector<std::unique_ptr<GraphNode>>& nodes, const std::unordered_map<size_t, size_t>& node_index_map) {
+    const auto& input_buffer = nodes[node_index_map.at(node.input_ids[0])]->output_buffer;
+    const auto& input_shape = input_buffer.shape;
+    
+    int dim = node.params.axis;
+    size_t index_value = node.params.index_value;
+    
+    // Calculate strides for the input tensor
+    std::vector<size_t> input_strides(input_shape.size());
+    input_strides[input_shape.size() - 1] = 1;
+    for (int i = static_cast<int>(input_shape.size()) - 2; i >= 0; --i) {
+        input_strides[i] = input_strides[i + 1] * input_shape[i + 1];
+    }
+    
+    // Calculate the size of elements to copy
+    size_t slice_size = 1;
+    for (size_t i = dim + 1; i < input_shape.size(); ++i) {
+        slice_size *= input_shape[i];
+    }
+    
+    // Calculate outer size (number of slices to copy)
+    size_t outer_size = 1;
+    for (int i = 0; i < dim; ++i) {
+        outer_size *= input_shape[i];
+    }
+    
+    // Calculate stride in the dimension we're indexing
+    size_t dim_stride = input_strides[dim];
+    
+    // Calculate size of a full "block" in the dimension we're indexing
+    size_t block_size = dim_stride * input_shape[dim];
+    
+    // Copy data based on precision
+    size_t element_size = PrecisionTraits::size_of(input_buffer.precision);
+    const char* input_data = static_cast<const char*>(input_buffer.get_data());
+    char* output_data = static_cast<char*>(node.output_buffer.get_data());
+    
+    size_t output_idx = 0;
+    
+    for (size_t outer_idx = 0; outer_idx < outer_size; ++outer_idx) {
+        // Calculate the starting position in the input tensor for this outer slice
+        size_t input_base = outer_idx * block_size + index_value * dim_stride;
+        
+        // Copy the slice
+        std::memcpy(output_data + output_idx * element_size,
+                    input_data + input_base * element_size,
+                    slice_size * element_size);
+        
+        output_idx += slice_size;
+    }
+    
+    // Copy quantization scale if needed
+    if (input_buffer.precision == Precision::INT8) {
+        node.output_buffer.quantization_scale = input_buffer.quantization_scale;
+    }
+}

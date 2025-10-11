@@ -13,7 +13,9 @@ static const char* op_type_names[] = {
     "RMS_NORM", "ROPE", "SOFTMAX", "ATTENTION",
     "SCALAR_ADD", "SCALAR_SUBTRACT", "SCALAR_MULTIPLY", "SCALAR_DIVIDE",
     "SCALAR_EXP", "SCALAR_SQRT", "SCALAR_COS", "SCALAR_SIN",
-    "SILU", "GELU", "SAMPLE", "CONCAT"
+    "SILU", "GELU", "SAMPLE", "CONCAT",
+    "TOPK", "LAYERNORM",
+    "INDEX"
 };
 
 static const char* get_op_name(OpType op) {
@@ -141,6 +143,46 @@ size_t CactusGraph::transpose(size_t input, ComputeBackend backend) {
 size_t CactusGraph::reshape(size_t input, const std::vector<size_t>& new_shape) {
     OpParams params{.new_shape = new_shape};
     return add_node(OpType::RESHAPE, {input}, new_shape, params);
+}
+
+size_t CactusGraph::index(size_t input, size_t index_value, int dim) {
+    const auto& input_buffer = get_output_buffer(input);
+    const auto& shape = input_buffer.shape;
+    
+    if (shape.empty()) {
+        throw std::invalid_argument("Cannot index a scalar tensor");
+    }
+    
+    // Handle negative indexing
+    int actual_dim = dim;
+    if (actual_dim < 0) {
+        actual_dim += static_cast<int>(shape.size());
+    }
+    
+    if (actual_dim < 0 || static_cast<size_t>(actual_dim) >= shape.size()) {
+        throw std::invalid_argument("Index dimension out of bounds");
+    }
+    
+    if (index_value >= shape[actual_dim]) {
+        throw std::invalid_argument("Index value " + std::to_string(index_value) + 
+                                    " out of bounds for dimension " + std::to_string(actual_dim) + 
+                                    " with size " + std::to_string(shape[actual_dim]));
+    }
+    
+    // Compute output shape (remove the indexed dimension)
+    std::vector<size_t> output_shape;
+    for (size_t i = 0; i < shape.size(); ++i) {
+        if (static_cast<int>(i) != actual_dim) {
+            output_shape.push_back(shape[i]);
+        }
+    }
+    
+    if (output_shape.empty()) {
+        output_shape = {1};  // Scalar output
+    }
+    
+    OpParams params{.axis = actual_dim, .index_value = index_value, .output_precision = input_buffer.precision};
+    return add_node(OpType::INDEX, {input}, output_shape, params);
 }
 
 size_t CactusGraph::sum(size_t input, int axis) {

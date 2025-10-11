@@ -383,6 +383,9 @@ void compute_node_optimized(GraphNode& node, const std::vector<std::unique_ptr<G
         case OpType::RESHAPE:
             compute_reshape_node(node, nodes, node_index_map);
             break;
+        case OpType::INDEX:
+            compute_index_node(node, nodes, node_index_map);
+            break;
     }
 }
 
