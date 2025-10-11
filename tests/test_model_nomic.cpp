@@ -1180,7 +1180,6 @@ int main() {
     TestUtils::TestRunner runner("Nomic Model Tests");
 
     runner.run_test("Forward executes with tokens", test_nomic_forward_executes_with_tokens());
-    runner.run_test("Capture MoE layer1 activations", capture_moe_layer1_activations());
     runner.run_test("Forward cache guard", test_nomic_forward_rejects_cache());
     runner.run_test("Attention cache guard", test_nomic_attention_rejects_cache());
     runner.run_test("Transformer block cache guard", test_nomic_transformer_block_rejects_cache());

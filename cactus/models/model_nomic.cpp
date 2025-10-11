@@ -1,6 +1,5 @@
 #include "model.h"
 #include "../graph/graph.h"
-#include <algorithm>
 #include <cstddef>
 #include <set>
 
@@ -60,12 +59,6 @@ size_t NomicModel::build_attention(CactusGraph* gb, size_t normalized_input, uin
     const size_t total_qkv_dim = weight_shape[0];
     if (total_qkv_dim % 3 != 0) {
         throw std::runtime_error("QKV weight first dimension must be divisible by 3");
-    }
-
-    const Precision input_precision = gb->get_output_buffer(normalized_input).precision;
-    size_t normalized_fp32 = normalized_input;
-    if (input_precision != Precision::FP32) {
-        normalized_fp32 = gb->precision_cast(normalized_input, Precision::FP32);
     }
 
     auto make_range_input = [&](size_t start, size_t length) {
@@ -162,10 +155,77 @@ size_t NomicModel::build_moe_mlp(CactusGraph* gb, size_t normalized_h, uint32_t 
     }
 
     const size_t num_experts = config_.num_experts != 0 ? config_.num_experts : router_shape[0];
-    const auto& w1_shape = gb->get_output_buffer(layer.mlp_experts_mlp_w1).shape;
+    const auto& w1_shape = gb->get_output_buffer(layer.mlp_experts_mlp_w1).shape;  // [E * D_e, D_h]
     const size_t expert_dim = w1_shape[0] / num_experts;
     const size_t hidden_dim = w1_shape[1];
     const size_t seq_len = gb->get_output_buffer(normalized_h).shape[0];
+
+    auto gate_weights = gb->matmul(normalized_h, layer.mlp_router_layer_weight, true, backend);
+    auto gate_probs = gb->softmax(gate_weights);
+    auto [topk_idx, topk_w] = gb->topk(gate_probs, config_.num_top_experts);
+    
+    // Verify topk outputs are FP32 (current implementation always outputs FP32)
+    const auto& topk_idx_buffer = gb->get_output_buffer(topk_idx);
+    const auto& topk_w_buffer = gb->get_output_buffer(topk_w);
+    if (topk_idx_buffer.precision != Precision::FP32 || topk_w_buffer.precision != Precision::FP32) {
+        throw std::runtime_error("TopK outputs must be FP32");
+    }
+    
+    auto topk_idx_data = static_cast<const float*>(gb->get_output(topk_idx));
+    auto topk_w_data = static_cast<const float*>(gb->get_output(topk_w));
+
+    // Getting expert outputs
+    auto expert_outputs = 0;  // -> [N, E, D_h]
+    for (size_t e = 0; e < num_experts; e++) {
+        // auto expert_index = make_scalar_index(e);
+        auto expert_index = gb->input({1}, Precision::FP32);
+        float e_float = static_cast<float>(e);
+        gb->set_input(expert_index, &e_float, Precision::FP32);
+
+        auto expert_weights1 = gb->reshape(layer.mlp_experts_mlp_w1, {num_experts, expert_dim * hidden_dim});
+        auto expert_weights2 = gb->reshape(layer.mlp_experts_mlp_w2, {num_experts, expert_dim * hidden_dim});
+        
+        auto expert_weight1 = gb->gather(expert_weights1, expert_index);
+        auto expert_weight2 = gb->gather(expert_weights2, expert_index);
+        
+        expert_weight1 = gb->reshape(expert_weight1, {expert_dim, hidden_dim});
+        expert_weight2 = gb->reshape(expert_weight2, {expert_dim, hidden_dim});
+        
+        auto new_expert_output = gb->matmul(normalized_h, expert_weight1, true, backend);  // [N, D_h] @ [D_h, D_e] = [N, D_e]
+        new_expert_output = gb->gelu(new_expert_output);
+        new_expert_output = gb->matmul(new_expert_output, expert_weight2, false, backend);  // [N, D_e] @ [D_h, D_e] (pretransposed) = [N, D_h]
+
+        auto expert_token_weights = gb->input({seq_len}, Precision::FP32);
+        std::vector<float> expert_token_weights_data(seq_len);
+        for (size_t i = 0; i < seq_len; i++) {
+            bool found = false;
+            for (size_t j = 0; j < config_.num_top_experts; j++) {
+                size_t idx_offset = i * config_.num_top_experts + j;
+                if (static_cast<size_t>(topk_idx_data[idx_offset]) == e) {
+                    expert_token_weights_data[i] = topk_w_data[idx_offset];
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) {
+                expert_token_weights_data[i] = 0.0f;
+            }
+        }
+        gb->set_input(expert_token_weights, expert_token_weights_data.data(), Precision::FP32);
+        expert_token_weights = gb->reshape(expert_token_weights, {seq_len, 1});
+        
+        new_expert_output = gb->multiply(new_expert_output, expert_token_weights);  // [N, D_h] * [N, 1] = [N, D_h]
+
+        new_expert_output = gb->reshape(new_expert_output, {seq_len, 1, hidden_dim});
+        if (e == 0) {
+            expert_outputs = new_expert_output;
+        } else {
+            expert_outputs = gb->concat(expert_outputs, new_expert_output, 1);
+        }
+    }
+
+    auto final_outputs = gb->sum(expert_outputs, 1);  // [N, E, D_h] -> [N, D_h]
+    return gb->add(final_outputs, layer.mlp_experts_bias);
 
     /*
     MOE Logic:
@@ -174,21 +234,28 @@ size_t NomicModel::build_moe_mlp(CactusGraph* gb, size_t normalized_h, uint32_t 
     G = softmax(G)
     topk_idx, topk_w = topk(G, k)          # routing map & weights
 
-    # Build per-expert views
-    buckets = bucketize_tokens(topk_idx)   # list of token indices per expert
+    // # Build per-expert views - ADD KERNEL
+    // buckets = bucketize_tokens(topk_idx)   # list of token indices per expert
 
-    # === Dispatch ===
-    # Option A: all-to-all (experts sharded)
-    X_by_expert = all_to_all_pack(X, buckets)  # permute+send; contiguous per-expert
+    // // 2 experts (choose 1 each) and 3 tokens 
+    // // [[0,2], [1]]
 
-    # Grouped GEMM: for each expert e on this GPU
-    Y_by_expert = grouped_mlp(X_by_expert, experts_params_local)
+    // // TODO: Parallelize or run in loop (start with loop though)
+    // tokens_outputs = zeros_like(normalized_h)
+    // for e, tokens in zip(experts, buckets):
+    //     tokens_matrix = concat([normalize_h[token] for token in tokens])
+    //     tokens_outputs = e.forward(tokens_matrix)  # Just build_MLP
+    //     // Add tokens to outputs?
+    //     tokens_and_outputs = [(token, output) for token, output in zip(tokens, tokens_outputs)]
+    //     for each token, output in tokens_and_outputs:
+    //         tokens_outputs[token] = output * topk_w[token]
 
-    # === Combine ===
-    Y_perm = all_to_all_unpack(Y_by_expert)    # bring results back, inverse permute
-    Y = combine_topk(Y_perm, topk_idx, topk_w) # if k=2, weighted sum; else assign
+    outputs = tokens @ all_experts; [n, e, d]
+    mask = mask(topk_w);  // kernel for masking, sort of like in attention kernel: [n, e, 1]
+    return outputs * mask  // element wise mult: graph.multiply
+    
+    return tokens_outputs
     */
-    return normalized_h;
 }
 
 size_t NomicModel::build_transformer_block(CactusGraph* gb, size_t hidden, uint32_t layer_idx,
