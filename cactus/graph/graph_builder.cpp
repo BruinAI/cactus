@@ -14,6 +14,7 @@ static const char* op_type_names[] = {
     "SCALAR_ADD", "SCALAR_SUBTRACT", "SCALAR_MULTIPLY", "SCALAR_DIVIDE",
     "SCALAR_EXP", "SCALAR_SQRT", "SCALAR_COS", "SCALAR_SIN",
     "SILU", "GELU", "SAMPLE", "CONCAT",
+    "SCATTER_TOPK",
     "TOPK", "LAYERNORM",
     "INDEX"
 };
@@ -358,6 +359,27 @@ size_t CactusGraph::concat(size_t input1, size_t input2, int axis) {
     OpParams params;
     params.axis = axis;
     return add_node(OpType::CONCAT, {input1, input2}, output_shape, params);
+}
+
+size_t CactusGraph::scatter_topk(size_t indices, size_t values, size_t num_classes) {
+    const auto& indices_buffer = get_output_buffer(indices);
+    const auto& values_buffer = get_output_buffer(values);
+
+    if (indices_buffer.shape != values_buffer.shape) {
+        throw std::runtime_error("ScatterTopK requires indices and values with identical shapes");
+    }
+    if (indices_buffer.shape.size() != 2) {
+        throw std::runtime_error("ScatterTopK currently supports 2D tensors [batch, top_k]");
+    }
+    if (indices_buffer.precision != Precision::FP32 || values_buffer.precision != Precision::FP32) {
+        throw std::runtime_error("ScatterTopK expects FP32 indices and values");
+    }
+
+    std::vector<size_t> output_shape = {indices_buffer.shape[0], num_classes};
+    OpParams params;
+    params.output_precision = Precision::FP32;
+    params.num_classes = num_classes;
+    return add_node(OpType::SCATTER_TOPK, {indices, values}, output_shape, params);
 }
 
 size_t CactusGraph::sample(size_t logits, float temperature, float top_p, size_t top_k) {

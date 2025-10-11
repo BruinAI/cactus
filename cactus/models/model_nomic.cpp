@@ -61,28 +61,17 @@ size_t NomicModel::build_attention(CactusGraph* gb, size_t normalized_input, uin
         throw std::runtime_error("QKV weight first dimension must be divisible by 3");
     }
 
-    auto make_range_input = [&](size_t start, size_t length) {
-        auto indices_node = gb->input({length}, Precision::FP32);
-        std::vector<float> indices(length);
-        for (size_t i = 0; i < length; ++i) {
-            indices[i] = static_cast<float>(start + i);
-        }
-        gb->set_input(indices_node, indices.data(), Precision::FP32);
-        return indices_node;
-    };
-
+    // Reshape QKV weights from [3*segment, hidden_dim] to [3, segment, hidden_dim] and split using index
     const size_t segment = total_qkv_dim / 3;
-    auto q_indices = make_range_input(0, segment);
-    auto k_indices = make_range_input(segment, segment);
-    auto v_indices = make_range_input(segment * 2, segment);
+    auto qkv_weight_reshaped = gb->reshape(layer.attn_qkv_weight, {3, segment, hidden_dim});
+    auto q_weight = gb->index(qkv_weight_reshaped, 0, 0);
+    auto k_weight = gb->index(qkv_weight_reshaped, 1, 0);
+    auto v_weight = gb->index(qkv_weight_reshaped, 2, 0);
 
-    auto q_weight = gb->gather(layer.attn_qkv_weight, q_indices);
-    auto k_weight = gb->gather(layer.attn_qkv_weight, k_indices);
-    auto v_weight = gb->gather(layer.attn_qkv_weight, v_indices);
-
-    auto q_bias = gb->gather(layer.attn_qkv_bias, q_indices);
-    auto k_bias = gb->gather(layer.attn_qkv_bias, k_indices);
-    auto v_bias = gb->gather(layer.attn_qkv_bias, v_indices);
+    auto qkv_bias_reshaped = gb->reshape(layer.attn_qkv_bias, {3, segment});
+    auto q_bias = gb->index(qkv_bias_reshaped, 0, 0);
+    auto k_bias = gb->index(qkv_bias_reshaped, 1, 0);
+    auto v_bias = gb->index(qkv_bias_reshaped, 2, 0);
 
     auto q_proj = gb->matmul(normalized_input, q_weight, true, backend);
     q_proj = gb->add(q_proj, q_bias);
@@ -146,6 +135,14 @@ size_t NomicModel::build_standard_mlp(CactusGraph* gb, size_t normalized_h, uint
     return hidden;
 }
 
+/*
+Looking for matching output:
+encoder.layers.1.norm2                            
+  -> Bias Shape:       torch.Size([768])
+  -> Bias Precision:     torch.float32
+  | Output Shape:       torch.Size([1, 10, 768])
+  | Elements:   tensor([-0.0329, -0.0191,  0.0159, -0.0130,  0.0067])
+*/
 size_t NomicModel::build_moe_mlp(CactusGraph* gb, size_t normalized_h, uint32_t layer_idx,
                                 ComputeBackend backend) const {
     const auto& layer = weight_nodes_.layers[layer_idx];
@@ -164,15 +161,13 @@ size_t NomicModel::build_moe_mlp(CactusGraph* gb, size_t normalized_h, uint32_t 
     auto gate_probs = gb->softmax(gate_weights);
     auto [topk_idx, topk_w] = gb->topk(gate_probs, config_.num_top_experts);
     
-    // Verify topk outputs are FP32 (current implementation always outputs FP32)
     const auto& topk_idx_buffer = gb->get_output_buffer(topk_idx);
     const auto& topk_w_buffer = gb->get_output_buffer(topk_w);
     if (topk_idx_buffer.precision != Precision::FP32 || topk_w_buffer.precision != Precision::FP32) {
         throw std::runtime_error("TopK outputs must be FP32");
     }
-    
-    auto topk_idx_data = static_cast<const float*>(gb->get_output(topk_idx));
-    auto topk_w_data = static_cast<const float*>(gb->get_output(topk_w));
+
+    auto expert_token_weights_matrix = gb->scatter_topk(topk_idx, topk_w, num_experts);
 
     // Getting expert outputs
     auto expert_outputs = 0;  // -> [N, E, D_h]
@@ -181,30 +176,30 @@ size_t NomicModel::build_moe_mlp(CactusGraph* gb, size_t normalized_h, uint32_t 
     auto expert_weights1_reshaped = gb->reshape(layer.mlp_experts_mlp_w1, {num_experts, expert_dim, hidden_dim});
     auto expert_weights2_reshaped = gb->reshape(layer.mlp_experts_mlp_w2, {num_experts, expert_dim, hidden_dim});
     
-    // Pre-compute expert-token weights matrix [N, E]
-    auto expert_token_weights_matrix = gb->input({seq_len, num_experts}, Precision::FP32);
-    std::vector<float> expert_token_weights_data(seq_len * num_experts, 0.0f);
-    for (size_t i = 0; i < seq_len; i++) {
-        for (size_t j = 0; j < config_.num_top_experts; j++) {
-            size_t idx_offset = i * config_.num_top_experts + j;
-            size_t expert_idx = static_cast<size_t>(topk_idx_data[idx_offset]);
-            float weight = topk_w_data[idx_offset];
-            expert_token_weights_data[i * num_experts + expert_idx] = weight;
-        }
-    }
-    gb->set_input(expert_token_weights_matrix, expert_token_weights_data.data(), Precision::FP32);
-    
     for (size_t e = 0; e < num_experts; e++) {
         // Use index to slice the expert weights: index(tensor, e, dim=0) is equivalent to tensor[e, :, :]
         auto expert_weight1 = gb->index(expert_weights1_reshaped, e, 0);  // [D_e, D_h]
         auto expert_weight2 = gb->index(expert_weights2_reshaped, e, 0);  // [D_e, D_h]
         
+        // Casting because transposing on fp16 is not supported
+        if (gb->get_output_buffer(expert_weight2).precision == Precision::FP16) {
+            expert_weight2 = gb->precision_cast(expert_weight2, Precision::FP32);
+            expert_weight2 = gb->transpose(expert_weight2, backend);  // [D_h, D_e]
+            expert_weight2 = gb->precision_cast(expert_weight2, Precision::FP16);
+        } else {
+            expert_weight2 = gb->transpose(expert_weight2, backend);  // [D_h, D_e]
+        }
+
         auto new_expert_output = gb->matmul(normalized_h, expert_weight1, true, backend);  // [N, D_h] @ [D_h, D_e] = [N, D_e]
         new_expert_output = gb->gelu(new_expert_output);
-        new_expert_output = gb->matmul(new_expert_output, expert_weight2, false, backend);  // [N, D_e] @ [D_h, D_e] (pretransposed) = [N, D_h]
+        new_expert_output = gb->matmul(new_expert_output, expert_weight2, true, backend);  // [N, D_e] @ [D_e, D_h] (pretransposed) = [N, D_h]
 
         // Use index to slice expert-specific weights: index(matrix, e, dim=1) is equivalent to matrix[:, e]
         auto expert_token_weights = gb->index(expert_token_weights_matrix, e, 1);  // [N]
+        const auto& expert_weights_prec = gb->get_output_buffer(new_expert_output).precision;
+        if (gb->get_output_buffer(expert_token_weights).precision != expert_weights_prec) {
+            expert_token_weights = gb->precision_cast(expert_token_weights, expert_weights_prec);
+        }
         expert_token_weights = gb->reshape(expert_token_weights, {seq_len, 1});
         
         new_expert_output = gb->multiply(new_expert_output, expert_token_weights);  // [N, D_h] * [N, 1] = [N, D_h]

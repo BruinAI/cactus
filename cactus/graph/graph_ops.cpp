@@ -755,6 +755,51 @@ void compute_sample_node(GraphNode& node, const std::vector<std::unique_ptr<Grap
     }
 }
 
+void compute_scatter_topk_node(GraphNode& node, const std::vector<std::unique_ptr<GraphNode>>& nodes, const std::unordered_map<size_t, size_t>& node_index_map) {
+    const auto& indices_buffer = nodes[node_index_map.at(node.input_ids[0])]->output_buffer;
+    const auto& values_buffer = nodes[node_index_map.at(node.input_ids[1])]->output_buffer;
+
+    if (indices_buffer.shape != values_buffer.shape) {
+        throw std::runtime_error("ScatterTopK requires indices and values with identical shapes");
+    }
+    if (indices_buffer.shape.size() != 2) {
+        throw std::runtime_error("ScatterTopK currently supports 2D tensors");
+    }
+
+    size_t batch_size = indices_buffer.shape[0];
+    size_t top_k = indices_buffer.shape[1];
+    size_t num_classes = node.params.num_classes;
+
+    if (num_classes == 0) {
+        throw std::runtime_error("ScatterTopK requires num_classes > 0");
+    }
+
+    float* output = node.output_buffer.data_as<float>();
+    std::fill(output, output + batch_size * num_classes, 0.0f);
+
+    if (indices_buffer.precision != Precision::FP32 || values_buffer.precision != Precision::FP32) {
+        throw std::runtime_error("ScatterTopK currently expects FP32 inputs");
+    }
+
+    const float* indices_data = indices_buffer.data_as<float>();
+    const float* values_data = values_buffer.data_as<float>();
+
+    for (size_t b = 0; b < batch_size; ++b) {
+        for (size_t k = 0; k < top_k; ++k) {
+            float raw_index = indices_data[b * top_k + k];
+            if (!std::isfinite(raw_index)) {
+                continue;
+            }
+            size_t expert_index = static_cast<size_t>(raw_index + 0.5f);
+            if (expert_index >= num_classes) {
+                throw std::runtime_error("ScatterTopK index out of range");
+            }
+            float weight = values_data[b * top_k + k];
+            output[b * num_classes + expert_index] = weight;
+        }
+    }
+}
+
 // TODO: Claude generated - optimize this, get rid of "axis" which causes code to be ran twice
 void compute_topk_node(GraphNode& node, const std::vector<std::unique_ptr<GraphNode>>& nodes, const std::unordered_map<size_t, size_t>& node_index_map) {
     const auto& input_buffer = nodes[node_index_map.at(node.input_ids[0])]->output_buffer;

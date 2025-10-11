@@ -33,6 +33,7 @@ enum class OpType {
     SCALAR_ADD, SCALAR_SUBTRACT, SCALAR_MULTIPLY, SCALAR_DIVIDE, SCALAR_EXP, SCALAR_SQRT, SCALAR_COS, SCALAR_SIN,
     SILU, GELU,
     SAMPLE, CONCAT,
+    SCATTER_TOPK,
     TOPK, LAYERNORM,
     INDEX,
 };
@@ -141,6 +142,7 @@ struct OpParams {
     size_t random_seed = 0;
     
     size_t index_value = 0;  // For INDEX operation
+    size_t num_classes = 0;  // For scatter operations
 };
 
 struct GraphNode {
@@ -167,6 +169,7 @@ void compute_fused_node(GraphNode& node, const std::vector<std::unique_ptr<Graph
 void compute_reshape_node(GraphNode& node, const std::vector<std::unique_ptr<GraphNode>>& nodes, const std::unordered_map<size_t, size_t>& node_index_map);
 void compute_precision_cast_node(GraphNode& node, const std::vector<std::unique_ptr<GraphNode>>& nodes, const std::unordered_map<size_t, size_t>& node_index_map);
 void compute_sample_node(GraphNode& node, const std::vector<std::unique_ptr<GraphNode>>& nodes, const std::unordered_map<size_t, size_t>& node_index_map);
+void compute_scatter_topk_node(GraphNode& node, const std::vector<std::unique_ptr<GraphNode>>& nodes, const std::unordered_map<size_t, size_t>& node_index_map);
 void compute_topk_node(GraphNode& node, const std::vector<std::unique_ptr<GraphNode>>& nodes, const std::unordered_map<size_t, size_t>& node_index_map);
 void compute_layernorm_node(GraphNode& node, const std::vector<std::unique_ptr<GraphNode>>& nodes, const std::unordered_map<size_t, size_t>& node_index_map);
 void compute_index_node(GraphNode& node, const std::vector<std::unique_ptr<GraphNode>>& nodes, const std::unordered_map<size_t, size_t>& node_index_map);
@@ -234,6 +237,7 @@ public:
     size_t sample(size_t logits, float temperature = 0.6f, float top_p = 0.95f, size_t top_k = 20);
     
     size_t concat(size_t input1, size_t input2, int axis = 0);
+    size_t scatter_topk(size_t indices, size_t values, size_t num_classes);
     
     void set_input(size_t node_id, void* data, Precision precision);
     void set_external_input(size_t node_id, void* data, Precision precision);

@@ -6,6 +6,11 @@ echo "==================================="
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 
+# Export sanitizer flags for both library and test builds
+export CMAKE_CXX_FLAGS="-fsanitize=address -fsanitize=undefined -fno-omit-frame-pointer -g -O1"
+export ASAN_OPTIONS="detect_leaks=1:fast_unwind_on_malloc=0"
+export UBSAN_OPTIONS="print_stacktrace=1"
+
 echo ""
 echo "Step 1: Building Cactus library..."
 cd "$PROJECT_ROOT"
@@ -42,4 +47,3 @@ if [ ! -x "./test_model_nomic" ]; then
 fi
 
 ./test_model_nomic
-
