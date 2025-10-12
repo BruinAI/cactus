@@ -203,7 +203,37 @@ private:
     void load_chat_template(const std::string& template_file);
 };
 
+class ConvCache {
+public:
+    struct CircularView {
+        void* ptr1;   // R_Tensor: [0, head)
+        size_t len1;
+        void* ptr2;   // L_Tensor: [head, L)
+        size_t len2;
+        size_t total_len;   // always L
+    };
 
+    void init(size_t layers, size_t hidden_dim, size_t window_len, Precision model_precision);
+    CircularView get_window(size_t layer) const;
+    void update(size_t layer, const void* latest_token);
+    void reset();
+
+    bool is_empty() const { return num_layers == 0; }
+
+    size_t num_layers = 0;
+    size_t hidden_size = 0;
+    size_t window_size = 0;  // L
+    Precision precision = Precision::FP32;
+    size_t element_size = 4;
+
+private:
+    struct LayerState {
+        std::vector<uint8_t> data;  // size = L * hidden_size * element_size
+        size_t head = 0;            // next write position [0, L)
+    };
+
+    std::vector<LayerState> layer_states;
+};
 
 struct KVCache {
     static constexpr size_t DEFAULT_WINDOW_SIZE = 1024;

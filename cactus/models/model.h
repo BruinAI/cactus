@@ -151,6 +151,8 @@ private:
 
         std::vector<LayerEntry> layers;
     } weight_nodes_;
+
+    ConvCache conv_cache_;
 };
 
 }

@@ -59,7 +59,6 @@ size_t LFM2Model::build_conv1d(CactusGraph* gb, size_t input, uint32_t layer_idx
     size_t hidden_dim = in_proj_buffer.shape[1] / 3;
 
     auto triplet = gb->reshape(in_proj, {seq_len, static_cast<size_t>(3), hidden_dim});
-
     auto B = gb->slice(triplet, 1, 0, 1);
     auto C = gb->slice(triplet, 1, 1, 1);
     auto X = gb->slice(triplet, 1, 2, 1);
@@ -70,38 +69,59 @@ size_t LFM2Model::build_conv1d(CactusGraph* gb, size_t input, uint32_t layer_idx
 
     auto Bx = gb->multiply(B, X);
 
-    const auto& depthwise_buffer = gb->get_output_buffer(layer.conv_depthwise_weight);
-    if (depthwise_buffer.shape.empty()) {
-        throw std::runtime_error("Conv depthwise weights must have shape");
+    auto view = conv_cache_.get_window(layer_idx);
+
+    auto& depthwise_buffer = gb->get_output_buffer(layer.conv_depthwise_weight);
+    size_t kernel_size = depthwise_buffer.shape.back();  // L
+
+    size_t window_node;
+
+    if (view.len2 > 0) {
+        size_t L_node = gb->input({view.len2, hidden_dim}, conv_cache_.precision);
+        size_t R_node = gb->input({view.len1, hidden_dim}, conv_cache_.precision);
+
+        gb->set_input(L_node, view.ptr2, conv_cache_.precision);
+        gb->set_input(R_node, view.ptr1, conv_cache_.precision);
+
+        window_node = gb->concat(L_node, R_node, 0);  // chronological order: [head:L] + [0:head]
+    } else {
+        // Head is 0 or buffer is already linear
+        size_t cache_node = gb->input({view.total_len, hidden_dim}, conv_cache_.precision);
+        gb->set_input(cache_node, view.ptr1, conv_cache_.precision);
+        window_node = cache_node;
     }
 
-    size_t kernel_size = depthwise_buffer.shape.back();
-    if (seq_len < kernel_size) {
-        throw std::runtime_error("Conv input sequence shorter than kernel size in non-prefill path");
-    }
+    
+    window_node = gb->concat(window_node, Bx, 0);  
 
-    size_t window_start = seq_len - kernel_size;
-    auto window = gb->slice(Bx, 0, window_start, kernel_size);
-    window = gb->reshape(window, {kernel_size, hidden_dim});
-    window = gb->transpose(window);
+    const auto& window_buffer = gb->get_output_buffer(window_node);
+    size_t total_window_len = window_buffer.shape[0];
+    size_t slice_start = (total_window_len >= kernel_size) ? (total_window_len - kernel_size) : 0;
+    size_t slice_len = std::min(kernel_size, total_window_len);
+
+    auto sliced_window = gb->slice(window_node, 0, slice_start, slice_len);
+
+    sliced_window = gb->reshape(sliced_window, {slice_len, hidden_dim});
+    sliced_window = gb->transpose(sliced_window); 
 
     size_t depthwise = layer.conv_depthwise_weight;
     if (depthwise_buffer.shape.size() == 3) {
         depthwise = gb->reshape(depthwise, {depthwise_buffer.shape[0], depthwise_buffer.shape[2]});
     } else if (depthwise_buffer.shape.size() == 2) {
         depthwise = gb->reshape(depthwise, {depthwise_buffer.shape[0], depthwise_buffer.shape[1]});
-    } else if (depthwise_buffer.shape.size() == 1) {
-        depthwise = gb->reshape(depthwise, {static_cast<size_t>(1), depthwise_buffer.shape[0]});
     }
 
-    auto conv_mul = gb->multiply(window, depthwise);
-    auto conv_out = gb->sum(conv_mul, 1);
+    auto conv_mul = gb->multiply(sliced_window, depthwise);
+    auto conv_out = gb->sum(conv_mul, 1); 
     conv_out = gb->reshape(conv_out, {static_cast<size_t>(1), hidden_dim});
 
     auto gate = gb->slice(C, 0, seq_len - 1, 1);
     gate = gb->reshape(gate, {static_cast<size_t>(1), hidden_dim});
 
     auto gated = gb->multiply(gate, conv_out);
+
+    void* bx_ptr = gb->get_output(Bx);
+    conv_cache_.update(layer_idx, bx_ptr);
 
     return gb->matmul(gated, layer.conv_out_proj_weight, true, backend);
 }
