@@ -27,7 +27,7 @@ struct Config {
     float rope_theta = 1000000.0f;
     bool tie_word_embeddings = true;
 
-    enum class ModelType {QWEN = 0, GEMMA = 1};
+    enum class ModelType {QWEN = 0, GEMMA = 1, LFM2 = 2};
     ModelType model_type = ModelType::QWEN;
 
     enum class Activation {GELU = 0, SILU = 1};
@@ -42,6 +42,10 @@ struct Config {
     float default_temperature = 0.6f;
     float default_top_p = 0.95f;
     size_t default_top_k = 20;
+
+    // LFM2-specific fields
+    std::vector<std::string> layer_types;
+    size_t conv_L_cache = 0;
 
     bool from_json(const std::string& json_path);
     std::string to_json() const;

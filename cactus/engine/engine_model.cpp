@@ -9,6 +9,7 @@
 #include <dirent.h>
 #include <algorithm>
 #include <set>
+#include <sstream>
 
 namespace cactus {
 namespace engine {
@@ -274,7 +275,21 @@ bool Config::from_json(const std::string& config_path) {
         }
         else if (key == "model_type") {
             if (value == "gemma" || value == "GEMMA") model_type = ModelType::GEMMA;
+            else if (value == "lfm2" || value == "LFM2") model_type = ModelType::LFM2;
             else model_type = ModelType::QWEN;
+        }
+        else if (key == "conv_L_cache") conv_L_cache = static_cast<size_t>(std::stoul(value));
+        else if (key == "layer_types") {
+            layer_types.clear();
+            std::stringstream ss(value);
+            std::string item;
+            while (std::getline(ss, item, ',')) {
+                if (!item.empty()) {
+                    item.erase(0, item.find_first_not_of(" \t"));
+                    item.erase(item.find_last_not_of(" \t") + 1);
+                    if (!item.empty()) layer_types.push_back(item);
+                }
+            }
         }
     }
 
@@ -308,6 +323,8 @@ std::unique_ptr<Model> create_model(const std::string& model_folder) {
             return std::make_unique<QwenModel>(config);
         case Config::ModelType::GEMMA:
             return std::make_unique<GemmaModel>(config);
+        case Config::ModelType::LFM2:
+            return std::make_unique<LFM2Model>(config);
         default:
             return std::make_unique<QwenModel>(config);
     }

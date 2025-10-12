@@ -14,9 +14,35 @@ LFM2Model::LFM2Model(const Config& config) : Model(config) {
     weight_nodes_.layers.resize(config.num_layers);
 }
 
+bool LFM2Model::init(const std::string& model_folder, size_t context_size, const std::string& system_prompt) {
+    // Call base class init first
+    if (!Model::init(model_folder, context_size, system_prompt)) {
+        return false;
+    }
+
+    // Initialize conv cache for LFM2
+    if (config_.conv_L_cache > 0) {
+        Precision cache_precision;
+        switch (config_.precision) {
+            case Config::Precision::INT8:
+                cache_precision = Precision::INT8;
+                break;
+            case Config::Precision::FP16:
+                cache_precision = Precision::FP16;
+                break;
+            case Config::Precision::FP32:
+                cache_precision = Precision::FP32;
+                break;
+        }
+        conv_cache_.init(config_.num_layers, config_.hidden_dim, config_.conv_L_cache, cache_precision);
+    }
+
+    return true;
+}
+
 void LFM2Model::load_weights_to_graph(CactusGraph* gb) {
     embedding_node_id_ = gb->mmap_embeddings(embedding_file_path_);
-    weight_nodes_.output_norm_weight = gb->mmap_weights(model_folder_path_ + "/output_norm.weights");
+    weight_nodes_.output_norm_weight = gb->mmap_weights(model_folder_path_ + "/post_attn_norm.weights");
 
     if (config_.tie_word_embeddings) {
         weight_nodes_.output_weight = embedding_node_id_;
@@ -30,17 +56,38 @@ void LFM2Model::load_weights_to_graph(CactusGraph* gb) {
         auto& layer_entry = weight_nodes_.layers[i];
         auto& layer = layer_entry.weights;
         std::string layer_prefix = model_folder_path_ + "/layer_" + std::to_string(i) + "_";
-        layer.attn_q_weight = gb->mmap_weights(layer_prefix + "attn_q.weights");
-        layer.attn_k_weight = gb->mmap_weights(layer_prefix + "attn_k.weights");
-        layer.attn_v_weight = gb->mmap_weights(layer_prefix + "attn_v.weights");
-        layer.attn_output_weight = gb->mmap_weights(layer_prefix + "attn_output.weights");
+
+        // Determine layer type from config
+        bool is_conv_layer = false;
+        if (i < config_.layer_types.size()) {
+            std::string layer_type = config_.layer_types[i];
+            is_conv_layer = (layer_type == "conv" || layer_type == "CONV");
+            // Anything else (attn, full_attention, attention) is treated as attention layer
+        }
+
+        if (is_conv_layer) {
+            // Load conv-specific weights
+            layer_entry.type = WeightNodeIDs::LayerType::CONV;
+            layer.conv_in_proj_weight = gb->mmap_weights(layer_prefix + "conv_in_proj.weights");
+            layer.conv_out_proj_weight = gb->mmap_weights(layer_prefix + "conv_out_proj.weights");
+            layer.conv_depthwise_weight = gb->mmap_weights(layer_prefix + "conv_depthwise.weights");
+        } else {
+            // Load attention-specific weights
+            layer_entry.type = WeightNodeIDs::LayerType::ATTENTION;
+            layer.attn_q_weight = gb->mmap_weights(layer_prefix + "attn_q.weights");
+            layer.attn_k_weight = gb->mmap_weights(layer_prefix + "attn_k.weights");
+            layer.attn_v_weight = gb->mmap_weights(layer_prefix + "attn_v.weights");
+            layer.attn_output_weight = gb->mmap_weights(layer_prefix + "attn_output.weights");
+            layer.attn_q_norm_weight = gb->mmap_weights(layer_prefix + "attn_q_norm.weights");
+            layer.attn_k_norm_weight = gb->mmap_weights(layer_prefix + "attn_k_norm.weights");
+        }
+
+        // Load shared weights (present in all layers)
         layer.input_layernorm_weight = gb->mmap_weights(layer_prefix + "input_norm.weights");
-        layer.attn_q_norm_weight = gb->mmap_weights(layer_prefix + "attn_q_norm.weights");
-        layer.attn_k_norm_weight = gb->mmap_weights(layer_prefix + "attn_k_norm.weights");
+        layer.post_attention_layernorm_weight = gb->mmap_weights(layer_prefix + "post_attn_norm.weights");
         layer.ffn_gate_weight = gb->mmap_weights(layer_prefix + "ffn_gate.weights");
         layer.ffn_up_weight = gb->mmap_weights(layer_prefix + "ffn_up.weights");
         layer.ffn_down_weight = gb->mmap_weights(layer_prefix + "ffn_down.weights");
-        layer.post_attention_layernorm_weight = gb->mmap_weights(layer_prefix + "post_attn_norm.weights");
     }
 }
 
@@ -243,12 +290,22 @@ size_t LFM2Model::build_transformer_block(CactusGraph* gb, size_t hidden, uint32
                                          ComputeBackend backend, bool use_cache, size_t position_offset) {
     const auto& layer_entry = weight_nodes_.layers[layer_idx];
     const auto& layer = layer_entry.weights;
+    
     auto normalized_input = gb->rms_norm(hidden, layer.input_layernorm_weight, config_.layer_norm_eps);
-    auto attn_output = build_attention(gb, normalized_input, layer_idx, backend, use_cache, position_offset);
-    auto after_attention = gb->add(hidden, attn_output);
-    auto normalized_after_attention = gb->rms_norm(after_attention, layer.post_attention_layernorm_weight, config_.layer_norm_eps);
-    auto mlp_output = build_mlp(gb, normalized_after_attention, layer_idx, backend);
-    return gb->add(after_attention, mlp_output);
+    
+    size_t block_output;
+    if (layer_entry.type == WeightNodeIDs::LayerType::CONV) {
+        // Conv layer: use conv1d instead of attention
+        block_output = build_conv1d(gb, normalized_input, layer_idx, backend);
+    } else {
+        // Attention layer: standard attention
+        block_output = build_attention(gb, normalized_input, layer_idx, backend, use_cache, position_offset);
+    }
+    
+    auto after_block = gb->add(hidden, block_output);
+    auto normalized_after_block = gb->rms_norm(after_block, layer.post_attention_layernorm_weight, config_.layer_norm_eps);
+    auto mlp_output = build_mlp(gb, normalized_after_block, layer_idx, backend);
+    return gb->add(after_block, mlp_output);
 }
 
 
@@ -265,7 +322,6 @@ size_t LFM2Model::forward(const std::vector<uint32_t>& tokens, bool use_cache) {
     gb->soft_reset();
 
     auto seq_len = static_cast<size_t>(tokens.size());
-    auto conv_L_cache = static_cast<size_t>(config_.conv_L_cache);
 
     size_t position_offset = use_cache ? kv_cache_.get_total_seq_len() : 0;
 
@@ -276,15 +332,8 @@ size_t LFM2Model::forward(const std::vector<uint32_t>& tokens, bool use_cache) {
     auto input_node_id = gb->input({seq_len}, Precision::FP32);
     auto hidden = gb->embedding(embedding_node_id_, input_node_id);
 
-    static std::set<uint32_t> skip_layers = {};
     for (uint32_t layer_idx = 0; layer_idx < config_.num_layers; layer_idx++) {
-        if (skip_layers.count(layer_idx)) {
-            continue;
-        }
-        if (weight_nodes_.layers[layer_idx].type == WeightNodeIDs::LayerType::ATTENTION) 
-            hidden = build_transformer_block(gb, hidden, layer_idx, backend, use_cache, position_offset);
-        else if (weight_nodes_.layers[layer_idx].type == WeightNodeIDs::LayerType::CONV)
-            hidden = build_conv1d(gb, hidden, layer_idx, backend);
+        hidden = build_transformer_block(gb, hidden, layer_idx, backend, use_cache, position_offset);
     }
 
     auto final_hidden = gb->rms_norm(hidden, weight_nodes_.output_norm_weight, config_.layer_norm_eps);

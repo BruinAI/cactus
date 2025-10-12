@@ -157,6 +157,14 @@ def save_tensor_with_header(tensor, output_path, precision='FP32', transpose=Fal
         with open(scale_path, 'w') as f:
             f.write(f"{scale:.10f}\n")
 
+
+def format_config_value(value):
+    if isinstance(value, bool):
+        return 'true' if value else 'false'
+    if isinstance(value, (list, tuple)):
+        return ','.join(str(v) for v in value)
+    return str(value)
+
 def convert_hf_model_weights(model, output_dir, precision='INT8', args=None):
     
     quantization_stats = {
@@ -179,11 +187,14 @@ def convert_hf_model_weights(model, output_dir, precision='INT8', args=None):
     model_type_str = getattr(config, 'model_type', '').lower()
     if 'gemma' in model_type_str:
         detected_model_type = 'gemma'
+    elif 'lfm2' in model_type_str:
+        detected_model_type = 'lfm2'
     elif 'qwen' in model_type_str:
         detected_model_type = 'qwen'
     else:
         detected_model_type = 'qwen'
-        print(f"  Warning: Unknown model type '{model_type_str}', defaulting to 'qwen'")
+        if model_type_str:
+            print(f"  Warning: Unknown model type '{model_type_str}', defaulting to 'qwen'")
 
     model_config = {
         'vocab_size': getattr(config, 'vocab_size', 0),
@@ -194,10 +205,15 @@ def convert_hf_model_weights(model, output_dir, precision='INT8', args=None):
         'ffn_intermediate_dim': getattr(config, 'intermediate_size', 0),
         'context_length': getattr(config, 'max_position_embeddings', getattr(config, 'max_sequence_length', 0)),
         'rope_theta': getattr(config, 'rope_theta', 10000.0),
-        'attention_head_dim': getattr(config, 'head_dim', getattr(config, 'hidden_size', 0) // getattr(config, 'num_attention_heads', 1)),
+        'attention_head_dim': getattr(config, 'head_dim', getattr(config, 'hidden_size', 0) // max(getattr(config, 'num_attention_heads', 1), 1)),
         'tie_word_embeddings': tie_word_embeddings,
         'model_type': detected_model_type
     }
+
+    if detected_model_type == 'lfm2':
+        layer_types = getattr(config, 'layer_types', [])
+        model_config['layer_types'] = layer_types
+        model_config['conv_L_cache'] = getattr(config, 'conv_L_cache', 0)
     
     embed_names = ['model.embed_tokens.weight', 'embed_tokens.weight', 'embeddings.weight', 'transformer.wte.weight']
     embedding_found = False
@@ -246,16 +262,19 @@ def convert_hf_model_weights(model, output_dir, precision='INT8', args=None):
             (['self_attn.k_proj.weight', 'attn.k_proj.weight'], precision, f'layer_{i}_attn_k.weights', False),
             (['self_attn.v_proj.weight', 'attn.v_proj.weight'], precision, f'layer_{i}_attn_v.weights', False),
             (['self_attn.o_proj.weight', 'attn.o_proj.weight', 'attn.c_proj.weight'], precision, f'layer_{i}_attn_output.weights', False),
-            (['input_layernorm.weight', 'ln_1.weight'], precision, f'layer_{i}_input_norm.weights', False),
+            (['input_layernorm.weight', 'ln_1.weight', 'operator_norm.weight'], precision, f'layer_{i}_input_norm.weights', False),
             (['self_attn.q_norm.weight', 'self_attn.q_layernorm.weight'], precision, f'layer_{i}_attn_q_norm.weights', False),
             (['self_attn.k_norm.weight', 'self_attn.k_layernorm.weight'], precision, f'layer_{i}_attn_k_norm.weights', False),
-            (['mlp.gate_proj.weight', 'mlp.c_fc.weight'], precision, f'layer_{i}_ffn_gate.weights', False),
-            (['mlp.up_proj.weight'], precision, f'layer_{i}_ffn_up.weights', False),
-            (['mlp.down_proj.weight', 'mlp.c_proj.weight'], precision, f'layer_{i}_ffn_down.weights', False),
-            (['post_attention_layernorm.weight', 'ln_2.weight'], precision, f'layer_{i}_post_attn_norm.weights', False),
+            (['mlp.gate_proj.weight', 'mlp.c_fc.weight', 'feed_forward.w1.weight'], precision, f'layer_{i}_ffn_gate.weights', False),
+            (['mlp.up_proj.weight', 'feed_forward.w3.weight'], precision, f'layer_{i}_ffn_up.weights', False),
+            (['mlp.down_proj.weight', 'mlp.c_proj.weight', 'feed_forward.w2.weight'], precision, f'layer_{i}_ffn_down.weights', False),
+            (['post_attention_layernorm.weight', 'ln_2.weight', 'ffn_norm.weight'], precision, f'layer_{i}_post_attn_norm.weights', False),
             # Gemma3 specific layer norms 
             (['pre_feedforward_layernorm.weight'], precision, f'layer_{i}_pre_ffn_norm.weights', False),
             (['post_feedforward_layernorm.weight'], precision, f'layer_{i}_post_ffn_norm.weights', False),
+            (['conv.in_proj.weight'], precision, f'layer_{i}_conv_in_proj.weights', False),
+            (['conv.out_proj.weight'], precision, f'layer_{i}_conv_out_proj.weights', False),
+            (['conv.conv.weight'], precision, f'layer_{i}_conv_depthwise.weights', False),
         ]
         
         for name_patterns, tensor_precision, output_name, should_transpose in weight_patterns:
@@ -528,11 +547,7 @@ def convert_hf_to_cactus(model_name, output_dir, precision='INT8', cache_dir=Non
     config_path = output_dir / "config.txt"
     with open(config_path, 'w') as f:
         for key, value in config.items():
-            if isinstance(value, bool):
-                value_str = str(value).lower()
-            else:
-                value_str = str(value)
-            f.write(f"{key}={value_str}\n")
+            f.write(f"{key}={format_config_value(value)}\n")
     
     convert_hf_tokenizer(tokenizer, output_dir)
     print(f"\nConversion complete: {output_dir}")

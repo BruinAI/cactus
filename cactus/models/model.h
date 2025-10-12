@@ -98,6 +98,8 @@ public:
     explicit LFM2Model(const Config& config);
     ~LFM2Model() override = default;
 
+    bool init(const std::string& model_folder, size_t context_size, const std::string& system_prompt = "");
+
 protected:
     size_t build_attention(CactusGraph* gb, size_t normalized_input, uint32_t layer_idx,
                           ComputeBackend backend, bool use_cache = false, size_t position_offset = 0) override;
