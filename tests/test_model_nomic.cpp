@@ -114,7 +114,10 @@ void dump_graph_activations(CactusGraph* gb) {
             }
         } else {
             const int8_t* data = static_cast<const int8_t*>(data_ptr);
+            float scale = buffer.quantization_scale;
             for (size_t i = 0; i < sample_count; ++i) {
+                // float dequantized = static_cast<float>(data[i]) * scale;
+                // std::cout << (i == 0 ? " " : ", ") << dequantized;
                 std::cout << (i == 0 ? " " : ", ") << static_cast<int>(data[i]);
             }
         }
@@ -246,7 +249,7 @@ bool test_nomic_forward_executes_with_tokens() {
         auto* gb = static_cast<CactusGraph*>(model->graph_handle_);
         size_t final_hidden = model->forward(tokens, false);
         
-        gb->execute();
+        gb->execute("profile.txt");
         
         if (std::getenv("CACTUS_DUMP_ACTIVATIONS")) {
             dump_graph_activations(gb);

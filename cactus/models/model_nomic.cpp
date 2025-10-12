@@ -147,7 +147,7 @@ size_t NomicModel::build_moe_mlp(CactusGraph* gb, size_t normalized_h, uint32_t 
         throw std::runtime_error("TopK outputs must be FP32");
     }
 
-    auto expert_token_weights_matrix = gb->scatter_topk(topk_idx, topk_w, num_experts);
+    auto expert_token_weights_matrix = gb->scatter_topk(topk_idx, topk_w, num_experts);  // [N, E]
 
     // Getting expert outputs
     auto expert_outputs = 0;  // -> [N, E, D_h]
@@ -159,20 +159,19 @@ size_t NomicModel::build_moe_mlp(CactusGraph* gb, size_t normalized_h, uint32_t 
     for (size_t e = 0; e < num_experts; e++) {
         // Use index to slice the expert weights: index(tensor, e, dim=0) is equivalent to tensor[e, :, :]
         auto expert_weight1 = gb->index(expert_weights1_reshaped, e, 0);  // [D_e, D_h]
-        auto expert_weight2 = gb->index(expert_weights2_reshaped, e, 0);  // [D_e, D_h]
+        auto new_expert_output = gb->matmul(normalized_h, expert_weight1, true, backend);  // [N, D_h] @ [D_h, D_e] = [N, D_e]
+        new_expert_output = gb->gelu(new_expert_output);
         
-        // Casting because transposing on fp16 is not supported
+        auto expert_weight2 = gb->index(expert_weights2_reshaped, e, 0);  // [D_e, D_h]
         if (gb->get_output_buffer(expert_weight2).precision == Precision::FP16) {
+            // Casting because transposing on fp16 does not work in practice even though it technically should
             expert_weight2 = gb->precision_cast(expert_weight2, Precision::FP32);
             expert_weight2 = gb->transpose(expert_weight2, backend);  // [D_h, D_e]
             expert_weight2 = gb->precision_cast(expert_weight2, Precision::FP16);
+            new_expert_output = gb->matmul(new_expert_output, expert_weight2, true, backend);  // [N, D_e] @ [D_e, D_h] (pretransposed) = [N, D_h]
         } else {
-            expert_weight2 = gb->transpose(expert_weight2, backend);  // [D_h, D_e]
+            new_expert_output = gb->matmul(new_expert_output, expert_weight2, false, backend);  // [N, D_e] @ [D_e, D_h] (pretransposed) = [N, D_h]
         }
-
-        auto new_expert_output = gb->matmul(normalized_h, expert_weight1, true, backend);  // [N, D_h] @ [D_h, D_e] = [N, D_e]
-        new_expert_output = gb->gelu(new_expert_output);
-        new_expert_output = gb->matmul(new_expert_output, expert_weight2, true, backend);  // [N, D_e] @ [D_e, D_h] (pretransposed) = [N, D_h]
 
         // Use index to slice expert-specific weights: index(matrix, e, dim=1) is equivalent to matrix[:, e]
         auto expert_token_weights = gb->index(expert_token_weights_matrix, e, 1);  // [N]
@@ -183,17 +182,14 @@ size_t NomicModel::build_moe_mlp(CactusGraph* gb, size_t normalized_h, uint32_t 
         expert_token_weights = gb->reshape(expert_token_weights, {seq_len, 1});
         
         new_expert_output = gb->multiply(new_expert_output, expert_token_weights);  // [N, D_h] * [N, 1] = [N, D_h]
-
-        new_expert_output = gb->reshape(new_expert_output, {seq_len, 1, hidden_dim});
         if (e == 0) {
             expert_outputs = new_expert_output;
         } else {
-            expert_outputs = gb->concat(expert_outputs, new_expert_output, 1);
+            expert_outputs = gb->add(expert_outputs, new_expert_output);
         }
     }
 
-    auto final_outputs = gb->sum(expert_outputs, 1);  // [N, E, D_h] -> [N, D_h]
-    return gb->add(final_outputs, layer.mlp_experts_bias);
+    return gb->add(expert_outputs, layer.mlp_experts_bias);
 
     /*
     MOE Logic:

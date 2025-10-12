@@ -33,7 +33,7 @@ def save_tensor_with_header(tensor, output_path, precision='FP32', transpose=Fal
     
     if precision == 'INT8':
         filename = output_path.name
-        if any(x in filename for x in ['norm', 'embedding']):
+        if any(x in filename for x in ['norm', 'embedding', 'bias']):
             precision = 'FP16'
     
     if precision == 'INT8':
@@ -173,7 +173,6 @@ def convert_hf_model_weights(model, output_dir, precision='INT8', args=None):
     state_dict = model.state_dict()
     config = model.config
     
-    
     tie_word_embeddings = getattr(config, 'tie_word_embeddings', False)
     model_type_str = getattr(config, 'model_type', '').lower()
 
@@ -195,7 +194,7 @@ def convert_hf_model_weights(model, output_dir, precision='INT8', args=None):
         'num_layers': getattr(config, 'num_hidden_layers', getattr(config, 'num_layers', 0)),
         'attention_heads': getattr(config, 'num_attention_heads', 0),
         'attention_kv_heads': getattr(config, 'num_key_value_heads', getattr(config, 'num_attention_heads', 0)),
-        'ffn_intermediate_dim': getattr(config, 'intermediate_size', 0),
+        'ffn_intermediate_dim': getattr(config, 'intermediate_size', getattr(config, 'n_inner', 0)),
         'context_length': getattr(config, 'max_position_embeddings', getattr(config, 'max_sequence_length', 0)),
         'rope_theta': getattr(config, 'rope_theta', getattr(config, 'rotary_emb_base', 10000.0)),
         'attention_head_dim': getattr(config, 'head_dim', getattr(config, 'hidden_size', 0) // getattr(config, 'num_attention_heads', 1)),
