@@ -20,23 +20,27 @@ void NomicModel::load_weights_to_graph(CactusGraph* gb) {
     for (uint32_t i = 0; i < config_.num_layers; i++) {
         auto& layer = weight_nodes_.layers[i];
         std::string layer_prefix = model_folder_path_ + "/layer_" + std::to_string(i) + "_";
-        layer.attn_qkv_weight = gb->mmap_weights(layer_prefix + "attn_qkv.weight");
-        layer.attn_qkv_bias = gb->mmap_weights(layer_prefix + "attn_qkv.bias");
-        layer.attn_output_weight = gb->mmap_weights(layer_prefix + "attn_output.weight");
+        layer.attn_q_weight = gb->mmap_weights(layer_prefix + "attn_q.weights");
+        layer.attn_k_weight = gb->mmap_weights(layer_prefix + "attn_k.weights");
+        layer.attn_v_weight = gb->mmap_weights(layer_prefix + "attn_v.weights");
+        layer.attn_q_bias = gb->mmap_weights(layer_prefix + "attn_q.bias");
+        layer.attn_k_bias = gb->mmap_weights(layer_prefix + "attn_k.bias");
+        layer.attn_v_bias = gb->mmap_weights(layer_prefix + "attn_v.bias");
+        layer.attn_output_weight = gb->mmap_weights(layer_prefix + "attn_output.weights");
         layer.attn_output_bias = gb->mmap_weights(layer_prefix + "attn_output.bias");
-        layer.ffn_norm_1_weight = gb->mmap_weights(layer_prefix + "norm1.weight");
+        layer.ffn_norm_1_weight = gb->mmap_weights(layer_prefix + "norm1.weights");
         layer.ffn_norm_1_bias = gb->mmap_weights(layer_prefix + "norm1.bias");
-        layer.ffn_norm_2_weight = gb->mmap_weights(layer_prefix + "norm2.weight");
+        layer.ffn_norm_2_weight = gb->mmap_weights(layer_prefix + "norm2.weights");
         layer.ffn_norm_2_bias = gb->mmap_weights(layer_prefix + "norm2.bias");
         if ((i + 1) % config_.moe_every_n_layers != 0) {
-            layer.ffn_up_weight = gb->mmap_weights(layer_prefix + "mlp_fc1.weight");
+            layer.ffn_up_weight = gb->mmap_weights(layer_prefix + "mlp_fc1.weights");
             layer.ffn_up_bias = gb->mmap_weights(layer_prefix + "mlp_fc1.bias");
-            layer.ffn_down_weight = gb->mmap_weights(layer_prefix + "mlp_fc2.weight");
+            layer.ffn_down_weight = gb->mmap_weights(layer_prefix + "mlp_fc2.weights");
             layer.ffn_down_bias = gb->mmap_weights(layer_prefix + "mlp_fc2.bias");
         } else {
-            layer.mlp_router_layer_weight = gb->mmap_weights(layer_prefix + "mlp_router.layer.weight");
-            layer.mlp_experts_mlp_w1 = gb->mmap_weights(layer_prefix + "mlp_experts.mlp.w1");
-            layer.mlp_experts_mlp_w2 = gb->mmap_weights(layer_prefix + "mlp_experts.mlp.w2");
+            layer.mlp_router_layer_weight = gb->mmap_weights(layer_prefix + "mlp_router.layer.weights");
+            layer.mlp_experts_mlp1_weight = gb->mmap_weights(layer_prefix + "mlp_experts.mlp1.weights");
+            layer.mlp_experts_mlp2_weight = gb->mmap_weights(layer_prefix + "mlp_experts.mlp2.weights");
             layer.mlp_experts_bias = gb->mmap_weights(layer_prefix + "mlp_experts.bias");
         }
     }
@@ -50,47 +54,22 @@ size_t NomicModel::build_attention(CactusGraph* gb, size_t normalized_input, uin
     (void)position_offset;
 
     const auto& layer = weight_nodes_.layers[layer_idx];
-    const auto& weight_shape = gb->get_output_buffer(layer.attn_qkv_weight).shape;
-    if (weight_shape.size() != 2) {
-        throw std::runtime_error("QKV weight must be 2D");
-    }
 
-    const size_t hidden_dim = weight_shape[1];
-    const size_t total_qkv_dim = weight_shape[0];
-    if (total_qkv_dim % 3 != 0) {
-        throw std::runtime_error("QKV weight first dimension must be divisible by 3");
-    }
+    auto q_proj = gb->matmul(normalized_input, layer.attn_q_weight, true, backend);
+    q_proj = gb->add(q_proj, layer.attn_q_bias);
 
-    // Reshape QKV weights from [3*segment, hidden_dim] to [3, segment, hidden_dim] and split using index
-    const size_t segment = total_qkv_dim / 3;
-    auto qkv_weight_reshaped = gb->reshape(layer.attn_qkv_weight, {3, segment, hidden_dim});
-    auto q_weight = gb->index(qkv_weight_reshaped, 0, 0);
-    auto k_weight = gb->index(qkv_weight_reshaped, 1, 0);
-    auto v_weight = gb->index(qkv_weight_reshaped, 2, 0);
+    auto k_proj = gb->matmul(normalized_input, layer.attn_k_weight, true, backend);
+    k_proj = gb->add(k_proj, layer.attn_k_bias);
 
-    auto qkv_bias_reshaped = gb->reshape(layer.attn_qkv_bias, {3, segment});
-    auto q_bias = gb->index(qkv_bias_reshaped, 0, 0);
-    auto k_bias = gb->index(qkv_bias_reshaped, 1, 0);
-    auto v_bias = gb->index(qkv_bias_reshaped, 2, 0);
-
-    auto q_proj = gb->matmul(normalized_input, q_weight, true, backend);
-    q_proj = gb->add(q_proj, q_bias);
-
-    auto k_proj = gb->matmul(normalized_input, k_weight, true, backend);
-    k_proj = gb->add(k_proj, k_bias);
-
-    auto v_proj = gb->matmul(normalized_input, v_weight, true, backend);
-    v_proj = gb->add(v_proj, v_bias);
+    auto v_proj = gb->matmul(normalized_input, layer.attn_v_weight, true, backend);
+    v_proj = gb->add(v_proj, layer.attn_v_bias);
 
     const auto& q_shape = gb->get_output_buffer(q_proj).shape;
-    if (q_shape.size() != 2) {
-        throw std::runtime_error("Projected queries must be 2D");
-    }
     const size_t seq_len = q_shape[0];
     const size_t num_heads = config_.attention_heads;
     const size_t head_dim = config_.attention_head_dim;
 
-    if (num_heads == 0 || head_dim == 0 || num_heads * head_dim != hidden_dim) {
+    if (num_heads == 0 || head_dim == 0) {
         throw std::runtime_error("Invalid attention head configuration for Nomic model");
     }
 
@@ -153,7 +132,7 @@ size_t NomicModel::build_moe_mlp(CactusGraph* gb, size_t normalized_h, uint32_t 
     }
 
     const size_t num_experts = config_.num_experts != 0 ? config_.num_experts : router_shape[0];
-    const auto& w1_shape = gb->get_output_buffer(layer.mlp_experts_mlp_w1).shape;  // [E * D_e, D_h]
+    const auto& w1_shape = gb->get_output_buffer(layer.mlp_experts_mlp1_weight).shape;  // [E * D_e, D_h]
     const size_t expert_dim = w1_shape[0] / num_experts;
     const size_t hidden_dim = w1_shape[1];
     const size_t seq_len = gb->get_output_buffer(normalized_h).shape[0];
@@ -174,8 +153,8 @@ size_t NomicModel::build_moe_mlp(CactusGraph* gb, size_t normalized_h, uint32_t 
     auto expert_outputs = 0;  // -> [N, E, D_h]
     
     // Reshape expert weights from [E*D_e, D_h] to [E, D_e, D_h] once
-    auto expert_weights1_reshaped = gb->reshape(layer.mlp_experts_mlp_w1, {num_experts, expert_dim, hidden_dim});
-    auto expert_weights2_reshaped = gb->reshape(layer.mlp_experts_mlp_w2, {num_experts, expert_dim, hidden_dim});
+    auto expert_weights1_reshaped = gb->reshape(layer.mlp_experts_mlp1_weight, {num_experts, expert_dim, hidden_dim});
+    auto expert_weights2_reshaped = gb->reshape(layer.mlp_experts_mlp2_weight, {num_experts, expert_dim, hidden_dim});
     
     for (size_t e = 0; e < num_experts; e++) {
         // Use index to slice the expert weights: index(tensor, e, dim=0) is equivalent to tensor[e, :, :]

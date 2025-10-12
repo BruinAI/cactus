@@ -166,8 +166,12 @@ private:
 
         struct LayerWeights {
             // standard weights
-            size_t attn_qkv_weight;  // attn.Wqkv.weight
-            size_t attn_qkv_bias;  // attn.Wqkv.bias
+            size_t attn_q_weight;  // attn.Wqkv[0].weight
+            size_t attn_k_weight;  // attn.Wqkv[1].weight
+            size_t attn_v_weight;  // attn.Wqkv[2].weight
+            size_t attn_q_bias;  // attn.Wqkv[0].bias
+            size_t attn_k_bias;  // attn.Wqkv[1].bias
+            size_t attn_v_bias;  // attn.Wqkv[2].bias
             size_t attn_output_weight;  // attn.out_proj.weight
             size_t attn_output_bias;  // attn.out_proj.bias
             size_t ffn_up_weight;  // mlp.fc1.weight
@@ -180,8 +184,8 @@ private:
             size_t ffn_norm_2_bias;  // norm2.bias
             // MoE weights
             size_t mlp_router_layer_weight;  // mlp.router.layer.weight
-            size_t mlp_experts_mlp_w1;  // mlp.experts.mlp.w1
-            size_t mlp_experts_mlp_w2;  // mlp.experts.mlp.w2
+            size_t mlp_experts_mlp1_weight;  // mlp.experts.mlp.w1
+            size_t mlp_experts_mlp2_weight;  // mlp.experts.mlp.w2
             size_t mlp_experts_bias;  // mlp.experts.bias
         };
 

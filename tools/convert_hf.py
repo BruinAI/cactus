@@ -278,23 +278,23 @@ def convert_hf_model_weights(model, output_dir, precision='INT8', args=None):
             (['pre_feedforward_layernorm.weight'], precision, f'layer_{i}_pre_ffn_norm.weights', False),
             (['post_feedforward_layernorm.weight'], precision, f'layer_{i}_post_ffn_norm.weights', False),
             # Nomic BERT specific combined weight matrices
-            (['attn.Wqkv.bias'], precision, f'layer_{i}_attn_qkv.bias', False),
-            (['attn.Wqkv.weight'], precision, f'layer_{i}_attn_qkv.weight', False),
+            (['attn.Wqkv.bias'], precision, f'layer_{i}_attn_{{channel}}.bias', False),
+            (['attn.Wqkv.weight'], precision, f'layer_{i}_attn_{{channel}}.weights', False),
             (['attn.out_proj.bias'], precision, f'layer_{i}_attn_output.bias', False),
-            (['attn.out_proj.weight'], precision, f'layer_{i}_attn_output.weight', False),
+            (['attn.out_proj.weight'], precision, f'layer_{i}_attn_output.weights', False),
             (['mlp.fc1.bias'], precision, f'layer_{i}_mlp_fc1.bias', False),
-            (['mlp.fc1.weight'], precision, f'layer_{i}_mlp_fc1.weight', False),
+            (['mlp.fc1.weight'], precision, f'layer_{i}_mlp_fc1.weights', False),
             (['mlp.fc2.bias'], precision, f'layer_{i}_mlp_fc2.bias', False),
-            (['mlp.fc2.weight'], precision, f'layer_{i}_mlp_fc2.weight', False),
+            (['mlp.fc2.weight'], precision, f'layer_{i}_mlp_fc2.weights', False),
             (['norm1.bias'], precision, f'layer_{i}_norm1.bias', False),
-            (['norm1.weight'], precision, f'layer_{i}_norm1.weight', False),
+            (['norm1.weight'], precision, f'layer_{i}_norm1.weights', False),
             (['norm2.bias'], precision, f'layer_{i}_norm2.bias', False),
-            (['norm2.weight'], precision, f'layer_{i}_norm2.weight', False),
+            (['norm2.weight'], precision, f'layer_{i}_norm2.weights', False),
             # MoE specific weight matrices for Nomic
             (['mlp.experts.bias'], precision, f'layer_{i}_mlp_experts.bias', False),
-            (['mlp.experts.mlp.w1'], precision, f'layer_{i}_mlp_experts.mlp.w1', False),
-            (['mlp.experts.mlp.w2'], precision, f'layer_{i}_mlp_experts.mlp.w2', False),
-            (['mlp.router.layer.weight'], precision, f'layer_{i}_mlp_router.layer.weight', False),
+            (['mlp.experts.mlp.w1'], precision, f'layer_{i}_mlp_experts.mlp1.weights', False),
+            (['mlp.experts.mlp.w2'], precision, f'layer_{i}_mlp_experts.mlp2.weights', False),
+            (['mlp.router.layer.weight'], precision, f'layer_{i}_mlp_router.layer.weights', False),
         ]
         
         for name_patterns, tensor_precision, output_name, should_transpose in weight_patterns:
@@ -303,6 +303,18 @@ def convert_hf_model_weights(model, output_dir, precision='INT8', args=None):
                 full_name = layer_prefix + pattern
                 if full_name in state_dict:
                     tensor = state_dict[full_name]
+                    if pattern.startswith('attn.Wqkv.') and model_type_str == 'nomic_bert':
+                        if tensor.ndim == 1:
+                            tensor = tensor.reshape(3, -1)
+                        elif tensor.ndim == 2:
+                            tensor = tensor.reshape(3, -1, tensor.size(-1))
+                        else:
+                            raise ValueError(f"Invalid tensor shape: {tensor.shape}")
+                        for i, ch in enumerate(['q', 'k', 'v']):
+                            channel_output_name = output_name.replace('{channel}', ch)
+                            save_tensor_with_header(tensor[i], output_dir / channel_output_name, tensor_precision, transpose=should_transpose, stats_tracker=quantization_stats, args=args, model_type=detected_model_type)
+                        found = True
+                        break
                     save_tensor_with_header(tensor, output_dir / output_name, tensor_precision, transpose=should_transpose, stats_tracker=quantization_stats, args=args, model_type=detected_model_type)
                     found = True
                     break
