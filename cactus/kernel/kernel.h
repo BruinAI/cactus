@@ -189,6 +189,16 @@ void cactus_attention_f32(const float* queries, const float* keys, const float* 
                           size_t head_dim, float scale, const float* mask, size_t position_offset = 0, size_t window_size = 0);
 
 
+void cactus_conv1d_causal_int8(const int8_t* input, const int8_t* weight, int8_t* output, size_t batch_size, size_t length,
+    size_t in_channels, size_t out_channels, size_t kernel_size, size_t dilation, float input_scale, float weight_scale, float output_scale);
+    
+void cactus_conv1d_causal_f16(const __fp16* input, const __fp16* weight, __fp16* output, size_t batch_size, size_t length,
+    size_t in_channels, size_t out_channels, size_t kernel_size, size_t dilation);
+
+void cactus_conv1d_causal_f32(const float* input, const float* weight, float* output, size_t batch_size, size_t length,
+    size_t in_channels, size_t out_channels, size_t kernel_size, size_t dilation);
+
+
 void cactus_sample_f32(const float* logits, uint32_t* output, size_t vocab_size,
                        float temperature, float top_p, size_t top_k, size_t random_seed);
 void cactus_sample_f16(const __fp16* logits, uint32_t* output, size_t vocab_size,

@@ -1,6 +1,7 @@
 #include "model.h"
 #include "../graph/graph.h"
 #include <cmath>
+#include <cstdint>
 #include <stdexcept>
 #include <set>
 
@@ -69,10 +70,39 @@ size_t LFM2Model::build_conv1d(CactusGraph* gb, size_t input, uint32_t layer_idx
 
     auto Bx = gb->multiply(B, X);
 
-    auto view = conv_cache_.get_window(layer_idx);
-
     auto& depthwise_buffer = gb->get_output_buffer(layer.conv_depthwise_weight);
     size_t kernel_size = depthwise_buffer.shape.back();  // L
+
+    if (seq_len != 1) {
+        size_t conv_weight = layer.conv_depthwise_weight;
+
+        if (depthwise_buffer.shape.size() == 2) {
+            kernel_size = depthwise_buffer.shape[1];
+            conv_weight = gb->reshape(conv_weight, {depthwise_buffer.shape[0], static_cast<size_t>(1), kernel_size});
+        } else if (depthwise_buffer.shape.size() == 3 && depthwise_buffer.shape[1] != 1) {
+            conv_weight = gb->reshape(conv_weight, {depthwise_buffer.shape[0], depthwise_buffer.shape[1], depthwise_buffer.shape[2]});
+            kernel_size = depthwise_buffer.shape[2];
+        }
+
+        auto bx_prefill = gb->reshape(Bx, {static_cast<size_t>(1), seq_len, hidden_dim});
+        auto conv_prefill = gb->conv1d_causal(bx_prefill, conv_weight, kernel_size, 1);
+        conv_prefill = gb->reshape(conv_prefill, {seq_len, hidden_dim});
+
+        auto gated = gb->multiply(C, conv_prefill);
+
+        void* bx_ptr = gb->get_output(Bx);
+        if (bx_ptr) {
+            auto* bx_bytes = static_cast<uint8_t*>(bx_ptr);
+            size_t stride = hidden_dim * conv_cache_.element_size;
+            for (size_t i = 0; i < seq_len; ++i) {
+                conv_cache_.update(layer_idx, bx_bytes + i * stride);
+            }
+        }
+
+        return gb->matmul(gated, layer.conv_out_proj_weight, true, backend);
+    }
+
+    auto view = conv_cache_.get_window(layer_idx);
 
     size_t window_node;
 
@@ -85,14 +115,12 @@ size_t LFM2Model::build_conv1d(CactusGraph* gb, size_t input, uint32_t layer_idx
 
         window_node = gb->concat(L_node, R_node, 0);  // chronological order: [head:L] + [0:head]
     } else {
-        // Head is 0 or buffer is already linear
         size_t cache_node = gb->input({view.total_len, hidden_dim}, conv_cache_.precision);
         gb->set_input(cache_node, view.ptr1, conv_cache_.precision);
         window_node = cache_node;
     }
 
-    
-    window_node = gb->concat(window_node, Bx, 0);  
+    window_node = gb->concat(window_node, Bx, 0);
 
     const auto& window_buffer = gb->get_output_buffer(window_node);
     size_t total_window_len = window_buffer.shape[0];
@@ -102,7 +130,7 @@ size_t LFM2Model::build_conv1d(CactusGraph* gb, size_t input, uint32_t layer_idx
     auto sliced_window = gb->slice(window_node, 0, slice_start, slice_len);
 
     sliced_window = gb->reshape(sliced_window, {slice_len, hidden_dim});
-    sliced_window = gb->transpose(sliced_window); 
+    sliced_window = gb->transpose(sliced_window);
 
     size_t depthwise = layer.conv_depthwise_weight;
     if (depthwise_buffer.shape.size() == 3) {
@@ -112,7 +140,7 @@ size_t LFM2Model::build_conv1d(CactusGraph* gb, size_t input, uint32_t layer_idx
     }
 
     auto conv_mul = gb->multiply(sliced_window, depthwise);
-    auto conv_out = gb->sum(conv_mul, 1); 
+    auto conv_out = gb->sum(conv_mul, 1);
     conv_out = gb->reshape(conv_out, {static_cast<size_t>(1), hidden_dim});
 
     auto gate = gb->slice(C, 0, seq_len - 1, 1);

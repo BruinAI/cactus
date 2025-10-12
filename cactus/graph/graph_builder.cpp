@@ -263,6 +263,11 @@ size_t CactusGraph::attention(size_t query, size_t key, size_t value, float scal
     return add_node(OpType::ATTENTION, {query, key, value}, {}, params);
 }
 
+size_t CactusGraph::conv1d_causal(size_t input, size_t weight, size_t kernel_size, size_t dilation) {
+    OpParams params{.dilation = dilation};
+    return add_node(OpType::CONV1D_CAUSAL, {input, weight}, {}, params);
+}
+
 
 size_t CactusGraph::concat(size_t input1, size_t input2, int axis) {
     const auto& buffer1 = get_output_buffer(input1);

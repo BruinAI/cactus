@@ -254,7 +254,7 @@ void compute_fused_node(GraphNode& node, const std::vector<std::unique_ptr<Graph
             size_t slice_length = node.params.slice_length;
 
             size_t axis_size = tensor_buffer.shape[axis_index];
-            
+
             size_t stride = 1;
             for (size_t i = axis_index + 1; i < tensor_buffer.shape.size(); ++i) {
                 stride *= tensor_buffer.shape[i];
@@ -528,6 +528,50 @@ void compute_fused_node(GraphNode& node, const std::vector<std::unique_ptr<Graph
             } else {
                 throw std::runtime_error("Attention operation only supports INT8, FP16, and FP32 precision, got " + 
                                        std::to_string(static_cast<int>(query_buffer.precision)));
+            }
+            break;
+        }
+        case OpType::CONV1D_CAUSAL: {
+            if (node.params.backend == ComputeBackend::NPU) {
+                throw std::runtime_error("NPU causal convolution operation not yet implemented");
+            }
+            
+            const auto& input_buffer = nodes[node_index_map.at(node.input_ids[0])]->output_buffer;
+            const auto& weight_buffer = nodes[node_index_map.at(node.input_ids[1])]->output_buffer;
+            const auto& bias_buffer = node.input_ids.size() > 2 ? nodes[node_index_map.at(node.input_ids[2])]->output_buffer : Buffer();
+            
+            if (input_buffer.shape.size() != 3) {
+                throw std::runtime_error("Causal convolution requires 3D input tensor [batch_size, seq_len, in_channels], got " + 
+                                        std::to_string(input_buffer.shape.size()) + "D tensor");
+            }
+            
+            size_t batch_size = input_buffer.shape[0];
+            size_t seq_len = input_buffer.shape[1];
+            size_t in_channels = input_buffer.shape[2];
+            size_t out_channels = weight_buffer.shape[0];
+            size_t kernel_size = weight_buffer.shape[2];
+            
+            if (input_buffer.precision == Precision::INT8) {
+                float input_scale = input_buffer.quantization_scale;
+                float weight_scale = weight_buffer.quantization_scale;
+                float output_scale = node.output_buffer.quantization_scale;
+                const int8_t* bias_data = bias_buffer.get_data() ? bias_buffer.data_as<int8_t>() : nullptr;
+                cactus_conv1d_causal_int8(input_buffer.data_as<int8_t>(), weight_buffer.data_as<int8_t>(),
+                                       node.output_buffer.data_as<int8_t>(),
+                                       batch_size, seq_len, in_channels, out_channels, kernel_size, node.params.dilation,
+                                       input_scale, weight_scale, output_scale);
+            } else if (input_buffer.precision == Precision::FP16) {
+                const __fp16* bias_data = bias_buffer.get_data() ? bias_buffer.data_as<__fp16>() : nullptr;
+                cactus_conv1d_causal_f16(input_buffer.data_as<__fp16>(), weight_buffer.data_as<__fp16>(),
+                                        node.output_buffer.data_as<__fp16>(),
+                                        batch_size, seq_len, in_channels, out_channels, kernel_size, node.params.dilation);
+            } else if (input_buffer.precision == Precision::FP32) {
+                const float* bias_data = bias_buffer.get_data() ? bias_buffer.data_as<float>() : nullptr;
+                cactus_conv1d_causal_f32(input_buffer.data_as<float>(), weight_buffer.data_as<float>(),
+                                        node.output_buffer.data_as<float>(),
+                                        batch_size, seq_len, in_channels, out_channels, kernel_size, node.params.dilation);
+            } else {
+                throw std::runtime_error("Causal convolution only supports INT8, FP16, and FP32 precision");
             }
             break;
         }

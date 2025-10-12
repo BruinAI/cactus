@@ -29,7 +29,7 @@ enum class OpType {
     ADD, ADD_CLIPPED, SUBTRACT, MULTIPLY, DIVIDE,
     MATMUL, TRANSPOSE, RESHAPE, SLICE, GATHER, EMBEDDING,
     SUM, MEAN, VARIANCE, MIN, MAX,
-    RMS_NORM, ROPE, SOFTMAX, ATTENTION,
+    RMS_NORM, ROPE, SOFTMAX, ATTENTION, CONV1D_CAUSAL,
     SCALAR_ADD, SCALAR_SUBTRACT, SCALAR_MULTIPLY, SCALAR_DIVIDE, SCALAR_EXP, SCALAR_SQRT, SCALAR_COS, SCALAR_SIN,
     SILU, GELU,
     SAMPLE, CONCAT,
@@ -133,7 +133,8 @@ struct OpParams {
     Precision output_precision = Precision::INT8;
     BroadcastInfo broadcast_info;
     ComputeBackend backend = ComputeBackend::CPU;
-    
+
+    size_t dilation = 1;
     float temperature = 1.0f;
     float top_p = 1.0f;
     size_t top_k = 0;
@@ -223,6 +224,8 @@ public:
     size_t attention(size_t query, size_t key, size_t value, float scale, ComputeBackend backend = ComputeBackend::CPU);
     size_t attention(size_t query, size_t key, size_t value, float scale, size_t position_offset, ComputeBackend backend = ComputeBackend::CPU);
     size_t attention(size_t query, size_t key, size_t value, float scale, size_t position_offset, size_t window_size, ComputeBackend backend = ComputeBackend::CPU);
+
+    size_t conv1d_causal(size_t input, size_t weight, size_t kernel_size, size_t dilation = 1);
     
     size_t sample(size_t logits, float temperature = 0.6f, float top_p = 0.95f, size_t top_k = 20);
     
