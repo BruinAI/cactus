@@ -147,7 +147,7 @@ public:
     explicit SmolVLMModel(const VLMConfig& cfg);
     ~SmolVLMModel() override = default;
 
-    size_t forward(const std::vector<uint32_t>& tokens,
+    size_t forward_mm(const std::vector<uint32_t>& tokens,
                    const std::vector<ImageBatch>& images,
                    bool use_cache = false);
 

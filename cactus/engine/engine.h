@@ -67,6 +67,13 @@ struct ChatMessage {
     std::string content;
 };
 
+struct ImageBatch {
+    std::vector<uint8_t> data;
+    uint32_t width = 0;
+    uint32_t height = 0;
+    uint32_t channels = 0;
+};
+
 class Tokenizer {
 public:
     virtual ~Tokenizer() = default;
