@@ -136,6 +136,7 @@ size_t NomicModel::build_standard_mlp(CactusGraph* gb, size_t normalized_h, uint
 }
 
 /*
+TODO: FIX INT 8
 Looking for matching output:
 encoder.layers.1.norm2                            
   -> Bias Shape:       torch.Size([768])

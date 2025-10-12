@@ -1,10 +1,53 @@
 #!/bin/bash
 
+# Parse command-line arguments
+PRECISION=""
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        -p|--precision)
+            PRECISION="$2"
+            shift 2
+            ;;
+        *)
+            echo "Unknown option: $1"
+            echo "Usage: $0 [-p|--precision FP16|FP32]"
+            exit 1
+            ;;
+    esac
+done
+
+# Set weights suffix based on precision flag
+WEIGHTS_SUFFIX=""
+if [[ -n "$PRECISION" ]]; then
+    case "$PRECISION" in
+        FP16|fp16)
+            WEIGHTS_SUFFIX="-fp16"
+            ;;
+        FP32|fp32)
+            WEIGHTS_SUFFIX="-fp32"
+            ;;
+        *)
+            echo "Invalid precision: $PRECISION"
+            echo "Must be FP16 or FP32"
+            exit 1
+            ;;
+    esac
+fi
+
 echo "Running Cactus Nomic test suite..."
 echo "==================================="
+if [[ -n "$WEIGHTS_SUFFIX" ]]; then
+    echo "Precision: $PRECISION (weights suffix: $WEIGHTS_SUFFIX)"
+else
+    echo "Precision: Default (no suffix)"
+fi
+echo ""
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+
+# Export weights suffix for test to use
+export CACTUS_WEIGHTS_SUFFIX="$WEIGHTS_SUFFIX"
 
 # Export sanitizer flags for both library and test builds
 export CMAKE_CXX_FLAGS="-fsanitize=address -fsanitize=undefined -fno-omit-frame-pointer -g -O1"

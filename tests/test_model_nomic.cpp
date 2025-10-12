@@ -144,7 +144,15 @@ std::filesystem::path find_project_root() {
 std::vector<uint32_t> tokenize_sample_text() {
     namespace fs = std::filesystem;
     auto project_root = find_project_root();
-    fs::path weights_dir = project_root / "weights" / "nomic-embed-text-v2-moe";
+    
+    // Get weights suffix from environment variable
+    std::string weights_suffix = "";
+    const char* suffix_env = std::getenv("CACTUS_WEIGHTS_SUFFIX");
+    if (suffix_env) {
+        weights_suffix = suffix_env;
+    }
+    
+    fs::path weights_dir = project_root / "weights" / ("nomic-embed-text-v2-moe" + weights_suffix);
 
     SPTokenizer tokenizer;
     if (!tokenizer.load_vocabulary_with_config(
@@ -207,7 +215,15 @@ bool expect_cache_exception(const std::function<void()>& fn) {
 bool test_nomic_forward_executes_with_tokens() {
     try {
         auto project_root = find_project_root();
-        std::string model_path = (project_root / "weights" / "nomic-embed-text-v2-moe").string();
+        
+        // Get weights suffix from environment variable
+        std::string weights_suffix = "";
+        const char* suffix_env = std::getenv("CACTUS_WEIGHTS_SUFFIX");
+        if (suffix_env) {
+            weights_suffix = suffix_env;
+        }
+        
+        std::string model_path = (project_root / "weights" / ("nomic-embed-text-v2-moe" + weights_suffix)).string();
 
         auto model_ptr = create_model(model_path);
         if (!model_ptr) {

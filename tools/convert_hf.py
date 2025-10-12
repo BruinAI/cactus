@@ -33,7 +33,7 @@ def save_tensor_with_header(tensor, output_path, precision='FP32', transpose=Fal
     
     if precision == 'INT8':
         filename = output_path.name
-        if any(x in filename for x in ['norm']):
+        if any(x in filename for x in ['norm', 'embedding']):
             precision = 'FP16'
     
     if precision == 'INT8':

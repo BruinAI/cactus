@@ -884,11 +884,7 @@ void compute_layernorm_node(GraphNode& node, const std::vector<std::unique_ptr<G
     
     // Convert input to float
     if (input_buffer.precision == Precision::INT8) {
-        const int8_t* input_int8 = input_buffer.data_as<int8_t>();
-        float scale = input_buffer.quantization_scale;
-        for (size_t i = 0; i < input_buffer.total_size; ++i) {
-            input_float[i] = input_int8[i] * scale;
-        }
+        throw std::runtime_error("LayerNorm currently does not support INT8 input");
     } else if (input_buffer.precision == Precision::FP16) {
         const __fp16* input_fp16 = input_buffer.data_as<__fp16>();
         for (size_t i = 0; i < input_buffer.total_size; ++i) {
@@ -898,13 +894,8 @@ void compute_layernorm_node(GraphNode& node, const std::vector<std::unique_ptr<G
         std::memcpy(input_float.data(), input_buffer.data_as<float>(), input_buffer.total_size * sizeof(float));
     }
     
-    // Convert weight to float
     if (weight_buffer.precision == Precision::INT8) {
-        const int8_t* weight_int8 = weight_buffer.data_as<int8_t>();
-        float scale = weight_buffer.quantization_scale;
-        for (size_t i = 0; i < feature_size; ++i) {
-            weight_float[i] = weight_int8[i] * scale;
-        }
+        throw std::runtime_error("LayerNorm currently does not support INT8 weight");
     } else if (weight_buffer.precision == Precision::FP16) {
         const __fp16* weight_fp16 = weight_buffer.data_as<__fp16>();
         for (size_t i = 0; i < feature_size; ++i) {
@@ -916,11 +907,7 @@ void compute_layernorm_node(GraphNode& node, const std::vector<std::unique_ptr<G
     
     // Convert bias to float
     if (bias_buffer.precision == Precision::INT8) {
-        const int8_t* bias_int8 = bias_buffer.data_as<int8_t>();
-        float scale = bias_buffer.quantization_scale;
-        for (size_t i = 0; i < feature_size; ++i) {
-            bias_float[i] = bias_int8[i] * scale;
-        }
+        throw std::runtime_error("LayerNorm currently does not support INT8 bias");
     } else if (bias_buffer.precision == Precision::FP16) {
         const __fp16* bias_fp16 = bias_buffer.data_as<__fp16>();
         for (size_t i = 0; i < feature_size; ++i) {
@@ -960,11 +947,7 @@ void compute_layernorm_node(GraphNode& node, const std::vector<std::unique_ptr<G
     
     // Convert output back to target precision
     if (node.output_buffer.precision == Precision::INT8) {
-        int8_t* output_int8 = node.output_buffer.data_as<int8_t>();
-        float scale = node.output_buffer.quantization_scale;
-        for (size_t i = 0; i < input_buffer.total_size; ++i) {
-            output_int8[i] = static_cast<int8_t>(std::max(-128.0f, std::min(127.0f, output_float[i] / scale)));
-        }
+        throw std::runtime_error("LayerNorm currently does not support INT8 output");
     } else if (node.output_buffer.precision == Precision::FP16) {
         __fp16* output_fp16 = node.output_buffer.data_as<__fp16>();
         for (size_t i = 0; i < input_buffer.total_size; ++i) {
@@ -989,17 +972,11 @@ void compute_index_node(GraphNode& node, const std::vector<std::unique_ptr<Graph
         input_strides[i] = input_strides[i + 1] * input_shape[i + 1];
     }
     
-    // Calculate the size of elements to copy
-    size_t slice_size = 1;
-    for (size_t i = dim + 1; i < input_shape.size(); ++i) {
-        slice_size *= input_shape[i];
-    }
+    // Calculate the size of elements to copy (stride at dim)
+    size_t slice_size = input_strides[dim];
     
     // Calculate outer size (number of slices to copy)
-    size_t outer_size = 1;
-    for (int i = 0; i < dim; ++i) {
-        outer_size *= input_shape[i];
-    }
+    size_t outer_size = (dim == 0) ? 1 : (input_buffer.total_size / input_strides[dim - 1]);
     
     // Calculate stride in the dimension we're indexing
     size_t dim_stride = input_strides[dim];
