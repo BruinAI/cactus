@@ -355,14 +355,14 @@ def convert_hf_model_weights_vlm(model, output_dir, precision='INT8', args=None)
     model_config = {
         'vocab_size': int(text_vocab),
         'model_type': 'smolvlm',
-        'text_hidden_dim': int(text_hidden),
-        'text_num_layers': int(text_num_layers),
-        'text_attention_heads': int(text_attention_heads),
-        'text_attention_kv_heads': int(text_attention_kv_heads),
-        'text_ffn_intermediate_dim': int(text_ffn),
-        'text_context_length': int(text_context),
-        'text_rope_theta': float(text_rope),
-        'text_attention_head_dim': int(text_head_dim),
+        'hidden_dim': int(text_hidden),
+        'num_layers': int(text_num_layers),
+        'attention_heads': int(text_attention_heads),
+        'attention_kv_heads': int(text_attention_kv_heads),
+        'ffn_intermediate_dim': int(text_ffn),
+        'context_length': int(text_context),
+        'rope_theta': float(text_rope),
+        'attention_head_dim': int(text_head_dim),
         'vision_hidden_size': int(vision_hidden),
         'vision_image_size': int(vision_image_size),
         'vision_patch_size': int(vision_patch),
@@ -384,7 +384,7 @@ def convert_hf_model_weights_vlm(model, output_dir, precision='INT8', args=None)
                 save_tensor_with_header(tensor, output_dir / "output_weight.weights", precision, transpose=False, stats_tracker=quantization_stats, args=args, model_type='smolvlm')
                 break
 
-    output_norm_names = ['model.norm.weight', 'norm.weight', 'final_layernorm.weight', 'transformer.ln_f.weight', 'model.text_model.post_layernorm.weight']
+    output_norm_names = ['model.norm.weight', 'norm.weight', 'final_layernorm.weight', 'transformer.ln_f.weight', 'model.text_model.norm.weight']
     for name in output_norm_names:
         if name in state_dict:
             tensor = state_dict[name]
@@ -449,7 +449,7 @@ def convert_hf_model_weights_vlm(model, output_dir, precision='INT8', args=None)
             if fname in state_dict:
                 save_tensor_with_header(state_dict[fname], output_dir / out, precision, stats_tracker=quantization_stats, args=args, model_type='smolvlm')
 
-    num_layers = int(model_config.get('text_num_layers', 0))
+    num_layers = int(model_config.get('num_layers', 0))
     for i in range(num_layers):
         layer_prefixes = [f'model.text_model.layers.{i}.', f'model.layers.{i}.', f'layers.{i}.', f'transformer.h.{i}.']
 
