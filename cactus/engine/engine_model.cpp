@@ -10,6 +10,10 @@
 #include <algorithm>
 #include <set>
 #include <sstream>
+#include <filesystem>
+#include <limits>
+#include <cctype>
+#include <system_error>
 
 namespace cactus {
 namespace engine {
@@ -21,6 +25,7 @@ Model::Model()
       initialized_(false),
       attention_scale_(0.0f),
       output_weight_node_id_(0) {
+        initialize_debug_options_from_env();
 }
 
 Model::Model(const Config& config)
@@ -30,6 +35,7 @@ Model::Model(const Config& config)
       initialized_(false),
       attention_scale_(0.0f),
       output_weight_node_id_(0) {
+        initialize_debug_options_from_env();
 }
 
 Model::~Model() {
@@ -128,7 +134,15 @@ bool Model::init(const std::string& model_folder, size_t context_size, const std
     
     std::string warmup_text = system_prompt.empty() ? "Henry" : system_prompt;
     auto warmup_tokens = tokenizer_->encode(warmup_text);
-    forward(warmup_tokens);
+    suspend_debug_capture();
+    try {
+        forward(warmup_tokens);
+    } catch (...) {
+        resume_debug_capture();
+        throw;
+    }
+    debug_captures_.clear();
+    resume_debug_capture();
     kv_cache_.reset();
     return true;
 }
@@ -162,7 +176,8 @@ uint32_t Model::generate(const std::vector<uint32_t>& tokens, float temperature,
     } else {
         gb->execute();
     }
-    
+
+    flush_debug_nodes(gb);
     update_kv_cache(gb, tokens.size());
     
     auto* output_ptr = gb->get_output(sampled_token_id);
@@ -188,6 +203,7 @@ std::vector<float> Model::get_embeddings(const std::vector<uint32_t>& tokens, bo
     if (pooled) {
         auto pooled_hidden = gb->mean(final_hidden, 0);
         gb->execute();
+        flush_debug_nodes(gb);
         
         auto* pooled_ptr = gb->get_output(pooled_hidden);
         const auto& pooled_buffer = gb->get_output_buffer(pooled_hidden);
@@ -208,6 +224,7 @@ std::vector<float> Model::get_embeddings(const std::vector<uint32_t>& tokens, bo
         }
     } else {
         gb->execute();
+        flush_debug_nodes(gb);
         
         size_t total_size = output_buffer.total_size;
         embeddings.resize(total_size);
@@ -232,6 +249,265 @@ std::vector<float> Model::get_embeddings(const std::vector<uint32_t>& tokens, bo
     kv_cache_.reset();
     
     return embeddings;
+}
+
+std::vector<float> Model::debug_forward(const std::vector<uint32_t>& tokens, bool use_cache,
+                                        const std::string& profile_file) {
+    if (!initialized_) {
+        throw std::runtime_error("Model not initialized - call init() before debug_forward()");
+    }
+
+    auto final_hidden = forward(tokens, use_cache);
+    auto* gb = static_cast<CactusGraph*>(graph_handle_);
+
+    if (!profile_file.empty()) {
+        gb->execute(profile_file);
+    } else {
+        gb->execute();
+    }
+
+    flush_debug_nodes(gb);
+
+    const auto& buffer = gb->get_output_buffer(final_hidden);
+    void* data = gb->get_output(final_hidden);
+    auto result = extract_tensor_as_fp32(buffer, data);
+
+    if (use_cache) {
+        update_kv_cache(gb, tokens.size());
+    } else {
+        kv_cache_.reset();
+    }
+
+    return result;
+}
+
+void Model::suspend_debug_capture() {
+    debug_suspend_depth_++;
+    debug_capture_suspended_ = true;
+}
+
+void Model::resume_debug_capture() {
+    if (debug_suspend_depth_ > 0) {
+        debug_suspend_depth_--;
+    }
+    if (debug_suspend_depth_ == 0) {
+        debug_capture_suspended_ = false;
+    }
+}
+
+void Model::initialize_debug_options_from_env() {
+    debug_options_ = DebugOptions{};
+
+    const char* enable_env = std::getenv("CACTUS_DEBUG_ENABLE");
+    const char* stdout_env = std::getenv("CACTUS_DEBUG_STDOUT");
+    const char* dir_env = std::getenv("CACTUS_DEBUG_DIR");
+    const char* layers_env = std::getenv("CACTUS_DEBUG_LAYERS");
+    const char* max_env = std::getenv("CACTUS_DEBUG_MAX_PRINT");
+
+    auto is_truthy = [](const char* value) {
+        if (!value) {
+            return false;
+        }
+        std::string s(value);
+        std::transform(s.begin(), s.end(), s.begin(), [](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
+        return !(s.empty() || s == "0" || s == "false" || s == "no" || s == "off");
+    };
+
+    if (is_truthy(stdout_env)) {
+        debug_options_.dump_stdout = true;
+    }
+
+    if (dir_env && *dir_env) {
+        debug_options_.dump_to_files = true;
+        debug_options_.dump_dir = dir_env;
+    }
+
+    if (max_env && *max_env) {
+        try {
+            debug_options_.max_print_values = std::max<size_t>(1, std::stoul(std::string(max_env)));
+        } catch (...) {
+            // ignore invalid values
+        }
+    }
+
+    bool explicitly_enabled = is_truthy(enable_env);
+    debug_options_.enabled = explicitly_enabled || debug_options_.dump_stdout || debug_options_.dump_to_files;
+
+    debug_options_.include_all_layers = true;
+    if (layers_env && *layers_env) {
+        std::string layers_spec = layers_env;
+        if (!(layers_spec == "*" || layers_spec == "all" || layers_spec == "ALL")) {
+            debug_options_.include_all_layers = false;
+            std::stringstream ss(layers_spec);
+            std::string token;
+            while (std::getline(ss, token, ',')) {
+                if (token.empty()) continue;
+                token.erase(0, token.find_first_not_of(" \t"));
+                token.erase(token.find_last_not_of(" \t") + 1);
+                if (token.empty()) continue;
+                try {
+                    debug_options_.layer_filter.insert(static_cast<uint32_t>(std::stoul(token)));
+                } catch (...) {
+                    // ignore invalid entries
+                }
+            }
+            if (debug_options_.layer_filter.empty()) {
+                debug_options_.include_all_layers = true;
+            }
+        }
+    }
+
+    if (debug_options_.dump_to_files && !debug_options_.dump_dir.empty()) {
+        std::error_code ec;
+        std::filesystem::create_directories(debug_options_.dump_dir, ec);
+        if (ec) {
+            std::cerr << "[Cactus] Failed to create debug dump directory '" << debug_options_.dump_dir
+                      << "': " << ec.message() << std::endl;
+            debug_options_.dump_to_files = false;
+        }
+    }
+}
+
+bool Model::should_capture_layer(uint32_t layer_idx) const {
+    if (!debug_options_.enabled || debug_capture_suspended_) {
+        return false;
+    }
+    if (layer_idx == std::numeric_limits<uint32_t>::max()) {
+        return true;
+    }
+    if (debug_options_.include_all_layers) {
+        return true;
+    }
+    return debug_options_.layer_filter.find(layer_idx) != debug_options_.layer_filter.end();
+}
+
+void Model::capture_debug_node(uint32_t layer_idx, const std::string& tag, size_t node_id) const {
+    if (!should_capture_layer(layer_idx)) {
+        return;
+    }
+    debug_captures_.push_back({layer_idx, tag, node_id});
+}
+
+std::string Model::debug_layer_label(uint32_t layer_idx) const {
+    if (layer_idx == std::numeric_limits<uint32_t>::max()) {
+        return "global";
+    }
+    std::ostringstream ss;
+    ss << "layer_" << layer_idx;
+    return ss.str();
+}
+
+std::vector<float> Model::extract_tensor_as_fp32(const BufferDesc& buffer, const void* data) const {
+    size_t count = buffer.total_size;
+    std::vector<float> result(count, 0.0f);
+
+    switch (buffer.precision) {
+        case Precision::FP32: {
+            const float* ptr = static_cast<const float*>(data);
+            std::copy(ptr, ptr + count, result.begin());
+            break;
+        }
+        case Precision::FP16: {
+            const __fp16* ptr = static_cast<const __fp16*>(data);
+            Quantization::fp16_to_fp32(ptr, result.data(), count);
+            break;
+        }
+        case Precision::INT8: {
+            const int8_t* ptr = static_cast<const int8_t*>(data);
+            Quantization::int8_to_fp32(ptr, result.data(), count, buffer.quantization_scale);
+            break;
+        }
+    }
+
+    return result;
+}
+
+void Model::flush_debug_nodes(CactusGraph* gb) {
+    if (!debug_options_.enabled) {
+        debug_captures_.clear();
+        return;
+    }
+
+    if (debug_captures_.empty()) {
+        return;
+    }
+
+    size_t flush_index = debug_flush_counter_++;
+
+    for (const auto& capture : debug_captures_) {
+        void* raw_data = gb->get_output(capture.node_id);
+        if (!raw_data) {
+            continue;
+        }
+
+        const auto& buffer = gb->get_output_buffer(capture.node_id);
+        auto values = extract_tensor_as_fp32(buffer, raw_data);
+
+        std::ostringstream shape_ss;
+        shape_ss << "[";
+        for (size_t i = 0; i < buffer.shape.size(); ++i) {
+            shape_ss << buffer.shape[i];
+            if (i + 1 < buffer.shape.size()) {
+                shape_ss << ", ";
+            }
+        }
+        shape_ss << "]";
+
+        if (debug_options_.dump_stdout) {
+            size_t preview_count = std::min(debug_options_.max_print_values, values.size());
+            std::cout << "[Cactus][" << debug_layer_label(capture.layer_idx) << "] "
+                      << capture.tag << " shape=" << shape_ss.str() << " showing "
+                      << preview_count << "/" << values.size() << " values: ";
+            for (size_t i = 0; i < preview_count; ++i) {
+                std::cout << values[i];
+                if (i + 1 < preview_count) {
+                    std::cout << ", ";
+                }
+            }
+            if (preview_count < values.size()) {
+                std::cout << " ...";
+            }
+            std::cout << std::endl;
+        }
+
+        if (debug_options_.dump_to_files) {
+            std::string layer_label = debug_layer_label(capture.layer_idx);
+            std::string sanitized_tag = capture.tag;
+            for (char& ch : sanitized_tag) {
+                if (!std::isalnum(static_cast<unsigned char>(ch))) {
+                    ch = '_';
+                }
+            }
+
+            std::ostringstream filename;
+            filename << debug_options_.dump_dir << "/" << layer_label << "_" << sanitized_tag
+                     << "_iter" << std::setw(4) << std::setfill('0') << flush_index << ".txt";
+
+            std::ofstream ofs(filename.str());
+            if (!ofs) {
+                std::cerr << "[Cactus] Failed to open debug dump file: " << filename.str() << std::endl;
+            } else {
+                ofs << "# layer=" << layer_label << " tag=" << capture.tag
+                    << " shape=" << shape_ss.str() << " precision=";
+                switch (buffer.precision) {
+                    case Precision::FP32: ofs << "FP32"; break;
+                    case Precision::FP16: ofs << "FP16"; break;
+                    case Precision::INT8: ofs << "INT8"; break;
+                }
+                if (buffer.precision == Precision::INT8) {
+                    ofs << " scale=" << buffer.quantization_scale;
+                }
+                ofs << "\n";
+
+                ofs << std::setprecision(10);
+                for (size_t i = 0; i < values.size(); ++i) {
+                    ofs << values[i] << '\n';
+                }
+            }
+        }
+    }
+
+    debug_captures_.clear();
 }
 
 

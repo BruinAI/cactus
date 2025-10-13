@@ -244,6 +244,7 @@ def convert_hf_model_weights(model, output_dir, precision='INT8', args=None):
             break
     
     num_layers = model_config['num_layers']
+    missing_tensors = []
     for i in range(num_layers):
         
         layer_prefixes = [f'model.layers.{i}.', f'layers.{i}.', f'transformer.h.{i}.']
@@ -301,7 +302,18 @@ def convert_hf_model_weights(model, output_dir, precision='INT8', args=None):
                     save_tensor_with_header(v_weight, output_dir / f'layer_{i}_attn_v.weights', precision, transpose=False, stats_tracker=quantization_stats, args=args, model_type=detected_model_type)
                     found = True
             
+            if not found:
+                missing_tensors.append((i, output_name, name_patterns))
     
+    if missing_tensors:
+        missing_report = output_dir / "missing_weights.txt"
+        with open(missing_report, 'w') as fh:
+            fh.write("# Missing tensors during conversion\n")
+            for layer_idx, output_name, patterns in missing_tensors:
+                pattern_list = ', '.join(patterns)
+                fh.write(f"layer={layer_idx}, output={output_name}, patterns=[{pattern_list}]\n")
+        print(f"Warning: {len(missing_tensors)} tensors were not exported. See {missing_report.name} for details.")
+
     if quantization_stats['quantized_tensors'] > 0:
         mse_values = np.array(quantization_stats['mse_values'])
         snr_values = np.array(quantization_stats['snr_values'])

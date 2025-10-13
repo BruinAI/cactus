@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <stdexcept>
 #include <set>
+#include <limits>
 
 namespace cactus {
 namespace engine {
@@ -97,6 +98,7 @@ size_t LFM2Model::build_conv1d(CactusGraph* gb, size_t input, uint32_t layer_idx
     const auto& layer = layer_entry.weights;
 
     auto in_proj = gb->matmul(input, layer.conv_in_proj_weight, true, backend);
+    capture_debug_node(layer_idx, "conv_in_proj", in_proj);
     const auto& in_proj_buffer = gb->get_output_buffer(in_proj);
 
     if (in_proj_buffer.shape.size() != 2 || in_proj_buffer.shape[1] % 3 != 0) {
@@ -110,12 +112,18 @@ size_t LFM2Model::build_conv1d(CactusGraph* gb, size_t input, uint32_t layer_idx
     auto B = gb->slice(triplet, 1, 0, 1);
     auto C = gb->slice(triplet, 1, 1, 1);
     auto X = gb->slice(triplet, 1, 2, 1);
+    capture_debug_node(layer_idx, "conv_triplet", triplet);
+    capture_debug_node(layer_idx, "conv_B_sliced", B);
 
     B = gb->reshape(B, {seq_len, hidden_dim});
     C = gb->reshape(C, {seq_len, hidden_dim});
     X = gb->reshape(X, {seq_len, hidden_dim});
+    capture_debug_node(layer_idx, "conv_B", B);
+    capture_debug_node(layer_idx, "conv_C", C);
+    capture_debug_node(layer_idx, "conv_X", X);
 
     auto Bx = gb->multiply(B, X);
+    capture_debug_node(layer_idx, "conv_bx", Bx);
 
     auto& depthwise_buffer = gb->get_output_buffer(layer.conv_depthwise_weight);
     size_t kernel_size = depthwise_buffer.shape.back();  // L
@@ -134,8 +142,10 @@ size_t LFM2Model::build_conv1d(CactusGraph* gb, size_t input, uint32_t layer_idx
         auto bx_prefill = gb->reshape(Bx, {static_cast<size_t>(1), seq_len, hidden_dim});
         auto conv_prefill = gb->conv1d_causal(bx_prefill, conv_weight, kernel_size, 1);
         conv_prefill = gb->reshape(conv_prefill, {seq_len, hidden_dim});
+        capture_debug_node(layer_idx, "conv_prefill_output", conv_prefill);
 
         auto gated = gb->multiply(C, conv_prefill);
+        capture_debug_node(layer_idx, "conv_gated_prefill", gated);
 
         void* bx_ptr = gb->get_output(Bx);
         if (bx_ptr) {
@@ -146,7 +156,9 @@ size_t LFM2Model::build_conv1d(CactusGraph* gb, size_t input, uint32_t layer_idx
             }
         }
 
-        return gb->matmul(gated, layer.conv_out_proj_weight, true, backend);
+        auto projected = gb->matmul(gated, layer.conv_out_proj_weight, true, backend);
+        capture_debug_node(layer_idx, "conv_out_proj_prefill", projected);
+        return projected;
     }
 
     auto view = conv_cache_.get_window(layer_idx);
@@ -189,16 +201,20 @@ size_t LFM2Model::build_conv1d(CactusGraph* gb, size_t input, uint32_t layer_idx
     auto conv_mul = gb->multiply(sliced_window, depthwise);
     auto conv_out = gb->sum(conv_mul, 1);
     conv_out = gb->reshape(conv_out, {static_cast<size_t>(1), hidden_dim});
+    capture_debug_node(layer_idx, "conv_depthwise_out", conv_out);
 
     auto gate = gb->slice(C, 0, seq_len - 1, 1);
     gate = gb->reshape(gate, {static_cast<size_t>(1), hidden_dim});
 
     auto gated = gb->multiply(gate, conv_out);
+    capture_debug_node(layer_idx, "conv_gated_decode", gated);
 
     void* bx_ptr = gb->get_output(Bx);
     conv_cache_.update(layer_idx, bx_ptr);
 
-    return gb->matmul(gated, layer.conv_out_proj_weight, true, backend);
+    auto projected = gb->matmul(gated, layer.conv_out_proj_weight, true, backend);
+    capture_debug_node(layer_idx, "conv_out_proj_decode", projected);
+    return projected;
 }
 
 size_t LFM2Model::build_attention(CactusGraph* gb, size_t normalized_input, uint32_t layer_idx,
@@ -206,32 +222,41 @@ size_t LFM2Model::build_attention(CactusGraph* gb, size_t normalized_input, uint
     const auto& layer_entry = weight_nodes_.layers[layer_idx];
     const auto& layer = layer_entry.weights;
 
-    auto q_proj = gb->matmul(normalized_input, layer.attn_q_weight, true, backend);
-    auto k_proj = gb->matmul(normalized_input, layer.attn_k_weight, true, backend);
-    auto v_proj = gb->matmul(normalized_input, layer.attn_v_weight, true, backend);
+    auto q_proj_linear = gb->matmul(normalized_input, layer.attn_q_weight, true, backend);
+    auto k_proj_linear = gb->matmul(normalized_input, layer.attn_k_weight, true, backend);
+    auto v_proj_linear = gb->matmul(normalized_input, layer.attn_v_weight, true, backend);
+    capture_debug_node(layer_idx, "attn_q_linear", q_proj_linear);
+    capture_debug_node(layer_idx, "attn_k_linear", k_proj_linear);
+    capture_debug_node(layer_idx, "attn_v_linear", v_proj_linear);
 
-    const auto& q_shape = gb->get_output_buffer(q_proj).shape;
+    const auto& q_shape = gb->get_output_buffer(q_proj_linear).shape;
     size_t batch_seq = q_shape[0];
     size_t num_heads = config_.attention_heads;
     size_t head_dim = config_.attention_head_dim;
-    q_proj = gb->reshape(q_proj, {batch_seq * num_heads, head_dim});
-    q_proj = gb->rms_norm(q_proj, layer.attn_q_norm_weight, config_.layer_norm_eps);
-    q_proj = gb->reshape(q_proj, {batch_seq, num_heads * head_dim});
+    auto q_proj_reshaped = gb->reshape(q_proj_linear, {batch_seq * num_heads, head_dim});
+    auto q_proj_norm = gb->rms_norm(q_proj_reshaped, layer.attn_q_norm_weight, config_.layer_norm_eps);
+    auto q_proj = gb->reshape(q_proj_norm, {batch_seq, num_heads * head_dim});
+    capture_debug_node(layer_idx, "attn_q_norm", q_proj);
 
     size_t num_kv_heads = config_.attention_kv_heads;
-    k_proj = gb->reshape(k_proj, {batch_seq * num_kv_heads, head_dim});
-    k_proj = gb->rms_norm(k_proj, layer.attn_k_norm_weight, config_.layer_norm_eps);
-    k_proj = gb->reshape(k_proj, {batch_seq, num_kv_heads * head_dim});
+    auto k_proj_reshaped = gb->reshape(k_proj_linear, {batch_seq * num_kv_heads, head_dim});
+    auto k_proj_norm = gb->rms_norm(k_proj_reshaped, layer.attn_k_norm_weight, config_.layer_norm_eps);
+    auto k_proj = gb->reshape(k_proj_norm, {batch_seq, num_kv_heads * head_dim});
+    capture_debug_node(layer_idx, "attn_k_norm", k_proj);
 
     size_t seq_len = batch_seq;
-
     auto q_proj_4d = gb->reshape(q_proj, {1, seq_len, config_.attention_heads, config_.attention_head_dim});
     auto k_proj_4d = gb->reshape(k_proj, {1, seq_len, config_.attention_kv_heads, config_.attention_head_dim});
-    auto v_proj_4d = gb->reshape(v_proj, {1, seq_len, config_.attention_kv_heads, config_.attention_head_dim});
+    auto v_proj_4d = gb->reshape(v_proj_linear, {1, seq_len, config_.attention_kv_heads, config_.attention_head_dim});
+    capture_debug_node(layer_idx, "attn_q_pre_rope", q_proj_4d);
+    capture_debug_node(layer_idx, "attn_k_pre_rope", k_proj_4d);
+    capture_debug_node(layer_idx, "attn_v", v_proj_4d);
 
     if (config_.rope_theta > 0) {
         q_proj_4d = gb->rope(q_proj_4d, config_.rope_theta, position_offset);
         k_proj_4d = gb->rope(k_proj_4d, config_.rope_theta, position_offset);
+        capture_debug_node(layer_idx, "attn_q_rope", q_proj_4d);
+        capture_debug_node(layer_idx, "attn_k_rope", k_proj_4d);
     }
 
     size_t final_k = k_proj_4d;
@@ -269,8 +294,12 @@ size_t LFM2Model::build_attention(CactusGraph* gb, size_t normalized_input, uint
 
 
     auto attn_output_4d = gb->attention(q_proj_4d, final_k, final_v, attention_scale_, position_offset);
+    capture_debug_node(layer_idx, "attn_scores_output", attn_output_4d);
     auto attn_output = gb->reshape(attn_output_4d, {seq_len, config_.attention_head_dim * config_.attention_heads});
-    return gb->matmul(attn_output, layer.attn_output_weight, true, backend);
+    capture_debug_node(layer_idx, "attn_output_flat", attn_output);
+    auto projected = gb->matmul(attn_output, layer.attn_output_weight, true, backend);
+    capture_debug_node(layer_idx, "attn_out_proj", projected);
+    return projected;
 }
 
 
@@ -279,10 +308,16 @@ size_t LFM2Model::build_mlp(CactusGraph* gb, size_t normalized_h, uint32_t layer
     const auto& layer_entry = weight_nodes_.layers[layer_idx];
     const auto& layer = layer_entry.weights;
     size_t gate_output = gb->matmul(normalized_h, layer.ffn_gate_weight, true, backend);
+    capture_debug_node(layer_idx, "mlp_gate_linear", gate_output);
     size_t up_output = gb->matmul(normalized_h, layer.ffn_up_weight, true, backend);
+    capture_debug_node(layer_idx, "mlp_up_linear", up_output);
     size_t gate_silu = gb->silu(gate_output);
+    capture_debug_node(layer_idx, "mlp_gate_silu", gate_silu);
     size_t gated = gb->multiply(gate_silu, up_output);
-    return gb->matmul(gated, layer.ffn_down_weight, true, backend);
+    capture_debug_node(layer_idx, "mlp_gated", gated);
+    auto down_output = gb->matmul(gated, layer.ffn_down_weight, true, backend);
+    capture_debug_node(layer_idx, "mlp_down_linear", down_output);
+    return down_output;
 }
 
 
@@ -292,6 +327,7 @@ size_t LFM2Model::build_transformer_block(CactusGraph* gb, size_t hidden, uint32
     const auto& layer = layer_entry.weights;
     
     auto normalized_input = gb->rms_norm(hidden, layer.input_layernorm_weight, config_.layer_norm_eps);
+    capture_debug_node(layer_idx, "input_norm", normalized_input);
     
     size_t block_output;
     if (layer_entry.type == WeightNodeIDs::LayerType::CONV) {
@@ -301,11 +337,17 @@ size_t LFM2Model::build_transformer_block(CactusGraph* gb, size_t hidden, uint32
         // Attention layer: standard attention
         block_output = build_attention(gb, normalized_input, layer_idx, backend, use_cache, position_offset);
     }
+    capture_debug_node(layer_idx, "block_main_output", block_output);
     
     auto after_block = gb->add(hidden, block_output);
+    capture_debug_node(layer_idx, "post_block_residual", after_block);
     auto normalized_after_block = gb->rms_norm(after_block, layer.post_attention_layernorm_weight, config_.layer_norm_eps);
+    capture_debug_node(layer_idx, "post_block_norm", normalized_after_block);
     auto mlp_output = build_mlp(gb, normalized_after_block, layer_idx, backend);
-    return gb->add(after_block, mlp_output);
+    capture_debug_node(layer_idx, "mlp_output", mlp_output);
+    auto block_result = gb->add(after_block, mlp_output);
+    capture_debug_node(layer_idx, "block_output", block_result);
+    return block_result;
 }
 
 
@@ -331,12 +373,15 @@ size_t LFM2Model::forward(const std::vector<uint32_t>& tokens, bool use_cache) {
 
     auto input_node_id = gb->input({seq_len}, Precision::FP32);
     auto hidden = gb->embedding(embedding_node_id_, input_node_id);
+    const uint32_t global_layer = std::numeric_limits<uint32_t>::max();
+    capture_debug_node(global_layer, "embedding_output", hidden);
 
     for (uint32_t layer_idx = 0; layer_idx < config_.num_layers; layer_idx++) {
         hidden = build_transformer_block(gb, hidden, layer_idx, backend, use_cache, position_offset);
     }
 
     auto final_hidden = gb->rms_norm(hidden, weight_nodes_.output_norm_weight, config_.layer_norm_eps);
+    capture_debug_node(global_layer, "final_norm", final_hidden);
 
     std::vector<float> input_data(seq_len);
     for (size_t i = 0; i < seq_len; i++) {
