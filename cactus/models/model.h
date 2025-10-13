@@ -135,12 +135,18 @@ private:
 class SmolVLMModel : public SmolModel {
 public:
     struct VLMConfig : public Config {
-        uint32_t vision_embed_dim;
-        uint32_t visual_tokens_per_img;
-        bool     use_pixel_shuffle;
-        uint32_t pixel_shuffle_factor;
-        bool     use_image_tokens;
-        bool     use_layout_tags;
+        uint32_t vision_hidden_dim = 0;
+        uint32_t vision_num_layers = 0;
+        uint32_t vision_attention_heads = 0;
+        uint32_t vision_image_size = 0;
+        uint32_t vision_patch_size = 0;
+        uint32_t num_channels = 3;
+        uint32_t vision_embed_dim = 0;
+        uint32_t visual_tokens_per_img = 0;
+        bool     use_pixel_shuffle = false;
+        uint32_t pixel_shuffle_factor = 1;
+        bool     use_image_tokens = false;
+        bool     use_layout_tags = false;
     };
 
     SmolVLMModel();

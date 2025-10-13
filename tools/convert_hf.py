@@ -351,6 +351,21 @@ def convert_hf_model_weights_vlm(model, output_dir, precision='INT8', args=None)
     vision_image_size = _cfg_get(vision_cfg, 'image_size', _cfg_get(vision_cfg, 'size', {}).get('longest_edge', 0) if isinstance(_cfg_get(vision_cfg, 'size', {}), dict) else _cfg_get(vision_cfg, 'image_size', 0))
     vision_patch = int(_cfg_get(vision_cfg, 'patch_size', 0))
     vision_heads = int(_cfg_get(vision_cfg, 'num_attention_heads', 0))
+    vision_num_layers = int(_cfg_get(vision_cfg, 'num_hidden_layers', _cfg_get(vision_cfg, 'num_layers', 0) or 0))
+    num_channels = int(_cfg_get(vision_cfg, 'num_channels', _cfg_get(vision_cfg, 'num_channels', 3)))
+    vision_embed_dim = int(vision_hidden)
+    visual_tokens_per_img = 0
+    try:
+        if vision_patch > 0 and vision_image_size > 0:
+            per_side = vision_image_size // vision_patch
+            visual_tokens_per_img = per_side * per_side
+    except Exception:
+        visual_tokens_per_img = 0
+
+    pixel_shuffle_factor = int(_cfg_get(config, 'scale_factor', _cfg_get(vision_cfg, 'scale_factor', 1) or 1))
+    use_pixel_shuffle = bool(pixel_shuffle_factor > 1)
+    use_image_tokens = bool(_cfg_get(config, 'image_token_id', None) is not None)
+    use_layout_tags = False
 
     model_config = {
         'vocab_size': int(text_vocab),
@@ -364,9 +379,17 @@ def convert_hf_model_weights_vlm(model, output_dir, precision='INT8', args=None)
         'rope_theta': float(text_rope),
         'attention_head_dim': int(text_head_dim),
         'vision_hidden_size': int(vision_hidden),
+        'vision_num_layers': int(vision_num_layers),
         'vision_image_size': int(vision_image_size),
         'vision_patch_size': int(vision_patch),
         'vision_attention_heads': int(vision_heads),
+        'vision_embed_dim': int(vision_embed_dim),
+        'num_channels': int(num_channels),
+        'visual_tokens_per_img': int(visual_tokens_per_img),
+        'use_pixel_shuffle': bool(use_pixel_shuffle),
+        'pixel_shuffle_factor': int(pixel_shuffle_factor),
+        'use_image_tokens': bool(use_image_tokens),
+        'use_layout_tags': bool(use_layout_tags),
         'tie_word_embeddings': tie_word_embeddings
     }
 
