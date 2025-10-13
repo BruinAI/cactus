@@ -533,56 +533,98 @@ void compute_fused_node(GraphNode& node, const std::vector<std::unique_ptr<Graph
             if (node.params.backend == ComputeBackend::NPU) {
                 throw std::runtime_error("NPU causal convolution operation not yet implemented");
             }
-            
-            const auto& input_buffer = nodes[node_index_map.at(node.input_ids[0])]->output_buffer;
-            const auto& weight_buffer = nodes[node_index_map.at(node.input_ids[1])]->output_buffer;
-            const BufferDesc* bias_buffer = nullptr;
-            if (node.input_ids.size() > 2) {
-                bias_buffer = &nodes[node_index_map.at(node.input_ids[2])]->output_buffer;
+
+            const auto& X = nodes[node_index_map.at(node.input_ids[0])]->output_buffer; // [N,L,C_in]
+            const auto& W = nodes[node_index_map.at(node.input_ids[1])]->output_buffer; // depthwise: [C_in*M,1,K]  standard: [C_out,C_in,K]
+            auto& Y = node.output_buffer;
+
+            // --- Basic shape checks ---
+            if (X.shape.size() != 3) {
+                throw std::runtime_error("Causal conv requires 3D input [batch, seq_len, in_channels]");
             }
-            
-            if (input_buffer.shape.size() != 3) {
-                throw std::runtime_error("Causal convolution requires 3D input tensor [batch_size, seq_len, in_channels], got " + 
-                                        std::to_string(input_buffer.shape.size()) + "D tensor");
+            if (W.shape.size() != 3) {
+                throw std::runtime_error("Weight must be 3D");
             }
-            
-            size_t batch_size = input_buffer.shape[0];
-            size_t seq_len = input_buffer.shape[1];
-            size_t in_channels = input_buffer.shape[2];
-            size_t out_channels = weight_buffer.shape[0];
-            size_t kernel_size = weight_buffer.shape[2];
-            
-            if (input_buffer.precision == Precision::INT8) {
-                float input_scale = input_buffer.quantization_scale;
-                float weight_scale = weight_buffer.quantization_scale;
-                float output_scale = node.output_buffer.quantization_scale;
-                const bool has_bias = bias_buffer && bias_buffer->get_data();
-                cactus_conv1d_causal_int8(input_buffer.data_as<int8_t>(), weight_buffer.data_as<int8_t>(),
-                                       node.output_buffer.data_as<int8_t>(),
-                                       batch_size, seq_len, in_channels, out_channels, kernel_size, node.params.dilation,
-                                       input_scale, weight_scale, output_scale);
-                if (has_bias) {
-                    throw std::runtime_error("Bias addition for INT8 causal convolution not implemented");
+
+            const size_t N     = X.shape[0];
+            const size_t L     = X.shape[1];
+            const size_t C_in  = X.shape[2];
+            const size_t W0    = W.shape[0]; // either C_out or C_in*channel_multiplier
+            const size_t W1    = W.shape[1]; // 1 for depthwise, C_in for standard
+            const size_t K     = W.shape[2];
+            const size_t dil   = node.params.dilation; 
+            if (dil < 1) throw std::runtime_error("dilation must be >= 1");
+
+            // --- Depthwise detection ---
+            bool is_depthwise = (W1 == 1) && (W0 % C_in == 0);
+            size_t M = 1;
+            size_t C_out = 0;
+
+            if (is_depthwise) {
+                M = W0 / C_in;             // channel multiplier
+                C_out = C_in * M;
+            } else {
+                // Standard conv requires W1 == C_in
+                if (W1 != C_in) {
+                    throw std::runtime_error("Weight in_channels mismatch: expected depthwise ([C_in*M,1,K]) or standard ([C_out,C_in,K])");
                 }
-            } else if (input_buffer.precision == Precision::FP16) {
-                cactus_conv1d_causal_f16(input_buffer.data_as<__fp16>(), weight_buffer.data_as<__fp16>(),
-                                        node.output_buffer.data_as<__fp16>(),
-                                        batch_size, seq_len, in_channels, out_channels, kernel_size, node.params.dilation);
-                if (bias_buffer && bias_buffer->get_data()) {
-                    throw std::runtime_error("Bias addition for FP16 causal convolution not implemented");
-                }
-            } else if (input_buffer.precision == Precision::FP32) {
-                cactus_conv1d_causal_f32(input_buffer.data_as<float>(), weight_buffer.data_as<float>(),
-                                        node.output_buffer.data_as<float>(),
-                                        batch_size, seq_len, in_channels, out_channels, kernel_size, node.params.dilation);
-                if (bias_buffer && bias_buffer->get_data()) {
-                    throw std::runtime_error("Bias addition for FP32 causal convolution not implemented");
+                C_out = W0;
+            }
+
+            // --- Prepare output buffer shape/precision ---
+            Y.shape = { N, L, C_out };
+            Y.precision = X.precision; // same dtype as input/weights branch
+            // ToDo: Ensure Y is allocated & writable
+
+            // --- Dtype consistency checks ---
+            if (X.precision != W.precision || Y.precision != X.precision) {
+                throw std::runtime_error("Causal conv requires matching precisions for input/weight/output");
+            }
+
+            // --- Dispatch ---
+            if (is_depthwise) {
+                if (X.precision == Precision::INT8) {
+                    const float in_s  = X.quantization_scale;
+                    const float w_s   = W.quantization_scale;
+                    const float out_s = Y.quantization_scale;
+                    cactus_conv1d_causal_depthwise_int8(
+                        X.data_as<int8_t>(), W.data_as<int8_t>(), Y.data_as<int8_t>(),
+                        N, L, C_in, K, dil, M, in_s, w_s, out_s);
+                } else if (X.precision == Precision::FP16) {
+                    cactus_conv1d_causal_depthwise_f16(
+                        X.data_as<__fp16>(), W.data_as<__fp16>(), Y.data_as<__fp16>(),
+                        N, L, C_in, K, dil, M);
+                } else if (X.precision == Precision::FP32) {
+                    cactus_conv1d_causal_depthwise_f32(
+                        X.data_as<float>(), W.data_as<float>(), Y.data_as<float>(),
+                        N, L, C_in, K, dil, M);
+                } else {
+                    throw std::runtime_error("Depthwise causal conv supports INT8/FP16/FP32");
                 }
             } else {
-                throw std::runtime_error("Causal convolution only supports INT8, FP16, and FP32 precision");
+                // --- Standard conv path (your existing kernels) ---
+                if (X.precision == Precision::INT8) {
+                    const float in_s  = X.quantization_scale;
+                    const float w_s   = W.quantization_scale;
+                    const float out_s = Y.quantization_scale;
+                    cactus_conv1d_causal_int8(
+                        X.data_as<int8_t>(), W.data_as<int8_t>(), Y.data_as<int8_t>(),
+                        N, L, C_in, C_out, K, dil, in_s, w_s, out_s);
+                } else if (X.precision == Precision::FP16) {
+                    cactus_conv1d_causal_f16(
+                        X.data_as<__fp16>(), W.data_as<__fp16>(), Y.data_as<__fp16>(),
+                        N, L, C_in, C_out, K, dil);
+                } else if (X.precision == Precision::FP32) {
+                    cactus_conv1d_causal_f32(
+                        X.data_as<float>(), W.data_as<float>(), Y.data_as<float>(),
+                        N, L, C_in, C_out, K, dil);
+                } else {
+                    throw std::runtime_error("Causal convolution supports INT8, FP16, and FP32");
+                }
             }
             break;
         }
+
         case OpType::CONCAT: {
             const auto& input1_buffer = nodes[node_index_map.at(node.input_ids[0])]->output_buffer;
             const auto& input2_buffer = nodes[node_index_map.at(node.input_ids[1])]->output_buffer;

@@ -198,6 +198,20 @@ void cactus_conv1d_causal_f16(const __fp16* input, const __fp16* weight, __fp16*
 void cactus_conv1d_causal_f32(const float* input, const float* weight, float* output, size_t batch_size, size_t length,
     size_t in_channels, size_t out_channels, size_t kernel_size, size_t dilation);
 
+void cactus_conv1d_causal_depthwise_f32(const float* x, const float* w, float* y,
+    size_t N, size_t L, size_t C_in, size_t K, size_t dilation, size_t M);
+
+void cactus_conv1d_causal_depthwise_f16(
+    const __fp16* x, const __fp16* w, __fp16* y,
+    size_t N, size_t L, size_t C_in,
+    size_t K, size_t dilation, size_t M);
+
+void cactus_conv1d_causal_depthwise_int8(
+    const int8_t* x, const int8_t* w, int8_t* y,
+    size_t N, size_t L, size_t C_in,
+    size_t K, size_t dilation, size_t M,
+    float input_scale, float weight_scale, float output_scale);
+
 
 void cactus_sample_f32(const float* logits, uint32_t* output, size_t vocab_size,
                        float temperature, float top_p, size_t top_k, size_t random_seed);

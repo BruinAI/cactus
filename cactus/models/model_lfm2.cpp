@@ -141,10 +141,11 @@ size_t LFM2Model::build_conv1d(CactusGraph* gb, size_t input, uint32_t layer_idx
 
         auto bx_prefill = gb->reshape(Bx, {static_cast<size_t>(1), seq_len, hidden_dim});
         auto conv_prefill = gb->conv1d_causal(bx_prefill, conv_weight, kernel_size, 1);
-        conv_prefill = gb->reshape(conv_prefill, {seq_len, hidden_dim});
         capture_debug_node(layer_idx, "conv_prefill_output", conv_prefill);
+        auto conv_prefill_reshaped = gb->reshape(conv_prefill, {seq_len, hidden_dim});
+        capture_debug_node(layer_idx, "conv_prefill_reshaped", conv_prefill_reshaped);
 
-        auto gated = gb->multiply(C, conv_prefill);
+        auto gated = gb->multiply(C, conv_prefill_reshaped);
         capture_debug_node(layer_idx, "conv_gated_prefill", gated);
 
         void* bx_ptr = gb->get_output(Bx);
