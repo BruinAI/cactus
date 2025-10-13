@@ -49,7 +49,7 @@ void* KVCache::get_value_ptr(size_t layer) {
 KVCache::CircularView KVCache::get_key_view(size_t layer) {
     CircularView view;
     if (layer >= num_layers || current_seq_len == 0) {
-        view.ptr1 = nullptr;
+    view.ptr1 = nullptr;
         view.ptr2 = nullptr;
         view.len1 = 0;
         view.len2 = 0;
@@ -156,7 +156,7 @@ ConvCache::CircularView ConvCache::get_window(size_t layer) const {
 
     // L_Tensor: [head, L)
     if (state.head < window_size) {
-        view.ptr2 = state.data.data() + state.head * stride;
+    view.ptr2 = state.data.data() + state.head * stride;
         view.len2 = window_size - state.head;
     } else {
         view.ptr2 = nullptr;

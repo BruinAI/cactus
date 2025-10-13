@@ -247,13 +247,11 @@ void compute_fused_node(GraphNode& node, const std::vector<std::unique_ptr<Graph
             break;
         }
         case OpType::SLICE: {
-            const auto& tensor_buffer = nodes[node_index_map.at(node.input_ids[0])]->output_buffer;
+            auto* input_node = nodes[node_index_map.at(node.input_ids[0])].get();
+            auto& tensor_buffer = input_node->output_buffer;
 
             size_t axis_index = static_cast<size_t>(node.params.axis);
             size_t slice_start = node.params.slice_start;
-            size_t slice_length = node.params.slice_length;
-
-            size_t axis_size = tensor_buffer.shape[axis_index];
 
             size_t stride = 1;
             for (size_t i = axis_index + 1; i < tensor_buffer.shape.size(); ++i) {
@@ -264,7 +262,7 @@ void compute_fused_node(GraphNode& node, const std::vector<std::unique_ptr<Graph
             size_t byte_stride = stride * element_size;
             size_t byte_offset = slice_start * byte_stride;
 
-            char* base_ptr = static_cast<char*>(tensor_buffer.get_data());
+            auto* base_ptr = static_cast<char*>(tensor_buffer.get_data());
             if (!base_ptr) {
                 throw std::runtime_error("Slice input buffer is not available");
             }
@@ -538,7 +536,10 @@ void compute_fused_node(GraphNode& node, const std::vector<std::unique_ptr<Graph
             
             const auto& input_buffer = nodes[node_index_map.at(node.input_ids[0])]->output_buffer;
             const auto& weight_buffer = nodes[node_index_map.at(node.input_ids[1])]->output_buffer;
-            const auto& bias_buffer = node.input_ids.size() > 2 ? nodes[node_index_map.at(node.input_ids[2])]->output_buffer : Buffer();
+            const BufferDesc* bias_buffer = nullptr;
+            if (node.input_ids.size() > 2) {
+                bias_buffer = &nodes[node_index_map.at(node.input_ids[2])]->output_buffer;
+            }
             
             if (input_buffer.shape.size() != 3) {
                 throw std::runtime_error("Causal convolution requires 3D input tensor [batch_size, seq_len, in_channels], got " + 
@@ -555,21 +556,28 @@ void compute_fused_node(GraphNode& node, const std::vector<std::unique_ptr<Graph
                 float input_scale = input_buffer.quantization_scale;
                 float weight_scale = weight_buffer.quantization_scale;
                 float output_scale = node.output_buffer.quantization_scale;
-                const int8_t* bias_data = bias_buffer.get_data() ? bias_buffer.data_as<int8_t>() : nullptr;
+                const bool has_bias = bias_buffer && bias_buffer->get_data();
                 cactus_conv1d_causal_int8(input_buffer.data_as<int8_t>(), weight_buffer.data_as<int8_t>(),
                                        node.output_buffer.data_as<int8_t>(),
                                        batch_size, seq_len, in_channels, out_channels, kernel_size, node.params.dilation,
                                        input_scale, weight_scale, output_scale);
+                if (has_bias) {
+                    throw std::runtime_error("Bias addition for INT8 causal convolution not implemented");
+                }
             } else if (input_buffer.precision == Precision::FP16) {
-                const __fp16* bias_data = bias_buffer.get_data() ? bias_buffer.data_as<__fp16>() : nullptr;
                 cactus_conv1d_causal_f16(input_buffer.data_as<__fp16>(), weight_buffer.data_as<__fp16>(),
                                         node.output_buffer.data_as<__fp16>(),
                                         batch_size, seq_len, in_channels, out_channels, kernel_size, node.params.dilation);
+                if (bias_buffer && bias_buffer->get_data()) {
+                    throw std::runtime_error("Bias addition for FP16 causal convolution not implemented");
+                }
             } else if (input_buffer.precision == Precision::FP32) {
-                const float* bias_data = bias_buffer.get_data() ? bias_buffer.data_as<float>() : nullptr;
                 cactus_conv1d_causal_f32(input_buffer.data_as<float>(), weight_buffer.data_as<float>(),
                                         node.output_buffer.data_as<float>(),
                                         batch_size, seq_len, in_channels, out_channels, kernel_size, node.params.dilation);
+                if (bias_buffer && bias_buffer->get_data()) {
+                    throw std::runtime_error("Bias addition for FP32 causal convolution not implemented");
+                }
             } else {
                 throw std::runtime_error("Causal convolution only supports INT8, FP16, and FP32 precision");
             }

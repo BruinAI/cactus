@@ -6,9 +6,9 @@
 #include <memory>
 #include <cstdint>
 
+#include "../graph/graph.h"
+
 class CactusGraph;
-enum class ComputeBackend;
-enum class Precision;
 
 namespace cactus {
 namespace engine {
@@ -210,9 +210,9 @@ private:
 class ConvCache {
 public:
     struct CircularView {
-        void* ptr1;   // R_Tensor: [0, head)
+        const void* ptr1;   // R_Tensor: [0, head)
         size_t len1;
-        void* ptr2;   // L_Tensor: [head, L)
+        const void* ptr2;   // L_Tensor: [head, L)
         size_t len2;
         size_t total_len;   // always L
     };
@@ -275,8 +275,8 @@ struct KVCache {
     void* get_value_ptr(size_t layer);
 
     struct CircularView {
-        void* ptr1;
-        void* ptr2;  
+        const void* ptr1;
+        const void* ptr2;  
         size_t len1;
         size_t len2; 
         size_t total_len;

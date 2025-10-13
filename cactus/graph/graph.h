@@ -211,7 +211,6 @@ public:
     size_t max(size_t input, int axis);
     
     size_t gather(size_t embeddings, size_t indices);
-    size_t slice(size_t input, int axis, size_t start, size_t length);
     size_t mmap_embeddings(const std::string& filename);
     size_t mmap_weights(const std::string& filename);
     void set_quantization_scale(size_t node_id, float scale);
@@ -231,7 +230,7 @@ public:
     
     size_t concat(size_t input1, size_t input2, int axis = 0);
     
-    void set_input(size_t node_id, void* data, Precision precision);
+    void set_input(size_t node_id, const void* data, Precision precision);
     void set_external_input(size_t node_id, void* data, Precision precision);
     void* get_output(size_t node_id);
     

@@ -524,7 +524,7 @@ size_t CactusGraph::precision_cast(size_t input, Precision target_precision) {
     return add_node(OpType::PRECISION_CAST, {input}, {}, params);
 }
 
-void CactusGraph::set_input(size_t node_id, void* data, Precision) {
+void CactusGraph::set_input(size_t node_id, const void* data, Precision) {
     auto& node = *nodes_[node_index_map_[node_id]];
     if (node.op_type != OpType::INPUT) {
         throw std::invalid_argument("Can only set data on input nodes");

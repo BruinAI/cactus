@@ -280,7 +280,7 @@ void BPETokenizer::init_byte_mappings() const {
             std::string unicode_char(1, static_cast<char>(byte));
             byte_to_unicode_[byte] = unicode_char;
             unicode_to_byte_[unicode_char] = byte;
-        } else if (byte >= 161 && byte <= 255) {
+        } else if (byte >= 161) {
             std::string unicode_char;
             unicode_char += static_cast<char>(0xC0 | (byte >> 6));
             unicode_char += static_cast<char>(0x80 | (byte & 0x3F));

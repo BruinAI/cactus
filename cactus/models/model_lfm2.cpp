@@ -42,7 +42,7 @@ bool LFM2Model::init(const std::string& model_folder, size_t context_size, const
 
 void LFM2Model::load_weights_to_graph(CactusGraph* gb) {
     embedding_node_id_ = gb->mmap_embeddings(embedding_file_path_);
-    weight_nodes_.output_norm_weight = gb->mmap_weights(model_folder_path_ + "/post_attn_norm.weights");
+    weight_nodes_.output_norm_weight = gb->mmap_weights(model_folder_path_ + "/output_norm.weights");
 
     if (config_.tie_word_embeddings) {
         weight_nodes_.output_weight = embedding_node_id_;
