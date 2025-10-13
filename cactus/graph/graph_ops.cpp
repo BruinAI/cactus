@@ -816,11 +816,7 @@ void compute_topk_node(GraphNode& node, const std::vector<std::unique_ptr<GraphN
     // Convert input to float for processing
     std::vector<float> input_float(input_buffer.total_size);
     if (input_buffer.precision == Precision::INT8) {
-        const int8_t* input_int8 = input_buffer.data_as<int8_t>();
-        float scale = input_buffer.quantization_scale;
-        for (size_t i = 0; i < input_buffer.total_size; ++i) {
-            input_float[i] = input_int8[i] * scale;
-        }
+        throw std::runtime_error("TopK currently does not support INT8 input");
     } else if (input_buffer.precision == Precision::FP16) {
         const __fp16* input_fp16 = input_buffer.data_as<__fp16>();
         for (size_t i = 0; i < input_buffer.total_size; ++i) {
