@@ -184,9 +184,9 @@ private:
             size_t ffn_norm_2_bias;  // norm2.bias
             // MoE weights
             size_t mlp_router_layer_weight;  // mlp.router.layer.weight
-            size_t mlp_experts_mlp1_weight;  // mlp.experts.mlp.w1
-            size_t mlp_experts_mlp2_weight;  // mlp.experts.mlp.w2
             size_t mlp_experts_bias;  // mlp.experts.bias
+            std::vector<size_t> mlp_experts_mlp1_weight;  // mlp.experts.mlp.w1
+            std::vector<size_t> mlp_experts_mlp2_weight;  // mlp.experts.mlp.w2
         };
 
         std::vector<LayerWeights> layers;

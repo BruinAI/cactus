@@ -33,7 +33,7 @@ def save_tensor_with_header(tensor, output_path, precision='FP32', transpose=Fal
     
     if precision == 'INT8':
         filename = output_path.name
-        if any(x in filename for x in ['norm', 'embedding', 'bias']):
+        if any(x in filename for x in ['norm', 'bias', 'embedding']):
             precision = 'FP16'
     
     if precision == 'INT8':
@@ -291,8 +291,8 @@ def convert_hf_model_weights(model, output_dir, precision='INT8', args=None):
             (['norm2.weight'], precision, f'layer_{i}_norm2.weights', False),
             # MoE specific weight matrices for Nomic
             (['mlp.experts.bias'], precision, f'layer_{i}_mlp_experts.bias', False),
-            (['mlp.experts.mlp.w1'], precision, f'layer_{i}_mlp_experts.mlp1.weights', False),
-            (['mlp.experts.mlp.w2'], precision, f'layer_{i}_mlp_experts.mlp2.weights', False),
+            (['mlp.experts.mlp.w1'], precision, f'layer_{i}_mlp_expert_{{channel}}.mlp1.weights', False),
+            (['mlp.experts.mlp.w2'], precision, f'layer_{i}_mlp_expert_{{channel}}.mlp2.weights', False),
             (['mlp.router.layer.weight'], precision, f'layer_{i}_mlp_router.layer.weights', False),
         ]
         
@@ -309,9 +309,22 @@ def convert_hf_model_weights(model, output_dir, precision='INT8', args=None):
                             tensor = tensor.reshape(3, -1, tensor.size(-1))
                         else:
                             raise ValueError(f"Invalid tensor shape: {tensor.shape}")
-                        for i, ch in enumerate(['q', 'k', 'v']):
+                        for j, ch in enumerate(['q', 'k', 'v']):
                             channel_output_name = output_name.replace('{channel}', ch)
-                            save_tensor_with_header(tensor[i], output_dir / channel_output_name, tensor_precision, transpose=should_transpose, stats_tracker=quantization_stats, args=args, model_type=detected_model_type)
+                            save_tensor_with_header(tensor[j], output_dir / channel_output_name, tensor_precision, transpose=should_transpose, stats_tracker=quantization_stats, args=args, model_type=detected_model_type)
+                        found = True
+                        break
+                    # Handle MoE expert weights - split and save each expert individually
+                    elif pattern.startswith('mlp.experts.') and 'bias' not in pattern and model_type_str == 'nomic_bert':
+                        # For expert weights, the first dimension is the number of experts
+                        num_experts = model_config['num_experts']
+                        if tensor.ndim != 2:
+                            raise ValueError(f"Invalid tensor shape: {tensor.shape}")
+                        tensor = tensor.reshape(num_experts, -1, tensor.size(-1))
+                        for expert_idx in range(num_experts):
+                            expert_tensor = tensor[expert_idx]
+                            expert_output_name = output_name.replace('{channel}', str(expert_idx))
+                            save_tensor_with_header(expert_tensor, output_dir / expert_output_name, tensor_precision, transpose=should_transpose, stats_tracker=quantization_stats, args=args, model_type=detected_model_type)
                         found = True
                         break
                     save_tensor_with_header(tensor, output_dir / output_name, tensor_precision, transpose=should_transpose, stats_tracker=quantization_stats, args=args, model_type=detected_model_type)

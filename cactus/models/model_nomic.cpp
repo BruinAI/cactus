@@ -39,9 +39,11 @@ void NomicModel::load_weights_to_graph(CactusGraph* gb) {
             layer.ffn_down_bias = gb->mmap_weights(layer_prefix + "mlp_fc2.bias");
         } else {
             layer.mlp_router_layer_weight = gb->mmap_weights(layer_prefix + "mlp_router.layer.weights");
-            layer.mlp_experts_mlp1_weight = gb->mmap_weights(layer_prefix + "mlp_experts.mlp1.weights");
-            layer.mlp_experts_mlp2_weight = gb->mmap_weights(layer_prefix + "mlp_experts.mlp2.weights");
             layer.mlp_experts_bias = gb->mmap_weights(layer_prefix + "mlp_experts.bias");
+            for (uint32_t j = 0; j < config_.num_experts; j++) {
+                layer.mlp_experts_mlp1_weight.push_back(gb->mmap_weights(layer_prefix + "mlp_expert_" + std::to_string(j) + ".mlp1.weights"));
+                layer.mlp_experts_mlp2_weight.push_back(gb->mmap_weights(layer_prefix + "mlp_expert_" + std::to_string(j) + ".mlp2.weights"));
+            }
         }
     }
 }
@@ -132,37 +134,22 @@ size_t NomicModel::build_moe_mlp(CactusGraph* gb, size_t normalized_h, uint32_t 
     }
 
     const size_t num_experts = config_.num_experts != 0 ? config_.num_experts : router_shape[0];
-    const auto& w1_shape = gb->get_output_buffer(layer.mlp_experts_mlp1_weight).shape;  // [E * D_e, D_h]
-    const size_t expert_dim = w1_shape[0] / num_experts;
-    const size_t hidden_dim = w1_shape[1];
     const size_t seq_len = gb->get_output_buffer(normalized_h).shape[0];
 
     auto gate_weights = gb->matmul(normalized_h, layer.mlp_router_layer_weight, true, backend);
     auto gate_probs = gb->softmax(gate_weights);
-    auto [topk_idx, topk_w] = gb->topk(gate_probs, config_.num_top_experts);
     
-    const auto& topk_idx_buffer = gb->get_output_buffer(topk_idx);
-    const auto& topk_w_buffer = gb->get_output_buffer(topk_w);
-    if (topk_idx_buffer.precision != Precision::FP32 || topk_w_buffer.precision != Precision::FP32) {
-        throw std::runtime_error("TopK outputs must be FP32");
-    }
-
+    auto [topk_idx, topk_w] = gb->topk(gate_probs, config_.num_top_experts);
     auto expert_token_weights_matrix = gb->scatter_topk(topk_idx, topk_w, num_experts);  // [N, E]
 
     // Getting expert outputs
     auto expert_outputs = 0;  // -> [N, E, D_h]
-    
-    // Reshape expert weights from [E*D_e, D_h] to [E, D_e, D_h] once
-    auto expert_weights1_reshaped = gb->reshape(layer.mlp_experts_mlp1_weight, {num_experts, expert_dim, hidden_dim});
-    auto expert_weights2_reshaped = gb->reshape(layer.mlp_experts_mlp2_weight, {num_experts, expert_dim, hidden_dim});
-    
     for (size_t e = 0; e < num_experts; e++) {
         // Use index to slice the expert weights: index(tensor, e, dim=0) is equivalent to tensor[e, :, :]
-        auto expert_weight1 = gb->index(expert_weights1_reshaped, e, 0);  // [D_e, D_h]
-        auto new_expert_output = gb->matmul(normalized_h, expert_weight1, true, backend);  // [N, D_h] @ [D_h, D_e] = [N, D_e]
+        auto new_expert_output = gb->matmul(normalized_h, layer.mlp_experts_mlp1_weight[e], true, backend);  // [N, D_h] @ [D_h, D_e] = [N, D_e]
         new_expert_output = gb->gelu(new_expert_output);
         
-        auto expert_weight2 = gb->index(expert_weights2_reshaped, e, 0);  // [D_e, D_h]
+        auto expert_weight2 = layer.mlp_experts_mlp2_weight[e];
         if (gb->get_output_buffer(expert_weight2).precision == Precision::FP16) {
             // Casting because transposing on fp16 does not work in practice even though it technically should
             expert_weight2 = gb->precision_cast(expert_weight2, Precision::FP32);
