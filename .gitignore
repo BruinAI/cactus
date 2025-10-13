@@ -18,7 +18,15 @@ apple/*.xcframework
 apple/libcactus.a
 *.a
 
+# Shared libraries for Python FFI
+*.dylib
+
 # IDE files
 pyproject.toml
 uv.lock
 .cache/
+
+# Benchmark results
+tests/benchmark_results.json
+tests/profile.txt
+__pycache__/

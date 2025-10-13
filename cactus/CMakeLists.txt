@@ -52,6 +52,26 @@ target_include_directories(cactus PUBLIC
     models
 )
 
+# Optionally build shared library for Python FFI
+option(BUILD_SHARED_LIB "Build shared library for Python FFI" OFF)
+if(BUILD_SHARED_LIB)
+    add_library(cactus_shared SHARED ${COMMON_SOURCES})
+    target_compile_definitions(cactus_shared PUBLIC PLATFORM_CPU_ONLY=1)
+    target_include_directories(cactus_shared PUBLIC
+        ${CMAKE_CURRENT_SOURCE_DIR}
+        engine
+        graph
+        kernel
+        ffi
+        models
+    )
+    set_target_properties(cactus_shared PROPERTIES OUTPUT_NAME cactus)
+    
+    if(APPLE)
+        target_link_libraries(cactus_shared "-framework Accelerate")
+    endif()
+endif()
+
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
