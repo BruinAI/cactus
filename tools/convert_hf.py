@@ -442,13 +442,13 @@ def convert_hf_model_weights_vlm(model, output_dir, precision='INT8', args=None)
     for i_v in range(vision_layers):
         vpref = f'model.vision_model.encoder.layers.{i_v}.'
         for fname, out in [
-            (vpref + 'layer_norm1.weight', f'vision_layer_{i_v}_layer_norm1.weight'),
-            (vpref + 'layer_norm1.bias', f'vision_layer_{i_v}_layer_norm1.bias'),
-            (vpref + 'layer_norm2.weight', f'vision_layer_{i_v}_layer_norm2.weight'),
-            (vpref + 'layer_norm2.bias', f'vision_layer_{i_v}_layer_norm2.bias')
+            (vpref + 'layer_norm1.weight', f'vision_layer_{i_v}_layer_norm1.weights'),
+            (vpref + 'layer_norm1.bias', f'vision_layer_{i_v}_layer_norm1.bias.weights'),
+            (vpref + 'layer_norm2.weight', f'vision_layer_{i_v}_layer_norm2.weights'),
+            (vpref + 'layer_norm2.bias', f'vision_layer_{i_v}_layer_norm2.bias.weights')
         ]:
             if fname in state_dict:
-                save_tensor_with_header(state_dict[fname], output_dir / (out + '.weights'), precision, stats_tracker=quantization_stats, args=args, model_type='smolvlm')
+                save_tensor_with_header(state_dict[fname], output_dir / out, precision, stats_tracker=quantization_stats, args=args, model_type='smolvlm')
 
         for fname, out in [
             (vpref + 'mlp.fc1.weight', f'vision_layer_{i_v}_ffn_fc1.weights'),
