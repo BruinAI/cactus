@@ -177,6 +177,7 @@ uint32_t Model::generate(const std::vector<uint32_t>& tokens, float temperature,
         gb->execute();
     }
 
+    post_execute_updates(gb, tokens.size());
     flush_debug_nodes(gb);
     update_kv_cache(gb, tokens.size());
     
@@ -203,6 +204,7 @@ std::vector<float> Model::get_embeddings(const std::vector<uint32_t>& tokens, bo
     if (pooled) {
         auto pooled_hidden = gb->mean(final_hidden, 0);
         gb->execute();
+        post_execute_updates(gb, tokens.size());
         flush_debug_nodes(gb);
         
         auto* pooled_ptr = gb->get_output(pooled_hidden);
@@ -224,6 +226,7 @@ std::vector<float> Model::get_embeddings(const std::vector<uint32_t>& tokens, bo
         }
     } else {
         gb->execute();
+        post_execute_updates(gb, tokens.size());
         flush_debug_nodes(gb);
         
         size_t total_size = output_buffer.total_size;
@@ -266,6 +269,7 @@ std::vector<float> Model::debug_forward(const std::vector<uint32_t>& tokens, boo
         gb->execute();
     }
 
+    post_execute_updates(gb, tokens.size());
     flush_debug_nodes(gb);
 
     const auto& buffer = gb->get_output_buffer(final_hidden);

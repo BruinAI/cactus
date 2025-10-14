@@ -321,6 +321,7 @@ protected:
     virtual size_t build_transformer_block(CactusGraph* gb, size_t hidden, uint32_t layer_idx,
                                   ComputeBackend backend, bool use_cache = false, size_t position_offset = 0) = 0;
     void update_kv_cache(CactusGraph* gb, size_t seq_len);
+    virtual void post_execute_updates(CactusGraph* gb, size_t seq_len) {}
     Config config_;
     std::unique_ptr<Tokenizer> tokenizer_;
 

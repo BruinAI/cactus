@@ -114,6 +114,7 @@ protected:
                                   ComputeBackend backend, bool use_cache = false, size_t position_offset = 0) override;
 
     size_t forward(const std::vector<uint32_t>& tokens, bool use_cache = false) override;
+    void post_execute_updates(CactusGraph* gb, size_t seq_len) override;
     void load_weights_to_graph(CactusGraph* gb) override;
 
 private:
@@ -155,6 +156,18 @@ private:
     } weight_nodes_;
 
     ConvCache conv_cache_;
+
+    struct PendingConvUpdate {
+        uint32_t layer_idx;
+        size_t node_id;
+        size_t seq_len;
+        size_t hidden_dim;
+    };
+
+    std::vector<PendingConvUpdate> pending_conv_updates_;
+
+    void enqueue_conv_cache_update(uint32_t layer_idx, size_t node_id, size_t seq_len, size_t hidden_dim);
+    void apply_pending_conv_cache_updates(CactusGraph* gb);
 };
 
 }
