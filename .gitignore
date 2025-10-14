@@ -18,3 +18,4 @@ apple/build-static/
 apple/*.xcframework
 apple/libcactus.a
 *.a
+**.txt

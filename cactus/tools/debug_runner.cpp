@@ -7,6 +7,7 @@
 #include <iostream>
 #include <sstream>
 #include <string>
+#include <utility>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -18,7 +19,8 @@ void print_usage() {
               << "       [--context <size>] [--cache] [--profile <profile_file>]\n"
               << "       [--dump-final <file>] [--print-tokens]\n"
               << "       [--generate <count>] [--temperature <value>] [--top-p <value>]\n"
-              << "       [--top-k <value>] [--stop-at-eos]\n";
+              << "       [--top-k <value>] [--stop-at-eos]\n"
+              << "       [--dump-embeddings <file>] [--print-embeddings]\n";
 }
 
 std::vector<uint32_t> parse_tokens(const std::string& token_str) {
@@ -41,6 +43,53 @@ std::vector<uint32_t> parse_tokens(const std::string& token_str) {
         }
     }
     return tokens;
+}
+
+std::string sanitize_token_text(const std::string& text) {
+    std::ostringstream oss;
+    for (unsigned char ch : text) {
+        switch (ch) {
+            case '\\': oss << "\\\\"; break;
+            case '"': oss << "\\\""; break;
+            case '\n': oss << "\\n"; break;
+            case '\r': oss << "\\r"; break;
+            case '\t': oss << "\\t"; break;
+            default:
+                if (ch < 0x20) {
+                    oss << "\\x" << std::uppercase << std::hex << std::setw(2) << std::setfill('0')
+                        << static_cast<int>(ch) << std::nouppercase << std::dec << std::setfill(' ');
+                } else {
+                    oss << static_cast<char>(ch);
+                }
+                break;
+        }
+    }
+    return oss.str();
+}
+
+std::vector<std::string> compute_token_texts(cactus::engine::Tokenizer* tokenizer,
+                                             const std::vector<uint32_t>& sequence) {
+    std::vector<std::string> texts(sequence.size());
+    if (!tokenizer || sequence.empty()) {
+        return texts;
+    }
+
+    std::vector<uint32_t> prefix;
+    prefix.reserve(sequence.size());
+    std::string previous_decoded;
+
+    for (size_t i = 0; i < sequence.size(); ++i) {
+        prefix.push_back(sequence[i]);
+        std::string decoded = tokenizer->decode(prefix);
+        if (decoded.size() >= previous_decoded.size()) {
+            texts[i] = decoded.substr(previous_decoded.size());
+        } else {
+            texts[i].clear();
+        }
+        previous_decoded = std::move(decoded);
+    }
+
+    return texts;
 }
 
 } // namespace
@@ -88,6 +137,7 @@ int main(int argc, char** argv) {
     bool use_cache = flags.find("--cache") != flags.end();
     bool print_tokens = flags.find("--print-tokens") != flags.end();
     bool stop_at_eos = flags.find("--stop-at-eos") != flags.end();
+    bool print_embeddings = flags.find("--print-embeddings") != flags.end();
 
     std::string profile_file;
     if (auto profile_it = options.find("--profile"); profile_it != options.end()) {
@@ -97,6 +147,11 @@ int main(int argc, char** argv) {
     std::string dump_final_path;
     if (auto dump_it = options.find("--dump-final"); dump_it != options.end()) {
         dump_final_path = dump_it->second;
+    }
+
+    std::string dump_embeddings_path;
+    if (auto embed_it = options.find("--dump-embeddings"); embed_it != options.end()) {
+        dump_embeddings_path = embed_it->second;
     }
 
     size_t max_new_tokens = 0;
@@ -151,6 +206,8 @@ int main(int argc, char** argv) {
             return 1;
         }
 
+        auto* tokenizer = model->get_tokenizer();
+
         std::vector<uint32_t> tokens;
         if (auto tokens_it = options.find("--tokens"); tokens_it != options.end()) {
             tokens = parse_tokens(tokens_it->second);
@@ -163,7 +220,6 @@ int main(int argc, char** argv) {
                 print_usage();
                 return 1;
             }
-            auto* tokenizer = model->get_tokenizer();
             if (!tokenizer) {
                 std::cerr << "Tokenizer not available after model initialization." << std::endl;
                 return 1;
@@ -221,25 +277,37 @@ int main(int argc, char** argv) {
 
         std::cout << "Layer dumps respect CACTUS_DEBUG_ENABLE, CACTUS_DEBUG_STDOUT, CACTUS_DEBUG_DIR, and related env vars." << std::endl;
 
+        std::vector<uint32_t> generation_context = tokens;
+        std::vector<uint32_t> generated_tokens;
+
         if (max_new_tokens > 0) {
-            auto* tokenizer = model->get_tokenizer();
             const auto& config = model->get_config();
 
             std::cout << "Starting autoregressive generation of " << max_new_tokens << " token(s)." << std::endl;
 
             model->reset_cache();
 
-            std::vector<uint32_t> generation_context = tokens;
-            std::vector<uint32_t> generated_tokens;
+            generation_context.reserve(tokens.size() + max_new_tokens);
             generated_tokens.reserve(max_new_tokens);
 
-            auto log_token = [&](size_t index, uint32_t token_id) {
+            std::string decoded_so_far;
+            if (tokenizer) {
+                decoded_so_far = tokenizer->decode(tokens);
+            }
+
+            auto log_token = [&](size_t index) {
+                uint32_t token_id = generation_context.back();
                 std::cout << "  [gen " << index << "] token_id=" << token_id;
                 if (tokenizer) {
-                    std::string piece = tokenizer->decode({token_id});
-                    if (!piece.empty()) {
-                        std::cout << " text=\"" << piece << "\"";
+                    std::string decoded_full = tokenizer->decode(generation_context);
+                    std::string diff;
+                    if (decoded_full.size() >= decoded_so_far.size()) {
+                        diff = decoded_full.substr(decoded_so_far.size());
                     }
+                    if (!diff.empty()) {
+                        std::cout << " text=\"" << sanitize_token_text(diff) << "\"";
+                    }
+                    decoded_so_far = std::move(decoded_full);
                 }
                 std::cout << std::endl;
             };
@@ -251,33 +319,29 @@ int main(int argc, char** argv) {
                 return model->generate(input, temperature, top_p, top_k);
             };
 
-            bool profile_used = false;
+            uint32_t next_token = generate_step(generation_context, !profile_file.empty());
 
-            if (max_new_tokens > 0) {
-                std::vector<uint32_t> first_input = generation_context.empty() ? std::vector<uint32_t>{} : generation_context;
-                uint32_t next_token = generate_step(first_input, !profile_used);
-                profile_used = true;
+            generated_tokens.push_back(next_token);
+            generation_context.push_back(next_token);
+            log_token(0);
 
-                generated_tokens.push_back(next_token);
-                generation_context.push_back(next_token);
-                log_token(0, next_token);
+            bool reached_eos = stop_at_eos && next_token == config.eos_token_id;
 
-                if (stop_at_eos && next_token == config.eos_token_id) {
-                    std::cout << "Hit EOS token; stopping generation." << std::endl;
-                } else {
-                    for (size_t i = 1; i < max_new_tokens; ++i) {
-                        std::vector<uint32_t> input_token = {generated_tokens.back()};
-                        uint32_t candidate = generate_step(input_token, false);
-                        generated_tokens.push_back(candidate);
-                        generation_context.push_back(candidate);
-                        log_token(i, candidate);
+            for (size_t i = 1; i < max_new_tokens && !reached_eos; ++i) {
+                std::vector<uint32_t> input_token = {generated_tokens.back()};
+                uint32_t candidate = generate_step(input_token, false);
 
-                        if (stop_at_eos && candidate == config.eos_token_id) {
-                            std::cout << "Hit EOS token; stopping generation." << std::endl;
-                            break;
-                        }
-                    }
+                generated_tokens.push_back(candidate);
+                generation_context.push_back(candidate);
+                log_token(i);
+
+                if (stop_at_eos && candidate == config.eos_token_id) {
+                    reached_eos = true;
                 }
+            }
+
+            if (reached_eos) {
+                std::cout << "Hit EOS token; stopping generation." << std::endl;
             }
 
             if (!generated_tokens.empty()) {
@@ -296,6 +360,68 @@ int main(int argc, char** argv) {
                 }
             } else {
                 std::cout << "No tokens generated." << std::endl;
+            }
+        }
+
+        bool want_embeddings = print_embeddings || !dump_embeddings_path.empty();
+        if (want_embeddings) {
+            if (generation_context.empty()) {
+                std::cerr << "No tokens available for embedding dump." << std::endl;
+            } else {
+                model->reset_cache();
+                auto embeddings = model->get_embeddings(generation_context, /*pooled=*/false);
+
+                size_t total_tokens = generation_context.size();
+                size_t embedding_dim = total_tokens == 0 ? 0 : embeddings.size() / total_tokens;
+
+                if (embedding_dim * total_tokens != embeddings.size() || embedding_dim == 0) {
+                    std::cerr << "Unexpected embedding size " << embeddings.size() << " for " << total_tokens
+                              << " tokens." << std::endl;
+                } else {
+                    auto token_texts = compute_token_texts(tokenizer, generation_context);
+
+                    std::ostringstream embed_ss;
+                    embed_ss << std::setprecision(10);
+                    embed_ss << "=== Token Embeddings (hidden_dim=" << embedding_dim << ") ===" << std::endl;
+
+                    for (size_t i = 0; i < total_tokens; ++i) {
+                        embed_ss << "token " << i << " [" << (i < tokens.size() ? "prompt" : "generated") << "] id="
+                                 << generation_context[i];
+                        if (tokenizer && i < token_texts.size()) {
+                            std::string sanitized = sanitize_token_text(token_texts[i]);
+                            if (!sanitized.empty()) {
+                                embed_ss << " text=\"" << sanitized << "\"";
+                            }
+                        }
+                        embed_ss << std::endl;
+
+                        size_t offset = i * embedding_dim;
+                        for (size_t d = 0; d < embedding_dim; ++d) {
+                            embed_ss << embeddings[offset + d];
+                            if (d + 1 < embedding_dim) {
+                                embed_ss << ' ';
+                            }
+                        }
+                        embed_ss << std::endl;
+                    }
+
+                    std::string embed_output = embed_ss.str();
+
+                    if (print_embeddings) {
+                        std::cout << embed_output;
+                    }
+
+                    if (!dump_embeddings_path.empty()) {
+                        std::ofstream embed_file(dump_embeddings_path);
+                        if (!embed_file) {
+                            std::cerr << "Failed to open --dump-embeddings path for writing: "
+                                      << dump_embeddings_path << std::endl;
+                        } else {
+                            embed_file << embed_output;
+                            std::cout << "Wrote token embeddings to " << dump_embeddings_path << std::endl;
+                        }
+                    }
+                }
             }
         }
     } catch (const std::exception& ex) {
