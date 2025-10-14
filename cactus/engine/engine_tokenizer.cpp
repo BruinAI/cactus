@@ -25,11 +25,11 @@ void Tokenizer::detect_model_type(const std::string& config_path) {
             } else if (line.find("gemma") != std::string::npos) {
                 model_type_ = ModelType::GEMMA;
                 break;
-            } else if (line.find("smol") != std::string::npos) {
-                model_type_ = ModelType::SMOL;
-                break;
             } else if (line.find("smolvlm") != std::string::npos) {
                 model_type_ = ModelType::SMOLVLM;
+                break;
+            } else if (line.find("smol") != std::string::npos) {
+                model_type_ = ModelType::SMOL;
                 break;
             }
         }
@@ -188,21 +188,35 @@ std::string Tokenizer::format_smolvlm_style(const std::vector<ChatMessage>& mess
     std::string result;
 
     if (!messages.empty() && messages.front().role != "system") {
-        result += "<|im_start|>system\n";
-        result += "You are a helpful AI assistant named SmolVLM, trained by Hugging Face";
-        result += "<|im_end|>\n";
+        result += "System: You are a helpful AI assistant named SmolVLM, trained by Hugging Face<end_of_utterance>\n";
     }
 
     for (const auto& msg : messages) {
-        result += "<|im_start|>";
-        result += msg.role;
-        result += "\n";
+        std::string role = msg.role;
+        if (!role.empty()) {
+            role[0] = static_cast<char>(::toupper(role[0]));
+            for (size_t i = 1; i < role.size(); ++i) role[i] = static_cast<char>(::tolower(role[i]));
+        }
+
+        std::string content = msg.content;
+        size_t first_non_ws = content.find_first_not_of(" \t\n\r");
+        if (first_non_ws != std::string::npos) content = content.substr(first_non_ws);
+
+        bool starts_with_image = false;
+        const std::string image_marker = "<image>";
+        if (content.size() >= image_marker.size() && content.compare(0, image_marker.size(), image_marker) == 0) {
+            starts_with_image = true;
+        }
+
+        result += role;
+        result += (starts_with_image ? ":" : ": ");
+
         result += msg.content;
-        result += "<|im_end|>\n";
+        result += "<end_of_utterance>\n";
     }
 
     if (add_generation_prompt) {
-        result += "<|im_start|>assistant\n";
+        result += "Assistant:";
     }
 
     return result;

@@ -286,8 +286,8 @@ bool Config::from_json(const std::string& config_path) {
         }
         else if (key == "model_type") {
             if (value == "gemma" || value == "GEMMA") model_type = ModelType::GEMMA;
-            else if (value == "smol" || value == "SMOL" || value == "Smol") model_type = ModelType::SMOL;
             else if (value == "smolvlm" || value == "SMOLVLM" || value == "SmolVLM") model_type = ModelType::SMOLVLM;
+            else if (value == "smol" || value == "SMOL" || value == "Smol") model_type = ModelType::SMOL;
             else model_type = ModelType::QWEN;
         }
     }
