@@ -3,9 +3,32 @@
 #include <cmath>
 #include <stdexcept>
 #include <set>
+#include <iostream>
 
 namespace cactus {
 namespace engine {
+
+// Placeholder: Reuse/assume this is defined in your CactusGraph header
+// size_t CactusGraph::repeat_kv(size_t kv_input, size_t num_q_heads, size_t num_kv_heads, size_t head_dim);
+size_t repeat_kv_heads(CactusGraph* gb, size_t kv_input, size_t num_q_heads, size_t num_kv_heads) {
+    if (num_q_heads == num_kv_heads) {
+        return kv_input; // MQA or no GQA needed
+    }
+    
+    // Calculate how many times the KV input needs to be repeated (tiled).
+    size_t repeat_factor = num_q_heads / num_kv_heads;
+
+    // Start with the original input
+    size_t repeated_kv = kv_input;
+
+    // Concat the input to itself (repeat_factor - 1) times.
+    // The concat is done along dimension 2 (the head dimension).
+    for (size_t i = 1; i < repeat_factor; ++i) {
+        repeated_kv = gb->concat(repeated_kv, kv_input, 2);
+    }
+    
+    return repeated_kv; 
+}
 
 llama3Model::llama3Model() : Model() {}
 
@@ -14,6 +37,7 @@ llama3Model::llama3Model(const Config& config) : Model(config) {
 }
 
 void llama3Model::load_weights_to_graph(CactusGraph* gb) {
+    // ... (load_weights_to_graph remains the same) ...
     embedding_node_id_ = gb->mmap_embeddings(embedding_file_path_);
     weight_nodes_.output_norm_weight = gb->mmap_weights(model_folder_path_ + "/output_norm.weights");
 
@@ -29,28 +53,26 @@ void llama3Model::load_weights_to_graph(CactusGraph* gb) {
         auto& layer = weight_nodes_.layers[i];
         std::string layer_prefix = model_folder_path_ + "/layer_" + std::to_string(i) + "_";
         
-    
         layer.input_layernorm_weight = gb->mmap_weights(layer_prefix + "input_norm.weights");
-
         layer.attn_q_weight = gb->mmap_weights(layer_prefix + "attn_q.weights");
         layer.attn_k_weight = gb->mmap_weights(layer_prefix + "attn_k.weights");
         layer.attn_v_weight = gb->mmap_weights(layer_prefix + "attn_v.weights");
         layer.attn_output_weight = gb->mmap_weights(layer_prefix + "attn_output.weights");
-
         layer.post_attention_layernorm_weight = gb->mmap_weights(layer_prefix + "post_attn_norm.weights");
-
         layer.ffn_gate_weight = gb->mmap_weights(layer_prefix + "ffn_gate.weights");
         layer.ffn_up_weight   = gb->mmap_weights(layer_prefix + "ffn_up.weights");
         layer.ffn_down_weight = gb->mmap_weights(layer_prefix + "ffn_down.weights");
     }
 }
 
-size_t llama3Model::build_attention(CactusGraph* gb, size_t normalized_input, uint32_t layer_idx,ComputeBackend backend, bool use_cache, size_t position_offset) {
+size_t llama3Model::build_attention(CactusGraph* gb, size_t normalized_input, uint32_t layer_idx, ComputeBackend backend, bool use_cache, size_t position_offset) {
     const auto& layer = weight_nodes_.layers[layer_idx];
 
+    // MatMuls remain NO-BIAS (implicit) and pre-transposed (true).
     auto q_proj = gb->matmul(normalized_input, layer.attn_q_weight, true, backend);
     auto k_proj = gb->matmul(normalized_input, layer.attn_k_weight, true, backend);
     auto v_proj = gb->matmul(normalized_input, layer.attn_v_weight, true, backend);
+    
 
     const auto& q_shape = gb->get_output_buffer(q_proj).shape;
     size_t batch_seq = q_shape[0];
@@ -71,6 +93,7 @@ size_t llama3Model::build_attention(CactusGraph* gb, size_t normalized_input, ui
     size_t final_k = k_proj_4d;
     size_t final_v = v_proj_4d;
 
+    // ... (KV Cache logic remains the same, correctly using num_kv_heads for cache setup) ...
     if (use_cache && !kv_cache_.is_empty()) {
         auto k_view = kv_cache_.get_key_view(layer_idx);
         auto v_view = kv_cache_.get_value_view(layer_idx);
@@ -90,30 +113,46 @@ size_t llama3Model::build_attention(CactusGraph* gb, size_t normalized_input, ui
         final_k = gb->concat(cache_k_node, k_proj_4d, 1);
         final_v = gb->concat(cache_v_node, v_proj_4d, 1);
     }
+    
+    // FIX 2: Grouped-Query Attention (GQA) implementation using CONCAT logic.
+    // This is the CRITICAL fix that makes GQA work without a dedicated gb->tile function.
+    // final_k = repeat_kv_heads(gb, final_k, num_heads, num_kv_heads);
+    // final_v = repeat_kv_heads(gb, final_v, num_heads, num_kv_heads);
+
 
     if (use_cache) {
         cache_k_output_nodes_[layer_idx] = final_k;
         cache_v_output_nodes_[layer_idx] = final_v;
     }
 
+    // After GQA, K and V have the same number of heads as Q (num_heads).
     auto attn_output_4d = gb->attention(q_proj_4d,final_k,final_v,attention_scale_,position_offset);
 
     auto attn_output = gb->reshape(attn_output_4d, {seq_len, num_heads * head_dim});
+    
+    // Output MatMul remains NO-BIAS (implicit) and pre-transposed (true).
     return gb->matmul(attn_output, layer.attn_output_weight, true, backend);
 }
 
 
+
 size_t llama3Model::build_mlp(CactusGraph* gb, size_t normalized_h, uint32_t layer_idx, ComputeBackend backend) const {
     const auto& layer = weight_nodes_.layers[layer_idx];
+    
+    // All MLP MatMuls remain NO-BIAS (implicit) and pre-transposed (true).
     size_t gate_output = gb->matmul(normalized_h, layer.ffn_gate_weight, true, backend);
     size_t up_output = gb->matmul(normalized_h, layer.ffn_up_weight,   true, backend);
+    
     size_t gate_silu = gb->silu(gate_output);
     size_t gated = gb->multiply(gate_silu, up_output);
+    
+    // Final down projection remains NO-BIAS (implicit) and pre-transposed (true).
     return gb->matmul(gated, layer.ffn_down_weight, true, backend);
 }
 
 
 size_t llama3Model::build_transformer_block(CactusGraph* gb, size_t hidden, uint32_t layer_idx, ComputeBackend backend, bool use_cache, size_t position_offset) {
+    // ... (build_transformer_block remains the same) ...
     const auto& layer = weight_nodes_.layers[layer_idx];
     auto normalized_input = gb->rms_norm(hidden, layer.input_layernorm_weight, config_.layer_norm_eps);
     auto attn_output = build_attention(gb, normalized_input, layer_idx, backend, use_cache, position_offset);
@@ -127,6 +166,7 @@ size_t llama3Model::build_transformer_block(CactusGraph* gb, size_t hidden, uint
 
 
 size_t llama3Model::forward(const std::vector<uint32_t>& tokens, bool use_cache) {
+    // ... (forward remains the same) ...
     if (!initialized_ || !graph_handle_) {
         throw std::runtime_error("Model not initialized - call init() first");
     }
@@ -148,6 +188,25 @@ size_t llama3Model::forward(const std::vector<uint32_t>& tokens, bool use_cache)
     auto input_node_id = gb->input({seq_len}, Precision::FP32);
 
     std::vector<float> input_data(seq_len);
+
+    // =========================================================
+    // 💥 START DEBUG CODE HERE 💥
+    // =========================================================
+    std::cout << "--- DEBUG: Input Tokens (" << seq_len << ") ---" << std::endl;
+    std::cout << "Tokens: [";
+    for (size_t i = 0; i < seq_len; i++) {
+        // We still perform the conversion to float here as required by the next line
+        input_data[i] = static_cast<float>(tokens[i]); 
+        
+        // Print the token ID (which is the value of tokens[i])
+        std::cout << tokens[i] << (i < seq_len - 1 ? ", " : "");
+    }
+    std::cout << "]" << std::endl;
+    std::cout << "-----------------------------------------------" << std::endl;
+    // =========================================================
+    // 💥 END DEBUG CODE HERE 💥
+    // =========================================================
+
     for (size_t i = 0; i < seq_len; i++) {
         input_data[i] = static_cast<float>(tokens[i]);
     }
