@@ -134,39 +134,18 @@ private:
 
 class SmolVLMModel : public SmolModel {
 public:
-    struct VLMConfig : public Config {
-        uint32_t vision_hidden_dim = 0;
-        uint32_t vision_num_layers = 0;
-        uint32_t vision_attention_heads = 0;
-        uint32_t vision_image_size = 0;
-        uint32_t vision_patch_size = 0;
-        uint32_t num_channels = 3;
-        uint32_t vision_embed_dim = 0;
-        uint32_t visual_tokens_per_img = 0;
-        bool     use_pixel_shuffle = false;
-        uint32_t pixel_shuffle_factor = 1;
-        bool     use_image_tokens = false;
-        bool     use_layout_tags = false;
-    };
-
     SmolVLMModel();
-    explicit SmolVLMModel(const VLMConfig& cfg);
+    explicit SmolVLMModel(const Config& cfg);
     ~SmolVLMModel() override = default;
 
-    size_t forward_mm(const std::vector<uint32_t>& tokens,
-                   const std::vector<ImageBatch>& images,
-                   bool use_cache = false);
+    size_t forward_mm(const std::vector<uint32_t>& tokens,const std::vector<ImageBatch>& images, bool use_cache = false);
 
 protected:
-    size_t build_vision_embeddings(CactusGraph* gb,
-                                   const std::vector<ImageBatch>& images,
+    size_t build_vision_embeddings(CactusGraph* gb, const std::vector<ImageBatch>& images,
                                    ComputeBackend backend);
 
-    size_t build_combined_input(CactusGraph* gb,
-                                size_t vision_embeds,
-                                const std::vector<uint32_t>& tokens,
-                                ComputeBackend backend,
-                                uint32_t& prefix_len);
+    size_t build_combined_input(CactusGraph* gb, size_t vision_embeds, const std::vector<uint32_t>& tokens,
+                                ComputeBackend backend, uint32_t& prefix_len);
 
     void load_weights_to_graph(CactusGraph* gb) override;
 
@@ -174,10 +153,7 @@ private:
     struct WeightNodeIDs {
         size_t vision_proj_weight;
         size_t vision_proj_bias;
-        size_t image_start_embedding;
-        size_t image_end_embedding;
-        size_t row_tag_embedding;
-        size_t col_tag_embedding;
+        size_t vision_position_embedding;
 
         struct VisionLayerWeights {
             size_t attn_q_weight;

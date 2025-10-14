@@ -267,6 +267,18 @@ bool Config::from_json(const std::string& config_path) {
         else if (key == "layer_norm_eps") layer_norm_eps = std::stof(value);
         else if (key == "rope_theta") rope_theta = std::stof(value);
         else if (key == "tie_word_embeddings") tie_word_embeddings = (value == "true" || value == "1");
+        else if (key == "vision_hidden_dim") vision_hidden_dim = std::stoul(value);
+        else if (key == "vision_num_layers") vision_num_layers = std::stoul(value);
+        else if (key == "vision_attention_heads") vision_attention_heads = std::stoul(value);
+        else if (key == "vision_image_size") vision_image_size = std::stoul(value);
+        else if (key == "vision_patch_size") vision_patch_size = std::stoul(value);
+        else if (key == "vision_num_channels") vision_num_channels = std::stoul(value);
+        else if (key == "vision_embed_dim") vision_embed_dim = std::stoul(value);
+        else if (key == "visual_tokens_per_img") visual_tokens_per_img = std::stoul(value);
+        else if (key == "use_pixel_shuffle") use_pixel_shuffle = (value == "true" || value == "1");
+        else if (key == "pixel_shuffle_factor") pixel_shuffle_factor = std::stoul(value);
+        else if (key == "use_image_tokens") use_image_tokens = (value == "true" || value == "1");
+        else if (key == "use_layout_tags") use_layout_tags = (value == "true" || value == "1");
         else if (key == "precision") {
             if (value == "INT8") precision = Precision::INT8;
             else if (value == "FP16") precision = Precision::FP16;
@@ -275,6 +287,7 @@ bool Config::from_json(const std::string& config_path) {
         else if (key == "model_type") {
             if (value == "gemma" || value == "GEMMA") model_type = ModelType::GEMMA;
             else if (value == "smol" || value == "SMOL" || value == "Smol") model_type = ModelType::SMOL;
+            else if (value == "smolvlm" || value == "SMOLVLM" || value == "SmolVLM") model_type = ModelType::SMOLVLM;
             else model_type = ModelType::QWEN;
         }
     }
@@ -284,6 +297,10 @@ bool Config::from_json(const std::string& config_path) {
         default_top_p = 0.95f;
         default_top_k = 64;
     } else if (model_type == ModelType::SMOL) {
+        default_temperature = 0.2f;
+        default_top_p = 0.95f;
+        default_top_k = 20;
+    } else if (model_type == ModelType::SMOLVLM) {
         default_temperature = 0.2f;
         default_top_p = 0.95f;
         default_top_k = 20;
@@ -315,6 +332,8 @@ std::unique_ptr<Model> create_model(const std::string& model_folder) {
             return std::make_unique<GemmaModel>(config);
         case Config::ModelType::SMOL:
             return std::make_unique<SmolModel>(config);
+        case Config::ModelType::SMOLVLM:
+            return std::make_unique<SmolVLMModel>(config);
         default:
             return std::make_unique<QwenModel>(config);
     }

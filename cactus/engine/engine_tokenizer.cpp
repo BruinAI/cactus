@@ -28,6 +28,9 @@ void Tokenizer::detect_model_type(const std::string& config_path) {
             } else if (line.find("smol") != std::string::npos) {
                 model_type_ = ModelType::SMOL;
                 break;
+            } else if (line.find("smolvlm") != std::string::npos) {
+                model_type_ = ModelType::SMOLVLM;
+                break;
             }
         }
     }
@@ -47,6 +50,8 @@ std::string Tokenizer::format_chat_prompt(const std::vector<ChatMessage>& messag
             return format_gemma_style(messages, add_generation_prompt, tools_json);
         case ModelType::SMOL:
             return format_smol_style(messages, add_generation_prompt, tools_json);
+        case ModelType::SMOLVLM:
+            return format_smolvlm_style(messages, add_generation_prompt, tools_json);
         default:
             return format_qwen_style(messages, add_generation_prompt, tools_json);
     }
@@ -156,6 +161,35 @@ std::string Tokenizer::format_smol_style(const std::vector<ChatMessage>& message
     if (!messages.empty() && messages.front().role != "system") {
         result += "<|im_start|>system\n";
         result += "You are a helpful AI assistant named SmolLM, trained by Hugging Face";
+        result += "<|im_end|>\n";
+    }
+
+    for (const auto& msg : messages) {
+        result += "<|im_start|>";
+        result += msg.role;
+        result += "\n";
+        result += msg.content;
+        result += "<|im_end|>\n";
+    }
+
+    if (add_generation_prompt) {
+        result += "<|im_start|>assistant\n";
+    }
+
+    return result;
+}
+
+std::string Tokenizer::format_smolvlm_style(const std::vector<ChatMessage>& messages, bool add_generation_prompt, const std::string& tools_json) const {
+    if (!tools_json.empty()) {
+        return "ERROR: Tool calls are currently not supported for SmolVLM models";
+    }
+
+    // if first message isn't system, add one
+    std::string result;
+
+    if (!messages.empty() && messages.front().role != "system") {
+        result += "<|im_start|>system\n";
+        result += "You are a helpful AI assistant named SmolVLM, trained by Hugging Face";
         result += "<|im_end|>\n";
     }
 

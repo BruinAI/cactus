@@ -28,7 +28,20 @@ struct Config {
     float rope_theta = 1000000.0f;
     bool tie_word_embeddings = true;
 
-    enum class ModelType {QWEN = 0, GEMMA = 1, SMOL = 2};
+    uint32_t vision_hidden_dim = 0;
+    uint32_t vision_num_layers = 0;
+    uint32_t vision_attention_heads = 0;
+    uint32_t vision_image_size = 0;
+    uint32_t vision_patch_size = 0;
+    uint32_t vision_num_channels = 3;
+    uint32_t vision_embed_dim = 0;
+    uint32_t visual_tokens_per_img = 0;
+    bool use_pixel_shuffle = false;
+    uint32_t pixel_shuffle_factor = 1;
+    bool use_image_tokens = false;
+    bool use_layout_tags = false;
+
+    enum class ModelType {QWEN = 0, GEMMA = 1, SMOL = 2, SMOLVLM = 3};
     ModelType model_type = ModelType::QWEN;
 
     enum class Activation {GELU = 0, SILU = 1};
@@ -93,7 +106,7 @@ public:
     virtual bool load_vocabulary_with_config(const std::string& vocab_file, const std::string& merges_file, const std::string& config_file) = 0;
 
 protected:
-    enum class ModelType { UNKNOWN, QWEN, GEMMA, SMOL };
+    enum class ModelType { UNKNOWN, QWEN, GEMMA, SMOL, SMOLVLM };
     ModelType model_type_ = ModelType::UNKNOWN;
     bool has_chat_template_ = false;
     std::string chat_template_;
@@ -102,6 +115,7 @@ protected:
     std::string format_qwen_style(const std::vector<ChatMessage>& messages, bool add_generation_prompt, const std::string& tools_json) const;
     std::string format_gemma_style(const std::vector<ChatMessage>& messages, bool add_generation_prompt, const std::string& tools_json) const;
     std::string format_smol_style(const std::vector<ChatMessage>& messages, bool add_generation_prompt, const std::string& tools_json) const;
+    std::string format_smolvlm_style(const std::vector<ChatMessage>& messages, bool add_generation_prompt, const std::string& tools_json) const;
 };
 
 class BPETokenizer : public Tokenizer {
