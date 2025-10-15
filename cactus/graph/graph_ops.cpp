@@ -248,28 +248,76 @@ void compute_fused_node(GraphNode& node, const std::vector<std::unique_ptr<Graph
         }
         case OpType::SLICE: {
             auto* input_node = nodes[node_index_map.at(node.input_ids[0])].get();
-            auto& tensor_buffer = input_node->output_buffer;
+            auto& input_buffer = input_node->output_buffer;
 
-            size_t axis_index = static_cast<size_t>(node.params.axis);
-            size_t slice_start = node.params.slice_start;
+            const size_t axis_index = static_cast<size_t>(node.params.axis);
 
-            size_t stride = 1;
-            for (size_t i = axis_index + 1; i < tensor_buffer.shape.size(); ++i) {
-                stride *= tensor_buffer.shape[i];
+            const size_t axis_size = input_buffer.shape[axis_index];
+            const size_t slice_start = node.params.slice_start;
+            size_t slice_length = node.params.slice_length;
+
+            if (slice_length == 0) {
+                slice_length = axis_size - slice_start;
             }
 
-            size_t element_size = PrecisionTraits::size_of(tensor_buffer.precision);
-            size_t byte_stride = stride * element_size;
-            size_t byte_offset = slice_start * byte_stride;
+            const size_t element_size = PrecisionTraits::size_of(input_buffer.precision);
 
-            auto* base_ptr = static_cast<char*>(tensor_buffer.get_data());
-            if (!base_ptr) {
+            // Zero-copy view when slicing along the leading axis keeps data contiguous.
+            if (axis_index == 0) {
+                size_t inner_elements = 1;
+                for (size_t i = 1; i < input_buffer.shape.size(); ++i) {
+                    inner_elements *= input_buffer.shape[i];
+                }
+
+                auto* base_ptr = static_cast<char*>(input_buffer.get_data());
+                if (!base_ptr) {
+                    throw std::runtime_error("Slice input buffer is not available");
+                }
+
+                const size_t byte_offset = slice_start * inner_elements * element_size;
+
+                node.output_buffer.set_external(base_ptr + byte_offset);
+                node.output_buffer.precision = input_buffer.precision;
+                node.output_buffer.quantization_scale = input_buffer.quantization_scale;
+                break;
+            }
+
+            // Otherwise, materialize a contiguous copy of the sliced region.
+            const char* input_ptr = static_cast<const char*>(input_buffer.get_data());
+            if (!input_ptr) {
                 throw std::runtime_error("Slice input buffer is not available");
             }
 
-            node.output_buffer.set_external(base_ptr + byte_offset);
-            node.output_buffer.precision = tensor_buffer.precision;
-            node.output_buffer.quantization_scale = tensor_buffer.quantization_scale;
+            size_t inner_elements = 1;
+            for (size_t i = axis_index + 1; i < input_buffer.shape.size(); ++i) {
+                inner_elements *= input_buffer.shape[i];
+            }
+
+            size_t outer_elements = 1;
+            for (size_t i = 0; i < axis_index; ++i) {
+                outer_elements *= input_buffer.shape[i];
+            }
+
+            const size_t copy_block_elements = slice_length * inner_elements;
+            const size_t axis_stride_elements = axis_size * inner_elements;
+            const size_t copy_block_bytes = copy_block_elements * element_size;
+            const size_t axis_stride_bytes = axis_stride_elements * element_size;
+
+            node.output_buffer.external_data = nullptr;
+            node.output_buffer.allocate();
+            node.output_buffer.precision = input_buffer.precision;
+            node.output_buffer.quantization_scale = input_buffer.quantization_scale;
+
+            auto* output_ptr = static_cast<char*>(node.output_buffer.get_data());
+            if (!output_ptr) {
+                throw std::runtime_error("Slice output buffer could not be allocated");
+            }
+
+            for (size_t outer = 0; outer < outer_elements; ++outer) {
+                const char* src = input_ptr + outer * axis_stride_bytes + slice_start * inner_elements * element_size;
+                char* dst = output_ptr + outer * copy_block_bytes;
+                std::memcpy(dst, src, copy_block_bytes);
+            }
             break;
         }
         case OpType::EMBEDDING: {

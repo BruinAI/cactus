@@ -470,8 +470,7 @@ void ref_causal_dw_conv1d_f32(
 
 // Depthwise, causal, 1D conv, FP32
 // Input  [N, L, C], Weight [C, 1, K], Output [N, L, C]
-// y[n,t,c] = sum_{k=0..K-1} w[c,0,k] * x[n, t - k*d, c], with causal guard (t - k*d >= 0)
-// IMPORTANT: tap k=K-1 is the "current" sample to match PyTorch/Dao correlation convention.
+// y[n,t,c] = sum_{k=0..K-1} w[c,0,k] * x[n, t - k*d, c], if (t - k*d >= 0)
 void cactus_conv1d_depthwise_causal_f32(
     const float* input,
     const float* weight,  // [C, 1, K]
@@ -482,28 +481,26 @@ void cactus_conv1d_depthwise_causal_f32(
     size_t K,
     size_t dilation
 ) {
-    const size_t in_batch_stride  = L * C;
-    const size_t out_batch_stride = L * C;
-    const size_t w_c_stride       = K;   // since Cin=1
-    // NOTE: we’ll read taps in reversed k (k_rev = K-1-k) to match Dao/PyTorch causal behavior.
+    const size_t in_bs  = L * C;
+    const size_t out_bs = L * C;
+    const size_t w_c_stride = K; // Cin==1
+
     for (size_t n = 0; n < N; ++n) {
-        const float* Xb = input  + n * in_batch_stride;
-        float*       Yb = output + n * out_batch_stride;
+        const float* Xb = input  + n * in_bs;
+        float*       Yb = output + n * out_bs;
         for (size_t c = 0; c < C; ++c) {
-            const float* Wc = weight + c * w_c_stride;
+            const float* Wc = weight + c * w_c_stride;   // taps in forward order
             for (size_t t = 0; t < L; ++t) {
                 float acc = 0.f;
-                // iterate causal taps
                 for (size_t k = 0; k < K; ++k) {
-                    const ptrdiff_t xt = static_cast<ptrdiff_t>(t) - static_cast<ptrdiff_t>(k * dilation);
-                    if (xt < 0) break; // causal guard
-                    // reversed tap to align current sample with Wc[K-1]
-                    const size_t k_rev = K - 1 - k;
-                    acc += Wc[k_rev] * Xb[static_cast<size_t>(xt) * C + c];
+                    const ptrdiff_t xt = (ptrdiff_t)t - (ptrdiff_t)(k * dilation);
+                    if (xt < 0) break;                   // causal guard
+                    acc += Wc[K-1-k] * Xb[(size_t)xt * C + c];
                 }
                 Yb[t * C + c] = acc;
             }
         }
     }
 }
+
 

@@ -25,6 +25,9 @@ void Tokenizer::detect_model_type(const std::string& config_path) {
             } else if (line.find("gemma") != std::string::npos) {
                 model_type_ = ModelType::GEMMA;
                 break;
+            } else if (line.find("lfm2") != std::string::npos) {
+                model_type_ = ModelType::LFM2;
+                break;
             }
         }
     }
@@ -42,6 +45,8 @@ std::string Tokenizer::format_chat_prompt(const std::vector<ChatMessage>& messag
             return format_qwen_style(messages, add_generation_prompt, tools_json);
         case ModelType::GEMMA:
             return format_gemma_style(messages, add_generation_prompt, tools_json);
+        case ModelType::LFM2:
+            return format_lfm2_style(messages, add_generation_prompt, tools_json);
         default:
             return format_qwen_style(messages, add_generation_prompt, tools_json);
     }
@@ -138,6 +143,11 @@ std::string Tokenizer::format_gemma_style(const std::vector<ChatMessage>& messag
     }
 
     return result;
+}
+
+std::string Tokenizer::format_lfm2_style(const std::vector<ChatMessage>& messages, bool add_generation_prompt, const std::string& tools_json) const {
+    // LFM2 chat interactions follow the ChatML-style formatting identical to QWEN models.
+    return format_qwen_style(messages, add_generation_prompt, tools_json);
 }
 
 } // namespace engine
