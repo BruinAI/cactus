@@ -105,7 +105,7 @@ protected:
                           ComputeBackend backend, bool use_cache = false, size_t position_offset = 0) override;
 
     size_t build_conv1d(CactusGraph* gb, size_t input, uint32_t layer_idx,
-                    ComputeBackend backend);
+                    ComputeBackend backend, bool use_cache);
 
     size_t build_mlp(CactusGraph* gb, size_t normalized_h, uint32_t layer_idx,
                     ComputeBackend backend) const override;

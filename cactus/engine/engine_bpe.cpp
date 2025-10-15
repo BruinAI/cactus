@@ -149,6 +149,7 @@ bool BPETokenizer::load_vocabulary_with_config(const std::string& vocab_file, co
             bos_token_id_ = std::stoul(value);
         } else if (key == "vocab_size") {
             if (std::stoul(value) != vocab_size_) {
+                // no-op; just here to silence unused variable warnings
             }
         }
     }
@@ -210,12 +211,63 @@ void BPETokenizer::load_special_tokens(const std::string& config_file) {
         special_tokens_[token_content] = token_id;
     }
 
+    // Parse additional_special_tokens: they appear as an array of objects with "token" and "id" fields.
+    size_t add_pos = content.find("\"additional_special_tokens\"");
+    if (add_pos != std::string::npos) {
+        size_t list_start = content.find("[", add_pos);
+        size_t list_end = content.find("]", list_start);
+        if (list_start != std::string::npos && list_end != std::string::npos && list_end > list_start) {
+            std::string list_content = content.substr(list_start + 1, list_end - list_start - 1);
+            size_t obj_pos = 0;
+            while (true) {
+                size_t obj_start = list_content.find("{", obj_pos);
+                if (obj_start == std::string::npos) break;
+                size_t obj_end = list_content.find("}", obj_start);
+                if (obj_end == std::string::npos) break;
+                std::string obj = list_content.substr(obj_start, obj_end - obj_start + 1);
+
+                // Extract the "token" value
+                size_t token_key = obj.find("\"token\"");
+                if (token_key != std::string::npos) {
+                    size_t token_val_start = obj.find("\"", token_key + 7);
+                    if (token_val_start != std::string::npos) {
+                        size_t token_val_end = obj.find("\"", token_val_start + 1);
+                        if (token_val_end != std::string::npos) {
+                            std::string token_str = obj.substr(token_val_start + 1, token_val_end - token_val_start - 1);
+
+                            // Extract the "id" value
+                            size_t id_key = obj.find("\"id\"");
+                            if (id_key != std::string::npos) {
+                                size_t colon = obj.find(":", id_key);
+                                if (colon != std::string::npos) {
+                                    size_t id_start_num = obj.find_first_of("0123456789", colon);
+                                    if (id_start_num != std::string::npos) {
+                                        size_t id_end_num = obj.find_first_not_of("0123456789", id_start_num);
+                                        std::string id_sub = obj.substr(id_start_num, id_end_num - id_start_num);
+                                        try {
+                                            uint32_t token_id = static_cast<uint32_t>(std::stoul(id_sub));
+                                            special_tokens_[token_str] = token_id;
+                                        } catch (...) {
+                                            // ignore malformed id
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                obj_pos = obj_end + 1;
+            }
+        }
+    }
 }
 
 std::vector<std::string> BPETokenizer::split_with_special_tokens(const std::string& text) const {
     std::vector<std::string> result;
 
     size_t start = 0;
+    // Greedily find the earliest special token.  If multiple tokens start at the same position,
+    // prefer the longest token to avoid partial matches (e.g. "<|tool_call>" vs "</tool_call>").
     while (start < text.size()) {
         size_t best_match_pos = text.size();
         size_t best_match_len = 0;
@@ -223,10 +275,14 @@ std::vector<std::string> BPETokenizer::split_with_special_tokens(const std::stri
 
         for (const auto& [special_token, token_id] : special_tokens_) {
             size_t pos = text.find(special_token, start);
-            if (pos != std::string::npos && pos < best_match_pos) {
-                best_match_pos = pos;
-                best_match_len = special_token.length();
-                best_special_token = special_token;
+            if (pos != std::string::npos) {
+                // earlier position wins; if equal positions, choose the longer token
+                if (pos < best_match_pos ||
+                    (pos == best_match_pos && special_token.length() > best_match_len)) {
+                    best_match_pos = pos;
+                    best_match_len = special_token.length();
+                    best_special_token = special_token;
+                }
             }
         }
 
@@ -254,19 +310,25 @@ void BPETokenizer::init_byte_mappings() const {
 
     std::vector<int> bytes;
 
+    // printable ASCII
     for (int i = 33; i <= 126; ++i) {
         bytes.push_back(i);
     }
 
-
+    // Latin-1 Supplement (except 0xAD)
+    // Soft hyphen (0xAD) should be handled in the "remaining_bytes" so that it gets mapped
+    // into the private use area.  This matches the GPT-2 byte/unicode mapping used by LFM2.
     for (int i = 161; i <= 255; ++i) {
+        if (i == 173) continue;  // skip soft hyphen
         bytes.push_back(i);
     }
 
+    // bytes that need to be mapped into private-use code points
     std::vector<int> remaining_bytes;
     for (int i = 0; i <= 32; ++i) remaining_bytes.push_back(i);
     remaining_bytes.push_back(127);
     for (int i = 128; i <= 160; ++i) remaining_bytes.push_back(i);
+    remaining_bytes.push_back(173);  // add soft hyphen here
 
     int unicode_start = 256;
     for (int byte : remaining_bytes) {
@@ -281,12 +343,14 @@ void BPETokenizer::init_byte_mappings() const {
             byte_to_unicode_[byte] = unicode_char;
             unicode_to_byte_[unicode_char] = byte;
         } else if (byte >= 161) {
+            // represent byte as a two-byte UTF-8 sequence
             std::string unicode_char;
             unicode_char += static_cast<char>(0xC0 | (byte >> 6));
             unicode_char += static_cast<char>(0x80 | (byte & 0x3F));
             byte_to_unicode_[byte] = unicode_char;
             unicode_to_byte_[unicode_char] = byte;
         } else {
+            // map into the private use area starting at U+0100, encoded in UTF-8
             int unicode_point = unicode_start++;
             std::string unicode_char;
             if (unicode_point < 0x800) {
@@ -372,7 +436,6 @@ std::vector<std::string> BPETokenizer::byte_level_split(const std::string& text)
     return chars;
 }
 
-
 std::pair<int, uint32_t> BPETokenizer::find_best_merge_fast(const std::vector<std::string>& tokens) const {
     int best_pos = -1;
     uint32_t best_priority = UINT32_MAX;
@@ -396,11 +459,9 @@ std::vector<std::string> BPETokenizer::apply_bpe(const std::vector<std::string>&
 
     std::vector<std::string> current_tokens = tokens;
 
-
     while (true) {
         auto [merge_pos, priority] = find_best_merge_fast(current_tokens);
         if (merge_pos == -1) break;
-
 
         std::vector<std::string> new_tokens;
         new_tokens.reserve(current_tokens.size() - 1);
@@ -423,9 +484,7 @@ std::vector<std::string> BPETokenizer::apply_bpe(const std::vector<std::string>&
 std::vector<uint32_t> BPETokenizer::encode(const std::string& text) const {
     if (text.empty()) return {};
 
-
     auto text_segments = split_with_special_tokens(text);
-
 
     std::vector<uint32_t> token_ids;
 
@@ -436,7 +495,6 @@ std::vector<uint32_t> BPETokenizer::encode(const std::string& text) const {
         } else {
             auto chars = byte_level_split(segment);
             auto bpe_tokens = apply_bpe(chars);
-
 
             for (const auto& token : bpe_tokens) {
                 auto it = token_to_id_.find(token);
@@ -476,5 +534,5 @@ void BPETokenizer::load_chat_template(const std::string& template_file) {
     has_chat_template_ = !chat_template_.empty();
 }
 
-}
-}
+} // namespace engine
+} // namespace cactus

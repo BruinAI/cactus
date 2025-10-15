@@ -236,6 +236,7 @@ private:
     struct LayerState {
         std::vector<uint8_t> data;  // size = L * hidden_size * element_size
         size_t head = 0;            // next write position [0, L)
+        size_t filled = 0;          // number of valid tokens stored (<= L)
     };
 
     std::vector<LayerState> layer_states;

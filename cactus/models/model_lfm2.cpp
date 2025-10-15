@@ -6,6 +6,7 @@
 #include <set>
 #include <limits>
 #include <iostream>
+#include <cstring>
 
 namespace cactus {
 namespace engine {
@@ -94,7 +95,7 @@ void LFM2Model::load_weights_to_graph(CactusGraph* gb) {
 }
 
 size_t LFM2Model::build_conv1d(CactusGraph* gb, size_t input, uint32_t layer_idx,
-                               ComputeBackend backend) {
+                               ComputeBackend backend, bool use_cache) {
     const auto& layer_entry = weight_nodes_.layers[layer_idx];
     const auto& layer       = layer_entry.weights;
 
@@ -128,6 +129,9 @@ size_t LFM2Model::build_conv1d(CactusGraph* gb, size_t input, uint32_t layer_idx
     size_t Bx = gb->multiply(B, X);                // [L, C]
     capture_debug_node(layer_idx, "conv_bx", Bx);
 
+    // Schedule cache update with the freshly computed convolution inputs
+    enqueue_conv_cache_update(layer_idx, Bx, L, C);
+
     // Prepare depthwise weights to [C,1,K]
     const auto& wbuf = gb->get_output_buffer(layer.conv_depthwise_weight);
     size_t K = wbuf.shape.back(); // last dim is K in both [C,K] or [C,1,K]
@@ -160,12 +164,49 @@ size_t LFM2Model::build_conv1d(CactusGraph* gb, size_t input, uint32_t layer_idx
 
     // Run causal depthwise conv on the whole sequence (no cache)
     // Input to kernel: [N=1, L, C]
-    size_t x_nlc = gb->reshape(Bx, {static_cast<size_t>(1), L, C});
-    capture_debug_node(layer_idx, "conv_input_Bx_[1,L,C]", x_nlc);
+    size_t history_len = 0;
+    size_t Bx_nlc = gb->reshape(Bx, {static_cast<size_t>(1), L, C});
+    capture_debug_node(layer_idx, "conv_input_current_[1,L,C]", Bx_nlc);
+
+    size_t x_nlc = Bx_nlc;
+
+    if (use_cache && !conv_cache_.is_empty() && conv_cache_.window_size > 0) {
+        auto view = conv_cache_.get_window(layer_idx);
+        history_len = view.total_len;
+
+        if (history_len > 0) {
+            size_t token_stride = C * conv_cache_.element_size;
+            std::vector<uint8_t> history_bytes(history_len * token_stride);
+            uint8_t* dst = history_bytes.data();
+
+            auto copy_segment = [&](const void* src, size_t tokens) {
+                if (!src || tokens == 0) return;
+                std::memcpy(dst, src, tokens * token_stride);
+                dst += tokens * token_stride;
+            };
+
+            // Maintain original L/R ordering: older (L) first, then newer (R)
+            copy_segment(view.ptr2, view.len2);
+            copy_segment(view.ptr1, view.len1);
+
+            size_t cache_input = gb->input({static_cast<size_t>(1), history_len, C}, conv_cache_.precision);
+            gb->set_input(cache_input, history_bytes.data(), conv_cache_.precision);
+            capture_debug_node(layer_idx, "conv_cache_history_[1,Lhist,C]", cache_input);
+
+            x_nlc = gb->concat(cache_input, Bx_nlc, 1);
+        }
+    }
+
+    capture_debug_node(layer_idx, "conv_input_with_cache_[1,Ltotal,C]", x_nlc);
 
     const size_t dilation = 1;
-    size_t y_nlc = gb->conv1d_causal(x_nlc, conv_w, K, dilation); // [1, L, C]
-    capture_debug_node(layer_idx, "conv_output_NLC_[1,L,C]", y_nlc);
+    size_t y_nlc = gb->conv1d_causal(x_nlc, conv_w, K, dilation); // [1, L_total, C]
+    capture_debug_node(layer_idx, "conv_output_NLC_[1,Ltotal,C]", y_nlc);
+
+    if (history_len > 0) {
+        y_nlc = gb->slice(y_nlc, /*axis*/1, history_len, L);
+        capture_debug_node(layer_idx, "conv_output_sliced_[1,L,C]", y_nlc);
+    }
 
     // Back to [L, C] then gate and out-proj
     size_t y_lc = gb->reshape(y_nlc, {L, C});
@@ -297,7 +338,7 @@ size_t LFM2Model::build_transformer_block(CactusGraph* gb, size_t hidden, uint32
     size_t block_output;
     if (layer_entry.type == WeightNodeIDs::LayerType::CONV) {
         // Conv layer: use conv1d instead of attention
-        block_output = build_conv1d(gb, normalized_input, layer_idx, backend);
+        block_output = build_conv1d(gb, normalized_input, layer_idx, backend, use_cache);
     } else {
         // Attention layer: standard attention
         block_output = build_attention(gb, normalized_input, layer_idx, backend, use_cache, position_offset);

@@ -133,6 +133,7 @@ void ConvCache::init(size_t layers, size_t hidden_dim, size_t window_len, Precis
     for (auto& state : layer_states) {
         state.data.assign(window_size * hidden_size * element_size, 0);  // zero init
         state.head = 0;
+        state.filled = 0;
     }
 }
 
@@ -148,22 +149,33 @@ ConvCache::CircularView ConvCache::get_window(size_t layer) const {
     }
 
     const auto& state = layer_states[layer];
+    size_t available = std::min(state.filled, window_size);
+    if (available == 0) {
+        view.ptr1 = nullptr;
+        view.len1 = 0;
+        view.ptr2 = nullptr;
+        view.len2 = 0;
+        view.total_len = 0;
+        return view;
+    }
+
     size_t stride = hidden_size * element_size;
 
-    // R_Tensor: [0, head)
-    view.ptr1 = state.data.data();
-    view.len1 = state.head;
+    size_t len_r = std::min(state.head, available);                         // newer tail [0, head)
+    size_t len_l = std::min(window_size - state.head, available - len_r);    // older head [head, L)
 
-    // L_Tensor: [head, L)
-    if (state.head < window_size) {
-    view.ptr2 = state.data.data() + state.head * stride;
-        view.len2 = window_size - state.head;
+    const uint8_t* base = state.data.data();
+    view.ptr1 = base;
+    view.len1 = len_r;
+    if (len_l > 0) {
+        view.ptr2 = base + state.head * stride;
+        view.len2 = len_l;
     } else {
         view.ptr2 = nullptr;
         view.len2 = 0;
     }
 
-    view.total_len = window_size;
+    view.total_len = len_r + len_l;
     return view;
 }
 
@@ -176,12 +188,16 @@ void ConvCache::update(size_t layer, const void* latest_token) {
     std::memcpy(state.data.data() + state.head * stride, latest_token, stride);
 
     state.head = (state.head + 1) % window_size;
+    if (state.filled < window_size) {
+        ++state.filled;
+    }
 }
 
 void ConvCache::reset() {
     for (auto& state : layer_states) {
         std::fill(state.data.begin(), state.data.end(), 0);
         state.head = 0;
+        state.filled = 0;
     }
 }
 
