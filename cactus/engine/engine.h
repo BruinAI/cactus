@@ -221,7 +221,7 @@ public:
 
     void init(size_t layers, size_t hidden_dim, size_t window_len, Precision model_precision);
     CircularView get_window(size_t layer) const;
-    void update(size_t layer, const void* latest_token);
+    void update(CactusGraph* gb, size_t layer, const size_t latest_token);
     void reset();
 
     bool is_empty() const { return num_layers == 0; }
@@ -236,7 +236,7 @@ private:
     struct LayerState {
         std::vector<uint8_t> data;  // size = L * hidden_size * element_size
         size_t head = 0;            // next write position [0, L)
-        size_t filled = 0;          // number of valid tokens stored (<= L)
+        size_t count = 0;           // number of valid rows currently stored
     };
 
     std::vector<LayerState> layer_states;

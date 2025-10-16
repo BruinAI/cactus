@@ -133,7 +133,7 @@ void ConvCache::init(size_t layers, size_t hidden_dim, size_t window_len, Precis
     for (auto& state : layer_states) {
         state.data.assign(window_size * hidden_size * element_size, 0);  // zero init
         state.head = 0;
-        state.filled = 0;
+        state.count = 0;
     }
 }
 
@@ -149,8 +149,7 @@ ConvCache::CircularView ConvCache::get_window(size_t layer) const {
     }
 
     const auto& state = layer_states[layer];
-    size_t available = std::min(state.filled, window_size);
-    if (available == 0) {
+    if (state.count == 0) {
         view.ptr1 = nullptr;
         view.len1 = 0;
         view.ptr2 = nullptr;
@@ -161,35 +160,69 @@ ConvCache::CircularView ConvCache::get_window(size_t layer) const {
 
     size_t stride = hidden_size * element_size;
 
-    size_t len_r = std::min(state.head, available);                         // newer tail [0, head)
-    size_t len_l = std::min(window_size - state.head, available - len_r);    // older head [head, L)
-
-    const uint8_t* base = state.data.data();
-    view.ptr1 = base;
-    view.len1 = len_r;
-    if (len_l > 0) {
-        view.ptr2 = base + state.head * stride;
-        view.len2 = len_l;
-    } else {
+    if (state.count < window_size) {
+        view.ptr1 = state.data.data();
+        view.len1 = state.count;
         view.ptr2 = nullptr;
         view.len2 = 0;
+        view.total_len = state.count;
+        return view;
     }
 
-    view.total_len = len_r + len_l;
+    // When full, expose wrap-around segments so callers can concatenate ptr2 then ptr1.
+    view.ptr1 = state.data.data();
+    view.len1 = state.head;
+    view.ptr2 = state.data.data() + state.head * stride;
+    view.len2 = window_size - state.head;
+    view.total_len = window_size;
     return view;
 }
 
-void ConvCache::update(size_t layer, const void* latest_token) {
-    if (layer >= num_layers || !latest_token) return;
+void ConvCache::update(CactusGraph* gb, size_t layer, const size_t bx_node) {
+    if (layer >= num_layers || !bx_node || window_size == 0 || hidden_size == 0) {
+        return;
+    }
 
     auto& state = layer_states[layer];
-    size_t stride = hidden_size * element_size;
+    const void* output_ptr = gb->get_output(bx_node);
+    if (!output_ptr) {
+        return;
+    }
 
-    std::memcpy(state.data.data() + state.head * stride, latest_token, stride);
+    const auto& buffer = gb->get_output_buffer(bx_node);
+    const size_t stride_bytes = hidden_size * element_size;
 
-    state.head = (state.head + 1) % window_size;
-    if (state.filled < window_size) {
-        ++state.filled;
+    size_t rows = 1;
+    if (!buffer.shape.empty()) {
+        if (buffer.shape.size() == 1) {
+            rows = 1;
+        } else {
+            rows = buffer.shape[0];
+        }
+    }
+
+    if (buffer.total_size > 0 && hidden_size > 0) {
+        size_t inferred = buffer.total_size / hidden_size;
+        if (inferred > 0) {
+            rows = inferred;
+        }
+    }
+
+    if (rows == 0) {
+        return;
+    }
+
+    size_t copy_rows = std::min(rows, window_size);
+    size_t start_row = rows > window_size ? rows - window_size : 0;
+
+    const uint8_t* src = static_cast<const uint8_t*>(output_ptr) + start_row * stride_bytes;
+
+    for (size_t i = 0; i < copy_rows; ++i) {
+        std::memcpy(state.data.data() + state.head * stride_bytes, src + i * stride_bytes, stride_bytes);
+        state.head = (state.head + 1) % window_size;
+        if (state.count < window_size) {
+            ++state.count;
+        }
     }
 }
 
@@ -197,7 +230,7 @@ void ConvCache::reset() {
     for (auto& state : layer_states) {
         std::fill(state.data.begin(), state.data.end(), 0);
         state.head = 0;
-        state.filled = 0;
+        state.count = 0;
     }
 }
 

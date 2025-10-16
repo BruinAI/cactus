@@ -156,18 +156,8 @@ private:
     } weight_nodes_;
 
     ConvCache conv_cache_;
-
-    struct PendingConvUpdate {
-        uint32_t layer_idx;
-        size_t node_id;
-        size_t seq_len;
-        size_t hidden_dim;
-    };
-
-    std::vector<PendingConvUpdate> pending_conv_updates_;
-
-    void enqueue_conv_cache_update(uint32_t layer_idx, size_t node_id, size_t seq_len, size_t hidden_dim);
-    void apply_pending_conv_cache_updates(CactusGraph* gb);
+    std::vector<size_t> conv_cache_bx_nodes_;
+    bool last_forward_used_cache_ = false;
 };
 
 }

@@ -6,15 +6,19 @@
 #include <set>
 #include <limits>
 #include <iostream>
-#include <cstring>
+#include <algorithm>
 
 namespace cactus {
 namespace engine {
 
-LFM2Model::LFM2Model() : Model() {}
+LFM2Model::LFM2Model() : Model() {
+    weight_nodes_.layers.resize(config_.num_layers);
+    conv_cache_bx_nodes_.assign(config_.num_layers, 0);
+}
 
 LFM2Model::LFM2Model(const Config& config) : Model(config) {
-    weight_nodes_.layers.resize(config.num_layers);
+    weight_nodes_.layers.resize(config_.num_layers);
+    conv_cache_bx_nodes_.assign(config_.num_layers, 0);
 }
 
 bool LFM2Model::init(const std::string& model_folder, size_t context_size, const std::string& system_prompt) {
@@ -22,6 +26,11 @@ bool LFM2Model::init(const std::string& model_folder, size_t context_size, const
     if (!Model::init(model_folder, context_size, system_prompt)) {
         return false;
     }
+
+    if (weight_nodes_.layers.size() != config_.num_layers) {
+        weight_nodes_.layers.resize(config_.num_layers);
+    }
+    conv_cache_bx_nodes_.assign(config_.num_layers, 0);
 
     // Initialize conv cache for LFM2
     if (config_.conv_L_cache > 0) {
@@ -37,13 +46,22 @@ bool LFM2Model::init(const std::string& model_folder, size_t context_size, const
                 cache_precision = Precision::FP32;
                 break;
         }
-        conv_cache_.init(config_.num_layers, config_.hidden_dim, config_.conv_L_cache, cache_precision);
+        size_t conv_window = config_.conv_L_cache > 0 ? config_.conv_L_cache - 1 : 0;
+        conv_cache_.init(config_.num_layers, config_.hidden_dim, conv_window, cache_precision);
     }
+    last_forward_used_cache_ = false;
 
     return true;
 }
 
 void LFM2Model::load_weights_to_graph(CactusGraph* gb) {
+    if (weight_nodes_.layers.size() != config_.num_layers) {
+        weight_nodes_.layers.resize(config_.num_layers);
+    }
+    if (conv_cache_bx_nodes_.size() != config_.num_layers) {
+        conv_cache_bx_nodes_.assign(config_.num_layers, 0);
+    }
+
     embedding_node_id_ = gb->mmap_embeddings(embedding_file_path_);
     weight_nodes_.output_norm_weight = gb->mmap_weights(model_folder_path_ + "/output_norm.weights");
 
@@ -129,8 +147,11 @@ size_t LFM2Model::build_conv1d(CactusGraph* gb, size_t input, uint32_t layer_idx
     size_t Bx = gb->multiply(B, X);                // [L, C]
     capture_debug_node(layer_idx, "conv_bx", Bx);
 
-    // Schedule cache update with the freshly computed convolution inputs
-    enqueue_conv_cache_update(layer_idx, Bx, L, C);
+    if (use_cache) {
+        conv_cache_bx_nodes_[layer_idx] = Bx;
+    } else {
+        conv_cache_bx_nodes_[layer_idx] = 0;
+    }
 
     // Prepare depthwise weights to [C,1,K]
     const auto& wbuf = gb->get_output_buffer(layer.conv_depthwise_weight);
@@ -164,53 +185,48 @@ size_t LFM2Model::build_conv1d(CactusGraph* gb, size_t input, uint32_t layer_idx
 
     // Run causal depthwise conv on the whole sequence (no cache)
     // Input to kernel: [N=1, L, C]
-    size_t history_len = 0;
-    size_t Bx_nlc = gb->reshape(Bx, {static_cast<size_t>(1), L, C});
-    capture_debug_node(layer_idx, "conv_input_current_[1,L,C]", Bx_nlc);
-
-    size_t x_nlc = Bx_nlc;
-
-    if (use_cache && !conv_cache_.is_empty() && conv_cache_.window_size > 0) {
+    size_t conv_input_lc = Bx;
+    if (use_cache && conv_cache_.window_size > 0) {
         auto view = conv_cache_.get_window(layer_idx);
-        history_len = view.total_len;
+        std::vector<size_t> segments;
 
-        if (history_len > 0) {
-            size_t token_stride = C * conv_cache_.element_size;
-            std::vector<uint8_t> history_bytes(history_len * token_stride);
-            uint8_t* dst = history_bytes.data();
+        if (view.len2 > 0) {
+            size_t left_node = gb->input({view.len2, C}, conv_cache_.precision);
+            gb->set_input(left_node, view.ptr2, conv_cache_.precision);
+            capture_debug_node(layer_idx, "conv_cache_left", left_node);
+            segments.push_back(left_node);
+        }
+        if (view.len1 > 0) {
+            size_t right_node = gb->input({view.len1, C}, conv_cache_.precision);
+            gb->set_input(right_node, view.ptr1, conv_cache_.precision);
+            capture_debug_node(layer_idx, "conv_cache_right", right_node);
+            segments.push_back(right_node);
+        }
 
-            auto copy_segment = [&](const void* src, size_t tokens) {
-                if (!src || tokens == 0) return;
-                std::memcpy(dst, src, tokens * token_stride);
-                dst += tokens * token_stride;
-            };
-
-            // Maintain original L/R ordering: older (L) first, then newer (R)
-            copy_segment(view.ptr2, view.len2);
-            copy_segment(view.ptr1, view.len1);
-
-            size_t cache_input = gb->input({static_cast<size_t>(1), history_len, C}, conv_cache_.precision);
-            gb->set_input(cache_input, history_bytes.data(), conv_cache_.precision);
-            capture_debug_node(layer_idx, "conv_cache_history_[1,Lhist,C]", cache_input);
-
-            x_nlc = gb->concat(cache_input, Bx_nlc, 1);
+        if (!segments.empty()) {
+            conv_input_lc = segments[0];
+            for (size_t idx = 1; idx < segments.size(); ++idx) {
+                conv_input_lc = gb->concat(conv_input_lc, segments[idx], 0);
+            }
+            conv_input_lc = gb->concat(conv_input_lc, Bx, 0);
         }
     }
 
-    capture_debug_node(layer_idx, "conv_input_with_cache_[1,Ltotal,C]", x_nlc);
+    const auto& conv_input_buf = gb->get_output_buffer(conv_input_lc);
+    size_t total_len = conv_input_buf.shape[0];
+    capture_debug_node(layer_idx, "conv_input_concat", conv_input_lc);
+
+    size_t x_nlc = gb->reshape(conv_input_lc, {static_cast<size_t>(1), total_len, C});
+    capture_debug_node(layer_idx, "conv_input_NLC", x_nlc);
 
     const size_t dilation = 1;
-    size_t y_nlc = gb->conv1d_causal(x_nlc, conv_w, K, dilation); // [1, L_total, C]
-    capture_debug_node(layer_idx, "conv_output_NLC_[1,Ltotal,C]", y_nlc);
+    size_t y_nlc = gb->conv1d_causal(x_nlc, conv_w, K, dilation); // [1, total_len, C]
+    capture_debug_node(layer_idx, "conv_output_NLC", y_nlc);
 
-    if (history_len > 0) {
-        y_nlc = gb->slice(y_nlc, /*axis*/1, history_len, L);
-        capture_debug_node(layer_idx, "conv_output_sliced_[1,L,C]", y_nlc);
-    }
-
-    // Back to [L, C] then gate and out-proj
-    size_t y_lc = gb->reshape(y_nlc, {L, C});
-    capture_debug_node(layer_idx, "conv_output_LC_[L,C]", y_lc);
+    size_t start = total_len > L ? total_len - L : 0;
+    size_t y_slice = gb->slice(y_nlc, /*axis*/1, start, L);
+    size_t y_lc = gb->reshape(y_slice, {L, C});
+    capture_debug_node(layer_idx, "conv_output_LC", y_lc);
 
     size_t gated = gb->multiply(Cg, y_lc);          // [L, C]
     capture_debug_node(layer_idx, "conv_gated_[L,C]", gated);
@@ -341,6 +357,9 @@ size_t LFM2Model::build_transformer_block(CactusGraph* gb, size_t hidden, uint32
         block_output = build_conv1d(gb, normalized_input, layer_idx, backend, use_cache);
     } else {
         // Attention layer: standard attention
+        if (layer_idx < conv_cache_bx_nodes_.size()) {
+            conv_cache_bx_nodes_[layer_idx] = 0;
+        }
         block_output = build_attention(gb, normalized_input, layer_idx, backend, use_cache, position_offset);
     }
     capture_debug_node(layer_idx, "block_main_output", block_output);
@@ -369,7 +388,14 @@ size_t LFM2Model::forward(const std::vector<uint32_t>& tokens, bool use_cache) {
     auto* gb = static_cast<CactusGraph*>(graph_handle_);
     gb->soft_reset();
 
-    pending_conv_updates_.clear();
+    if (conv_cache_bx_nodes_.size() != config_.num_layers) {
+        conv_cache_bx_nodes_.assign(config_.num_layers, 0);
+    }
+    std::fill(conv_cache_bx_nodes_.begin(), conv_cache_bx_nodes_.end(), 0);
+    last_forward_used_cache_ = use_cache;
+    if (!use_cache && conv_cache_.window_size > 0) {
+        conv_cache_.reset();
+    }
 
     auto seq_len = static_cast<size_t>(tokens.size());
 
@@ -401,45 +427,31 @@ size_t LFM2Model::forward(const std::vector<uint32_t>& tokens, bool use_cache) {
     return final_hidden;
 }
 
-void LFM2Model::enqueue_conv_cache_update(uint32_t layer_idx, size_t node_id, size_t seq_len, size_t hidden_dim) {
-    if (config_.conv_L_cache == 0 || seq_len == 0) {
-        return;
-    }
-
-    pending_conv_updates_.push_back({layer_idx, node_id, seq_len, hidden_dim});
-}
-
-void LFM2Model::apply_pending_conv_cache_updates(CactusGraph* gb) {
-    if (pending_conv_updates_.empty() || config_.conv_L_cache == 0) {
-        pending_conv_updates_.clear();
-        return;
-    }
-
-    for (const auto& update : pending_conv_updates_) {
-        const auto& buffer = gb->get_output_buffer(update.node_id);
-        if (buffer.precision != conv_cache_.precision) {
-            std::cerr << "[Cactus][LFM2Model] Conv cache precision mismatch for layer "
-                      << update.layer_idx << std::endl;
-            continue;
-        }
-
-        auto* raw = static_cast<uint8_t*>(gb->get_output(update.node_id));
-        if (!raw) {
-            continue;
-        }
-
-        size_t stride = update.hidden_dim * PrecisionTraits::size_of(buffer.precision);
-        for (size_t i = 0; i < update.seq_len; ++i) {
-            conv_cache_.update(update.layer_idx, raw + i * stride);
-        }
-    }
-
-    pending_conv_updates_.clear();
-}
-
 void LFM2Model::post_execute_updates(CactusGraph* gb, size_t seq_len) {
-    apply_pending_conv_cache_updates(gb);
-    Model::post_execute_updates(gb, seq_len);
+    if (conv_cache_bx_nodes_.empty()) {
+        return;
+    }
+
+    if (!last_forward_used_cache_ || conv_cache_.window_size == 0) {
+        std::fill(conv_cache_bx_nodes_.begin(), conv_cache_bx_nodes_.end(), 0);
+        return;
+    }
+
+    size_t layer_count = std::min(conv_cache_bx_nodes_.size(), weight_nodes_.layers.size());
+    for (size_t layer_idx = 0; layer_idx < layer_count; ++layer_idx) {
+        if (weight_nodes_.layers[layer_idx].type != WeightNodeIDs::LayerType::CONV) {
+            conv_cache_bx_nodes_[layer_idx] = 0;
+            continue;
+        }
+
+        size_t bx_node = conv_cache_bx_nodes_[layer_idx];
+        if (bx_node != 0) {
+            conv_cache_.update(gb, layer_idx, bx_node);
+        }
+        conv_cache_bx_nodes_[layer_idx] = 0;
+    }
+
+    last_forward_used_cache_ = false;
 }
 
 }

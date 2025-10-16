@@ -1,6 +1,7 @@
 #include "engine/engine.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdlib>
 #include <fstream>
 #include <iomanip>
