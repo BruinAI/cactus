@@ -9,6 +9,7 @@
 #include <atomic>
 
 const char* g_model_path = "../../weights/qwen3-600m-i8";
+const char* g_nomic_model_path = "../../weights/nomic-embed-text-v2-moe";
 
 const char* g_options = R"({
         "max_tokens": 256,
@@ -67,7 +68,7 @@ bool test_ffi() {
 }
 
 bool test_embeddings() {
-    cactus_model_t model = cactus_init(g_model_path, 2048);
+    cactus_model_t model = cactus_init(g_nomic_model_path, 2048);
     
     if (!model) {
         std::cerr << "Failed to initialize model" << std::endl;

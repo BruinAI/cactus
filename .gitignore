@@ -17,7 +17,3 @@ apple/build-static/
 apple/*.xcframework
 apple/libcactus.a
 *.a
-
-# UV Env
-pyproject.toml
-uv.lock
