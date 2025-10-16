@@ -250,18 +250,74 @@ int main(int argc, char** argv) {
         std::cout << "Final hidden tensor has " << final_hidden.size() << " values"
                   << " (seq_len=" << tokens.size() << ", hidden_dim=" << hidden_dim << ")" << std::endl;
 
-        size_t preview = std::min<size_t>(16, final_hidden.size());
-        std::cout << "Preview: ";
-        for (size_t i = 0; i < preview; ++i) {
-            std::cout << final_hidden[i];
-            if (i + 1 < preview) {
-                std::cout << ", ";
+        if (hidden_dim == 0 || tokens.empty()) {
+            std::cout << "No hidden state information available for per-token summary." << std::endl;
+        } else {
+            auto token_texts = compute_token_texts(tokenizer, tokens);
+
+            struct TokenStats {
+                float min;
+                float max;
+                float mean;
+                float stddev;
+            };
+
+            auto compute_stats = [](const float* data, size_t length) -> TokenStats {
+                if (length == 0) {
+                    return {0.0f, 0.0f, 0.0f, 0.0f};
+                }
+
+                float min_val = data[0];
+                float max_val = data[0];
+                double sum = 0.0;
+                double sum_sq = 0.0;
+
+                for (size_t i = 0; i < length; ++i) {
+                    float value = data[i];
+                    min_val = std::min(min_val, value);
+                    max_val = std::max(max_val, value);
+                    sum += value;
+                    sum_sq += static_cast<double>(value) * static_cast<double>(value);
+                }
+
+                double mean = sum / static_cast<double>(length);
+                double variance = std::max(0.0, (sum_sq / static_cast<double>(length)) - mean * mean);
+                double stddev = std::sqrt(variance);
+
+                return {min_val, max_val, static_cast<float>(mean), static_cast<float>(stddev)};
+            };
+
+            size_t tokens_to_show = std::min<size_t>(tokens.size(), 8);
+            std::cout << "Per-token hidden summaries (showing " << tokens_to_show
+                      << " of " << tokens.size() << " prefilling token(s)):" << std::endl;
+
+            size_t preview_values = std::min<size_t>(8, hidden_dim);
+            for (size_t token_index = 0; token_index < tokens_to_show; ++token_index) {
+                const float* token_ptr = final_hidden.data() + token_index * hidden_dim;
+                TokenStats stats = compute_stats(token_ptr, hidden_dim);
+
+                std::cout << "  token " << token_index << " id=" << tokens[token_index];
+                if (token_index < token_texts.size()) {
+                    const std::string& piece = token_texts[token_index];
+                    if (!piece.empty()) {
+                        std::cout << " text=\"" << sanitize_token_text(piece) << "\"";
+                    }
+                }
+                std::cout << " | min=" << std::setprecision(5) << stats.min
+                          << " max=" << stats.max
+                          << " mean=" << stats.mean
+                          << " std=" << stats.stddev << std::endl;
+
+                std::cout << "    values:";
+                for (size_t d = 0; d < preview_values; ++d) {
+                    std::cout << ' ' << std::setprecision(5) << token_ptr[d];
+                }
+                if (preview_values < hidden_dim) {
+                    std::cout << " ...";
+                }
+                std::cout << std::endl;
             }
         }
-        if (preview < final_hidden.size()) {
-            std::cout << " ...";
-        }
-        std::cout << std::endl;
 
         if (!dump_final_path.empty()) {
             std::ofstream ofs(dump_final_path);
