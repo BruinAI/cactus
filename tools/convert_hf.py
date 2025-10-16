@@ -6,6 +6,16 @@ import json
 import argparse
 from pathlib import Path
 
+# Default configuration values
+class Defaults:
+    OUTLIER_PERCENTILE = 0.01
+    SIGMA_MULTIPLIER = 3.5
+    SATURATION_THRESHOLD = 0.01
+    RANGE_THRESHOLD = 0.5
+    SNR_THRESHOLD = 20.0
+    SATURATION_WARNING_THRESHOLD = 0.1
+    SNR_THRESHOLD_LEGACY = 30.0  # For legacy quantization methods
+
 try:
     from transformers import AutoTokenizer, AutoModelForCausalLM, AutoModel
     import torch
@@ -13,7 +23,62 @@ except ImportError:
     print("Please install required packages: pip install torch transformers")
     sys.exit(1)
 
+
+def int8_quantize_tensor_rows(tensor: np.ndarray, args: argparse.Namespace=None, chunk_size: int=32) -> tuple[np.ndarray, np.ndarray]:
+    args = args if args else Defaults
+    original_shape = tensor.shape
+    tensor = tensor.reshape(-1, chunk_size)
+
+    qmin, qmax = -128, 127
+    
+    min_vals = np.min(tensor, axis=1)
+    max_vals = np.max(tensor, axis=1)
+
+    standard_scales = (max_vals - min_vals).reshape(-1, 1) / (qmax - qmin)
+    standard_scales = np.where(standard_scales == 0, 1.0, standard_scales)
+
+    standard_zero_point = qmax - max_vals.reshape(-1, 1) / standard_scales
+    standard_zero_point_clipped = np.clip(np.round(standard_zero_point), qmin, qmax)
+
+    test_quantizations = np.clip(np.round(tensor / standard_scales + standard_zero_point_clipped), qmin, qmax)
+    test_saturations = np.sum(np.abs(test_quantizations) >= 127, axis=1) / tensor.shape[1]
+
+    lower_percentile = np.percentile(tensor, args.outlier_percentile, axis=1)
+    upper_percentile = np.percentile(tensor, 100 - args.outlier_percentile, axis=1)
+
+    mean_val = np.mean(tensor, axis=1)
+    std_val = np.std(tensor, axis=1)
+
+    three_sigma_min = mean_val - args.sigma_multiplier * std_val
+    three_sigma_max = mean_val + args.sigma_multiplier * std_val
+
+    clipped_min = np.minimum(min_vals, np.minimum(lower_percentile, three_sigma_min))
+    clipped_max = np.maximum(max_vals, np.maximum(upper_percentile, three_sigma_max))
+    use_clipped = (test_saturations > args.saturation_threshold) & \
+                  ((clipped_max - clipped_min) >= args.range_threshold * (max_vals - min_vals))
+    
+    min_vals = np.where(use_clipped, clipped_min, min_vals)
+    max_vals = np.where(use_clipped, clipped_max, max_vals)
+    
+    abs_max_vals = np.maximum(np.abs(min_vals), np.abs(max_vals))
+    scales = abs_max_vals / 127.0
+    scales = np.where(scales == 0, 1.0, scales)
+    
+    quantized_rows = np.clip(np.round(tensor / scales.reshape(-1, 1)), qmin, qmax).astype(np.int8)
+    
+    scales = scales.reshape(original_shape[0], -1)
+    return quantized_rows.reshape(original_shape), scales
+
+def dequantize_row(quantized_data: np.ndarray, scale: np.ndarray) -> np.ndarray:
+    chunk_size = quantized_data.shape[1] // scale.shape[1]  # Use integer division
+    original_shape = quantized_data.shape
+    data = quantized_data.reshape(-1, chunk_size)
+    scale = scale.reshape(data.shape[0], -1)
+    dequantized_data = data.astype(np.float32) * scale
+    return dequantized_data.reshape(original_shape)
+
 def save_tensor_with_header(tensor, output_path, precision='FP32', transpose=False, stats_tracker=None, args=None, model_type=None):
+    args = args if args else Defaults
     if isinstance(tensor, torch.Tensor):
         data = tensor.detach().cpu().numpy()
     else:
@@ -37,52 +102,55 @@ def save_tensor_with_header(tensor, output_path, precision='FP32', transpose=Fal
             precision = 'FP16'
     
     if precision == 'INT8':
-        qmin, qmax = -128, 127
-        standard_scale = (max_val - min_val) / (qmax - qmin) if max_val != min_val else 1.0
-        
-        standard_zero_point = qmax - max_val / standard_scale
-        standard_zero_point_clipped = np.clip(np.round(standard_zero_point), qmin, qmax)
-        test_quantized = np.clip(np.round(original_data / standard_scale + standard_zero_point_clipped), qmin, qmax)
-        test_saturation = np.sum(np.abs(test_quantized) >= 127) / original_data.size
-        
-        saturation_threshold = args.saturation_threshold if args else 0.01
-        if test_saturation > saturation_threshold:
-            outlier_percentile = args.outlier_percentile if args else 0.01
-            lower_percentile = np.percentile(original_data, outlier_percentile)
-            upper_percentile = np.percentile(original_data, 100 - outlier_percentile)
+        if not (args and args.new_int8):
+            qmin, qmax = -128, 127
+            standard_scale = (max_val - min_val) / (qmax - qmin) if max_val != min_val else 1.0
             
-            mean_val = np.mean(original_data)
-            std_val = np.std(original_data)
-            sigma_multiplier = args.sigma_multiplier if args else 3.5
-            three_sigma_min = mean_val - sigma_multiplier * std_val
-            three_sigma_max = mean_val + sigma_multiplier * std_val
+            standard_zero_point = qmax - max_val / standard_scale
+            standard_zero_point_clipped = np.clip(np.round(standard_zero_point), qmin, qmax)
+            test_quantized = np.clip(np.round(original_data / standard_scale + standard_zero_point_clipped), qmin, qmax)
+            test_saturation = np.sum(np.abs(test_quantized) >= 127) / original_data.size
             
-            clipped_min = max(min_val, min(lower_percentile, three_sigma_min))
-            clipped_max = min(max_val, max(upper_percentile, three_sigma_max))
-            
-            range_threshold = args.range_threshold if args else 0.5
-            if (clipped_max - clipped_min) < range_threshold * (max_val - min_val):
+            saturation_threshold = args.saturation_threshold if args else Defaults.SATURATION_THRESHOLD
+            if test_saturation > saturation_threshold:
+                outlier_percentile = args.outlier_percentile if args else Defaults.OUTLIER_PERCENTILE
+                lower_percentile = np.percentile(original_data, outlier_percentile)
+                upper_percentile = np.percentile(original_data, 100 - outlier_percentile)
+                
+                mean_val = np.mean(original_data)
+                std_val = np.std(original_data)
+                sigma_multiplier = args.sigma_multiplier if args else Defaults.SIGMA_MULTIPLIER
+                three_sigma_min = mean_val - sigma_multiplier * std_val
+                three_sigma_max = mean_val + sigma_multiplier * std_val
+                
+                clipped_min = max(min_val, min(lower_percentile, three_sigma_min))
+                clipped_max = min(max_val, max(upper_percentile, three_sigma_max))
+                
+                range_threshold = args.range_threshold if args else Defaults.RANGE_THRESHOLD
+                if (clipped_max - clipped_min) < range_threshold * (max_val - min_val):
+                    clipped_min = min_val
+                    clipped_max = max_val
+            else:
                 clipped_min = min_val
                 clipped_max = max_val
+            
+            abs_max = max(abs(clipped_min), abs(clipped_max))
+            scale = abs_max / 127.0 if abs_max != 0 else 1.0
+            
+            quantized_data = np.clip(np.round(original_data / scale), qmin, qmax).astype(np.int8)
+            
+            dequantized_data = quantized_data.astype(np.float32) * scale
         else:
-            clipped_min = min_val
-            clipped_max = max_val
-        
-        # Symmetric quantization: use maximum absolute value for optimal range
-        abs_max = max(abs(clipped_min), abs(clipped_max))
-        scale = abs_max / 127.0 if abs_max != 0 else 1.0
-        
-        quantized_data = np.clip(np.round(original_data / scale), qmin, qmax).astype(np.int8)
-        
-        dequantized_data = quantized_data.astype(np.float32) * scale
+            quantized_data, scale = int8_quantize_tensor_rows(original_data, args=args)
+            dequantized_data = dequantize_row(quantized_data, scale)
         mse_error = np.mean((original_data - dequantized_data) ** 2)
         snr_db = 10 * np.log10(np.var(original_data) / mse_error) if mse_error > 0 else float('inf')
-        
+
         original_flat = original_data.flatten()
         dequantized_flat = dequantized_data.flatten()
         cos_sim = np.dot(original_flat, dequantized_flat) / (np.linalg.norm(original_flat) * np.linalg.norm(dequantized_flat))
         
-        snr_threshold = args.snr_threshold if args else 30.0
+        snr_threshold = args.snr_threshold if args else Defaults.SNR_THRESHOLD_LEGACY
         if snr_db < snr_threshold:
             precision = 'FP16'
             data = data.astype(np.float16)
@@ -100,7 +168,7 @@ def save_tensor_with_header(tensor, output_path, precision='FP32', transpose=Fal
                 stats_tracker['mse_values'].append(mse_error)
                 stats_tracker['snr_values'].append(snr_db)
                 stats_tracker['cos_sim_values'].append(cos_sim)
-                saturation_warning_threshold = args.saturation_warning_threshold if args else 0.1
+                saturation_warning_threshold = args.saturation_warning_threshold if args else Defaults.SATURATION_WARNING_THRESHOLD
                 if saturation_percent > saturation_warning_threshold:
                     stats_tracker['saturation_warnings'] += 1
     elif precision == 'FP16':
@@ -148,17 +216,29 @@ def save_tensor_with_header(tensor, output_path, precision='FP32', transpose=Fal
         f.write(struct.pack('<Q', byte_size))
         
         if precision == 'INT8':
-            f.write(struct.pack('<f', scale))
+            # For row-wise quantization, use a placeholder scale in header
+            # The actual scales are saved separately
+            if isinstance(scale, np.ndarray):
+                f.write(struct.pack('<f', 1.0))  # Placeholder scale
+            else:
+                f.write(struct.pack('<f', scale))
             
         f.write(data.tobytes())
     
     if precision == 'INT8':
         scale_path = output_path.with_suffix('.scale')
         with open(scale_path, 'w') as f:
-            f.write(f"{scale:.10f}\n")
+            if isinstance(scale, np.ndarray):
+                # Save scales as numpy array
+                np.save(scale_path.with_suffix('.npy'), scale)
+                # Also save as text for compatibility
+                f.write(f"Row-wise scales saved as {scale_path.with_suffix('.npy')}\n")
+                f.write(f"Shape: {scale.shape}\n")
+            else:
+                f.write(f"{scale:.10f}\n")
 
 def convert_hf_model_weights(model, output_dir, precision='INT8', args=None):
-    
+    args = args if args else Defaults
     quantization_stats = {
         'total_tensors': 0,
         'quantized_tensors': 0,
@@ -351,7 +431,7 @@ def convert_hf_model_weights(model, output_dir, precision='INT8', args=None):
         print(f"CosSim - Mean: {np.mean(cos_sim_values):.6f}, Max: {np.mean(cos_sim_values):.6f}, Median: {np.median(cos_sim_values):.6f}, Min: {np.min(cos_sim_values):.6f}")
         fp16_tensors = quantization_stats['total_tensors'] - quantization_stats['quantized_tensors']
         low_snr_fallbacks = quantization_stats.get('low_snr_fallbacks', 0)
-        snr_threshold = args.snr_threshold if args else 30.0
+        snr_threshold = args.snr_threshold if args else Defaults.SNR_THRESHOLD_LEGACY
         print(f"Processed {quantization_stats['quantized_tensors']} INT8 tensors, {fp16_tensors} FP16 tensors ({low_snr_fallbacks} SNR<{snr_threshold}dB fallbacks)")
     
     return model_config
@@ -597,6 +677,7 @@ def convert_hf_tokenizer(tokenizer, output_dir):
     
 
 def convert_hf_to_cactus(model_name, output_dir, precision='INT8', cache_dir=None, args=None):
+    args = args if args else Defaults
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     
@@ -663,18 +744,20 @@ def create_parser():
     parser.add_argument('--cache-dir', help='Cache directory for HuggingFace models')
     
     quant_group = parser.add_argument_group('Quantization Parameters')
-    quant_group.add_argument('--snr-threshold', type=float, default=20.0,
+    quant_group.add_argument('--snr-threshold', type=float, default=Defaults.SNR_THRESHOLD,
                             help='Minimum SNR (dB) for INT8 quantization, fallback to FP32 below this')
-    quant_group.add_argument('--saturation-threshold', type=float, default=0.01,
+    quant_group.add_argument('--saturation-threshold', type=float, default=Defaults.SATURATION_THRESHOLD,
                             help='Saturation threshold for outlier clipping (0.0-1.0)')
-    quant_group.add_argument('--outlier-percentile', type=float, default=0.01,
+    quant_group.add_argument('--outlier-percentile', type=float, default=Defaults.OUTLIER_PERCENTILE,
                             help='Percentile for outlier detection (0.0-50.0)')
-    quant_group.add_argument('--sigma-multiplier', type=float, default=3.5,
+    quant_group.add_argument('--sigma-multiplier', type=float, default=Defaults.SIGMA_MULTIPLIER,
                             help='Standard deviation multiplier for range clipping')
-    quant_group.add_argument('--range-threshold', type=float, default=0.5,
+    quant_group.add_argument('--range-threshold', type=float, default=Defaults.RANGE_THRESHOLD,
                             help='Minimum range preservation ratio (0.0-1.0)')
-    quant_group.add_argument('--saturation-warning-threshold', type=float, default=0.1,
+    quant_group.add_argument('--saturation-warning-threshold', type=float, default=Defaults.SATURATION_WARNING_THRESHOLD,
                             help='Saturation percentage threshold for warnings')
+    quant_group.add_argument('--new-int8', action='store_true',
+                            help='Use new INT8 quantization method with row-wise quantization')
     
     return parser
 

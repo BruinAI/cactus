@@ -21,3 +21,4 @@ apple/libcactus.a
 # UV Env
 pyproject.toml
 uv.lock
+__pycache__/
