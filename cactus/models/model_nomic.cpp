@@ -62,13 +62,13 @@ size_t NomicModel::build_attention(CactusGraph* gb, size_t normalized_input, uin
     const auto& layer = weight_nodes_.layers[layer_idx];
 
     auto q_proj = gb->matmul(normalized_input, layer.attn_q_weight, true, backend);
-    q_proj = gb->add_clipped(q_proj, layer.attn_q_bias);
+    q_proj = gb->add(q_proj, layer.attn_q_bias);
 
     auto k_proj = gb->matmul(normalized_input, layer.attn_k_weight, true, backend);
-    k_proj = gb->add_clipped(k_proj, layer.attn_k_bias);
+    k_proj = gb->add(k_proj, layer.attn_k_bias);
 
     auto v_proj = gb->matmul(normalized_input, layer.attn_v_weight, true, backend);
-    v_proj = gb->add_clipped(v_proj, layer.attn_v_bias);
+    v_proj = gb->add(v_proj, layer.attn_v_bias);
 
     const auto& q_shape = gb->get_output_buffer(q_proj).shape;
     const size_t seq_len = q_shape[0];
@@ -96,7 +96,7 @@ size_t NomicModel::build_attention(CactusGraph* gb, size_t normalized_input, uin
     auto attn_output = gb->reshape(attn_output_4d, {seq_len, num_heads * head_dim});
 
     auto output = gb->matmul(attn_output, layer.attn_output_weight, true, backend);
-    output = gb->add_clipped(output, layer.attn_output_bias);
+    output = gb->add(output, layer.attn_output_bias);
     return output;
 }
 
@@ -113,10 +113,10 @@ size_t NomicModel::build_standard_mlp(CactusGraph* gb, size_t normalized_h, uint
                                      ComputeBackend backend) const {
     const auto& layer = weight_nodes_.layers[layer_idx];
     auto hidden = gb->matmul(normalized_h, layer.ffn_up_weight, true, backend);
-    hidden = gb->add_clipped(hidden, layer.ffn_up_bias);
+    hidden = gb->add(hidden, layer.ffn_up_bias);
     hidden = gb->gelu(hidden);
     hidden = gb->matmul(hidden, layer.ffn_down_weight, true, backend);
-    hidden = gb->add_clipped(hidden, layer.ffn_down_bias);
+    hidden = gb->add(hidden, layer.ffn_down_bias);
     return hidden;
 }
 
@@ -156,11 +156,11 @@ size_t NomicModel::build_moe_mlp(CactusGraph* gb, size_t normalized_h, uint32_t 
         if (e == 0) {
             expert_outputs = new_expert_output;
         } else {
-            expert_outputs = gb->add_clipped(expert_outputs, new_expert_output);
+            expert_outputs = gb->add(expert_outputs, new_expert_output);
         }
     }
 
-    return gb->add_clipped(expert_outputs, layer.mlp_experts_bias);
+    return gb->add(expert_outputs, layer.mlp_experts_bias);
 }
 
 size_t NomicModel::build_transformer_block(CactusGraph* gb, size_t hidden, uint32_t layer_idx,
@@ -171,10 +171,10 @@ size_t NomicModel::build_transformer_block(CactusGraph* gb, size_t hidden, uint3
     (void)position_offset;
     const auto& layer = weight_nodes_.layers[layer_idx];
     auto attn_output = build_attention(gb, hidden, layer_idx, backend);
-    auto residual = gb->add_clipped(hidden, attn_output);
+    auto residual = gb->add(hidden, attn_output);
     auto normalized_residual = gb->layernorm(residual, layer.ffn_norm_1_weight, layer.ffn_norm_1_bias, config_.layer_norm_eps);
     auto mlp_output = build_mlp(gb, normalized_residual, layer_idx, backend);
-    auto final_residual = gb->add_clipped(normalized_residual, mlp_output);
+    auto final_residual = gb->add(normalized_residual, mlp_output);
     auto normalized_final_residual = gb->layernorm(final_residual, layer.ffn_norm_2_weight, layer.ffn_norm_2_bias, config_.layer_norm_eps);
     return normalized_final_residual;
 }
