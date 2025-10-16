@@ -270,7 +270,7 @@ public:
     uint32_t generate(const std::vector<uint32_t>& tokens, float temperature = -1.0f, float top_p = -1.0f,
                       size_t top_k = 0, const std::string& profile_file = "");
 
-    std::vector<float> get_embeddings(const std::vector<uint32_t>& tokens, bool pooled = true);
+    std::vector<float> get_embeddings(const std::vector<uint32_t>& tokens, bool pooled = true, const std::string& profile_file = "");
 
     void reset_cache() { kv_cache_.reset(); }
     void set_cache_window(size_t window_size, size_t sink_size = 4) { kv_cache_.set_window_size(window_size, sink_size); }

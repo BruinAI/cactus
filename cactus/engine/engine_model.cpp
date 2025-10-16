@@ -175,25 +175,30 @@ void Model::update_kv_cache(CactusGraph* gb, size_t seq_len) {
 }
 
 
-std::vector<float> Model::get_embeddings(const std::vector<uint32_t>& tokens, bool pooled) {
+std::vector<float> Model::get_embeddings(const std::vector<uint32_t>& tokens, bool pooled, const std::string& profile_file) {
     auto final_hidden = forward(tokens);
-    
+
     auto* gb = static_cast<CactusGraph*>(graph_handle_);
     auto* output_ptr = gb->get_output(final_hidden);
     const auto& output_buffer = gb->get_output_buffer(final_hidden);
-    
+
     std::vector<float> embeddings;
-    
+
     if (pooled) {
         auto pooled_hidden = gb->mean(final_hidden, 0);
-        gb->execute();
-        
+
+        if (!profile_file.empty()) {
+            gb->execute(profile_file);
+        } else {
+            gb->execute();
+        }
+
         auto* pooled_ptr = gb->get_output(pooled_hidden);
         const auto& pooled_buffer = gb->get_output_buffer(pooled_hidden);
-        
+
         size_t hidden_dim = pooled_buffer.total_size;
         embeddings.resize(hidden_dim);
-        
+
         if (pooled_buffer.precision == Precision::FP32) {
             float* pooled_data = static_cast<float*>(pooled_ptr);
             std::copy(pooled_data, pooled_data + hidden_dim, embeddings.begin());
@@ -206,11 +211,15 @@ std::vector<float> Model::get_embeddings(const std::vector<uint32_t>& tokens, bo
             Quantization::int8_to_fp32(pooled_data, embeddings.data(), hidden_dim, scale);
         }
     } else {
-        gb->execute();
-        
+        if (!profile_file.empty()) {
+            gb->execute(profile_file);
+        } else {
+            gb->execute();
+        }
+
         size_t total_size = output_buffer.total_size;
         embeddings.resize(total_size);
-        
+
         if (output_buffer.precision == Precision::FP32) {
             float* hidden_states = static_cast<float*>(output_ptr);
             std::copy(hidden_states, hidden_states + total_size, embeddings.begin());
@@ -227,9 +236,9 @@ std::vector<float> Model::get_embeddings(const std::vector<uint32_t>& tokens, bo
             }
         }
     }
-    
+
     kv_cache_.reset();
-    
+
     return embeddings;
 }
 
