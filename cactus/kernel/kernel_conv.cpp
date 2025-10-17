@@ -7,6 +7,8 @@
 #include <cstring>
 #include <limits>
 #include <vector>
+#include <cstddef>
+#include <iostream>
 
 // Layouts:
 // X: [N, L, C_in]
@@ -123,8 +125,6 @@ void cactus_conv1d_causal_depthwise_f16(
     }
 }
 
-
-#include <cstddef>
 
 void cactus_conv1d_causal_depthwise_f32(
     const float* input,     // [N, L, C] (inner stride C)
