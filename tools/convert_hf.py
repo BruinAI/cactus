@@ -212,7 +212,8 @@ def convert_hf_model_weights(model, output_dir, precision='INT8', args=None):
         'rope_theta': getattr(config, 'rope_theta', 10000.0),
         'attention_head_dim': getattr(config, 'head_dim', getattr(config, 'hidden_size', 0) // max(getattr(config, 'num_attention_heads', 1), 1)),
         'tie_word_embeddings': tie_word_embeddings,
-        'model_type': detected_model_type
+        'model_type': detected_model_type,
+        'layer_norm_eps': getattr(config, 'layer_norm_eps', None) or getattr(config, 'rms_norm_eps', None) or getattr(config, 'norm_eps', 1e-6), 
     }
 
     if detected_model_type == 'lfm2':

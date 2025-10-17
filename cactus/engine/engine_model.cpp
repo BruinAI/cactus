@@ -130,6 +130,9 @@ bool Model::init(const std::string& model_folder, size_t context_size, const std
     cache_k_output_nodes_.resize(config_.num_layers);
     cache_v_output_nodes_.resize(config_.num_layers);
     
+    // Allow derived classes to perform additional initialization
+    post_init();
+    
     initialized_ = true;
     
     std::string warmup_text = system_prompt.empty() ? "Henry" : system_prompt;
@@ -458,20 +461,41 @@ void Model::flush_debug_nodes(CactusGraph* gb) {
         shape_ss << "]";
 
         if (debug_options_.dump_stdout) {
-            size_t preview_count = std::min(debug_options_.max_print_values, values.size());
             std::cout << "[Cactus][" << debug_layer_label(capture.layer_idx) << "] "
-                      << capture.tag << " shape=" << shape_ss.str() << " showing "
-                      << preview_count << "/" << values.size() << " values: ";
-            for (size_t i = 0; i < preview_count; ++i) {
-                std::cout << values[i];
-                if (i + 1 < preview_count) {
-                    std::cout << ", ";
+                      << capture.tag << " shape=" << shape_ss.str();
+            
+            // For 2D tensors (like [seq_len, hidden_dim]), show first few values from each token
+            if (buffer.shape.size() == 2 && buffer.shape[0] > 1) {
+                size_t seq_len = buffer.shape[0];
+                size_t hidden_dim = buffer.shape[1];
+                size_t vals_per_token = std::min(debug_options_.max_print_values, hidden_dim);
+                
+                std::cout << " per-token (first " << vals_per_token << " dims):" << std::endl;
+                for (size_t tok = 0; tok < seq_len; ++tok) {
+                    std::cout << "  [tok" << tok << ": ";
+                    for (size_t i = 0; i < vals_per_token; ++i) {
+                        std::cout << values[tok * hidden_dim + i];
+                        if (i + 1 < vals_per_token) {
+                            std::cout << ",";
+                        }
+                    }
+                    std::cout << "]" << std::endl;
                 }
+            } else {
+                // For 1D or other tensors, show linearly as before
+                size_t preview_count = std::min(debug_options_.max_print_values, values.size());
+                std::cout << " showing " << preview_count << "/" << values.size() << " values: ";
+                for (size_t i = 0; i < preview_count; ++i) {
+                    std::cout << values[i];
+                    if (i + 1 < preview_count) {
+                        std::cout << ", ";
+                    }
+                }
+                if (preview_count < values.size()) {
+                    std::cout << " ...";
+                }
+                std::cout << std::endl;
             }
-            if (preview_count < values.size()) {
-                std::cout << " ...";
-            }
-            std::cout << std::endl;
         }
 
         if (debug_options_.dump_to_files) {

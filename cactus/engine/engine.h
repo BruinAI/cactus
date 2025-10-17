@@ -310,7 +310,7 @@ public:
 
     std::vector<float> get_embeddings(const std::vector<uint32_t>& tokens, bool pooled = true);
 
-    void reset_cache() { kv_cache_.reset(); }
+    virtual void reset_cache() { kv_cache_.reset(); }
     void set_cache_window(size_t window_size, size_t sink_size = 4) { kv_cache_.set_window_size(window_size, sink_size); }
 
 protected:
@@ -323,6 +323,7 @@ protected:
     virtual size_t build_transformer_block(CactusGraph* gb, size_t hidden, uint32_t layer_idx,
                                   ComputeBackend backend, bool use_cache = false, size_t position_offset = 0) = 0;
     void update_kv_cache(CactusGraph* gb, size_t seq_len);
+    virtual void post_init() {}
     virtual void post_execute_updates(CactusGraph* gb, size_t seq_len) {}
     Config config_;
     std::unique_ptr<Tokenizer> tokenizer_;

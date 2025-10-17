@@ -21,6 +21,33 @@ LFM2Model::LFM2Model(const Config& config) : Model(config) {
     conv_cache_bx_nodes_.assign(config_.num_layers, 0);
 }
 
+void LFM2Model::post_init() {
+    if (config_.conv_L_cache > 0) {
+        Precision cache_precision;
+        switch (config_.precision) {
+            case Config::Precision::INT8:
+                cache_precision = Precision::INT8;
+                break;
+            case Config::Precision::FP16:
+                cache_precision = Precision::FP16;
+                break;
+            case Config::Precision::FP32:
+                cache_precision = Precision::FP32;
+                break;
+        }
+        size_t conv_window = config_.conv_L_cache > 0 ? config_.conv_L_cache - 1 : 0;
+        conv_cache_.init(config_.num_layers, config_.hidden_dim, conv_window, cache_precision);
+    }
+    last_forward_used_cache_ = false;
+}
+
+void LFM2Model::reset_cache() {
+    Model::reset_cache();  // Reset KV cache
+    if (conv_cache_.window_size > 0) {
+        conv_cache_.reset();
+    }
+}
+
 bool LFM2Model::init(const std::string& model_folder, size_t context_size, const std::string& system_prompt) {
     // Call base class init first
     if (!Model::init(model_folder, context_size, system_prompt)) {
@@ -183,11 +210,12 @@ size_t LFM2Model::build_conv1d(CactusGraph* gb, size_t input, uint32_t layer_idx
         capture_debug_node(layer_idx, "conv_depthwise_weight_c0_kernel_[K]", w_c0);
     }
 
-    // Run causal depthwise conv on the whole sequence (no cache)
-    // Input to kernel: [N=1, L, C]
+    // Run causal depthwise conv with optional cache
     size_t conv_input_lc = Bx;
+    
     if (use_cache && conv_cache_.window_size > 0) {
         auto view = conv_cache_.get_window(layer_idx);
+        
         std::vector<size_t> segments;
 
         if (view.len2 > 0) {
