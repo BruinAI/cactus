@@ -3,7 +3,6 @@
 #include <vector>
 #include <string>
 #include <unordered_map>
-#include <unordered_set>
 #include <memory>
 #include <cstdint>
 
@@ -302,12 +301,6 @@ public:
     uint32_t generate(const std::vector<uint32_t>& tokens, float temperature = -1.0f, float top_p = -1.0f,
                       size_t top_k = 0, const std::string& profile_file = "");
 
-    std::vector<float> debug_forward(const std::vector<uint32_t>& tokens, bool use_cache = false,
-                                     const std::string& profile_file = "");
-
-    void suspend_debug_capture();
-    void resume_debug_capture();
-
     std::vector<float> get_embeddings(const std::vector<uint32_t>& tokens, bool pooled = true);
 
     virtual void reset_cache() { kv_cache_.reset(); }
@@ -341,35 +334,6 @@ protected:
     size_t embedding_node_id_;
     std::string model_folder_path_;
     size_t output_weight_node_id_;
-
-    struct DebugCapture {
-        uint32_t layer_idx;
-        std::string tag;
-        size_t node_id;
-    };
-
-    struct DebugOptions {
-        bool enabled = false;
-        bool dump_stdout = false;
-        bool dump_to_files = false;
-        bool include_all_layers = true;
-        std::unordered_set<uint32_t> layer_filter;
-        std::string dump_dir;
-        size_t max_print_values = 32;
-    };
-
-    DebugOptions debug_options_;
-    mutable std::vector<DebugCapture> debug_captures_;
-    bool debug_capture_suspended_ = false;
-    size_t debug_suspend_depth_ = 0;
-    size_t debug_flush_counter_ = 0;
-
-    void initialize_debug_options_from_env();
-    bool should_capture_layer(uint32_t layer_idx) const;
-    void capture_debug_node(uint32_t layer_idx, const std::string& tag, size_t node_id) const;
-    void flush_debug_nodes(CactusGraph* gb);
-    std::vector<float> extract_tensor_as_fp32(const BufferDesc& buffer, const void* data) const;
-    std::string debug_layer_label(uint32_t layer_idx) const;
 };
 
 std::unique_ptr<Model> create_model(const std::string& model_folder);
