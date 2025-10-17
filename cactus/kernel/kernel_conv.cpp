@@ -228,279 +228,550 @@ static inline ptrdiff_t safe_ti(size_t t, size_t k, size_t dilation) {
     return (ptrdiff_t)t - (ptrdiff_t)k * (ptrdiff_t)dilation;
 }
 
-// ---------------- FP32 (NEON-accelerated for M==1) ----------------
-void cactus_conv1d_causal_depthwise_f32(
-    const float* x, const float* w, float* y,
-    size_t N, size_t L, size_t C_in,
-    size_t K, size_t dilation, size_t M)
+
+constexpr size_t T_TILE_F16 = 2;
+
+inline void cactus_conv1d_depthwise_causal_f16_impl(
+    const __fp16* input,    // [N, L, C]
+    const __fp16* weight,   // [C, 1, K] forward order (fp16)
+    __fp16* output,         // [N, L, C]
+    size_t N, size_t L, size_t C, size_t K, size_t dilation)
 {
-    const size_t CinM = C_in * M;               // = C_out
-    const size_t in_batch_stride  = L * C_in;
-    const size_t out_batch_stride = L * CinM;
+    const size_t in_bs  = L * C;
+    const size_t out_bs = L * C;
 
-#if defined(__ARM_NEON)
-    if (M == 1) {
-        // Vectorize across channels in 4-lane blocks (x is contiguous over channels).
-        const size_t Cblk = 4;
-        const size_t Cvec = (C_in / Cblk) * Cblk;
+    for (size_t n = 0; n < N; ++n) {
+        const __fp16* Xb = input  + n * in_bs;
+        __fp16*       Yb = output + n * out_bs;
 
-        for (size_t n = 0; n < N; ++n) {
-            const float* Xn = x + n * in_batch_stride;
-            float*       Yn = y + n * out_batch_stride;
+        for (size_t c = 0; c < C; ++c) {
+            // Pre-reverse weights (convert to f32 here to avoid repeated casts)
+            std::vector<float> wrev(K);
+            const __fp16* Wc = weight + c * K;
+            for (size_t k = 0; k < K; ++k) wrev[k] = (float)Wc[K - 1 - k];
 
-            for (size_t t = 0; t < L; ++t) {
-                // Vector blocks of 4 channels
-                for (size_t c = 0; c < Cvec; c += Cblk) {
-                    float32x4_t acc = vdupq_n_f32(0.0f);
-                    // Sum over taps with causal guard
-                    for (size_t k = 0; k < K; ++k) {
-                        const ptrdiff_t ti = safe_ti(t, k, dilation);
-                        if (ti < 0) break;
+            for (size_t t0 = 0; t0 < L; t0 += T_TILE_F16) {
+                const size_t t1 = std::min(t0 + 1, L - 1);
 
-                        // inputs: contiguous across channels
-                        const float* xptr = &Xn[ (size_t)ti * C_in + c ];
-                        float32x4_t xv = vld1q_f32(xptr);
+                float32x4_t vacc0 = vdupq_n_f32(0.f);
+                float32x4_t vacc1 = vdupq_n_f32(0.f);
 
-                        // weights: W is laid out [C_in, K], stride K between channels
-                        // Gather 4 scalars with stride K, assemble into a vector
-                        float wt[4];
-                        wt[0] = w[(c+0)*K + k];
-                        wt[1] = w[(c+1)*K + k];
-                        wt[2] = w[(c+2)*K + k];
-                        wt[3] = w[(c+3)*K + k];
-                        float32x4_t wv = vld1q_f32(wt);
+                size_t k = 0;
+                for (; k + 8 <= K; k += 8) {
+                    // taps k..k+3
+                    float x0_0=0, x1_0=0, x2_0=0, x3_0=0;
+                    float x0_1=0, x1_1=0, x2_1=0, x3_1=0;
+                    {
+                        ptrdiff_t a0=(ptrdiff_t)t0-(ptrdiff_t)((k+0)*dilation);
+                        ptrdiff_t a1=(ptrdiff_t)t0-(ptrdiff_t)((k+1)*dilation);
+                        ptrdiff_t a2=(ptrdiff_t)t0-(ptrdiff_t)((k+2)*dilation);
+                        ptrdiff_t a3=(ptrdiff_t)t0-(ptrdiff_t)((k+3)*dilation);
+                        if (a0>=0) x0_0 = (float)Xb[(size_t)a0*C + c];
+                        if (a1>=0) x1_0 = (float)Xb[(size_t)a1*C + c];
+                        if (a2>=0) x2_0 = (float)Xb[(size_t)a2*C + c];
+                        if (a3>=0) x3_0 = (float)Xb[(size_t)a3*C + c];
 
-                        acc = vfmaq_f32(acc, xv, wv);
+                        ptrdiff_t b0=(ptrdiff_t)t1-(ptrdiff_t)((k+0)*dilation);
+                        ptrdiff_t b1=(ptrdiff_t)t1-(ptrdiff_t)((k+1)*dilation);
+                        ptrdiff_t b2=(ptrdiff_t)t1-(ptrdiff_t)((k+2)*dilation);
+                        ptrdiff_t b3=(ptrdiff_t)t1-(ptrdiff_t)((k+3)*dilation);
+                        if (b0>=0) x0_1 = (float)Xb[(size_t)b0*C + c];
+                        if (b1>=0) x1_1 = (float)Xb[(size_t)b1*C + c];
+                        if (b2>=0) x2_1 = (float)Xb[(size_t)b2*C + c];
+                        if (b3>=0) x3_1 = (float)Xb[(size_t)b3*C + c];
                     }
-                    vst1q_f32(&Yn[t * CinM + c], acc);
+                    float32x4_t xv0 = {x0_0,x1_0,x2_0,x3_0};
+                    float32x4_t yv0 = {x0_1,x1_1,x2_1,x3_1};
+                    float32x4_t wv0 = {wrev[k+0],wrev[k+1],wrev[k+2],wrev[k+3]};
+                    vacc0 = vfmaq_f32(vacc0, xv0, wv0);
+                    vacc1 = vfmaq_f32(vacc1, yv0, wv0);
+
+                    // taps k+4..k+7
+                    float a0_0=0, a1_0=0, a2_0=0, a3_0=0;
+                    float a0_1=0, a1_1=0, a2_1=0, a3_1=0;
+                    {
+                        ptrdiff_t a0i=(ptrdiff_t)t0-(ptrdiff_t)((k+4)*dilation);
+                        ptrdiff_t a1i=(ptrdiff_t)t0-(ptrdiff_t)((k+5)*dilation);
+                        ptrdiff_t a2i=(ptrdiff_t)t0-(ptrdiff_t)((k+6)*dilation);
+                        ptrdiff_t a3i=(ptrdiff_t)t0-(ptrdiff_t)((k+7)*dilation);
+                        if (a0i>=0) a0_0 = (float)Xb[(size_t)a0i*C + c];
+                        if (a1i>=0) a1_0 = (float)Xb[(size_t)a1i*C + c];
+                        if (a2i>=0) a2_0 = (float)Xb[(size_t)a2i*C + c];
+                        if (a3i>=0) a3_0 = (float)Xb[(size_t)a3i*C + c];
+
+                        ptrdiff_t b0i=(ptrdiff_t)t1-(ptrdiff_t)((k+4)*dilation);
+                        ptrdiff_t b1i=(ptrdiff_t)t1-(ptrdiff_t)((k+5)*dilation);
+                        ptrdiff_t b2i=(ptrdiff_t)t1-(ptrdiff_t)((k+6)*dilation);
+                        ptrdiff_t b3i=(ptrdiff_t)t1-(ptrdiff_t)((k+7)*dilation);
+                        if (b0i>=0) a0_1 = (float)Xb[(size_t)b0i*C + c];
+                        if (b1i>=0) a1_1 = (float)Xb[(size_t)b1i*C + c];
+                        if (b2i>=0) a2_1 = (float)Xb[(size_t)b2i*C + c];
+                        if (b3i>=0) a3_1 = (float)Xb[(size_t)b3i*C + c];
+                    }
+                    float32x4_t xv1 = {a0_0,a1_0,a2_0,a3_0};
+                    float32x4_t yv1 = {a0_1,a1_1,a2_1,a3_1};
+                    float32x4_t wv1 = {wrev[k+4],wrev[k+5],wrev[k+6],wrev[k+7]};
+                    vacc0 = vfmaq_f32(vacc0, xv1, wv1);
+                    vacc1 = vfmaq_f32(vacc1, yv1, wv1);
                 }
 
-                // Tail channels (scalar)
-                for (size_t c = Cvec; c < C_in; ++c) {
-                    float acc = 0.f;
-                    const float* wc = w + c * K;
-                    for (size_t k = 0; k < K; ++k) {
-                        const ptrdiff_t ti = safe_ti(t, k, dilation);
-                        if (ti < 0) break;
-                        acc += Xn[(size_t)ti * C_in + c] * wc[k];
+                float acc0 = vaddvq_f32(vacc0);
+                float acc1 = vaddvq_f32(vacc1);
+
+                for (; k < K; ++k) {
+                    ptrdiff_t a=(ptrdiff_t)t0-(ptrdiff_t)(k*dilation);
+                    if (a>=0) acc0 += wrev[k] * (float)Xb[(size_t)a*C + c];
+                    ptrdiff_t b=(ptrdiff_t)t1-(ptrdiff_t)(k*dilation);
+                    if (b>=0) acc1 += wrev[k] * (float)Xb[(size_t)b*C + c];
+                }
+
+                Yb[t0*C + c] = (__fp16)acc0;
+                if (t0 + 1 < L) Yb[t1*C + c] = (__fp16)acc1;
+            }
+        }
+    }
+}
+
+
+#include <cstddef>
+
+inline void cactus_conv1d_depthwise_causal_f32_impl(
+    const float* input,     // [N, L, C] (inner stride C)
+    const float* weight,    // [C, 1, K] forward order
+    float* output,          // [N, L, C]
+    size_t N, size_t L, size_t C, size_t K, size_t dilation)
+{
+    const size_t T_TILE_F32 = 2;
+    const size_t in_bs  = L * C;
+    const size_t out_bs = L * C;
+
+    // process batch, channel
+    for (size_t n = 0; n < N; ++n) {
+        const float* Xb = input  + n * in_bs;
+        float*       Yb = output + n * out_bs;
+
+        for (size_t c = 0; c < C; ++c) {
+            // Pre-reverse weights for this channel (one-time, cheap, improves inner-loop)
+            std::vector<float> wrev(K);
+            const float* Wc = weight + c * K;
+            for (size_t k = 0; k < K; ++k) wrev[k] = Wc[K - 1 - k];
+
+            // Walk time in tiles of 2
+            for (size_t t0 = 0; t0 < L; t0 += T_TILE_F32) {
+                const size_t t1 = std::min(t0 + 1, L - 1);
+
+                // two accumulators for the two time points
+                float32x4_t vacc0_0 = vdupq_n_f32(0.f);
+                float32x4_t vacc0_1 = vdupq_n_f32(0.f);
+                float       tail0   = 0.f;
+                float       tail1   = 0.f;
+
+                // Tap blocks: 8 at a time (two 4-lane vfma blocks)
+                size_t k = 0;
+                for (; k + 8 <= K; k += 8) {
+                    // prefetch upcoming input rows lightly
+                    if (t0 + 4 < L) __builtin_prefetch(Xb + (t0 + 4) * C + c);
+
+                    // -------- taps k..k+3
+                    float x0_0 = 0.f, x1_0 = 0.f, x2_0 = 0.f, x3_0 = 0.f; // for t0
+                    float x0_1 = 0.f, x1_1 = 0.f, x2_1 = 0.f, x3_1 = 0.f; // for t1
+                    {
+                        ptrdiff_t xt0 = (ptrdiff_t)t0 - (ptrdiff_t)((k + 0) * dilation);
+                        ptrdiff_t xt1 = (ptrdiff_t)t0 - (ptrdiff_t)((k + 1) * dilation);
+                        ptrdiff_t xt2 = (ptrdiff_t)t0 - (ptrdiff_t)((k + 2) * dilation);
+                        ptrdiff_t xt3 = (ptrdiff_t)t0 - (ptrdiff_t)((k + 3) * dilation);
+
+                        if (xt0 >= 0) x0_0 = Xb[(size_t)xt0 * C + c];
+                        if (xt1 >= 0) x1_0 = Xb[(size_t)xt1 * C + c];
+                        if (xt2 >= 0) x2_0 = Xb[(size_t)xt2 * C + c];
+                        if (xt3 >= 0) x3_0 = Xb[(size_t)xt3 * C + c];
+
+                        // second time point (t1)
+                        ptrdiff_t yu0 = (ptrdiff_t)t1 - (ptrdiff_t)((k + 0) * dilation);
+                        ptrdiff_t yu1 = (ptrdiff_t)t1 - (ptrdiff_t)((k + 1) * dilation);
+                        ptrdiff_t yu2 = (ptrdiff_t)t1 - (ptrdiff_t)((k + 2) * dilation);
+                        ptrdiff_t yu3 = (ptrdiff_t)t1 - (ptrdiff_t)((k + 3) * dilation);
+                        if (yu0 >= 0) x0_1 = Xb[(size_t)yu0 * C + c];
+                        if (yu1 >= 0) x1_1 = Xb[(size_t)yu1 * C + c];
+                        if (yu2 >= 0) x2_1 = Xb[(size_t)yu2 * C + c];
+                        if (yu3 >= 0) x3_1 = Xb[(size_t)yu3 * C + c];
                     }
-                    Yn[t * CinM + c] = acc;
+
+                    float32x4_t xv0 = {x0_0, x1_0, x2_0, x3_0};
+                    float32x4_t yv0 = {x0_1, x1_1, x2_1, x3_1};
+
+                    float w0 = wrev[k+0], w1 = wrev[k+1], w2 = wrev[k+2], w3 = wrev[k+3];
+                    float32x4_t wv0 = {w0, w1, w2, w3};
+
+                    vacc0_0 = vfmaq_f32(vacc0_0, xv0, wv0);
+                    vacc0_1 = vfmaq_f32(vacc0_1, yv0, wv0);
+
+                    // -------- taps k+4..k+7
+                    float a0_0 = 0.f, a1_0 = 0.f, a2_0 = 0.f, a3_0 = 0.f;
+                    float a0_1 = 0.f, a1_1 = 0.f, a2_1 = 0.f, a3_1 = 0.f;
+                    {
+                        ptrdiff_t xt0 = (ptrdiff_t)t0 - (ptrdiff_t)((k + 4) * dilation);
+                        ptrdiff_t xt1 = (ptrdiff_t)t0 - (ptrdiff_t)((k + 5) * dilation);
+                        ptrdiff_t xt2 = (ptrdiff_t)t0 - (ptrdiff_t)((k + 6) * dilation);
+                        ptrdiff_t xt3 = (ptrdiff_t)t0 - (ptrdiff_t)((k + 7) * dilation);
+
+                        if (xt0 >= 0) a0_0 = Xb[(size_t)xt0 * C + c];
+                        if (xt1 >= 0) a1_0 = Xb[(size_t)xt1 * C + c];
+                        if (xt2 >= 0) a2_0 = Xb[(size_t)xt2 * C + c];
+                        if (xt3 >= 0) a3_0 = Xb[(size_t)xt3 * C + c];
+
+                        ptrdiff_t yu0 = (ptrdiff_t)t1 - (ptrdiff_t)((k + 4) * dilation);
+                        ptrdiff_t yu1 = (ptrdiff_t)t1 - (ptrdiff_t)((k + 5) * dilation);
+                        ptrdiff_t yu2 = (ptrdiff_t)t1 - (ptrdiff_t)((k + 6) * dilation);
+                        ptrdiff_t yu3 = (ptrdiff_t)t1 - (ptrdiff_t)((k + 7) * dilation);
+                        if (yu0 >= 0) a0_1 = Xb[(size_t)yu0 * C + c];
+                        if (yu1 >= 0) a1_1 = Xb[(size_t)yu1 * C + c];
+                        if (yu2 >= 0) a2_1 = Xb[(size_t)yu2 * C + c];
+                        if (yu3 >= 0) a3_1 = Xb[(size_t)yu3 * C + c];
+                    }
+
+                    float32x4_t xv1 = {a0_0, a1_0, a2_0, a3_0};
+                    float32x4_t yv1 = {a0_1, a1_1, a2_1, a3_1};
+
+                    float u0 = wrev[k+4], u1 = wrev[k+5], u2 = wrev[k+6], u3 = wrev[k+7];
+                    float32x4_t wv1 = {u0, u1, u2, u3};
+
+                    vacc0_0 = vfmaq_f32(vacc0_0, xv1, wv1);
+                    vacc0_1 = vfmaq_f32(vacc0_1, yv1, wv1);
+                }
+
+                // reduce vector accumulators
+                float acc0 = vaddvq_f32(vacc0_0) + vaddvq_f32(vacc0_1);
+                float acc1 = vaddvq_f32(vacc0_1); // (vacc0_1 already included above for t1 vector parts)
+                // fix: we summed vacc0_1 twice; correct way:
+                acc0 = vaddvq_f32(vacc0_0);
+                acc1 = vaddvq_f32(vacc0_1);
+
+                // scalar tail taps
+                for (; k < K; ++k) {
+                    ptrdiff_t x0 = (ptrdiff_t)t0 - (ptrdiff_t)(k * dilation);
+                    if (x0 >= 0) acc0 += wrev[k] * Xb[(size_t)x0 * C + c];
+                    ptrdiff_t x1 = (ptrdiff_t)t1 - (ptrdiff_t)(k * dilation);
+                    if (x1 >= 0) acc1 += wrev[k] * Xb[(size_t)x1 * C + c];
+                }
+
+                // store t0
+                Yb[t0 * C + c] = acc0;
+                // store t1 if it belongs to this tile
+                if (t0 + 1 < L) {
+                    Yb[t1 * C + c] = acc1;
                 }
             }
         }
-        return;
     }
+}
+
+
+constexpr size_t T_TILE_S8 = 2;
+
+inline void cactus_conv1d_depthwise_causal_int8_impl(
+    const int8_t* input,     // [N,L,C]
+    const int8_t* weight,    // [C,1,K] forward
+    int32_t* output,         // [N,L,C]
+    size_t N, size_t L, size_t C, size_t K, size_t dilation)
+{
+    const size_t in_bs  = L*C;
+    const size_t out_bs = L*C;
+
+    for (size_t n=0;n<N;++n){
+        const int8_t* Xb = input  + n*in_bs;
+        int32_t*      Yb = output + n*out_bs;
+
+        for (size_t c=0;c<C;++c){
+            // Pre-reverse weights
+            std::vector<int8_t> wrev(K);
+            const int8_t* Wc = weight + c*K;
+            for (size_t k=0;k<K;++k) wrev[k] = Wc[K-1-k];
+
+            for (size_t t0=0;t0<L; t0+=T_TILE_S8){
+                const size_t t1 = std::min(t0+1, L-1);
+
+                int32x4_t vacc0 = vdupq_n_s32(0);
+                int32x4_t vacc1 = vdupq_n_s32(0);
+
+                size_t k=0;
+
+#if defined(__aarch64__) && defined(__ARM_FEATURE_DOTPROD)
+                // 16-tap SDOT blocks
+                for (; k+16<=K; k+=16){
+                    int8_t xv0_buf[16];
+                    int8_t xv1_buf[16];
+                    for (int i = 0; i < 16; ++i) {
+                        ptrdiff_t a = (ptrdiff_t)t0 - (ptrdiff_t)((k + i) * dilation);
+                        xv0_buf[i] = (a >= 0) ? Xb[(size_t)a * C + c] : 0;
+                        ptrdiff_t b = (ptrdiff_t)t1 - (ptrdiff_t)((k + i) * dilation);
+                        xv1_buf[i] = (b >= 0) ? Xb[(size_t)b * C + c] : 0;
+                    }
+
+                    int8x16_t xv0 = vld1q_s8(xv0_buf);
+                    int8x16_t xv1 = vld1q_s8(xv1_buf);
+                    int8x16_t wv  = vld1q_s8(&wrev[k]); // contiguous
+
+                    vacc0 = vdotq_s32(vacc0, xv0, wv);
+                    vacc1 = vdotq_s32(vacc1, xv1, wv);
+                }
 #endif
-
-    // Fallback (handles any M, any platform)
-    for (size_t n = 0; n < N; ++n) {
-        const float* Xn = x + n * in_batch_stride;
-        float*       Yn = y + n * out_batch_stride;
-
-        for (size_t c = 0; c < C_in; ++c) {
-            const float* Wc = w + c * (K * M); // [M,K]
-            for (size_t t = 0; t < L; ++t) {
-                for (size_t m = 0; m < M; ++m) {
-                    const float* wcm = Wc + m * K;
-                    float acc = 0.0f;
-                    for (size_t k = 0; k < K; ++k) {
-                        const ptrdiff_t ti = safe_ti(t, k, dilation);
-                        if (ti < 0) break;
-                        acc += Xn[(size_t)ti * C_in + c] * wcm[k];
+                // 8-tap fallback blocks (portable)
+                for (; k+8<=K; k+=8){
+                    int8_t xv0_buf[8];
+                    int8_t xv1_buf[8];
+                    for (int i = 0; i < 8; ++i) {
+                        ptrdiff_t a = (ptrdiff_t)t0 - (ptrdiff_t)((k + i) * dilation);
+                        xv0_buf[i] = (a >= 0) ? Xb[(size_t)a * C + c] : 0;
+                        ptrdiff_t b = (ptrdiff_t)t1 - (ptrdiff_t)((k + i) * dilation);
+                        xv1_buf[i] = (b >= 0) ? Xb[(size_t)b * C + c] : 0;
                     }
-                    Yn[t * CinM + c * M + m] = acc;
+
+                    int8x8_t xv0 = vld1_s8(xv0_buf);
+                    int8x8_t xv1 = vld1_s8(xv1_buf);
+                    int8x8_t wv  = vld1_s8(&wrev[k]);
+
+                    // vmull_s8 -> int16x8_t, then pairwise add+ widen
+                    int16x8_t p0 = vmull_s8(xv0, wv);
+                    int16x8_t p1 = vmull_s8(xv1, wv);
+                    int32x4_t s0 = vpaddlq_s16(p0);
+                    int32x4_t s1 = vpaddlq_s16(p1);
+                    vacc0 = vaddq_s32(vacc0, s0);
+                    vacc1 = vaddq_s32(vacc1, s1);
                 }
+
+                // scalar tail
+                int32_t acc0 = vaddvq_s32(vacc0);
+                int32_t acc1 = vaddvq_s32(vacc1);
+                for (; k<K; ++k){
+                    ptrdiff_t a=(ptrdiff_t)t0-(ptrdiff_t)(k*dilation);
+                    if (a>=0) acc0 += (int32_t)Xb[(size_t)a*C + c] * (int32_t)wrev[k];
+                    ptrdiff_t b=(ptrdiff_t)t1-(ptrdiff_t)(k*dilation);
+                    if (b>=0) acc1 += (int32_t)Xb[(size_t)b*C + c] * (int32_t)wrev[k];
+                }
+
+                Yb[t0*C + c] = acc0;
+                if (t0+1<L) Yb[t1*C + c] = acc1;
             }
         }
     }
 }
 
-// ---------------- FP16 (NEON-accelerated for M==1; accumulate in f32) ----------------
-void cactus_conv1d_causal_depthwise_f16(
-    const __fp16* x, const __fp16* w, __fp16* y,
-    size_t N, size_t L, size_t C_in,
-    size_t K, size_t dilation, size_t M)
+// Requantized s8 output with **per-channel** scales:
+//   acc_scale[c] = (input_scale[c] * weight_scale[c]) / output_scale[c]
+inline void cactus_conv1d_depthwise_causal_s8_neon_s8out_tiled(
+    const int8_t* input,      // [N,L,C]
+    const int8_t* weight,     // [C,1,K]
+    int8_t* output,           // [N,L,C]
+    const float* acc_scale,   // [C] per-channel
+    size_t N, size_t L, size_t C, size_t K, size_t dilation)
 {
-    const size_t CinM = C_in * M;
+    std::vector<int32_t> tmp(static_cast<size_t>(N) * L * C);
+
+    cactus_conv1d_depthwise_causal_int8_impl(
+        input,
+        weight,
+        tmp.data(),
+        N,
+        L,
+        C,
+        K,
+        dilation);
+
+    // per-channel requantize
+    for (size_t n=0;n<N;++n){
+        int32_t* src = tmp.data() + n*(L*C);
+        int8_t*  dst = output     + n*(L*C);
+        for (size_t t=0;t<L;++t){
+            for (size_t c=0;c<C;++c){
+                float scaled = (float)src[t*C + c] * acc_scale[c];
+                int32_t q = (int32_t)lrintf(scaled);
+                q = std::min(127, std::max(-128, q));
+                dst[t*C + c] = (int8_t)q;
+            }
+        }
+    }
+}
+
+template <typename T>
+static void cactus_conv1d_causal_depthwise_naive_float(
+    const T* input,
+    const T* weight,
+    T* output,
+    size_t N,
+    size_t L,
+    size_t C_in,
+    size_t K,
+    size_t dilation,
+    size_t M)
+{
+    const size_t C_out = C_in * M;
     const size_t in_batch_stride  = L * C_in;
-    const size_t out_batch_stride = L * CinM;
-
-#if defined(__ARM_NEON)
-    if (M == 1) {
-        const size_t Cblk = 4;                  // process 4 channels per step
-        const size_t Cvec = (C_in / Cblk) * Cblk;
-
-        for (size_t n = 0; n < N; ++n) {
-            const __fp16* Xn = x + n * in_batch_stride;
-            __fp16*       Yn = y + n * out_batch_stride;
-
-            for (size_t t = 0; t < L; ++t) {
-                for (size_t c = 0; c < Cvec; c += Cblk) {
-                    float32x4_t acc = vdupq_n_f32(0.0f);
-                    for (size_t k = 0; k < K; ++k) {
-                        const ptrdiff_t ti = safe_ti(t, k, dilation);
-                        if (ti < 0) break;
-
-                        // load 4 half inputs, convert to f32
-                        const __fp16* xptr_h = &Xn[(size_t)ti * C_in + c];
-                        float16x4_t xv_h4 = vld1_f16(xptr_h);
-                        float32x4_t xv = vcvt_f32_f16(xv_h4);
-
-                        // gather 4 half weights (stride K), convert to f32 vector
-                        __fp16 wt_h[4];
-                        wt_h[0] = w[(c+0)*K + k];
-                        wt_h[1] = w[(c+1)*K + k];
-                        wt_h[2] = w[(c+2)*K + k];
-                        wt_h[3] = w[(c+3)*K + k];
-                        float16x4_t wv_h4 = vld1_f16(wt_h);
-                        float32x4_t wv = vcvt_f32_f16(wv_h4);
-
-                        acc = vfmaq_f32(acc, xv, wv);
-                    }
-                    // store back as f16
-                    float16x4_t out_h4 = vcvt_f16_f32(acc);
-                    vst1_f16(&Yn[t * CinM + c], out_h4);
-                }
-
-                // Tail channels (scalar)
-                for (size_t c = Cvec; c < C_in; ++c) {
-                    float acc = 0.f;
-                    const __fp16* wc = w + c * K;
-                    for (size_t k = 0; k < K; ++k) {
-                        const ptrdiff_t ti = safe_ti(t, k, dilation);
-                        if (ti < 0) break;
-                        acc += (float)Xn[(size_t)ti * C_in + c] * (float)wc[k];
-                    }
-                    Yn[t * CinM + c] = (__fp16)acc;
-                }
-            }
-        }
-        return;
-    }
-#endif
-
-    // Fallback (any M)
-    for (size_t n = 0; n < N; ++n) {
-        const __fp16* Xn = x + n * in_batch_stride;
-        __fp16*       Yn = y + n * out_batch_stride;
-
-        for (size_t c = 0; c < C_in; ++c) {
-            const __fp16* Wc = w + c * (K * M);
-            for (size_t t = 0; t < L; ++t) {
-                for (size_t m = 0; m < M; ++m) {
-                    const __fp16* wcm = Wc + m * K;
-                    float acc = 0.0f;
-                    for (size_t k = 0; k < K; ++k) {
-                        const ptrdiff_t ti = safe_ti(t, k, dilation);
-                        if (ti < 0) break;
-                        acc += (float)Xn[(size_t)ti * C_in + c] * (float)wcm[k];
-                    }
-                    Yn[t * CinM + c * M + m] = (__fp16)acc;
-                }
-            }
-        }
-    }
-}
-
-// ---------------- INT8 (scalar; K small so this is fine) ----------------
-void cactus_conv1d_causal_depthwise_int8(
-    const int8_t* x, const int8_t* w, int8_t* y,
-    size_t N, size_t L, size_t C_in,
-    size_t K, size_t dilation, size_t M,
-    float input_scale, float weight_scale, float output_scale)
-{
-    const float prod_scale = input_scale * weight_scale;
-    const size_t CinM = C_in * M;
-    const size_t in_batch_stride  = L * C_in;
-    const size_t out_batch_stride = L * CinM;
+    const size_t out_batch_stride = L * C_out;
 
     for (size_t n = 0; n < N; ++n) {
-        const int8_t* Xn = x + n * in_batch_stride;
-        int8_t*       Yn = y + n * out_batch_stride;
+        const T* Xb = input + n * in_batch_stride;
+        T*       Yb = output + n * out_batch_stride;
 
-        for (size_t c = 0; c < C_in; ++c) {
-            const int8_t* Wc = w + c * (K * M);
-            for (size_t t = 0; t < L; ++t) {
-                for (size_t m = 0; m < M; ++m) {
-                    const int8_t* wcm = Wc + m * K;
-                    float acc_i8 = 0.0f;
-                    for (size_t k = 0; k < K; ++k) {
-                        const ptrdiff_t ti = safe_ti(t, k, dilation);
-                        if (ti < 0) break;
-                        acc_i8 += (float)Xn[(size_t)ti * C_in + c] * (float)wcm[k];
-                    }
-                    const float y_fp = acc_i8 * prod_scale;
-                    float y_qf = y_fp / output_scale;
-                    int q = (int)(y_qf >= 0.f ? y_qf + 0.5f : y_qf - 0.5f);
-                    if (q < -128) q = -128; else if (q > 127) q = 127;
-                    Yn[t * CinM + c * M + m] = (int8_t)q;
-                }
-            }
-        }
-    }
-}
-
-// scalar, depthwise, causal, CORRECT reference
-void ref_causal_dw_conv1d_f32(
-    const float* x,     // [N, L, C]
-    const float* w,     // [C*M, 1, K]  (often M==1)
-    float* y,           // [N, L, C*M]
-    size_t N, size_t L, size_t C, size_t K, size_t dilation, size_t M)
-{
-    const size_t CinM = C * M;
-    for (size_t n = 0; n < N; ++n) {
-        const float* Xn = x + n * L * C;
-        float*       Yn = y + n * L * CinM;
         for (size_t t = 0; t < L; ++t) {
-            for (size_t c = 0; c < C; ++c) {
-                for (size_t m = 0; m < M; ++m) {
-                    float acc = 0.f;
-                    const float* wcm = w + (c*M + m) * K; // [K]
-                    for (size_t k = 0; k < K; ++k) {
-                        ptrdiff_t ti = (ptrdiff_t)t - (ptrdiff_t)k * (ptrdiff_t)dilation;
-                        if (ti < 0) break;
-                        acc += Xn[(size_t)ti * C + c] * wcm[k];
-                    }
-                    Yn[t * CinM + (c*M + m)] = acc;
+            for (size_t co = 0; co < C_out; ++co) {
+                const size_t c = co / M;
+                const T* Wc = weight + co * K;
+
+                float acc = 0.0f;
+                for (size_t k = 0; k < K; ++k) {
+                    const ptrdiff_t xt = static_cast<ptrdiff_t>(t) - static_cast<ptrdiff_t>(k * dilation);
+                    if (xt < 0) break;
+
+                    const float x_val = static_cast<float>(Xb[static_cast<size_t>(xt) * C_in + c]);
+                    const float w_val = static_cast<float>(Wc[K - 1 - k]);
+                    acc += x_val * w_val;
                 }
+
+                Yb[t * C_out + co] = static_cast<T>(acc);
             }
         }
     }
 }
 
-// Depthwise, causal, 1D conv, FP32
-// Input  [N, L, C], Weight [C, 1, K], Output [N, L, C]
-// y[n,t,c] = sum_{k=0..K-1} w[c,0,k] * x[n, t - k*d, c], if (t - k*d >= 0)
+static void cactus_conv1d_causal_depthwise_naive_int8(
+    const int8_t* input,
+    const int8_t* weight,
+    int8_t* output,
+    size_t N,
+    size_t L,
+    size_t C_in,
+    size_t K,
+    size_t dilation,
+    size_t M,
+    float input_scale,
+    float weight_scale,
+    float output_scale)
+{
+    const size_t C_out = C_in * M;
+    const size_t in_batch_stride  = L * C_in;
+    const size_t out_batch_stride = L * C_out;
+    const float acc_scale = (input_scale * weight_scale) / output_scale;
+
+    for (size_t n = 0; n < N; ++n) {
+        const int8_t* Xb = input + n * in_batch_stride;
+        int8_t*       Yb = output + n * out_batch_stride;
+
+        for (size_t t = 0; t < L; ++t) {
+            for (size_t co = 0; co < C_out; ++co) {
+                const size_t c = co / M;
+                const int8_t* Wc = weight + co * K;
+
+                int32_t acc = 0;
+                for (size_t k = 0; k < K; ++k) {
+                    const ptrdiff_t xt = static_cast<ptrdiff_t>(t) - static_cast<ptrdiff_t>(k * dilation);
+                    if (xt < 0) break;
+
+                    acc += static_cast<int32_t>(Xb[static_cast<size_t>(xt) * C_in + c]) *
+                           static_cast<int32_t>(Wc[K - 1 - k]);
+                }
+
+                int32_t q = static_cast<int32_t>(lrintf(static_cast<float>(acc) * acc_scale));
+                q = std::min(127, std::max(-128, q));
+                Yb[t * C_out + co] = static_cast<int8_t>(q);
+            }
+        }
+    }
+}
+
 void cactus_conv1d_depthwise_causal_f32(
     const float* input,
-    const float* weight,  // [C, 1, K]
+    const float* weight,
     float* output,
     size_t N,
     size_t L,
     size_t C,
     size_t K,
-    size_t dilation
-) {
-    const size_t in_bs  = L * C;
-    const size_t out_bs = L * C;
-    const size_t w_c_stride = K; // Cin==1
-
-    for (size_t n = 0; n < N; ++n) {
-        const float* Xb = input  + n * in_bs;
-        float*       Yb = output + n * out_bs;
-        for (size_t c = 0; c < C; ++c) {
-            const float* Wc = weight + c * w_c_stride;   // taps in forward order
-            for (size_t t = 0; t < L; ++t) {
-                float acc = 0.f;
-                for (size_t k = 0; k < K; ++k) {
-                    const ptrdiff_t xt = (ptrdiff_t)t - (ptrdiff_t)(k * dilation);
-                    if (xt < 0) break;                   // causal guard
-                    acc += Wc[K-1-k] * Xb[(size_t)xt * C + c];
-                }
-                Yb[t * C + c] = acc;
-            }
-        }
-    }
+    size_t dilation)
+{
+    cactus_conv1d_depthwise_causal_f32_impl(input, weight, output, N, L, C, K, dilation);
 }
 
+void cactus_conv1d_causal_depthwise_f32(
+    const float* x,
+    const float* w,
+    float* y,
+    size_t N,
+    size_t L,
+    size_t C_in,
+    size_t K,
+    size_t dilation,
+    size_t M)
+{
+    if (M == 1) {
+        cactus_conv1d_depthwise_causal_f32_impl(x, w, y, N, L, C_in, K, dilation);
+        return;
+    }
 
+    cactus_conv1d_causal_depthwise_naive_float(x, w, y, N, L, C_in, K, dilation, M);
+}
+
+void cactus_conv1d_causal_depthwise_f16(
+    const __fp16* x,
+    const __fp16* w,
+    __fp16* y,
+    size_t N,
+    size_t L,
+    size_t C_in,
+    size_t K,
+    size_t dilation,
+    size_t M)
+{
+    if (M == 1) {
+        cactus_conv1d_depthwise_causal_f16_impl(x, w, y, N, L, C_in, K, dilation);
+        return;
+    }
+
+    cactus_conv1d_causal_depthwise_naive_float(x, w, y, N, L, C_in, K, dilation, M);
+}
+
+void cactus_conv1d_causal_depthwise_int8(
+    const int8_t* x,
+    const int8_t* w,
+    int8_t* y,
+    size_t N,
+    size_t L,
+    size_t C_in,
+    size_t K,
+    size_t dilation,
+    size_t M,
+    float input_scale,
+    float weight_scale,
+    float output_scale)
+{
+    if (M == 1) {
+        std::vector<float> acc_scale(C_in);
+        const float factor = (input_scale * weight_scale) / output_scale;
+        std::fill(acc_scale.begin(), acc_scale.end(), factor);
+        cactus_conv1d_depthwise_causal_s8_neon_s8out_tiled(
+            x,
+            w,
+            y,
+            acc_scale.data(),
+            N,
+            L,
+            C_in,
+            K,
+            dilation);
+        return;
+    }
+
+    cactus_conv1d_causal_depthwise_naive_int8(
+        x,
+        w,
+        y,
+        N,
+        L,
+        C_in,
+        K,
+        dilation,
+        M,
+        input_scale,
+        weight_scale,
+        output_scale);
+}
