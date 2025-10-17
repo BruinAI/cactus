@@ -10,6 +10,7 @@
 #include <cstdlib>
 #include <algorithm>
 #include <cmath>
+#include <assert.h>
 
 namespace {
     thread_local std::vector<int8_t> transpose_buffer_int8;
@@ -608,82 +609,33 @@ void compute_fused_node(GraphNode& node, const std::vector<std::unique_ptr<Graph
             size_t M = 1;
             size_t C_out = 0;
 
-            if (is_depthwise) {
-                M = W0 / C_in;             // channel multiplier
-                C_out = C_in * M;
-            } else {
-                // Standard conv requires W1 == C_in
-                if (W1 != C_in) {
-                    throw std::runtime_error("Weight in_channels mismatch: expected depthwise ([C_in*M,1,K]) or standard ([C_out,C_in,K])");
-                }
-                C_out = W0;
-            }
-
+            assert(is_depthwise && "Only depthwise causal convolution is supported currently");
+            M = W0 / C_in;   
+            C_out = C_in * M;
+            
             // --- Prepare output buffer shape/precision ---
             Y.shape = { N, L, C_out };
             Y.precision = X.precision; // same dtype as input/weights branch
             // ToDo: Ensure Y is allocated & writable
 
-            // --- Dtype consistency checks ---
-            if (X.precision != W.precision || Y.precision != X.precision) {
-                // std::cerr << "Precision mismatch: X=" << static_cast<int>(X.precision)
-                //           << ", W=" << static_cast<int>(W.precision)
-                //           << ", Y=" << static_cast<int>(Y.precision) << std::endl;
-                // throw std::runtime_error("Causal conv requires matching precisions for input/weight/output");
-            }
-
-            // --- Dispatch ---
-            if (is_depthwise) {
-                if (X.precision == Precision::INT8) {
-                    const float in_s  = X.quantization_scale;
-                    const float w_s   = W.quantization_scale;
-                    const float out_s = Y.quantization_scale;
-                    cactus_conv1d_causal_depthwise_int8(
-                        X.data_as<int8_t>(), W.data_as<int8_t>(), Y.data_as<int8_t>(),
-                        N, L, C_in, K, dil, M, in_s, w_s, out_s);
-                } else if (X.precision == Precision::FP16) {
-                    cactus_conv1d_causal_depthwise_f16(
-                        X.data_as<__fp16>(), W.data_as<__fp16>(), Y.data_as<__fp16>(),
-                        N, L, C_in, K, dil, M);
-                } else if (X.precision == Precision::FP32) {
-                    // cactus_conv1d_causal_depthwise_f32(
-                    //     X.data_as<float>(), W.data_as<float>(), Y.data_as<float>(),
-                    //     N, L, C_in, K, dil, M);
-                    // ref_causal_dw_conv1d_f32(
-                    //     X.data_as<float>(), W.data_as<float>(), Y.data_as<float>(),
-                    //     N, L, C_in, K, dil, M);
-                     cactus_conv1d_depthwise_causal_f32(
-                            X.data_as<float>(),  // [N, L, C]
-                            W.data_as<float>(),  // [C, 1, K]
-                            Y.data_as<float>(),  // [N, L, C]
-                            N,
-                            L,
-                            C_in,
-                            K,
-                            dil);
-                } else {
-                    throw std::runtime_error("Depthwise causal conv supports INT8/FP16/FP32");
-                }
+            // --- Dispatch depthwise causal convolution only ---
+            if (X.precision == Precision::INT8) {
+                const float in_s  = X.quantization_scale;
+                const float w_s   = W.quantization_scale;
+                const float out_s = Y.quantization_scale;
+                cactus_conv1d_causal_depthwise_int8(
+                    X.data_as<int8_t>(), W.data_as<int8_t>(), Y.data_as<int8_t>(),
+                    N, L, C_in, K, dil, in_s, w_s, out_s);
+            } else if (X.precision == Precision::FP16) {
+                cactus_conv1d_causal_depthwise_f16(
+                    X.data_as<__fp16>(), W.data_as<__fp16>(), Y.data_as<__fp16>(),
+                    N, L, C_in, K, dil);
+            } else if (X.precision == Precision::FP32) {
+                cactus_conv1d_causal_depthwise_f32(
+                    X.data_as<float>(), W.data_as<float>(), Y.data_as<float>(),
+                    N, L, C_in, K, dil);
             } else {
-                // --- Standard conv path (your existing kernels) ---
-                if (X.precision == Precision::INT8) {
-                    const float in_s  = X.quantization_scale;
-                    const float w_s   = W.quantization_scale;
-                    const float out_s = Y.quantization_scale;
-                    cactus_conv1d_causal_int8(
-                        X.data_as<int8_t>(), W.data_as<int8_t>(), Y.data_as<int8_t>(),
-                        N, L, C_in, C_out, K, dil, in_s, w_s, out_s);
-                } else if (X.precision == Precision::FP16) {
-                    cactus_conv1d_causal_f16(
-                        X.data_as<__fp16>(), W.data_as<__fp16>(), Y.data_as<__fp16>(),
-                        N, L, C_in, C_out, K, dil);
-                } else if (X.precision == Precision::FP32) {
-                    cactus_conv1d_causal_f32(
-                        X.data_as<float>(), W.data_as<float>(), Y.data_as<float>(),
-                        N, L, C_in, C_out, K, dil);
-                } else {
-                    throw std::runtime_error("Causal convolution supports INT8, FP16, and FP32");
-                }
+                throw std::runtime_error("Depthwise causal conv supports INT8/FP16/FP32");
             }
             break;
         }
