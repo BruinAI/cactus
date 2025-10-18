@@ -189,24 +189,6 @@ size_t llama3Model::forward(const std::vector<uint32_t>& tokens, bool use_cache)
 
     std::vector<float> input_data(seq_len);
 
-    // =========================================================
-    // 💥 START DEBUG CODE HERE 💥
-    // =========================================================
-    std::cout << "--- DEBUG: Input Tokens (" << seq_len << ") ---" << std::endl;
-    std::cout << "Tokens: [";
-    for (size_t i = 0; i < seq_len; i++) {
-        // We still perform the conversion to float here as required by the next line
-        input_data[i] = static_cast<float>(tokens[i]); 
-        
-        // Print the token ID (which is the value of tokens[i])
-        std::cout << tokens[i] << (i < seq_len - 1 ? ", " : "");
-    }
-    std::cout << "]" << std::endl;
-    std::cout << "-----------------------------------------------" << std::endl;
-    // =========================================================
-    // 💥 END DEBUG CODE HERE 💥
-    // =========================================================
-
     for (size_t i = 0; i < seq_len; i++) {
         input_data[i] = static_cast<float>(tokens[i]);
     }

@@ -13,6 +13,11 @@ except ImportError:
     print("Please install required packages: pip install torch transformers")
     sys.exit(1)
 
+try:
+    from huggingface_hub import hf_hub_download  # type: ignore
+except ImportError:
+    hf_hub_download = None  # type: ignore
+
 def save_tensor_with_header(tensor, output_path, precision='FP32', transpose=False, stats_tracker=None, args=None, model_type=None):
     if isinstance(tensor, torch.Tensor):
         data = tensor.detach().cpu().numpy()
@@ -316,14 +321,14 @@ def convert_hf_tokenizer(tokenizer, output_dir):
 
     if not is_sentencepiece and hasattr(tokenizer, 'sp_model'):
         is_sentencepiece = True
-        try:
-            from huggingface_hub import hf_hub_download
-            tokenizer_model_path = hf_hub_download(
-                repo_id=tokenizer.name_or_path,
-                filename="tokenizer.model"
-            )
-        except:
-            pass
+        if hf_hub_download:
+            try:
+                tokenizer_model_path = hf_hub_download(
+                    repo_id=tokenizer.name_or_path,
+                    filename="tokenizer.model"
+                )
+            except Exception:
+                pass
 
     if is_sentencepiece and tokenizer_model_path:
         import shutil
@@ -333,6 +338,16 @@ def convert_hf_tokenizer(tokenizer, output_dir):
             print(f"  Copied SentencePiece model to {dest_path.name}")
         except Exception as e:
             print(f"  Warning: Could not copy tokenizer.model: {e}")
+
+    tokenizer_json_data = {}
+    tokenizer_json_path = output_dir / "tokenizer.json"
+    try:
+        tokenizer.save_pretrained(output_dir)
+        if tokenizer_json_path.exists():
+            with open(tokenizer_json_path, 'r', encoding='utf-8') as f:
+                tokenizer_json_data = json.load(f)
+    except Exception as e:
+        print(f"  Warning: Could not save tokenizer JSON: {e}")
 
     vocab = tokenizer.get_vocab()
 
@@ -357,37 +372,43 @@ def convert_hf_tokenizer(tokenizer, output_dir):
     
     
     merges_output = output_dir / "merges.txt"
-    try:
-        try:
-            from huggingface_hub import hf_hub_download
-            merges_file = hf_hub_download(repo_id=tokenizer.name_or_path, filename="merges.txt")
-            import shutil
-            shutil.copy2(merges_file, merges_output)
-        except Exception:
-            if hasattr(tokenizer, 'backend_tokenizer') and tokenizer.backend_tokenizer:
-                backend = tokenizer.backend_tokenizer
-                vocab = backend.get_vocab()
-                merges = []
-                
-                if hasattr(backend, 'model'):
-                    model = backend.model
-                    if hasattr(model, 'merges'):
-                        merges = model.merges
-                
-                if merges:
-                    with open(merges_output, 'w', encoding='utf-8') as f:
-                        f.write("#version: 0.2\n")
-                        for merge in merges:
-                            f.write(f"{merge}\n")
-                else:
-                    with open(merges_output, 'w', encoding='utf-8') as f:
-                        f.write("#version: 0.2\n")
-            else:
-                with open(merges_output, 'w', encoding='utf-8') as f:
-                    f.write("#version: 0.2\n")
-    except Exception:
-        with open(merges_output, 'w', encoding='utf-8') as f:
+
+    def write_merges_file(merges_list):
+        with open(merges_output, 'w', encoding='utf-8', newline='') as f:
             f.write("#version: 0.2\n")
+            for merge in merges_list:
+                f.write(f"{' '.join(merge)}\n")
+
+    merges_written = False
+
+    if not is_sentencepiece and tokenizer_json_data:
+        merges_from_json = tokenizer_json_data.get("model", {}).get("merges", []) or []
+        write_merges_file(merges_from_json)
+        merges_written = True
+
+    if not merges_written and hf_hub_download:
+        try:
+            import shutil
+            merges_file = hf_hub_download(repo_id=tokenizer.name_or_path, filename="merges.txt")
+            shutil.copy2(merges_file, merges_output)
+            merges_written = True
+        except Exception:
+            pass
+
+    if not merges_written and hasattr(tokenizer, 'backend_tokenizer') and tokenizer.backend_tokenizer:
+        backend = tokenizer.backend_tokenizer
+        merges = []
+
+        if hasattr(backend, 'model'):
+            model = backend.model
+            if hasattr(model, 'merges'):
+                merges = model.merges
+
+        write_merges_file(merges)
+        merges_written = True
+
+    if not merges_written:
+        write_merges_file([])
     
     
     special_tokens = {}
@@ -430,8 +451,7 @@ def convert_hf_tokenizer(tokenizer, output_dir):
     
     try:
         config_path = None
-        if hasattr(tokenizer, 'name_or_path'):
-            from huggingface_hub import hf_hub_download
+        if hasattr(tokenizer, 'name_or_path') and hf_hub_download:
             try:
                 config_path = hf_hub_download(repo_id=tokenizer.name_or_path, filename="tokenizer_config.json")
                 with open(config_path, 'r') as f:

@@ -114,32 +114,37 @@ std::string Tokenizer::format_qwen_style(const std::vector<ChatMessage>& message
 }
 
 std::string Tokenizer::format_llama_style(const std::vector<ChatMessage>& messages, bool add_generation_prompt, const std::string& tools_json) const {
-    if (!tools_json.empty()) {
-        return "ERROR: Tool calls are currently not supported for Llama models";
-    }
+    std::stringstream ss;
+    bool system_handled = false;
 
-    // if first message isn't system, add one
-    std::string result;
+    ss << "<|begin_of_text|>";
 
-    if (!messages.empty() && messages.front().role != "system") {
-        result += "<|im_start|>system\n";
-        result += "You are a helpful AI assistant named Llama, trained by Hugging Face";
-        result += "<|im_end|>\n";
-    }
+    for (const auto& message : messages) {
+        if (!system_handled && message.role == "system") {
+            ss << "<|start_header_id|>system<|end_header_id|>\n";
+            ss << message.content << "\n";
+            
+            if (!tools_json.empty()) {
+                ss << "The following tools are available:\n";
+                ss << "<|tool_definitions|>\n";
+                ss << tools_json << "\n";
+                ss << "<|end_tool_definitions|>\n";
+            }
+            ss << "<|eot_id|>";
+            system_handled = true;
+            continue;
+        }
 
-    for (const auto& msg : messages) {
-        result += "<|im_start|>";
-        result += msg.role;
-        result += "\n";
-        result += msg.content;
-        result += "<|im_end|>\n";
+        ss << "<|start_header_id|>" << message.role << "<|end_header_id|>\n";
+        ss << message.content << "\n";
+        ss << "<|eot_id|>";
     }
 
     if (add_generation_prompt) {
-        result += "<|im_start|>assistant\n";
+        ss << "<|start_header_id|>assistant<|end_header_id|>\n";
     }
 
-    return result;
+    return ss.str();
 }
 
 std::string Tokenizer::format_gemma_style(const std::vector<ChatMessage>& messages, bool add_generation_prompt, const std::string& tools_json) const {
