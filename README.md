@@ -6,17 +6,26 @@ Energy-efficient kernels & inference engine for phones.
 - Phones run on battery, GPUs drain energy and heat the devices. 
 - 70% of phones today don't ship NPUs which most frameworks optimse for. 
 - Cactus is optimsed for old and new ARM-CPU first, with NPU/DSP/ISP coming.
-- Fast on all phones with negligible battery drain and heating.
+- Fast on all phones with less battery drain and heating.
 
-## Performance 
+## Performance (CPU only)
 
-LLama.cpp is the fastest possible alternative, so we benchmark against llama.cpp on Qwen3-INT8-0.6B
+- Speed for various sizes can be estimated proportionally
+- INT4 wiil give 30% gains when merged 
+- GPUs yield gains but drain battery, will be passed on for NPUs
 
-| Framework | Configuration | iPhone 13 Pro | Pixel 6a
-|-----------|--------------|------------------------|---------------|
-| Cactus | CPU only | 38-40 toks/sec | 15-18 toks/sec | 
-| Llama.cpp | CPU only | 20-24 toks/sec | 10-13 toks/sec |
-| Llama.cpp | CPU + GPU | 33-37 toks/sec | N/A |
+| Device                        |  Qwen3-INT8-600m (toks/sec) |  
+|:------------------------------|:------------------------:|
+| iPhone 17 Pro                 | 74 |
+| Galaxy S25 Ultra / 16 Pro     | 58 |
+| iPhone 16 / Galaxy S25 / Nothing 3 | 52 |
+| iPhone 15 Pro                 | 48 |
+| iPhone 14 Pro / OnePlus 13 5G | 47 |
+| Galaxy S24 Ultra / iPhone 15  | 42 |
+| OnePlus Open / Galaxy S23     | 41 |
+| iPhone 13 Pro / OnePlus 12    | 38 |
+| iPhone 13 mini / Redmi K70 Ultra / Xiaomi 13 / OnePlus 11 | 27 |
+| Pixel 6a / Nothing 3a / iPhone X / Galaxy S21 | 16 |
 
 ## File Size Comparison
 
@@ -26,6 +35,20 @@ LLama.cpp is the fastest possible alternative, so we benchmark against llama.cpp
 | ONNX/TFLite/MLX | 600 MB |
 | GGUF | 800 MB |
 | Executorch | 944 MB |
+
+## Battery drain
+
+ - Newer devices have bigger battery 
+ - NPUs are designed for less drain (2-10x)
+ - Apple Intelligence drain 0.6 percent/min on iPhone 16 Pro Max
+
+| Device                        |  Qwen3-INT8-600m (percent/min) |  
+|:------------------------------|:------------------------:|
+| OnePlus 13 5G | 0.33 |
+| Redmi K70 Ultra / OnePlus 12 | 0.41 |
+| Galaxy S25 Ultra / Iphone 17 Pro / Nothing 3 | 0.44 |
+| Galaxy S24 Ultra / Nothing 3a / Pixel 6a | 0.48 |
+| iPhone 16 Pro Max / Xiaomi 13 | 0.50  |
 
 ## Design 
 ```
@@ -91,9 +114,6 @@ const char* messages = R"([
 ])";
 
 const char* options = R"({
-    "temperature": 0.1,
-    "top_p": 0.95,
-    "top_k": 20,
     "max_tokens": 50,
     "stop_sequences": ["<|im_end|>"]
 })";
@@ -151,35 +171,41 @@ Cactus SDKs run 500k+ weekly inference tasks in production today, try them!
   <img alt="Download Android App" src="https://img.shields.io/badge/Try_Android_Demo-grey?style=for-the-badge&logo=android&logoColor=white">
 </a>
 
-## Contributing or using the repo directly
+## Using this repo
 You can run these codes directly on M-series Macbooks since they are ARM-based.
-Vanilla M3 CPU-only can run Qwen3-600m-INT8 at 60-70 toks/sec, use the following: 
+Vanilla M3 CPU-only can run Qwen3-600m-INT8 at 60-70 toks/sec, just run the following: 
 
-1. **Generate weights from HuggingFace model:**
-```bash
-python3 tools/convert_hf.py Qwen/Qwen3-0.6B weights/qwen3-600m-i8/ --precision INT8
-```
-
-2. **Build and test:**
 ```bash
 ./tests/run.sh # chmod +x first time
-
 ```
 
-## Supported models
-- Qwen3
-- Gemma3
-- Llama3 (in dev)
-- LFM2 (in dev)
-- SmolVLM2 (in dev)
-- Whisper (in dev)
-- Nomic (in dev)
+## Generating weights from HuggingFace 
+Use any of the following (270m, 360m, 600m, 1B, 1.7B activated params):
+```bash
+# Language models
+python3 tools/convert_hf.py google/gemma-3-270m-it weights/gemma3-270m-i8/ --precision INT8
+python3 tools/convert_hf.py HuggingFaceTB/SmolLM2-360m-Instruct weights/smollm2-360m-i8/ --precision INT8
+python3 tools/convert_hf.py Qwen/Qwen3-0.6B weights/qwen3-600m-i8/ --precision INT8
+python3 tools/convert_hf.py google/gemma-3-ib-it weights/gemma3-1b-i8/ --precision INT8
+python3 tools/convert_hf.py Qwen/Qwen3-1.7B weights/qwen3-1.7B-i8/ --precision INT8
+python3 tools/convert_hf.py HuggingFaceTB/SmolLM2-1.7B-Instruct weights/smollm2-1.7B-i8/ --precision INT8
+
+# Embedding models
+python3 tools/convert_hf.py Qwen/Qwen3-Embedding-0.6B weights/qwen3-embed-600m-i8/ --precision INT8
+python3 tools/convert_hf.py nomic-ai/nomic-embed-text-v2-moe weights/nomic-i8/ --precision INT8
+```
+
+Simply replace the weight path `tests/test_engine.cpp` with your choice.
 
 ## Roadmap:
-- SMMLA, NPU & DSP for high-end phones.
-- INT4 support.
-- Python tools for porting any Torch/JAX to cactus.
+- Llama, LFM, SmolVLM, Whisper, Kitten, Neuphonic
+- Python tools for porting any Torch/JAX to cactus
+- GPTQ & NPU/DSP/ISP for high-end phones 
 
-## Limitlations
+## Limitations
 While Cactus can be used for all Apple devices including Macbooks, for computers/AMD/Intel/Nvidia generally, 
 please use HuggingFace, Llama.cpp, Ollama, vLLM, MLX. They're built for those, support x86, and are all great! 
+
+## Contributing
+
+We welcome contributions! Please see our [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
