@@ -7,7 +7,7 @@ import argparse
 from pathlib import Path
 
 try:
-    from transformers import AutoTokenizer, AutoModelForCausalLM, AutoProcessor, AutoModelForImageTextToText
+    from transformers import AutoTokenizer, AutoModelForCausalLM, AutoProcessor, AutoModelForImageTextToText, AutoModel
     import torch
     # Note: for SmolVLM, we also need Pillow + num2words + torchvision
 except ImportError:
@@ -34,7 +34,7 @@ def save_tensor_with_header(tensor, output_path, precision='FP32', transpose=Fal
     
     if precision == 'INT8':
         filename = output_path.name
-        if any(x in filename for x in ['norm']):
+        if any(x in filename for x in ['norm', 'bias']) or (model_type == 'bert' and 'embedding' in filename):
             precision = 'FP16'
     
     if precision == 'INT8':
@@ -69,41 +69,31 @@ def save_tensor_with_header(tensor, output_path, precision='FP32', transpose=Fal
             clipped_min = min_val
             clipped_max = max_val
         
-        # Symmetric quantization: use maximum absolute value for optimal range
         abs_max = max(abs(clipped_min), abs(clipped_max))
         scale = abs_max / 127.0 if abs_max != 0 else 1.0
         
         quantized_data = np.clip(np.round(original_data / scale), qmin, qmax).astype(np.int8)
-        
+
         dequantized_data = quantized_data.astype(np.float32) * scale
         mse_error = np.mean((original_data - dequantized_data) ** 2)
         snr_db = 10 * np.log10(np.var(original_data) / mse_error) if mse_error > 0 else float('inf')
-        
+
         original_flat = original_data.flatten()
         dequantized_flat = dequantized_data.flatten()
         cos_sim = np.dot(original_flat, dequantized_flat) / (np.linalg.norm(original_flat) * np.linalg.norm(dequantized_flat))
-        
-        snr_threshold = args.snr_threshold if args else 30.0
-        if snr_db < snr_threshold:
-            precision = 'FP16'
-            data = data.astype(np.float16)
-            scale = 1.0
-            if stats_tracker:
-                stats_tracker['low_snr_fallbacks'] = stats_tracker.get('low_snr_fallbacks', 0) + 1
-        else:
-            saturated_values = np.sum(np.abs(quantized_data) == 127)
-            saturation_percent = (saturated_values / quantized_data.size) * 100
-            data = quantized_data
-            
-            if stats_tracker:
-                stats_tracker['quantized_tensors'] += 1
-                stats_tracker['quantized_parameters'] += original_data.size
-                stats_tracker['mse_values'].append(mse_error)
-                stats_tracker['snr_values'].append(snr_db)
-                stats_tracker['cos_sim_values'].append(cos_sim)
-                saturation_warning_threshold = args.saturation_warning_threshold if args else 0.1
-                if saturation_percent > saturation_warning_threshold:
-                    stats_tracker['saturation_warnings'] += 1
+        saturated_values = np.sum(np.abs(quantized_data) == 127)
+        saturation_percent = (saturated_values / quantized_data.size) * 100
+        data = quantized_data
+
+        if stats_tracker:
+            stats_tracker['quantized_tensors'] += 1
+            stats_tracker['quantized_parameters'] += original_data.size
+            stats_tracker['mse_values'].append(mse_error)
+            stats_tracker['snr_values'].append(snr_db)
+            stats_tracker['cos_sim_values'].append(cos_sim)
+            saturation_warning_threshold = args.saturation_warning_threshold if args else 0.1
+            if saturation_percent > saturation_warning_threshold:
+                stats_tracker['saturation_warnings'] += 1
     elif precision == 'FP16':
         data = data.astype(np.float16)
         scale = 1.0
@@ -172,11 +162,12 @@ def convert_hf_model_weights(model, output_dir, precision='INT8', args=None):
 
     state_dict = model.state_dict()
     config = model.config
+    saved_tensor_full_names = set()
     
     
     tie_word_embeddings = getattr(config, 'tie_word_embeddings', False)
-    
     model_type_str = getattr(config, 'model_type', '').lower()
+
     if 'gemma' in model_type_str:
         detected_model_type = 'gemma'
     elif 'qwen' in model_type_str:
@@ -186,6 +177,8 @@ def convert_hf_model_weights(model, output_dir, precision='INT8', args=None):
             detected_model_type = 'smol'
         else:
             detected_model_type = 'llama'
+    elif 'bert' in model_type_str:
+        detected_model_type = 'bert'
     else:
         detected_model_type = 'qwen'
         print(f"  Warning: Unknown model type '{model_type_str}', defaulting to 'qwen'")
@@ -196,33 +189,51 @@ def convert_hf_model_weights(model, output_dir, precision='INT8', args=None):
         'num_layers': getattr(config, 'num_hidden_layers', getattr(config, 'num_layers', 0)),
         'attention_heads': getattr(config, 'num_attention_heads', 0),
         'attention_kv_heads': getattr(config, 'num_key_value_heads', getattr(config, 'num_attention_heads', 0)),
-        'ffn_intermediate_dim': getattr(config, 'intermediate_size', 0),
+        'ffn_intermediate_dim': getattr(config, 'intermediate_size', getattr(config, 'n_inner', 0)),
         'context_length': getattr(config, 'max_position_embeddings', getattr(config, 'max_sequence_length', 0)),
-        'rope_theta': getattr(config, 'rope_theta', 10000.0),
+        'rope_theta': getattr(config, 'rope_theta', getattr(config, 'rotary_emb_base', 10000.0)),
         'attention_head_dim': getattr(config, 'head_dim', getattr(config, 'hidden_size', 0) // getattr(config, 'num_attention_heads', 1)),
+        'layer_norm_eps': getattr(config, 'layer_norm_eps', getattr(config, 'layer_norm_epsilon', getattr(config, 'rms_norm_eps', 1e-6))),
+        'num_experts': getattr(config, 'num_experts', 0),
+        'num_shared_experts': getattr(config, 'num_shared_experts', 0),
+        'num_top_experts': getattr(config, 'moe_top_k', getattr(config, 'num_top_experts', 0)),
+        'moe_every_n_layers': getattr(config, 'moe_every_n_layers', 0),
         'tie_word_embeddings': tie_word_embeddings,
         'model_type': detected_model_type
     }
 
     embed_names = ['model.embed_tokens.weight', 'embed_tokens.weight', 'embeddings.weight', 'transformer.wte.weight']
     embedding_found = False
-    embedding_tensor = None
     for name in embed_names:
         if name in state_dict:
             embedding_tensor = state_dict[name]
             save_tensor_with_header(embedding_tensor, output_dir / "token_embeddings.weights", precision, transpose=False, stats_tracker=quantization_stats, args=args, model_type=detected_model_type)
+            saved_tensor_full_names.add(name)
             embedding_found = True
             break
-
-    if not embedding_found:
-        pass
-
+    if model_type_str == 'nomic_bert':
+        if 'embeddings.word_embeddings.weight' in state_dict:
+            fused_embedding_tensor = state_dict['embeddings.word_embeddings.weight'] + state_dict.get('embeddings.token_type_embeddings.weight', torch.zeros([1]))
+            save_tensor_with_header(fused_embedding_tensor, output_dir / "token_embeddings.weights", precision, transpose=False, stats_tracker=quantization_stats, args=args, model_type=detected_model_type)
+            saved_tensor_full_names.add('embeddings.word_embeddings.weight')
+            if 'embeddings.token_type_embeddings.weight' in state_dict:
+                saved_tensor_full_names.add('embeddings.token_type_embeddings.weight')
+            embedding_found = True
+    
+    if embedding_found:
+        embedding_norm_names = {'emb_ln.weight': 'embedding_layernorm.weight', 'emb_ln.bias': 'embedding_layernorm.bias'}
+        for name, file_name in embedding_norm_names.items():
+            if name in state_dict:
+                save_tensor_with_header(state_dict[name], output_dir / file_name, precision, stats_tracker=quantization_stats, args=args, model_type=detected_model_type)
+                saved_tensor_full_names.add(name)
+    
     if not tie_word_embeddings:
         output_names = ['lm_head.weight', 'output.weight', 'transformer.lm_head.weight']
         for name in output_names:
             if name in state_dict:
                 tensor = state_dict[name]
                 save_tensor_with_header(tensor, output_dir / "output_weight.weights", precision, transpose=False, stats_tracker=quantization_stats, args=args, model_type=detected_model_type)
+                saved_tensor_full_names.add(name)
                 break
 
     output_norm_names = ['model.norm.weight', 'norm.weight', 'final_layernorm.weight', 'transformer.ln_f.weight']
@@ -230,13 +241,14 @@ def convert_hf_model_weights(model, output_dir, precision='INT8', args=None):
         if name in state_dict:
             tensor = state_dict[name]
             save_tensor_with_header(tensor, output_dir / "output_norm.weights", precision, stats_tracker=quantization_stats, args=args, model_type=detected_model_type)
+            saved_tensor_full_names.add(name)
             break
 
     num_layers = model_config['num_layers']
     for i in range(num_layers):
-
-        layer_prefixes = [f'model.layers.{i}.', f'layers.{i}.', f'transformer.h.{i}.']
-
+        
+        layer_prefixes = [f'model.layers.{i}.', f'layers.{i}.', f'transformer.h.{i}.', f'encoder.layers.{i}.']
+        
         layer_prefix = None
         for prefix in layer_prefixes:
             if any(key.startswith(prefix) for key in state_dict.keys()):
@@ -261,6 +273,23 @@ def convert_hf_model_weights(model, output_dir, precision='INT8', args=None):
             # Gemma3 specific layer norms 
             (['pre_feedforward_layernorm.weight'], precision, f'layer_{i}_pre_ffn_norm.weights', False),
             (['post_feedforward_layernorm.weight'], precision, f'layer_{i}_post_ffn_norm.weights', False),
+            # Nomic BERT specific parameters
+            (['attn.Wqkv.bias'], precision, f'layer_{i}_attn_{{channel}}.bias', False),
+            (['attn.Wqkv.weight'], precision, f'layer_{i}_attn_{{channel}}.weights', False),
+            (['attn.out_proj.bias'], precision, f'layer_{i}_attn_output.bias', False),
+            (['attn.out_proj.weight'], precision, f'layer_{i}_attn_output.weights', False),
+            (['mlp.fc1.bias'], precision, f'layer_{i}_mlp_fc1.bias', False),
+            (['mlp.fc1.weight'], precision, f'layer_{i}_mlp_fc1.weights', False),
+            (['mlp.fc2.bias'], precision, f'layer_{i}_mlp_fc2.bias', False),
+            (['mlp.fc2.weight'], precision, f'layer_{i}_mlp_fc2.weights', False),
+            (['norm1.bias'], precision, f'layer_{i}_norm1.bias', False),
+            (['norm1.weight'], precision, f'layer_{i}_norm1.weights', False),
+            (['norm2.bias'], precision, f'layer_{i}_norm2.bias', False),
+            (['norm2.weight'], precision, f'layer_{i}_norm2.weights', False),
+            (['mlp.experts.bias'], precision, f'layer_{i}_mlp_experts.bias', False),
+            (['mlp.experts.mlp.w1'], precision, f'layer_{i}_mlp_expert_{{channel}}.mlp1.weights', False),
+            (['mlp.experts.mlp.w2'], precision, f'layer_{i}_mlp_expert_{{channel}}.mlp2.weights', True),
+            (['mlp.router.layer.weight'], precision, f'layer_{i}_mlp_router.layer.weights', False),
         ]
 
         for name_patterns, tensor_precision, output_name, should_transpose in weight_patterns:
@@ -269,7 +298,33 @@ def convert_hf_model_weights(model, output_dir, precision='INT8', args=None):
                 full_name = layer_prefix + pattern
                 if full_name in state_dict:
                     tensor = state_dict[full_name]
+                    if pattern.startswith('attn.Wqkv.') and model_type_str == 'nomic_bert':
+                        if tensor.ndim == 1:
+                            tensor = tensor.reshape(3, -1)
+                        elif tensor.ndim == 2:
+                            tensor = tensor.reshape(3, -1, tensor.size(-1))
+                        else:
+                            raise ValueError(f"Invalid tensor shape: {tensor.shape}")
+                        for j, ch in enumerate(['q', 'k', 'v']):
+                            channel_output_name = output_name.replace('{channel}', ch)
+                            save_tensor_with_header(tensor[j], output_dir / channel_output_name, tensor_precision, transpose=should_transpose, stats_tracker=quantization_stats, args=args, model_type=detected_model_type)
+                            saved_tensor_full_names.add(full_name)
+                        found = True
+                        break
+                    elif model_type_str == 'nomic_bert' and pattern.startswith('mlp.experts.') and 'bias' not in pattern:
+                        num_experts = model_config['num_experts']
+                        if tensor.ndim != 2:
+                            raise ValueError(f"Invalid tensor shape: {tensor.shape}")
+                        tensor = tensor.reshape(num_experts, -1, tensor.size(-1))
+                        for expert_idx in range(num_experts):
+                            expert_tensor = tensor[expert_idx]
+                            expert_output_name = output_name.replace('{channel}', str(expert_idx))
+                            save_tensor_with_header(expert_tensor, output_dir / expert_output_name, tensor_precision, transpose=should_transpose, stats_tracker=quantization_stats, args=args, model_type=detected_model_type)
+                            saved_tensor_full_names.add(full_name)
+                        found = True
+                        break
                     save_tensor_with_header(tensor, output_dir / output_name, tensor_precision, transpose=should_transpose, stats_tracker=quantization_stats, args=args, model_type=detected_model_type)
+                    saved_tensor_full_names.add(full_name)
                     found = True
                     break
 
@@ -285,7 +340,11 @@ def convert_hf_model_weights(model, output_dir, precision='INT8', args=None):
                     save_tensor_with_header(q_weight, output_dir / f'layer_{i}_attn_q.weights', precision, transpose=False, stats_tracker=quantization_stats, args=args, model_type=detected_model_type)
                     save_tensor_with_header(k_weight, output_dir / f'layer_{i}_attn_k.weights', precision, transpose=False, stats_tracker=quantization_stats, args=args, model_type=detected_model_type)
                     save_tensor_with_header(v_weight, output_dir / f'layer_{i}_attn_v.weights', precision, transpose=False, stats_tracker=quantization_stats, args=args, model_type=detected_model_type)
+                    saved_tensor_full_names.add(attn_name)
                     found = True
+    
+    if saved_tensor_full_names != set(state_dict.keys()):
+        print(f"Warning: Unsaved tensors: {set(state_dict.keys()) - saved_tensor_full_names}")
 
     if quantization_stats['quantized_tensors'] > 0:
         mse_values = np.array(quantization_stats['mse_values'])
@@ -673,6 +732,49 @@ def convert_hf_tokenizer(tokenizer, output_dir):
             if token_id != tokenizer.unk_token_id:
                 special_tokens[token_id] = token
                 additional_special_tokens.append({"token": token, "id": token_id})
+
+    model_type = getattr(tokenizer, 'name_or_path', '').lower()
+    if 'gemma' in model_type:
+        gemma_special_tokens = {
+            '<start_of_turn>': None,
+            '<end_of_turn>': None,
+            '<start_of_image>': None,
+            '<end_of_image>': None
+        }
+
+        vocab = tokenizer.get_vocab()
+        for token_str in gemma_special_tokens.keys():
+            if token_str in vocab:
+                token_id = vocab[token_str]
+                gemma_special_tokens[token_str] = token_id
+                special_tokens[token_id] = token_str
+                print(f"    Found Gemma special token: {token_str} (ID: {token_id})")
+
+        missing_tokens = [k for k, v in gemma_special_tokens.items() if v is None]
+        if missing_tokens and is_sentencepiece and tokenizer_model_path:
+            try:
+                import sentencepiece as spm
+                sp = spm.SentencePieceProcessor(model_file=tokenizer_model_path)
+                for token_str in missing_tokens:
+                    token_id = sp.piece_to_id(token_str)
+                    if token_id != sp.unk_id():
+                        gemma_special_tokens[token_str] = token_id
+                        special_tokens[token_id] = token_str
+                        print(f"    Found Gemma special token via SentencePiece: {token_str} (ID: {token_id})")
+            except Exception as e:
+                print(f"    Warning: Could not check SentencePiece for Gemma tokens: {e}")
+
+        if gemma_special_tokens['<start_of_turn>'] is None:
+            hardcoded_ids = {
+                '<start_of_turn>': 105,
+                '<end_of_turn>': 106
+            }
+            for token_str, token_id in hardcoded_ids.items():
+                if token_str in gemma_special_tokens and gemma_special_tokens[token_str] is None:
+                    if token_id not in special_tokens:
+                        gemma_special_tokens[token_str] = token_id
+                        special_tokens[token_id] = token_str
+                        print(f"    Using hardcoded Gemma special token: {token_str} (ID: {token_id})")
     
     chat_template_data = {}
     if hasattr(tokenizer, 'chat_template') and tokenizer.chat_template:
@@ -886,12 +988,20 @@ def convert_hf_to_cactus(model_name, output_dir, precision='INT8', cache_dir=Non
             cache_dir=cache_dir,
             trust_remote_code=True
         )
-        model = AutoModelForCausalLM.from_pretrained(
-            model_name,
-            cache_dir=cache_dir,
-            trust_remote_code=True,
-            torch_dtype=torch.float32
-        )
+        try:
+            model = AutoModelForCausalLM.from_pretrained(
+                model_name,
+                cache_dir=cache_dir,
+                trust_remote_code=True,
+                dtype=torch.float32
+            )
+        except ValueError:
+            model = AutoModel.from_pretrained(
+                model_name,
+                cache_dir=cache_dir,
+                trust_remote_code=True,
+                dtype=torch.float32
+            )
     except Exception as e:
         print(f"Error: {e}")
         sys.exit(1)

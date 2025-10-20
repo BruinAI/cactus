@@ -355,7 +355,7 @@ size_t SmolVLMModel::build_vision_attention(CactusGraph* gb, size_t hidden_state
     size_t v4 = gb->reshape(v, {1, Slen, Hh, Dh});
 
     float scale = 1.0f / std::sqrt(static_cast<float>(Dh));
-    size_t attn4 = gb->attention(q4, k4, v4, scale, backend);
+    size_t attn4 = gb->attention(q4, k4, v4, scale, true, backend);
 
     size_t out2 = gb->reshape(attn4, {Slen, Hh * Dh});
     size_t output = gb->matmul(out2, layer.attn_output_weight, true, backend);
