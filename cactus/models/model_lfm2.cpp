@@ -159,20 +159,17 @@ size_t LFM2Model::build_conv1d(CactusGraph* gb, size_t input, uint32_t layer_idx
     size_t K = wbuf.shape.back(); // last dim is K in both [C,K] or [C,1,K]
 
     size_t conv_w = layer.conv_depthwise_weight;
+    
     if (wbuf.shape.size() == 2) {                   // [C, K] -> [C, 1, K]
         K = wbuf.shape[1];
+        auto conv_w_quantization_scale = gb->get_output_buffer(conv_w).quantization_scale;
         conv_w = gb->reshape(conv_w, {wbuf.shape[0], static_cast<size_t>(1), K});
-    } else if (wbuf.shape.size() == 3) {            // [C, Cin(=1), K]
-        if (wbuf.shape[1] != 1) {
-            throw std::runtime_error("Depthwise conv expects weight shape [C,1,K] or [C,K]");
-        }
-        K = wbuf.shape[2];
-        conv_w = gb->reshape(conv_w, {wbuf.shape[0], static_cast<size_t>(1), K});
-    } else {
+        gb->set_quantization_scale(conv_w, conv_w_quantization_scale);
+    } else if (wbuf.shape.size() != 3){
         throw std::runtime_error("Unexpected depthwise weight rank");
     }
+    K = wbuf.shape.back();
 
-    // Run causal depthwise conv with optional cache
     size_t conv_input_lc = Bx;
     
     if (use_cache && conv_cache_.window_size > 0) {
@@ -206,6 +203,7 @@ size_t LFM2Model::build_conv1d(CactusGraph* gb, size_t input, uint32_t layer_idx
     size_t x_nlc = gb->reshape(conv_input_lc, {static_cast<size_t>(1), total_len, C});
 
     const size_t dilation = 1;
+    // std::cout << "Weights Quantization Scale in build_conv1d: " << gb->get_output_buffer(conv_w).quantization_scale << std::endl;
     size_t y_nlc = gb->conv1d_causal(x_nlc, conv_w, K, dilation); // [1, total_len, C]
 
     size_t start = total_len > L ? total_len - L : 0;

@@ -544,6 +544,11 @@ void compute_fused_node(GraphNode& node, const std::vector<std::unique_ptr<Graph
             const auto& value_buffer = nodes[node_index_map.at(node.input_ids[2])]->output_buffer;
             const auto& q_shape = query_buffer.shape;
             const auto& k_shape = key_buffer.shape;
+
+            // std ::cout << "Attention input precisions - Q: " << static_cast<int>(query_buffer.precision)
+            //           << ", K: " << static_cast<int>(key_buffer.precision)
+            //           << ", V: " << static_cast<int>(value_buffer.precision) << std::endl;
+            // std::cout << "Output node precision: " << static_cast<int>(node.output_buffer.precision) << std::endl;
             
             if (q_shape.size() < 4) {
                 throw std::runtime_error("Attention operation requires 4D tensors [batch, seq_len, num_heads, head_dim], got " + 
@@ -584,6 +589,7 @@ void compute_fused_node(GraphNode& node, const std::vector<std::unique_ptr<Graph
             break;
         }
         case OpType::CONV1D_CAUSAL: {
+            // std::cout << "Causal Conv1D node computation started." << std::endl;
             if (node.params.backend == ComputeBackend::NPU) {
                 throw std::runtime_error("NPU causal convolution operation not yet implemented");
             }
@@ -591,6 +597,7 @@ void compute_fused_node(GraphNode& node, const std::vector<std::unique_ptr<Graph
             const auto& X = nodes[node_index_map.at(node.input_ids[0])]->output_buffer; // [N,L,C_in]
             const auto& W = nodes[node_index_map.at(node.input_ids[1])]->output_buffer; // depthwise: [C_in*M,1,K]  standard: [C_out,C_in,K]
             auto& Y = node.output_buffer;
+            // std ::cout << "Causal Conv1D input precision: " << static_cast<int>(X.precision) << ", weight precision: " << static_cast<int>(W.precision) << std::endl;
 
             // --- Basic shape checks ---
             if (X.shape.size() != 3) {
@@ -624,18 +631,48 @@ void compute_fused_node(GraphNode& node, const std::vector<std::unique_ptr<Graph
             // ToDo: Ensure Y is allocated & writable
 
             // --- Dispatch depthwise causal convolution only ---
-            if (X.precision == Precision::INT8) {
-                const float in_s  = X.quantization_scale;
+            if (W.precision == Precision::INT8) {
+                // std::cout << "Dispatching INT8 depthwise causal convolution." << std::endl;
                 const float w_s   = W.quantization_scale;
-                const float out_s = Y.quantization_scale;
-                cactus_conv1d_causal_depthwise_int8(
-                    X.data_as<int8_t>(), W.data_as<int8_t>(), Y.data_as<int8_t>(),
-                    N, L, C_in, K, dil, in_s, w_s, out_s);
-            } else if (X.precision == Precision::FP16) {
+                // std::cout << "Weight quantization scale: " << w_s << std::endl;
+                
+                // Dequantize INT8 weights to FP16
+                const size_t W_size = W0 * W1 * K;
+                const int8_t* W_int8 = W.data_as<int8_t>();
+
+                std::vector<__fp16> W_fp16(W_size);
+                for (size_t i = 0; i < W_size; ++i) {
+                    W_fp16[i] = static_cast<__fp16>(W_int8[i] * w_s);
+                }
+                
+                if (X.precision == Precision::INT8) {
+                    // Dequantize INT8 input to FP16
+                    const float x_s = X.quantization_scale;
+                    std::cout << "Input quantization scale: " << x_s << std::endl;
+                    const size_t X_size = N * L * C_in;
+                    const int8_t* X_int8 = X.data_as<int8_t>();
+                    
+                    std::vector<__fp16> X_fp16(X_size);
+                    for (size_t i = 0; i < X_size; ++i) {
+                        X_fp16[i] = static_cast<__fp16>(X_int8[i] * x_s);
+                    }
+                    
+                    // Call FP16 conv
+                    cactus_conv1d_causal_depthwise_f16(
+                        X_fp16.data(), W_fp16.data(), Y.data_as<__fp16>(),
+                        N, L, C_in, K, dil);
+                } else {
+                    // X is already FP16
+                    // std::cout << "Dispatching FP16 depthwise causal convolution." << std::endl;
+                    cactus_conv1d_causal_depthwise_f16(
+                        X.data_as<__fp16>(), W_fp16.data(), Y.data_as<__fp16>(),
+                        N, L, C_in, K, dil);
+                }
+            } else if (W.precision == Precision::FP16) {
                 cactus_conv1d_causal_depthwise_f16(
                     X.data_as<__fp16>(), W.data_as<__fp16>(), Y.data_as<__fp16>(),
                     N, L, C_in, K, dil);
-            } else if (X.precision == Precision::FP32) {
+            } else if (W.precision == Precision::FP32) {
                 cactus_conv1d_causal_depthwise_f32(
                     X.data_as<float>(), W.data_as<float>(), Y.data_as<float>(),
                     N, L, C_in, K, dil);
