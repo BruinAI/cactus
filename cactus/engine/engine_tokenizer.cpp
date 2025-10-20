@@ -28,10 +28,15 @@ void Tokenizer::detect_model_type(const std::string& config_path) {
             } else if(line.find("lfm2") != std::string::npos) {
                 model_type_ = ModelType::LFM2;
                 break;
+            } else if (line.find("smol") != std::string::npos) {
+                model_type_ = ModelType::SMOL;
+                break;
+            } else if (line.find("bert") != std::string::npos) {
+                model_type_ = ModelType::BERT;
+                break;
             } else {
                 model_type_ = ModelType::UNKNOWN;
-                break;
-            }
+            } 
         }
     }
     file.close();
@@ -48,8 +53,13 @@ std::string Tokenizer::format_chat_prompt(const std::vector<ChatMessage>& messag
             return format_qwen_style(messages, add_generation_prompt, tools_json);
         case ModelType::GEMMA:
             return format_gemma_style(messages, add_generation_prompt, tools_json);
+<<<<<<< HEAD
         case ModelType::LFM2:
             return format_lfm2_style(messages, add_generation_prompt, tools_json);
+=======
+        case ModelType::SMOL:
+            return format_smol_style(messages, add_generation_prompt, tools_json);
+>>>>>>> main
         default:
             return format_qwen_style(messages, add_generation_prompt, tools_json);
     }
@@ -224,23 +234,69 @@ std::string Tokenizer::format_gemma_style(const std::vector<ChatMessage>& messag
 
     result = "<bos>";
 
+    std::string first_user_prefix = "";
+    size_t start_idx = 0;
 
-    for (const auto& msg : messages) {
-        if (msg.role == "system") {
-            continue;  
-        } else if (msg.role == "user") {
-            result += "<start_of_turn>user\n";
+    if (!messages.empty() && messages[0].role == "system") {
+        first_user_prefix = messages[0].content + "\n\n";
+        start_idx = 1;
+    }
+
+    bool first_user = true;
+    for (size_t i = start_idx; i < messages.size(); i++) {
+        const auto& msg = messages[i];
+
+        if (msg.role == "user") {
+            result += "<start_of_turn>user";
+            result += "\n";
+            if (first_user && !first_user_prefix.empty()) {
+                result += first_user_prefix;
+                first_user = false;
+            }
             result += msg.content;
-            result += "<end_of_turn>\n";
+            result += "<end_of_turn>";
+            result += "\n";
         } else if (msg.role == "assistant") {
-            result += "<start_of_turn>model\n";
+            result += "<start_of_turn>model";
+            result += "\n";
             result += msg.content;
-            result += "<end_of_turn>\n";
+            result += "<end_of_turn>";
+            result += "\n";
         }
     }
 
     if (add_generation_prompt) {
-        result += "<start_of_turn>model\n";
+        result += "<start_of_turn>model";
+        result += "\n";
+    }
+
+    return result;
+}
+
+std::string Tokenizer::format_smol_style(const std::vector<ChatMessage>& messages, bool add_generation_prompt, const std::string& tools_json) const {
+    if (!tools_json.empty()) {
+        return "ERROR: Tool calls are currently not supported for Smol models";
+    }
+
+    // if first message isn't system, add one
+    std::string result;
+
+    if (!messages.empty() && messages.front().role != "system") {
+        result += "<|im_start|>system\n";
+        result += "You are a helpful AI assistant named SmolLM, trained by Hugging Face";
+        result += "<|im_end|>\n";
+    }
+
+    for (const auto& msg : messages) {
+        result += "<|im_start|>";
+        result += msg.role;
+        result += "\n";
+        result += msg.content;
+        result += "<|im_end|>\n";
+    }
+
+    if (add_generation_prompt) {
+        result += "<|im_start|>assistant\n";
     }
 
     return result;

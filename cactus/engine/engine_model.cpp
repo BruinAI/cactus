@@ -165,7 +165,6 @@ uint32_t Model::generate(const std::vector<uint32_t>& tokens, float temperature,
     } else {
         gb->execute();
     }
-
     post_execute_updates(gb, tokens.size());
     update_kv_cache(gb, tokens.size());
     
@@ -180,26 +179,30 @@ void Model::update_kv_cache(CactusGraph* gb, size_t seq_len) {
 }
 
 
-std::vector<float> Model::get_embeddings(const std::vector<uint32_t>& tokens, bool pooled) {
+std::vector<float> Model::get_embeddings(const std::vector<uint32_t>& tokens, bool pooled, const std::string& profile_file) {
     auto final_hidden = forward(tokens);
-    
+
     auto* gb = static_cast<CactusGraph*>(graph_handle_);
     auto* output_ptr = gb->get_output(final_hidden);
     const auto& output_buffer = gb->get_output_buffer(final_hidden);
-    
+
     std::vector<float> embeddings;
-    
+
     if (pooled) {
         auto pooled_hidden = gb->mean(final_hidden, 0);
-        gb->execute();
+
+        if (!profile_file.empty()) {
+            gb->execute(profile_file);
+        } else {
+            gb->execute();
+        }
         post_execute_updates(gb, tokens.size());
-        
         auto* pooled_ptr = gb->get_output(pooled_hidden);
         const auto& pooled_buffer = gb->get_output_buffer(pooled_hidden);
-        
+
         size_t hidden_dim = pooled_buffer.total_size;
         embeddings.resize(hidden_dim);
-        
+
         if (pooled_buffer.precision == Precision::FP32) {
             float* pooled_data = static_cast<float*>(pooled_ptr);
             std::copy(pooled_data, pooled_data + hidden_dim, embeddings.begin());
@@ -212,12 +215,16 @@ std::vector<float> Model::get_embeddings(const std::vector<uint32_t>& tokens, bo
             Quantization::int8_to_fp32(pooled_data, embeddings.data(), hidden_dim, scale);
         }
     } else {
-        gb->execute();
+        if (!profile_file.empty()) {
+            gb->execute(profile_file);
+        } else {
+            gb->execute();
+        }
         post_execute_updates(gb, tokens.size());
-        
+
         size_t total_size = output_buffer.total_size;
         embeddings.resize(total_size);
-        
+
         if (output_buffer.precision == Precision::FP32) {
             float* hidden_states = static_cast<float*>(output_ptr);
             std::copy(hidden_states, hidden_states + total_size, embeddings.begin());
@@ -234,9 +241,9 @@ std::vector<float> Model::get_embeddings(const std::vector<uint32_t>& tokens, bo
             }
         }
     }
-    
+
     kv_cache_.reset();
-    
+
     return embeddings;
 }
 
@@ -272,6 +279,10 @@ bool Config::from_json(const std::string& config_path) {
         else if (key == "attention_head_dim") attention_head_dim = std::stoul(value);
         else if (key == "layer_norm_eps") layer_norm_eps = std::stof(value);
         else if (key == "rope_theta") rope_theta = std::stof(value);
+        else if (key == "num_experts") num_experts = std::stoul(value);
+        else if (key == "num_shared_experts") num_shared_experts = std::stoul(value);
+        else if (key == "num_top_experts") num_top_experts = std::stoul(value);
+        else if (key == "moe_every_n_layers") moe_every_n_layers = std::stoul(value);
         else if (key == "tie_word_embeddings") tie_word_embeddings = (value == "true" || value == "1");
         else if (key == "precision") {
             if (value == "INT8") precision = Precision::INT8;
@@ -281,6 +292,8 @@ bool Config::from_json(const std::string& config_path) {
         else if (key == "model_type") {
             if (value == "gemma" || value == "GEMMA") model_type = ModelType::GEMMA;
             else if (value == "lfm2" || value == "LFM2") model_type = ModelType::LFM2;
+            else if (value == "smol" || value == "SMOL" || value == "Smol") model_type = ModelType::SMOL;
+            else if (value == "bert" || value == "BERT") model_type = ModelType::NOMIC;
             else model_type = ModelType::QWEN;
         }
         else if (key == "conv_L_cache") conv_L_cache = static_cast<size_t>(std::stoul(value));
@@ -302,6 +315,10 @@ bool Config::from_json(const std::string& config_path) {
         default_temperature = 1.0f;
         default_top_p = 0.95f;
         default_top_k = 64;
+    } else if (model_type == ModelType::SMOL) {
+        default_temperature = 0.2f;
+        default_top_p = 0.95f;
+        default_top_k = 20;
     } else if (model_type == ModelType::QWEN) {
         default_temperature = 0.6f;
         default_top_p = 0.95f;
@@ -330,6 +347,10 @@ std::unique_ptr<Model> create_model(const std::string& model_folder) {
             return std::make_unique<GemmaModel>(config);
         case Config::ModelType::LFM2:
             return std::make_unique<LFM2Model>(config);
+        case Config::ModelType::SMOL:
+            return std::make_unique<SmolModel>(config);
+        case Config::ModelType::NOMIC:
+            return std::make_unique<NomicModel>(config);
         default:
             return std::make_unique<QwenModel>(config);
     }

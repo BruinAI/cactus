@@ -171,31 +171,40 @@ Cactus SDKs run 500k+ weekly inference tasks in production today, try them!
   <img alt="Download Android App" src="https://img.shields.io/badge/Try_Android_Demo-grey?style=for-the-badge&logo=android&logoColor=white">
 </a>
 
-## Contributing or using the repo directly
+## Using this repo
 You can run these codes directly on M-series Macbooks since they are ARM-based.
-Vanilla M3 CPU-only can run Qwen3-600m-INT8 at 60-70 toks/sec, use the following: 
+Vanilla M3 CPU-only can run Qwen3-600m-INT8 at 60-70 toks/sec, just run the following: 
 
-1. **Generate weights from HuggingFace model:**
-```bash
-python3 tools/convert_hf.py Qwen/Qwen3-0.6B weights/qwen3-600m-i8/ --precision INT8
-```
-
-2. **Build and test:**
 ```bash
 ./tests/run.sh # chmod +x first time
-
 ```
 
-## Supported models
-- Shipped: Qwen3, Gemma3 
-- In dev: Llama3, LFM2, SmolVLM2, Whisper, Nomic 
-- Coming: Neuphonic, Kitten, 
+## Generating weights from HuggingFace 
+Use any of the following (270m, 360m, 600m, 1B, 1.7B activated params):
+```bash
+# Language models
+python3 tools/convert_hf.py google/gemma-3-270m-it weights/gemma3-270m-i8/ --precision INT8
+python3 tools/convert_hf.py HuggingFaceTB/SmolLM2-360m-Instruct weights/smollm2-360m-i8/ --precision INT8
+python3 tools/convert_hf.py Qwen/Qwen3-0.6B weights/qwen3-600m-i8/ --precision INT8
+python3 tools/convert_hf.py google/gemma-3-ib-it weights/gemma3-1b-i8/ --precision INT8
+python3 tools/convert_hf.py Qwen/Qwen3-1.7B weights/qwen3-1.7B-i8/ --precision INT8
+python3 tools/convert_hf.py HuggingFaceTB/SmolLM2-1.7B-Instruct weights/smollm2-1.7B-i8/ --precision INT8
+
+# Embedding models
+python3 tools/convert_hf.py Qwen/Qwen3-Embedding-0.6B weights/qwen3-embed-600m-i8/ --precision INT8
+```
+
+Simply replace the weight path `tests/test_engine.cpp` with your choice.
 
 ## Roadmap:
-- SMMLA, NPU & DSP for high-end phones.
-- INT4 support.
-- Python tools for porting any Torch/JAX to cactus.
+- Llama, Nomic, LFM, SmolVLM, Whisper, Kitten, Neuphonic
+- Python tools for porting any Torch/JAX to cactus
+- GPTQ & NPU/DSP/ISP for high-end phones 
 
-## Limitlations
+## Limitations
 While Cactus can be used for all Apple devices including Macbooks, for computers/AMD/Intel/Nvidia generally, 
 please use HuggingFace, Llama.cpp, Ollama, vLLM, MLX. They're built for those, support x86, and are all great! 
+
+## Contributing
+
+We welcome contributions! Please see our [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
