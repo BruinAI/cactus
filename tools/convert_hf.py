@@ -367,9 +367,18 @@ def convert_hf_model_weights_vlm(model, output_dir, precision='INT8', args=None)
     use_image_tokens = bool(_cfg_get(config, 'image_token_id', None) is not None)
     use_layout_tags = False
 
+    model_type_str = _cfg_get(text_cfg, 'model_type', None) or _cfg_get(config, 'model_type', '')
+    model_type_str = str(cand).lower() if cand is not None else ''
+    if 'smolvlm' in model_type_str:
+        detected_model_type = 'smolvlm'
+    else:
+        detected_model_type = 'smolvlm'
+        print(f"  Warning: Unknown VLM model type '{model_type_str}', defaulting to 'smolvlm'")
+
+
     model_config = {
         'vocab_size': int(text_vocab),
-        'model_type': 'smolvlm',
+        'model_type': detected_model_type,
         'hidden_dim': int(text_hidden),
         'num_layers': int(text_num_layers),
         'attention_heads': int(text_attention_heads),
@@ -396,7 +405,7 @@ def convert_hf_model_weights_vlm(model, output_dir, precision='INT8', args=None)
     embed_names = ['model.embed_tokens.weight', 'embed_tokens.weight', 'embeddings.weight', 'transformer.wte.weight', 'model.text_model.embed_tokens.weight']
     for name in embed_names:
         if name in state_dict:
-            save_tensor_with_header(state_dict[name], output_dir / "token_embeddings.weights", precision, transpose=False, stats_tracker=quantization_stats, args=args, model_type='smolvlm')
+            save_tensor_with_header(state_dict[name], output_dir / "token_embeddings.weights", precision, transpose=False, stats_tracker=quantization_stats, args=args, model_type=detected_model_type)
             break
 
     if not tie_word_embeddings:
@@ -404,14 +413,14 @@ def convert_hf_model_weights_vlm(model, output_dir, precision='INT8', args=None)
         for name in output_names:
             if name in state_dict:
                 tensor = state_dict[name]
-                save_tensor_with_header(tensor, output_dir / "output_weight.weights", precision, transpose=False, stats_tracker=quantization_stats, args=args, model_type='smolvlm')
+                save_tensor_with_header(tensor, output_dir / "output_weight.weights", precision, transpose=False, stats_tracker=quantization_stats, args=args, model_type=detected_model_type)
                 break
 
     output_norm_names = ['model.norm.weight', 'norm.weight', 'final_layernorm.weight', 'transformer.ln_f.weight', 'model.text_model.norm.weight']
     for name in output_norm_names:
         if name in state_dict:
             tensor = state_dict[name]
-            save_tensor_with_header(tensor, output_dir / "output_norm.weights", precision, stats_tracker=quantization_stats, args=args, model_type='smolvlm')
+            save_tensor_with_header(tensor, output_dir / "output_norm.weights", precision, stats_tracker=quantization_stats, args=args, model_type=detected_model_type)
             break
 
     vision_items = [
@@ -423,7 +432,7 @@ def convert_hf_model_weights_vlm(model, output_dir, precision='INT8', args=None)
     ]
     for key, outname in vision_items:
         if key in state_dict:
-            save_tensor_with_header(state_dict[key], output_dir / outname, precision, stats_tracker=quantization_stats, args=args, model_type='smolvlm')
+            save_tensor_with_header(state_dict[key], output_dir / outname, precision, stats_tracker=quantization_stats, args=args, model_type=detected_model_type)
 
     # detect number of vision encoder layers
     import re
@@ -448,7 +457,7 @@ def convert_hf_model_weights_vlm(model, output_dir, precision='INT8', args=None)
             (vpref + 'layer_norm2.bias', f'vision_layer_{i_v}_layer_norm2.bias.weights')
         ]:
             if fname in state_dict:
-                save_tensor_with_header(state_dict[fname], output_dir / out, precision, stats_tracker=quantization_stats, args=args, model_type='smolvlm')
+                save_tensor_with_header(state_dict[fname], output_dir / out, precision, stats_tracker=quantization_stats, args=args, model_type=detected_model_type)
 
         for fname, out in [
             (vpref + 'mlp.fc1.weight', f'vision_layer_{i_v}_ffn_fc1.weights'),
@@ -457,7 +466,7 @@ def convert_hf_model_weights_vlm(model, output_dir, precision='INT8', args=None)
             (vpref + 'mlp.fc2.bias', f'vision_layer_{i_v}_ffn_fc2.bias.weights')
         ]:
             if fname in state_dict:
-                save_tensor_with_header(state_dict[fname], output_dir / out, precision, stats_tracker=quantization_stats, args=args, model_type='smolvlm')
+                save_tensor_with_header(state_dict[fname], output_dir / out, precision, stats_tracker=quantization_stats, args=args, model_type=detected_model_type)
 
         for fname, out in [
             (vpref + 'self_attn.q_proj.weight', f'vision_layer_{i_v}_self_attn_q.weights'),
@@ -470,7 +479,7 @@ def convert_hf_model_weights_vlm(model, output_dir, precision='INT8', args=None)
             (vpref + 'self_attn.out_proj.bias', f'vision_layer_{i_v}_self_attn_out.bias.weights')
         ]:
             if fname in state_dict:
-                save_tensor_with_header(state_dict[fname], output_dir / out, precision, stats_tracker=quantization_stats, args=args, model_type='smolvlm')
+                save_tensor_with_header(state_dict[fname], output_dir / out, precision, stats_tracker=quantization_stats, args=args, model_type=detected_model_type)
 
     connector_keys = [
         'model.connector.modality_projection.proj.weight',
@@ -480,7 +489,7 @@ def convert_hf_model_weights_vlm(model, output_dir, precision='INT8', args=None)
     ]
     for ck in connector_keys:
         if ck in state_dict:
-            save_tensor_with_header(state_dict[ck], output_dir / 'connector_proj.weights', precision, stats_tracker=quantization_stats, args=args, model_type='smolvlm')
+            save_tensor_with_header(state_dict[ck], output_dir / 'connector_proj.weights', precision, stats_tracker=quantization_stats, args=args, model_type=detected_model_type)
             break
 
     num_layers = int(model_config.get('num_layers', 0))
@@ -518,7 +527,7 @@ def convert_hf_model_weights_vlm(model, output_dir, precision='INT8', args=None)
                 full_name = layer_prefix + pattern
                 if full_name in state_dict:
                     tensor = state_dict[full_name]
-                    save_tensor_with_header(tensor, output_dir / output_name, tensor_precision, transpose=should_transpose, stats_tracker=quantization_stats, args=args, model_type='smolvlm')
+                    save_tensor_with_header(tensor, output_dir / output_name, tensor_precision, transpose=should_transpose, stats_tracker=quantization_stats, args=args, model_type=detected_model_type)
                     found = True
                     break
 
@@ -531,9 +540,9 @@ def convert_hf_model_weights_vlm(model, output_dir, precision='INT8', args=None)
                     k_weight = combined_weight[:, hidden_size:2*hidden_size]
                     v_weight = combined_weight[:, 2*hidden_size:]
 
-                    save_tensor_with_header(q_weight, output_dir / f'layer_{i}_attn_q.weights', precision, transpose=False, stats_tracker=quantization_stats, args=args, model_type='smolvlm')
-                    save_tensor_with_header(k_weight, output_dir / f'layer_{i}_attn_k.weights', precision, transpose=False, stats_tracker=quantization_stats, args=args, model_type='smolvlm')
-                    save_tensor_with_header(v_weight, output_dir / f'layer_{i}_attn_v.weights', precision, transpose=False, stats_tracker=quantization_stats, args=args, model_type='smolvlm')
+                    save_tensor_with_header(q_weight, output_dir / f'layer_{i}_attn_q.weights', precision, transpose=False, stats_tracker=quantization_stats, args=args, model_type=detected_model_type)
+                    save_tensor_with_header(k_weight, output_dir / f'layer_{i}_attn_k.weights', precision, transpose=False, stats_tracker=quantization_stats, args=args, model_type=detected_model_type)
+                    save_tensor_with_header(v_weight, output_dir / f'layer_{i}_attn_v.weights', precision, transpose=False, stats_tracker=quantization_stats, args=args, model_type=detected_model_type)
                     found = True
 
     if quantization_stats['quantized_tensors'] > 0:
