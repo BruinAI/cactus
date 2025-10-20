@@ -5,6 +5,7 @@ import sys
 import json
 import argparse
 from pathlib import Path
+from typing import Optional
 
 try:
     from transformers import AutoTokenizer, AutoModelForCausalLM, AutoModel
@@ -12,6 +13,33 @@ try:
 except ImportError:
     print("Please install required packages: pip install torch transformers")
     sys.exit(1)
+
+
+def add_lora_weights(name, tensor, lora_dir_path: Path) -> np.ndarray:
+    if isinstance(tensor, torch.Tensor):
+        data = tensor.detach().cpu().numpy()
+    else:
+        data = np.array(tensor)
+
+    if not name.endswith('.weight'):
+        return data
+
+    root_name = name.rstrip('.weight')
+    lora_path_a = lora_dir_path / f"{root_name}.lora_a.npy"
+    lora_path_b = lora_dir_path / f"{root_name}.lora_b.npy"
+    path_exist_count = int(lora_path_a.exists()) + int(lora_path_b.exists())
+    if path_exist_count == 0:
+        return data
+    if path_exist_count == 1:
+        raise ValueError(f"LoRA weights found for only one of the low rank matrices for {name}")
+
+    lora_a = np.load(lora_path_a, allow_pickle=False)
+    lora_b = np.load(lora_path_b, allow_pickle=False)
+
+    combined_lora = (lora_a @ lora_b).T
+    if combined_lora.shape != data.shape:
+        raise ValueError(f"LoRA shape mismatch for {name}: combined_lora {combined_lora.shape} vs data {data.shape}")
+    return data + combined_lora
 
 def save_tensor_with_header(tensor, output_path, precision='FP32', transpose=False, stats_tracker=None, args=None, model_type=None):
     if isinstance(tensor, torch.Tensor):
@@ -147,7 +175,7 @@ def save_tensor_with_header(tensor, output_path, precision='FP32', transpose=Fal
         with open(scale_path, 'w') as f:
             f.write(f"{scale:.10f}\n")
 
-def convert_hf_model_weights(model, output_dir, precision='INT8', args=None):
+def convert_hf_model_weights(model, output_dir, precision='INT8', args: Optional[argparse.Namespace] = None) -> dict:
     
     quantization_stats = {
         'total_tensors': 0,
@@ -164,6 +192,11 @@ def convert_hf_model_weights(model, output_dir, precision='INT8', args=None):
     config = model.config
     saved_tensor_full_names = set()
     
+    if args and getattr(args, 'lora_dir_path', None):
+        lora_dir_path = Path(args.lora_dir_path)
+        print(f"Adding LoRA weights from {lora_dir_path}")
+        for name, tensor in state_dict.items():
+            state_dict[name] = add_lora_weights(name, tensor, lora_dir_path)
     
     tie_word_embeddings = getattr(config, 'tie_word_embeddings', False)
     model_type_str = getattr(config, 'model_type', '').lower()
@@ -662,7 +695,8 @@ def create_parser():
     parser.add_argument('--precision', choices=['INT8', 'FP16', 'FP32'], default='INT8',
                        help='Quantization precision')
     parser.add_argument('--cache-dir', help='Cache directory for HuggingFace models')
-    
+    parser.add_argument('--lora-dir-path', type=str, help='Directory containing LoRA weights (.npy files)')
+
     quant_group = parser.add_argument_group('Quantization Parameters')
     quant_group.add_argument('--snr-threshold', type=float, default=20.0,
                             help='Minimum SNR (dB) for INT8 quantization, fallback to FP32 below this')
