@@ -111,7 +111,7 @@ protected:
     size_t forward(const std::vector<uint32_t>& tokens, bool use_cache = false) override;
     void load_weights_to_graph(CactusGraph* gb) override;
     
-private:
+protected:
     struct WeightNodeIDs {
         size_t output_weight;
         size_t output_norm_weight;
@@ -139,10 +139,21 @@ public:
     ~SmolVLMModel() override = default;
 
     size_t forward_mm(const std::vector<uint32_t>& tokens,const std::vector<ImageBatch>& images, bool use_cache = false);
+    uint32_t generate_with_images(const std::vector<uint32_t>& tokens, const std::vector<ImageBatch>& images,
+                                  float temperature = -1.0f, float top_p = -1.0f,
+                                  size_t top_k = 0, const std::string& profile_file = "") override;
 
 protected:
     size_t build_vision_embeddings(CactusGraph* gb, const std::vector<ImageBatch>& images,
                                    ComputeBackend backend);
+    
+    size_t build_vision_transformer_layer(CactusGraph* gb, size_t hidden_states, uint32_t layer_idx,
+                                         ComputeBackend backend);
+    
+    size_t build_vision_attention(CactusGraph* gb, size_t hidden_states, uint32_t layer_idx,
+                                  ComputeBackend backend);
+    
+    size_t pixel_shuffle(CactusGraph* gb, size_t input, int scale_factor);
 
     size_t build_combined_input(CactusGraph* gb, size_t vision_embeds, const std::vector<uint32_t>& tokens,
                                 ComputeBackend backend, uint32_t& prefix_len);
@@ -150,16 +161,23 @@ protected:
     void load_weights_to_graph(CactusGraph* gb) override;
 
 private:
-    struct WeightNodeIDs {
+    struct VisionWeightNodeIDs {
         size_t vision_proj_weight;
         size_t vision_proj_bias;
         size_t vision_position_embedding;
+        size_t vision_post_layernorm_weight;
+        size_t vision_post_layernorm_bias;
+        size_t connector_proj_weight;
 
         struct VisionLayerWeights {
             size_t attn_q_weight;
             size_t attn_k_weight;
             size_t attn_v_weight;
             size_t attn_output_weight;
+            size_t attn_q_bias;
+            size_t attn_k_bias;
+            size_t attn_v_bias;
+            size_t attn_output_bias;
             size_t layer_norm1_weight;
             size_t layer_norm1_bias;
             size_t layer_norm2_weight;
@@ -171,7 +189,7 @@ private:
         };
 
         std::vector<VisionLayerWeights> vision_layers;
-    } weight_nodes_;
+    } vision_weight_nodes_;
 };
 
 }

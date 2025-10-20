@@ -37,6 +37,42 @@ void Tokenizer::detect_model_type(const std::string& config_path) {
     file.close();
 }
 
+void Tokenizer::load_special_tokens(const std::string& added_tokens_path) {
+    std::ifstream file(added_tokens_path);
+    if (!file.is_open()) {
+        return;
+    }
+
+    std::string content((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+    file.close();
+
+    auto find_token_id = [&content](const std::string& token_name) -> uint32_t {
+        std::string search = "\"" + token_name + "\":";
+        size_t pos = content.find(search);
+        if (pos == std::string::npos) return 0;
+        
+        pos = content.find(':', pos) + 1;
+        while (pos < content.length() && (content[pos] == ' ' || content[pos] == '\t')) pos++;
+        
+        size_t end_pos = pos;
+        while (end_pos < content.length() && (std::isdigit(content[end_pos]) || content[end_pos] == '-')) end_pos++;
+        
+        if (end_pos > pos) {
+            return static_cast<uint32_t>(std::stoul(content.substr(pos, end_pos - pos)));
+        }
+        return 0;
+    };
+
+    uint32_t image_token = find_token_id("<image>");
+    if (image_token != 0) image_token_id_ = image_token;
+    
+    uint32_t fake_token = find_token_id("<fake_token_around_image>");
+    if (fake_token != 0) fake_token_id_ = fake_token;
+    
+    uint32_t global_token = find_token_id("<global-img>");
+    if (global_token != 0) global_img_token_id_ = global_token;
+}
+
 std::vector<uint32_t> Tokenizer::apply_chat_template(const std::vector<ChatMessage>& messages, bool add_generation_prompt) const {
     std::string formatted_prompt = format_chat_prompt(messages, add_generation_prompt);
     return encode(formatted_prompt);
@@ -219,6 +255,64 @@ std::string Tokenizer::format_smolvlm_style(const std::vector<ChatMessage>& mess
         result += "Assistant:";
     }
 
+    return result;
+}
+
+std::string Tokenizer::expand_image_tokens_in_text(const std::string& text, uint32_t image_seq_len,
+                                                   uint32_t image_rows, uint32_t image_cols) const {
+    const std::string IMAGE_TOKEN = "<image>";
+    const std::string FAKE_TOKEN = "<fake_token_around_image>";
+    const std::string GLOBAL_TOKEN = "<global-img>";
+
+    std::vector<size_t> image_positions;
+    size_t pos = 0;
+    while ((pos = text.find(IMAGE_TOKEN, pos)) != std::string::npos) {
+        image_positions.push_back(pos);
+        pos += IMAGE_TOKEN.length();
+    }
+    
+    if (image_positions.empty()) {
+        return text;
+    }
+    
+    std::string result;
+    size_t last_pos = 0;
+    
+    for (size_t img_pos : image_positions) {
+        result += text.substr(last_pos, img_pos - last_pos);
+        
+        if (image_rows == 0 && image_cols == 0) {
+            result += FAKE_TOKEN;
+            result += GLOBAL_TOKEN;
+            for (uint32_t i = 0; i < image_seq_len; ++i) {
+                result += IMAGE_TOKEN;
+            }
+            result += FAKE_TOKEN;
+        } else {
+            for (uint32_t r = 0; r < image_rows; ++r) {
+                for (uint32_t c = 0; c < image_cols; ++c) {
+                    result += FAKE_TOKEN;
+                    result += "<row_" + std::to_string(r + 1) + "_col_" + std::to_string(c + 1) + ">";
+                    for (uint32_t i = 0; i < image_seq_len; ++i) {
+                        result += IMAGE_TOKEN;
+                    }
+                }
+                result += "\n";
+            }
+            result += "\n";
+            result += FAKE_TOKEN;
+            result += GLOBAL_TOKEN;
+            for (uint32_t i = 0; i < image_seq_len; ++i) {
+                result += IMAGE_TOKEN;
+            }
+            result += FAKE_TOKEN;
+        }
+        
+        last_pos = img_pos + IMAGE_TOKEN.length();
+    }
+    
+    result += text.substr(last_pos);
+    
     return result;
 }
 

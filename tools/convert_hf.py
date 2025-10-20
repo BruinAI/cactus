@@ -472,6 +472,17 @@ def convert_hf_model_weights_vlm(model, output_dir, precision='INT8', args=None)
             if fname in state_dict:
                 save_tensor_with_header(state_dict[fname], output_dir / out, precision, stats_tracker=quantization_stats, args=args, model_type='smolvlm')
 
+    connector_keys = [
+        'model.connector.modality_projection.proj.weight',
+        'connector.modality_projection.proj.weight',
+        'model.connector.proj.weight',
+        'connector.proj.weight'
+    ]
+    for ck in connector_keys:
+        if ck in state_dict:
+            save_tensor_with_header(state_dict[ck], output_dir / 'connector_proj.weights', precision, stats_tracker=quantization_stats, args=args, model_type='smolvlm')
+            break
+
     num_layers = int(model_config.get('num_layers', 0))
     for i in range(num_layers):
         layer_prefixes = [f'model.text_model.layers.{i}.', f'model.layers.{i}.', f'layers.{i}.', f'transformer.h.{i}.']

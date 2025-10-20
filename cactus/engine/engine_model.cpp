@@ -78,6 +78,13 @@ bool Model::init(const std::string& model_folder, size_t context_size, const std
         return false;
     }
     
+    std::string added_tokens_file = model_folder + "/added_tokens.json";
+    std::ifstream added_tokens_check(added_tokens_file);
+    if (added_tokens_check.good()) {
+        added_tokens_check.close();
+        tokenizer_->load_special_tokens(added_tokens_file);
+    }
+    
     auto* gb = new CactusGraph();
     graph_handle_ = gb;
     
@@ -166,6 +173,12 @@ uint32_t Model::generate(const std::vector<uint32_t>& tokens, float temperature,
     
     auto* output_ptr = gb->get_output(sampled_token_id);
     return *static_cast<uint32_t*>(output_ptr);
+}
+
+uint32_t Model::generate_with_images(const std::vector<uint32_t>& tokens, const std::vector<ImageBatch>& images,
+                                     float temperature, float top_p, size_t top_k, const std::string& profile_file) {
+    (void)images;
+    return generate(tokens, temperature, top_p, top_k, profile_file);
 }
 
 void Model::update_kv_cache(CactusGraph* gb, size_t seq_len) {
@@ -279,6 +292,7 @@ bool Config::from_json(const std::string& config_path) {
         else if (key == "pixel_shuffle_factor") pixel_shuffle_factor = std::stoul(value);
         else if (key == "use_image_tokens") use_image_tokens = (value == "true" || value == "1");
         else if (key == "use_layout_tags") use_layout_tags = (value == "true" || value == "1");
+        else if (key == "image_seq_len") image_seq_len = std::stoul(value);
         else if (key == "precision") {
             if (value == "INT8") precision = Precision::INT8;
             else if (value == "FP16") precision = Precision::FP16;
