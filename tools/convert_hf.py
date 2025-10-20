@@ -179,6 +179,8 @@ def convert_hf_model_weights(model, output_dir, precision='INT8', args=None):
             detected_model_type = 'llama'
     elif 'bert' in model_type_str:
         detected_model_type = 'bert'
+    elif 'whisper' in model_type_str:
+        detected_model_type = 'whisper'
     else:
         detected_model_type = 'qwen'
         print(f"  Warning: Unknown model type '{model_type_str}', defaulting to 'qwen'")
@@ -219,6 +221,14 @@ def convert_hf_model_weights(model, output_dir, precision='INT8', args=None):
             if 'embeddings.token_type_embeddings.weight' in state_dict:
                 saved_tensor_full_names.add('embeddings.token_type_embeddings.weight')
             embedding_found = True
+    elif model_type_str == 'whisper':
+        weights = ['model.decoder.embed_tokens.weight', 'model.decoder.embed_positions.weight', 'model.decoder.layer_norm.weight', 'model.decoder.layer_norm.bias', 'proj_out.weight']
+        save_names = ['token_embeddings.weights', 'position_embeddings.weights', 'output_norm.weights', 'output_norm.bias', 'output_layer.weights']
+        for name, save_name in zip(weights, save_names):
+            if name in state_dict:
+                save_tensor_with_header(state_dict[name], output_dir / save_name, precision, transpose=False, stats_tracker=quantization_stats, args=args, model_type=detected_model_type)
+                saved_tensor_full_names.add(name)
+        embedding_found = True
     
     if embedding_found:
         embedding_norm_names = {'emb_ln.weight': 'embedding_layernorm.weight', 'emb_ln.bias': 'embedding_layernorm.bias'}
@@ -247,7 +257,7 @@ def convert_hf_model_weights(model, output_dir, precision='INT8', args=None):
     num_layers = model_config['num_layers']
     for i in range(num_layers):
         
-        layer_prefixes = [f'model.layers.{i}.', f'layers.{i}.', f'transformer.h.{i}.', f'encoder.layers.{i}.']
+        layer_prefixes = [f'model.layers.{i}.', f'layers.{i}.', f'transformer.h.{i}.', f'encoder.layers.{i}.', f'model.decoder.layers.{i}.']
         
         layer_prefix = None
         for prefix in layer_prefixes:
@@ -290,6 +300,30 @@ def convert_hf_model_weights(model, output_dir, precision='INT8', args=None):
             (['mlp.experts.mlp.w1'], precision, f'layer_{i}_mlp_expert_{{channel}}.mlp1.weights', False),
             (['mlp.experts.mlp.w2'], precision, f'layer_{i}_mlp_expert_{{channel}}.mlp2.weights', True),
             (['mlp.router.layer.weight'], precision, f'layer_{i}_mlp_router.layer.weights', False),
+            # Whisper specific parameters
+            (['self_attn.out_proj.weight'], precision, f'layer_{i}_attn_output.weights', False),
+            (['self_attn.q_proj.bias'], precision, f'layer_{i}_attn_q.bias', False),
+            (['self_attn.k_proj.bias'], precision, f'layer_{i}_attn_k.bias', False),
+            (['self_attn.v_proj.bias'], precision, f'layer_{i}_attn_v.bias', False),
+            (['self_attn.out_proj.bias'], precision, f'layer_{i}_attn_output.bias', False),
+            (['encoder_attn.q_proj.weight'], precision, f'layer_{i}_attn_q.weights', False),
+            (['encoder_attn.k_proj.weight'], precision, f'layer_{i}_encoder_attn_k.weights', False),
+            (['encoder_attn.v_proj.weight'], precision, f'layer_{i}_encoder_attn_v.weights', False),
+            (['encoder_attn.q_proj.bias'], precision, f'layer_{i}_encoder_attn_q.bias', False),
+            (['encoder_attn.k_proj.bias'], precision, f'layer_{i}_encoder_attn_k.bias', False),
+            (['encoder_attn.v_proj.bias'], precision, f'layer_{i}_encoder_attn_v.bias', False),
+            (['encoder_attn.out_proj.weight'], precision, f'layer_{i}_encoder_attn_output.weights', False),
+            (['encoder_attn.out_proj.bias'], precision, f'layer_{i}_encoder_attn_output.bias', False),
+            (['fc1.weight'], precision, f'layer_{i}_mlp_fc1.weights', False),
+            (['fc1.bias'], precision, f'layer_{i}_mlp_fc1.bias', False),
+            (['fc2.weight'], precision, f'layer_{i}_mlp_fc2.weights', False),
+            (['fc2.bias'], precision, f'layer_{i}_mlp_fc2.bias', False),
+            (['self_attn_layer_norm.weight'], precision, f'layer_{i}_self_attn_norm.weights', False),
+            (['self_attn_layer_norm.bias'], precision, f'layer_{i}_self_attn_norm.bias', False),
+            (['encoder_attn_layer_norm.weight'], precision, f'layer_{i}_encoder_attn_norm.weights', False),
+            (['encoder_attn_layer_norm.bias'], precision, f'layer_{i}_encoder_attn_norm.bias', False),
+            (['final_layer_norm.weight'], precision, f'layer_{i}_final_norm.weights', False),
+            (['final_layer_norm.bias'], precision, f'layer_{i}_final_norm.bias', False),
         ]
         
         for name_patterns, tensor_precision, output_name, should_transpose in weight_patterns:
