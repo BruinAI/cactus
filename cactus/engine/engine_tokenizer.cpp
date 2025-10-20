@@ -53,13 +53,10 @@ std::string Tokenizer::format_chat_prompt(const std::vector<ChatMessage>& messag
             return format_qwen_style(messages, add_generation_prompt, tools_json);
         case ModelType::GEMMA:
             return format_gemma_style(messages, add_generation_prompt, tools_json);
-<<<<<<< HEAD
         case ModelType::LFM2:
             return format_lfm2_style(messages, add_generation_prompt, tools_json);
-=======
         case ModelType::SMOL:
             return format_smol_style(messages, add_generation_prompt, tools_json);
->>>>>>> main
         default:
             return format_qwen_style(messages, add_generation_prompt, tools_json);
     }

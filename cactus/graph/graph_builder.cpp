@@ -180,7 +180,10 @@ size_t CactusGraph::index(size_t input, size_t index_value, int dim) {
         output_shape = {1};
     }
     
-    OpParams params{.axis = actual_dim, .index_value = index_value, .output_precision = input_buffer.precision};
+    OpParams params{};
+    params.axis = actual_dim;
+    params.index_value = index_value;
+    params.output_precision = input_buffer.precision;
     return add_node(OpType::INDEX, {input}, output_shape, params);
 }
 
@@ -297,7 +300,9 @@ size_t CactusGraph::topk(size_t input, size_t k) {
     }
     
     std::vector<size_t> output_shape = {2, input_buffer.shape[0], k};
-    OpParams params{.top_k = k, .output_precision = Precision::FP32};
+    OpParams params{};
+    params.output_precision = Precision::FP32;
+    params.top_k = k;
 
     return add_node(OpType::TOPK, {input}, output_shape, params);
 }
@@ -395,22 +400,30 @@ size_t CactusGraph::sample(size_t logits, float temperature, float top_p, size_t
 }
 
 size_t CactusGraph::scalar_add(size_t input, float value) {
-    OpParams params{.scalar = value, .output_precision = get_output_buffer(input).precision};
+    OpParams params{};
+    params.scalar = value;
+    params.output_precision = get_output_buffer(input).precision;
     return add_node(OpType::SCALAR_ADD, {input}, {}, params);
 }
 
 size_t CactusGraph::scalar_subtract(size_t input, float value) {
-    OpParams params{.scalar = value, .output_precision = get_output_buffer(input).precision};
+    OpParams params{};
+    params.scalar = value;
+    params.output_precision = get_output_buffer(input).precision;
     return add_node(OpType::SCALAR_SUBTRACT, {input}, {}, params);
 }
 
 size_t CactusGraph::scalar_multiply(size_t input, float value) {
-    OpParams params{.scalar = value, .output_precision = get_output_buffer(input).precision};
+    OpParams params{};
+    params.scalar = value;
+    params.output_precision = get_output_buffer(input).precision;
     return add_node(OpType::SCALAR_MULTIPLY, {input}, {}, params);
 }
 
 size_t CactusGraph::scalar_divide(size_t input, float value) {
-    OpParams params{.scalar = value, .output_precision = get_output_buffer(input).precision};
+    OpParams params{};
+    params.scalar = value;
+    params.output_precision = get_output_buffer(input).precision;
     return add_node(OpType::SCALAR_DIVIDE, {input}, {}, params);
 }
 
@@ -598,7 +611,8 @@ size_t CactusGraph::embedding(size_t embedding_tensor, size_t indices) {
 }
 
 size_t CactusGraph::precision_cast(size_t input, Precision target_precision) {
-    OpParams params{.output_precision = target_precision};
+    OpParams params{};
+    params.output_precision = target_precision;
     return add_node(OpType::PRECISION_CAST, {input}, {}, params);
 }
 
