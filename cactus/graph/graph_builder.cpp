@@ -180,10 +180,7 @@ size_t CactusGraph::index(size_t input, size_t index_value, int dim) {
         output_shape = {1};
     }
     
-    OpParams params{};
-    params.axis = actual_dim;
-    params.index_value = index_value;
-    params.output_precision = input_buffer.precision;
+    OpParams params{.axis = actual_dim, .output_precision = input_buffer.precision, .index_value = index_value};
     return add_node(OpType::INDEX, {input}, output_shape, params);
 }
 
@@ -300,9 +297,7 @@ size_t CactusGraph::topk(size_t input, size_t k) {
     }
     
     std::vector<size_t> output_shape = {2, input_buffer.shape[0], k};
-    OpParams params{};
-    params.output_precision = Precision::FP32;
-    params.top_k = k;
+    OpParams params{.output_precision = Precision::FP32, .top_k = k};
 
     return add_node(OpType::TOPK, {input}, output_shape, params);
 }
