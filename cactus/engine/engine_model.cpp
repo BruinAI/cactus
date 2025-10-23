@@ -108,11 +108,8 @@ bool Model::init(const std::string& model_folder, size_t context_size, const std
             precision_name = "FP32";
             break;
     }
-    std::string cache_path = model_folder + "/cache";
-    kv_cache_.set_cache_dir(cache_path);
-
     kv_cache_.init(config_.num_layers, context_size, config_.attention_kv_heads, config_.attention_head_dim, cache_precision);
-
+    
     size_t window_size = std::min(context_size, size_t(1024));
     size_t sink_size = 4;
     const char* env_window = std::getenv("CACTUS_KV_WINDOW_SIZE");
@@ -323,8 +320,8 @@ bool Config::from_json(const std::string& config_path) {
         default_top_p = 0.95f;
         default_top_k = 20;
     } else if (model_type == ModelType::QWEN) {
-        default_temperature = 0.6f;
-        default_top_p = 0.95f;
+        default_temperature = 0.7f;
+        default_top_p = 0.8f;
         default_top_k = 20;
     }
 

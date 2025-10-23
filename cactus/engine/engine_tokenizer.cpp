@@ -78,26 +78,17 @@ std::string Tokenizer::format_qwen_style(const std::vector<ChatMessage>& message
             }
         }
 
-        result += "You can call any of the following tools to satisfy the user's requests: [\n";
+        result += "You have access to the following tools:\n";
+        result += "[\n";
         result += tools_json;
-        result += "\n]\n";
-        result += "Example tool call syntax:\n";
-        result += "{\n";
-        result += "  \"tool_calls\": [\n";
-        result += "    {\n";
-        result += "      \"name\": \"tool_name\",\n";
-        result += "      \"arguments\": {\n";
-        result += "        \"arg1\": \"some_value\"\n";
-        result += "      },\n";
-        result += "      \"id\": \"call_1___\"\n";
-        result += "    }\n";
-        result += "  ]\n";
-        result += "}";
+        result += "\n]\n\n";
+        result += "When you need to call a tool, respond with a JSON object in this exact format:\n";
+        result += "{\"function_call\": {\"name\": \"function_name\", \"arguments\": {\"arg1\": \"value1\"}}}";
         result += "<|im_end|>\n";
 
         for (const auto& msg : messages) {
             if (msg.role == "system" && has_system_msg) {
-                continue; 
+                continue;
             } else if (msg.role == "user") {
                 result += "<|im_start|>user\n" + msg.content + "<|im_end|>\n";
             } else if (msg.role == "assistant") {
@@ -275,7 +266,6 @@ std::string Tokenizer::format_smol_style(const std::vector<ChatMessage>& message
         return "ERROR: Tool calls are currently not supported for Smol models";
     }
 
-    // if first message isn't system, add one
     std::string result;
 
     if (!messages.empty() && messages.front().role != "system") {
