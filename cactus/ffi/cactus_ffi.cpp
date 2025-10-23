@@ -45,21 +45,19 @@ static std::pair<int,int> resize_preserve_aspect(int width, int height, int long
     }
 }
 
-static std::pair<int,int> resize_for_vision_encoder(int width, int height, int vision_encoder_max_size) {
+static std::pair<int,int> resize_for_vision_encoder(int width, int height, int vision_encoder_max_size, int patch_size, int pixel_shuffle_factor) {
     if (vision_encoder_max_size <= 0) return {width, height};
-    double aspect = (double)width / (double)height;
-    int new_w = width;
-    int new_h = height;
-    if (width >= height) {
-        new_w = ((width + vision_encoder_max_size - 1) / vision_encoder_max_size) * vision_encoder_max_size;
-        new_h = static_cast<int>(std::ceil(new_w / aspect));
-        new_h = ((new_h + vision_encoder_max_size - 1) / vision_encoder_max_size) * vision_encoder_max_size;
-    } else {
-        new_h = ((height + vision_encoder_max_size - 1) / vision_encoder_max_size) * vision_encoder_max_size;
-        new_w = static_cast<int>(std::ceil(new_h * aspect));
-        new_w = ((new_w + vision_encoder_max_size - 1) / vision_encoder_max_size) * vision_encoder_max_size;
+
+    int max_dim = std::max(width, height);
+
+    int target_size = ((max_dim + vision_encoder_max_size - 1) / vision_encoder_max_size) * vision_encoder_max_size;
+
+    int alignment = patch_size * pixel_shuffle_factor;
+    if (target_size % alignment != 0) {
+        target_size = ((target_size + alignment - 1) / alignment) * alignment;
     }
-    return {new_w, new_h};
+
+    return {target_size, target_size};
 }
 
 static void convert_to_chw_float_and_normalize(unsigned char* pixels, int w, int h, int c, ImageBatch &out, float rescale, const std::array<float,3>& mean, const std::array<float,3>& std) {
@@ -83,15 +81,18 @@ static void convert_to_chw_float_and_normalize(unsigned char* pixels, int w, int
     }
 }
 
-static std::vector<std::vector<unsigned char>> split_image_tiles(unsigned char* pixels, int w, int h, int c, int max_size, int &out_tile_w, int &out_tile_h) {
+static std::vector<std::vector<unsigned char>> split_image_tiles(unsigned char* pixels, int w, int h, int c, int max_size, int &out_tile_w, int &out_tile_h, int &out_grid_rows, int &out_grid_cols) {
     std::vector<std::vector<unsigned char>> tiles;
     if (w <= max_size && h <= max_size) {
         out_tile_w = w; out_tile_h = h;
+        out_grid_rows = 1; out_grid_cols = 1;
         tiles.emplace_back(pixels, pixels + w*h*c);
         return tiles;
     }
     int num_splits_h = (h + max_size - 1) / max_size;
     int num_splits_w = (w + max_size - 1) / max_size;
+    out_grid_rows = num_splits_h;
+    out_grid_cols = num_splits_w;
     int optimal_h = (h + num_splits_h - 1) / num_splits_h;
     int optimal_w = (w + num_splits_w - 1) / num_splits_w;
     for (int r = 0; r < num_splits_h; ++r) {
@@ -120,9 +121,10 @@ static std::vector<std::vector<unsigned char>> split_image_tiles(unsigned char* 
 }
 
 
-static std::vector<ChatMessage> parse_messages_json(const std::string& json, std::vector<std::string>& out_image_paths) {
+static std::vector<ChatMessage> parse_messages_json(const std::string& json, std::vector<std::string>& out_image_paths, std::vector<size_t>& out_image_placeholder_indices) {
     std::vector<ChatMessage> messages;
     out_image_paths.clear();
+    out_image_placeholder_indices.clear();
 
     size_t pos = json.find('[');
     if (pos == std::string::npos) {
@@ -226,9 +228,11 @@ static std::vector<ChatMessage> parse_messages_json(const std::string& json, std
                                     std::filesystem::path p(relpath);
                                     std::filesystem::path ap = std::filesystem::absolute(p);
                                     out_image_paths.push_back(ap.string());
+                                    out_image_placeholder_indices.push_back(assembled.length());
                                     if (!assembled.empty()) assembled += " ";
                                     assembled += std::string("<image>");
                                 } catch (...) {
+                                    out_image_placeholder_indices.push_back(assembled.length());
                                     if (!assembled.empty()) assembled += " ";
                                     assembled += std::string("<image>");
                                 }
@@ -485,30 +489,55 @@ int cactus_complete(
         
         
     std::vector<std::string> image_paths;
-    auto messages = parse_messages_json(messages_json, image_paths);
+    std::vector<size_t> image_placeholder_indices;
+    auto messages = parse_messages_json(messages_json, image_paths, image_placeholder_indices);
     std::vector<ImageBatch> preprocessed_images;
+    std::vector<size_t> tiles_per_image;
+    std::vector<std::pair<int,int>> grid_dims_per_image;
     if (!image_paths.empty()) {
-            int max_image_size = 512;
-            int vision_encoder_max = 364;
-            float rescale = 1.0f / 255.0f;
-            std::array<float,3> mean = {0.5f, 0.5f, 0.5f};
-            std::array<float,3> stdv = {0.5f, 0.5f, 0.5f};
+            const auto& cfg = wrapper->model->get_config();
+            int global_size = static_cast<int>(cfg.global_image_size);
+            int max_tile_size = static_cast<int>(cfg.max_tile_size);
+            int vision_size = static_cast<int>(cfg.vision_image_size);
+            int patch_size = static_cast<int>(cfg.vision_patch_size);
+            int shuffle_factor = static_cast<int>(cfg.pixel_shuffle_factor);
+            float rescale = cfg.rescale_factor;
+            std::array<float,3> mean = {cfg.image_mean, cfg.image_mean, cfg.image_mean};
+            std::array<float,3> stdv = {cfg.image_std, cfg.image_std, cfg.image_std};
 
             for (const auto& path : image_paths) {
                 int w=0,h=0,c=0;
                 unsigned char* data = stbi_load(path.c_str(), &w, &h, &c, 3);
                 if (!data) {
+                    tiles_per_image.push_back(0);
+                    grid_dims_per_image.push_back({0, 0});
                     continue;
                 }
 
-                int tile_w=0, tile_h=0;
-                auto tiles = split_image_tiles(data, w, h, 3, max_image_size, tile_w, tile_h);
+                auto [global_w, global_h] = resize_preserve_aspect(w, h, global_size);
+                std::vector<unsigned char> global_img;
+                if (global_w != w || global_h != h) {
+                    global_img.resize((size_t)global_w * global_h * 3);
+                    unsigned char *gptr = stbir_resize_uint8_linear(data, w, h, 0, global_img.data(), global_w, global_h, 0, STBIR_RGB);
+                    if (!gptr) {
+                        global_img.assign(data, data + w * h * 3);
+                        global_w = w; global_h = h;
+                    }
+                } else {
+                    global_img.assign(data, data + w * h * 3);
+                }
+
+                int tile_w=0, tile_h=0, grid_rows=0, grid_cols=0;
+                auto tiles = split_image_tiles(global_img.data(), global_w, global_h, 3, max_tile_size, tile_w, tile_h, grid_rows, grid_cols);
+                tiles_per_image.push_back(tiles.size());
+                grid_dims_per_image.push_back({grid_rows, grid_cols});
+
                 for (auto &tile : tiles) {
                     int in_w = tile_w;
                     int in_h = tile_h;
                     int out_w = in_w;
                     int out_h = in_h;
-                    std::tie(out_w, out_h) = resize_for_vision_encoder(in_w, in_h, vision_encoder_max);
+                    std::tie(out_w, out_h) = resize_for_vision_encoder(in_w, in_h, vision_size, patch_size, shuffle_factor);
 
                     std::vector<unsigned char> resized_pixels;
                     if (out_w != in_w || out_h != in_h) {
@@ -525,30 +554,6 @@ int cactus_complete(
                     ImageBatch ib;
                     convert_to_chw_float_and_normalize(resized_pixels.data(), out_w, out_h, 3, ib, rescale, mean, stdv);
                     preprocessed_images.push_back(std::move(ib));
-                }
-
-                auto [g_w, g_h] = resize_preserve_aspect(w, h, max_image_size);
-                if (g_w > 0 && g_h > 0) {
-                    std::vector<unsigned char> global_resized((size_t)g_w * g_h * 3);
-                    unsigned char *gptr = stbir_resize_uint8_linear(data, w, h, 0, global_resized.data(), g_w, g_h, 0, STBIR_RGB);
-                    if (gptr) {
-                        ImageBatch gib;
-                        convert_to_chw_float_and_normalize(global_resized.data(), g_w, g_h, 3, gib, rescale, mean, stdv);
-                        auto [rw, rh] = resize_for_vision_encoder((int)gib.width, (int)gib.height, vision_encoder_max);
-                        if (rw != (int)gib.width || rh != (int)gib.height) {
-                            std::vector<unsigned char> rr((size_t)rw * rh * 3);
-                            unsigned char *rptr = stbir_resize_uint8_linear(global_resized.data(), g_w, g_h, 0, rr.data(), rw, rh, 0, STBIR_RGB);
-                            if (rptr) {
-                                ImageBatch final_gib;
-                                convert_to_chw_float_and_normalize(rr.data(), rw, rh, 3, final_gib, rescale, mean, stdv);
-                                preprocessed_images.push_back(std::move(final_gib));
-                            } else {
-                                preprocessed_images.push_back(std::move(gib));
-                            }
-                        } else {
-                            preprocessed_images.push_back(std::move(gib));
-                        }
-                    }
                 }
 
                 stbi_image_free(data);
@@ -603,7 +608,48 @@ int cactus_complete(
 
         if (!preprocessed_images.empty() && wrapper->model->get_config().model_type == cactus::engine::Config::ModelType::SMOLVLM) {
             uint32_t image_seq_len = wrapper->model->get_config().image_seq_len;
-            full_prompt = tokenizer->expand_image_tokens_in_text(full_prompt, image_seq_len, 0, 0);
+
+            std::string expanded_prompt;
+            size_t last_pos = 0;
+            size_t img_idx = 0;
+            size_t search_pos = 0;
+
+            while (search_pos < full_prompt.length() && img_idx < tiles_per_image.size()) {
+                size_t img_pos = full_prompt.find("<image>", search_pos);
+                if (img_pos == std::string::npos) break;
+
+                expanded_prompt += full_prompt.substr(last_pos, img_pos - last_pos);
+
+                size_t num_tiles = tiles_per_image[img_idx];
+                auto [grid_rows, grid_cols] = grid_dims_per_image[img_idx];
+
+                for (size_t tile = 0; tile < num_tiles; ++tile) {
+                    int row = static_cast<int>(tile / grid_cols);
+                    int col = static_cast<int>(tile % grid_cols);
+
+                    expanded_prompt += "<fake_token_around_image>";
+
+                    if (num_tiles > 1) {
+                        expanded_prompt += "<row_" + std::to_string(row + 1) + "_col_" + std::to_string(col + 1) + ">";
+                    }
+
+                    if (tile == 0) {
+                        expanded_prompt += "<global-img>";
+                    }
+
+                    for (uint32_t i = 0; i < image_seq_len; ++i) {
+                        expanded_prompt += "<image>";
+                    }
+                    expanded_prompt += "<fake_token_around_image>";
+                }
+
+                img_idx++;
+                search_pos = img_pos + 7;
+                last_pos = search_pos;
+            }
+
+            expanded_prompt += full_prompt.substr(last_pos);
+            full_prompt = expanded_prompt;
         }
 
         std::vector<uint32_t> tokens_to_process = tokenizer->encode(full_prompt);

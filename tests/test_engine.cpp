@@ -286,7 +286,6 @@ bool test_image_input() {
     std::filesystem::path abs_img_path = std::filesystem::absolute(rel_img_path);
     std::string img_path_str = abs_img_path.string();
     std::string messages_json = "[";
-    messages_json += "{\"role\": \"system\", \"content\": \"You are a helpful assistant.\"},";
     messages_json += "{\"role\": \"user\", \"content\": [";
     messages_json += "{\"type\": \"image\", \"path\": \"" + img_path_str + "\"},";
     messages_json += "{\"type\": \"text\", \"text\": \"Describe what is happening in this image in two sentences.\"}";

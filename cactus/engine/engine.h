@@ -45,6 +45,12 @@ struct Config {
     bool use_layout_tags = false;
     uint32_t image_seq_len = 64;
 
+    uint32_t global_image_size = 2048;
+    uint32_t max_tile_size = 512;
+    float rescale_factor = 0.00392156862745098f;
+    float image_mean = 0.5f;
+    float image_std = 0.5f;
+
     enum class ModelType {QWEN = 0, GEMMA = 1, SMOL = 2, NOMIC = 3, SMOLVLM = 4};
     ModelType model_type = ModelType::QWEN;
 
@@ -111,19 +117,12 @@ public:
 
     virtual bool load_vocabulary_with_config(const std::string& vocab_file, const std::string& merges_file, const std::string& config_file) = 0;
     
-    // SmolVLM special token accessors
     uint32_t get_image_token_id() const { return image_token_id_; }
     uint32_t get_fake_token_id() const { return fake_token_id_; }
     uint32_t get_global_img_token_id() const { return global_img_token_id_; }
     
-    // Load special tokens from added_tokens.json
     void load_special_tokens(const std::string& added_tokens_path);
-    
-    // SmolVLM text preprocessing: expand <image> tokens in text before tokenization
-    // For single images (image_rows=0, image_cols=0): "<image>" -> "<fake><global-img><image>*image_seq_len<fake>"
-    // Returns expanded text ready for tokenization
-    std::string expand_image_tokens_in_text(const std::string& text, uint32_t image_seq_len,
-                                           uint32_t image_rows = 0, uint32_t image_cols = 0) const;
+
 
 protected:
     enum class ModelType { UNKNOWN, QWEN, GEMMA, SMOL, SMOLVLM, BERT };
@@ -131,7 +130,6 @@ protected:
     bool has_chat_template_ = false;
     std::string chat_template_;
     
-    // SmolVLM special token IDs (loaded from added_tokens.json)
     uint32_t image_token_id_ = 49190;  // <image>
     uint32_t fake_token_id_ = 49189;   // <fake_token_around_image>
     uint32_t global_img_token_id_ = 49152;  // <global-img>

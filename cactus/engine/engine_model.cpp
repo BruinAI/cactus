@@ -306,6 +306,11 @@ bool Config::from_json(const std::string& config_path) {
         else if (key == "use_image_tokens") use_image_tokens = (value == "true" || value == "1");
         else if (key == "use_layout_tags") use_layout_tags = (value == "true" || value == "1");
         else if (key == "image_seq_len") image_seq_len = std::stoul(value);
+        else if (key == "global_image_size") global_image_size = std::stoul(value);
+        else if (key == "max_tile_size") max_tile_size = std::stoul(value);
+        else if (key == "rescale_factor") rescale_factor = std::stof(value);
+        else if (key == "image_mean") image_mean = std::stof(value);
+        else if (key == "image_std") image_std = std::stof(value);
         else if (key == "precision") {
             if (value == "INT8") precision = Precision::INT8;
             else if (value == "FP16") precision = Precision::FP16;

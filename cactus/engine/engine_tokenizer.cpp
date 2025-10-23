@@ -278,63 +278,6 @@ std::string Tokenizer::format_smolvlm_style(const std::vector<ChatMessage>& mess
     return result;
 }
 
-std::string Tokenizer::expand_image_tokens_in_text(const std::string& text, uint32_t image_seq_len,
-                                                   uint32_t image_rows, uint32_t image_cols) const {
-    const std::string IMAGE_TOKEN = "<image>";
-    const std::string FAKE_TOKEN = "<fake_token_around_image>";
-    const std::string GLOBAL_TOKEN = "<global-img>";
-
-    std::vector<size_t> image_positions;
-    size_t pos = 0;
-    while ((pos = text.find(IMAGE_TOKEN, pos)) != std::string::npos) {
-        image_positions.push_back(pos);
-        pos += IMAGE_TOKEN.length();
-    }
-    
-    if (image_positions.empty()) {
-        return text;
-    }
-    
-    std::string result;
-    size_t last_pos = 0;
-    
-    for (size_t img_pos : image_positions) {
-        result += text.substr(last_pos, img_pos - last_pos);
-        
-        if (image_rows == 0 && image_cols == 0) {
-            result += FAKE_TOKEN;
-            result += GLOBAL_TOKEN;
-            for (uint32_t i = 0; i < image_seq_len; ++i) {
-                result += IMAGE_TOKEN;
-            }
-            result += FAKE_TOKEN;
-        } else {
-            for (uint32_t r = 0; r < image_rows; ++r) {
-                for (uint32_t c = 0; c < image_cols; ++c) {
-                    result += FAKE_TOKEN;
-                    result += "<row_" + std::to_string(r + 1) + "_col_" + std::to_string(c + 1) + ">";
-                    for (uint32_t i = 0; i < image_seq_len; ++i) {
-                        result += IMAGE_TOKEN;
-                    }
-                }
-                result += "\n";
-            }
-            result += "\n";
-            result += FAKE_TOKEN;
-            result += GLOBAL_TOKEN;
-            for (uint32_t i = 0; i < image_seq_len; ++i) {
-                result += IMAGE_TOKEN;
-            }
-            result += FAKE_TOKEN;
-        }
-        
-        last_pos = img_pos + IMAGE_TOKEN.length();
-    }
-    
-    result += text.substr(last_pos);
-    
-    return result;
-}
 
 } // namespace engine
 } // namespace cactus
