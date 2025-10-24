@@ -427,7 +427,6 @@ def convert_hf_model_weights_vlm(model, output_dir, precision='INT8', args=None)
     use_layout_tags = False
 
     model_type_str = _cfg_get(text_cfg, 'model_type', None) or _cfg_get(config, 'model_type', '')
-    model_type_str = str(cand).lower() if cand is not None else ''
     if 'smolvlm' in model_type_str:
         detected_model_type = 'smolvlm'
     else:
