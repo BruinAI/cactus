@@ -4,7 +4,6 @@ build
 .DS_Store
 *.gguf
 weights/
-venv/
 
 android/build/
 android/libs/
@@ -16,4 +15,3 @@ apple/build-static/
 apple/*.xcframework
 apple/libcactus.a
 *.a
-**.txt

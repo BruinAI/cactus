@@ -5,6 +5,8 @@
 namespace cactus {
 namespace engine {
 
+
+
 class QwenModel : public Model {
 public:
     QwenModel();
@@ -46,6 +48,7 @@ private:
         std::vector<LayerWeights> layers;
     } weight_nodes_;
 };
+
 
 
 class GemmaModel : public Model {
@@ -92,6 +95,8 @@ private:
     } weight_nodes_;
 };
 
+
+
 class SmolModel : public Model{
 public:
     SmolModel();
@@ -132,6 +137,8 @@ private:
     } weight_nodes_;
 };
 
+
+
 class LFM2Model : public Model {
 public:
     LFM2Model();
@@ -166,7 +173,6 @@ private:
         size_t output_norm_weight;
 
         struct LayerWeights {
-        // ---- Attention tensors (present only on attention layers) ----
         size_t attn_q_weight;
         size_t attn_k_weight;
         size_t attn_v_weight;
@@ -174,12 +180,10 @@ private:
         size_t attn_q_norm_weight;   
         size_t attn_k_norm_weight;
 
-        // ---- Conv tensors (present only on conv layers) ----
         size_t conv_depthwise_weight;
         size_t conv_in_proj_weight;
         size_t conv_out_proj_weight;
 
-        // ---- Shared per-layer norms / MLP ----
         size_t input_layernorm_weight;
         size_t post_attention_layernorm_weight;
         size_t ffn_gate_weight;
@@ -201,6 +205,7 @@ private:
     std::vector<size_t> conv_cache_bx_nodes_;
     bool last_forward_used_cache_ = false;
 };
+
 
 class NomicModel : public Model {
 public:

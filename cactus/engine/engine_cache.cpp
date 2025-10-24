@@ -125,13 +125,13 @@ void KVCache::update_from_graph(CactusGraph* gb, const std::vector<size_t>& k_no
 void ConvCache::init(size_t layers, size_t hidden_dim, size_t window_len, Precision model_precision) {
     num_layers = layers;
     hidden_size = hidden_dim;
-    window_size = window_len;  // L
+    window_size = window_len;  
     precision = model_precision;
     element_size = PrecisionTraits::size_of(precision);
 
     layer_states.resize(num_layers);
     for (auto& state : layer_states) {
-        state.data.assign(window_size * hidden_size * element_size, 0);  // zero init
+        state.data.assign(window_size * hidden_size * element_size, 0);  
         state.head = 0;
         state.count = 0;
     }
@@ -169,7 +169,6 @@ ConvCache::CircularView ConvCache::get_window(size_t layer) const {
         return view;
     }
 
-    // When full, expose wrap-around segments so callers can concatenate ptr2 then ptr1.
     view.ptr1 = state.data.data();
     view.len1 = state.head;
     view.ptr2 = state.data.data() + state.head * stride;

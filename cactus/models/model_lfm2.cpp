@@ -42,18 +42,16 @@ void LFM2Model::post_init() {
 }
 
 void LFM2Model::reset_cache() {
-    Model::reset_cache();  // Reset KV cache
+    Model::reset_cache(); 
     if (conv_cache_.window_size > 0) {
         conv_cache_.reset();
     }
 }
 
 bool LFM2Model::init(const std::string& model_folder, size_t context_size, const std::string& system_prompt) {
-    // Call base class init first
     if (!Model::init(model_folder, context_size, system_prompt)) {
         return false;
     }
-
     if (weight_nodes_.layers.size() != config_.num_layers) {
         weight_nodes_.layers.resize(config_.num_layers);
     }
@@ -86,22 +84,18 @@ void LFM2Model::load_weights_to_graph(CactusGraph* gb) {
         auto& layer = layer_entry.weights;
         std::string layer_prefix = model_folder_path_ + "/layer_" + std::to_string(i) + "_";
 
-        // Determine layer type from config
         bool is_conv_layer = false;
         if (i < config_.layer_types.size()) {
             std::string layer_type = config_.layer_types[i];
             is_conv_layer = (layer_type == "conv" || layer_type == "CONV");
-            // Anything else (attn, full_attention, attention) is treated as attention layer
         }
 
         if (is_conv_layer) {
-            // Load conv-specific weights
             layer_entry.type = WeightNodeIDs::LayerType::CONV;
             layer.conv_in_proj_weight = gb->mmap_weights(layer_prefix + "conv_in_proj.weights");
             layer.conv_out_proj_weight = gb->mmap_weights(layer_prefix + "conv_out_proj.weights");
             layer.conv_depthwise_weight = gb->mmap_weights(layer_prefix + "conv_depthwise.weights");
         } else {
-            // Load attention-specific weights
             layer_entry.type = WeightNodeIDs::LayerType::ATTENTION;
             layer.attn_q_weight = gb->mmap_weights(layer_prefix + "attn_q.weights");
             layer.attn_k_weight = gb->mmap_weights(layer_prefix + "attn_k.weights");
@@ -111,7 +105,6 @@ void LFM2Model::load_weights_to_graph(CactusGraph* gb) {
             layer.attn_k_norm_weight = gb->mmap_weights(layer_prefix + "attn_k_norm.weights");
         }
 
-        // Load shared weights (present in all layers)
         layer.input_layernorm_weight = gb->mmap_weights(layer_prefix + "input_norm.weights");
         layer.post_attention_layernorm_weight = gb->mmap_weights(layer_prefix + "post_attn_norm.weights");
         layer.ffn_gate_weight = gb->mmap_weights(layer_prefix + "ffn_gate.weights");
@@ -125,7 +118,6 @@ size_t LFM2Model::build_conv1d(CactusGraph* gb, size_t input, uint32_t layer_idx
     const auto& layer_entry = weight_nodes_.layers[layer_idx];
     const auto& layer       = layer_entry.weights;
 
-    // in_proj: [L, 3*C]
     size_t in_proj = gb->matmul(input, layer.conv_in_proj_weight, true, backend);
 
     const auto& in_proj_buf = gb->get_output_buffer(in_proj);
@@ -136,17 +128,16 @@ size_t LFM2Model::build_conv1d(CactusGraph* gb, size_t input, uint32_t layer_idx
     const size_t L = in_proj_buf.shape[0];
     const size_t C = in_proj_buf.shape[1] / 3;
 
-    // Split into (B, C, X) then elementwise B⊙X
     size_t triplet = gb->reshape(in_proj, {L, static_cast<size_t>(3), C});
-    size_t B = gb->slice(triplet, /*axis*/1, /*start*/0, /*len*/1);
-    size_t Cg = gb->slice(triplet, /*axis*/1, /*start*/1, /*len*/1);
-    size_t X = gb->slice(triplet, /*axis*/1, /*start*/2, /*len*/1);
+    size_t B = gb->slice(triplet, 1, 0, 1);
+    size_t Cg = gb->slice(triplet, 1, 1, 1);
+    size_t X = gb->slice(triplet, 1, 2, 1);
 
     B  = gb->reshape(B,  {L, C});
     Cg = gb->reshape(Cg, {L, C});
     X  = gb->reshape(X,  {L, C});
 
-    size_t Bx = gb->multiply(B, X);                // [L, C]
+    size_t Bx = gb->multiply(B, X);
 
     if (use_cache) {
         conv_cache_bx_nodes_[layer_idx] = Bx;
@@ -154,13 +145,12 @@ size_t LFM2Model::build_conv1d(CactusGraph* gb, size_t input, uint32_t layer_idx
         conv_cache_bx_nodes_[layer_idx] = 0;
     }
 
-    // Prepare depthwise weights to [C,1,K]
     const auto& wbuf = gb->get_output_buffer(layer.conv_depthwise_weight);
-    size_t K = wbuf.shape.back(); // last dim is K in both [C,K] or [C,1,K]
+    size_t K = wbuf.shape.back(); 
 
     size_t conv_w = layer.conv_depthwise_weight;
 
-    if (wbuf.shape.size() == 2) {                   // [C, K] -> [C, 1, K]
+    if (wbuf.shape.size() == 2) { 
         K = wbuf.shape[1];
         auto conv_w_quantization_scale = gb->get_output_buffer(conv_w).quantization_scale;
         conv_w = gb->reshape(conv_w, {wbuf.shape[0], static_cast<size_t>(1), K});
@@ -204,17 +194,17 @@ size_t LFM2Model::build_conv1d(CactusGraph* gb, size_t input, uint32_t layer_idx
 
     const size_t dilation = 1;
     
-    size_t y_nlc = gb->conv1d_causal(x_nlc, conv_w, K, dilation); // [1, total_len, C]
+    size_t y_nlc = gb->conv1d_causal(x_nlc, conv_w, K, dilation); 
 
     size_t start = total_len > L ? total_len - L : 0;
-    size_t y_slice = gb->slice(y_nlc, /*axis*/1, start, L);
+    size_t y_slice = gb->slice(y_nlc, 1, start, L);
     size_t y_lc = gb->reshape(y_slice, {L, C});
 
-    size_t gated = gb->multiply(Cg, y_lc);          // [L, C]
+    size_t gated = gb->multiply(Cg, y_lc); 
 
-    size_t projected = gb->matmul(gated, layer.conv_out_proj_weight, true, backend); // [L, C]
+    size_t projected = gb->matmul(gated, layer.conv_out_proj_weight, true, backend); 
 
-    return projected; // [L, C]
+    return projected;
 }
 
 
@@ -374,7 +364,7 @@ size_t LFM2Model::forward(const std::vector<uint32_t>& tokens, bool use_cache) {
     return final_hidden;
 }
 
-void LFM2Model::post_execute_updates(CactusGraph* gb, size_t seq_len) {
+void LFM2Model::post_execute_updates(CactusGraph* gb, size_t) {
     if (conv_cache_bx_nodes_.empty()) {
         return;
     }

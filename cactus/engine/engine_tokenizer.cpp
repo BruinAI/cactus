@@ -118,97 +118,23 @@ std::string Tokenizer::format_lfm2_style(const std::vector<ChatMessage>& message
                                          bool add_generation_prompt,
                                          const std::string& tools_json) const
 {
-    // LFM2: ChatML-style with explicit BOS: <|startoftext|>
-    // Turns are wrapped in <|im_start|>{role}\n ... <|im_end|>\n
-    // Optionally insert a tools preamble in a system block.
-    std::string out;
-    out.reserve(1024);
-
-    // Explicit BOS token (LFM2 typically expects startoftext)
-    out += "<|startoftext|>";
-
-    auto emit_block = [&](const char* role, const std::string& content) {
-        out += "<|im_start|>";
-        out += role;
-        out += "\n";
-        out += content;
-        out += "<|im_end|>\n";
-    };
-
     if (!tools_json.empty()) {
-        // Tools preamble lives in a system turn, then we replay the conversation.
-        // If you already have a system message, we’ll include it above the tools description.
-        std::string sys_header;
+        return "ERROR: Tool calls are not supported for LFM2 models";
+    }
 
-        // Concatenate first system message (if any) at the top
-        bool has_system_msg = false;
-        for (const auto& msg : messages) {
-            if (msg.role == "system") {
-                sys_header = msg.content;
-                has_system_msg = true;
-                break;
-            }
-        }
+    std::string result = "<|startoftext|>";
 
-        std::string sys_preamble;
-        if (has_system_msg) {
-            sys_preamble += sys_header;
-            if (!sys_preamble.empty() && sys_preamble.back() != '\n') sys_preamble += "\n";
-            sys_preamble += "\n";
-        }
-
-        sys_preamble += "You can call any of the following tools to satisfy the user's requests: [\n";
-        sys_preamble += tools_json;
-        sys_preamble += "\n]\n";
-        sys_preamble += "Example tool call syntax:\n";
-        sys_preamble += "{\n";
-        sys_preamble += "  \"tool_calls\": [\n";
-        sys_preamble += "    {\n";
-        sys_preamble += "      \"name\": \"tool_name\",\n";
-        sys_preamble += "      \"arguments\": {\n";
-        sys_preamble += "        \"arg1\": \"some_value\"\n";
-        sys_preamble += "      },\n";
-        sys_preamble += "      \"id\": \"call_1___\"\n";
-        sys_preamble += "    }\n";
-        sys_preamble += "  ]\n";
-        sys_preamble += "}";
-        emit_block("system", sys_preamble);
-
-        // Replay the conversation but skip the first system (we already included it)
-        bool skipped_first_system = !sys_header.empty();
-        for (const auto& msg : messages) {
-            if (msg.role == "system" && skipped_first_system) {
-                skipped_first_system = false; // only skip one
-                continue;
-            }
-            if (msg.role == "system") {
-                emit_block("system", msg.content);
-            } else if (msg.role == "user") {
-                emit_block("user", msg.content);
-            } else if (msg.role == "assistant") {
-                emit_block("assistant", msg.content);
-            }
-        }
-    } else {
-        // Plain ChatML conversation
-        for (const auto& msg : messages) {
-            if (msg.role == "system") {
-                emit_block("system", msg.content);
-            } else if (msg.role == "user") {
-                emit_block("user", msg.content);
-            } else if (msg.role == "assistant") {
-                emit_block("assistant", msg.content);
-            }
-        }
+    for (const auto& msg : messages) {
+        result += "<|im_start|>" + msg.role + "\n";
+        result += msg.content;
+        result += "<|im_end|>\n";
     }
 
     if (add_generation_prompt) {
-        // Open the assistant turn to let the model continue generating
-        out += "<|im_start|>assistant\n";
-        // Intentionally no <|im_end|> here.
+        result += "<|im_start|>assistant\n";
     }
 
-    return out;
+    return result;
 }
 
 

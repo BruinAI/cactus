@@ -265,7 +265,6 @@ void compute_fused_node(GraphNode& node, const std::vector<std::unique_ptr<Graph
 
             const size_t element_size = PrecisionTraits::size_of(input_buffer.precision);
 
-            // Zero-copy view when slicing along the leading axis keeps data contiguous.
             if (axis_index == 0) {
                 size_t inner_elements = 1;
                 for (size_t i = 1; i < input_buffer.shape.size(); ++i) {
@@ -285,7 +284,6 @@ void compute_fused_node(GraphNode& node, const std::vector<std::unique_ptr<Graph
                 break;
             }
 
-            // Otherwise, materialize a contiguous copy of the sliced region.
             const char* input_ptr = static_cast<const char*>(input_buffer.get_data());
             if (!input_ptr) {
                 throw std::runtime_error("Slice input buffer is not available");
@@ -544,11 +542,6 @@ void compute_fused_node(GraphNode& node, const std::vector<std::unique_ptr<Graph
             const auto& value_buffer = nodes[node_index_map.at(node.input_ids[2])]->output_buffer;
             const auto& q_shape = query_buffer.shape;
             const auto& k_shape = key_buffer.shape;
-
-            // std ::cout << "Attention input precisions - Q: " << static_cast<int>(query_buffer.precision)
-            //           << ", K: " << static_cast<int>(key_buffer.precision)
-            //           << ", V: " << static_cast<int>(value_buffer.precision) << std::endl;
-            // std::cout << "Output node precision: " << static_cast<int>(node.output_buffer.precision) << std::endl;
             
             if (q_shape.size() < 4) {
                 throw std::runtime_error("Attention operation requires 4D tensors [batch, seq_len, num_heads, head_dim], got " + 
@@ -593,8 +586,8 @@ void compute_fused_node(GraphNode& node, const std::vector<std::unique_ptr<Graph
                 throw std::runtime_error("NPU causal convolution operation not yet implemented");
             }
 
-            const auto& X = nodes[node_index_map.at(node.input_ids[0])]->output_buffer; // [N,L,C_in]
-            const auto& W = nodes[node_index_map.at(node.input_ids[1])]->output_buffer; // depthwise: [C_in*M,1,K]  standard: [C_out,C_in,K]
+            const auto& X = nodes[node_index_map.at(node.input_ids[0])]->output_buffer; 
+            const auto& W = nodes[node_index_map.at(node.input_ids[1])]->output_buffer; 
             auto& Y = node.output_buffer;
 
             if (X.shape.size() != 3) {
@@ -607,18 +600,17 @@ void compute_fused_node(GraphNode& node, const std::vector<std::unique_ptr<Graph
             const size_t N     = X.shape[0];
             const size_t L     = X.shape[1];
             const size_t C_in  = X.shape[2];
-            const size_t W0    = W.shape[0]; // either C_out or C_in*channel_multiplier
-            const size_t W1    = W.shape[1]; // 1 for depthwise, C_in for standard
+            const size_t W0    = W.shape[0];
+            const size_t W1    = W.shape[1]; 
             const size_t K     = W.shape[2];
             const size_t dil   = node.params.dilation; 
             if (dil < 1) throw std::runtime_error("dilation must be >= 1");
 
-            bool is_depthwise = (W1 == 1) && (W0 % C_in == 0);
             size_t M = 1;
             size_t C_out = 0;
 
-            assert(is_depthwise && "Only depthwise causal convolution is supported currently");
-            M = W0 / C_in;   
+            assert((W1 == 1) && (W0 % C_in == 0) && "Only depthwise causal convolution is supported currently");
+            M = W0 / C_in;
             C_out = C_in * M;
             
             Y.shape = { N, L, C_out };

@@ -6,27 +6,27 @@ echo "============================"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 
-WEIGHTS_DIR="$PROJECT_ROOT/weights/lfm2-350m-i8"
+WEIGHTS_DIR="$PROJECT_ROOT/weights/qwen3-600m"
 if [ ! -d "$WEIGHTS_DIR" ] || [ ! -f "$WEIGHTS_DIR/config.txt" ]; then
     echo ""
-    echo "LFM2 weights not found. Generating weights..."
+    echo "Qwen weights not found. Generating weights..."
     echo "============================================="
     cd "$PROJECT_ROOT"
     if command -v python3 &> /dev/null; then
-        echo "Running: python3 tools/convert_hf.py BruinAI/lfm2-350m weights/lfm2-350m-i8/ --precision INT8"
-        if python3 tools/convert_hf.py BruinAI/lfm2-350m weights/lfm2-350m-i8/ --precision INT8; then
-            echo "Successfully generated LFM2 weights"
+        echo "Running: python3 tools/convert_hf.py Qwen/Qwen3-0.6B weights/qwen3-600m/ --precision INT8"
+        if python3 tools/convert_hf.py Qwen/Qwen3-0.6B weights/qwen3-600m/ --precision INT8; then
+            echo "Successfully generated Qwen weights"
         else
-            echo "Warning: Failed to generate LFM2 weights. Tests may fail."
-            echo "Please run manually: python3 tools/convert_hf.py BruinAI/lfm2-350m weights/lfm2-350m-i8/ --precision INT8"
+            echo "Warning: Failed to generate Qwen weights. Tests may fail."
+            echo "Please run manually: python3 tools/convert_hf.py Qwen/Qwen3-0.6B weights/qwen3-600m-i8/ --precision INT8"
         fi
     else
         echo "Warning: Python3 not found. Cannot generate weights automatically."
-        echo "Please run manually: python3 tools/convert_hf.py BruinAI/lfm2-350m weights/lfm2-350m-i8/ --precision INT8"
+        echo "Please run manually: python3 tools/convert_hf.py Qwen/Qwen3-0.6B weights/qwen3-600m-i8/ --precision INT8"
     fi
 else
     echo ""
-    echo "LFM2 weights found at $WEIGHTS_DIR"
+    echo "Qwen weights found at $WEIGHTS_DIR"
 fi
 
 echo ""

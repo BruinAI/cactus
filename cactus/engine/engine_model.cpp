@@ -124,7 +124,6 @@ bool Model::init(const std::string& model_folder, size_t context_size, const std
     cache_k_output_nodes_.resize(config_.num_layers);
     cache_v_output_nodes_.resize(config_.num_layers);
     
-    // Allow derived classes to perform additional initialization
     post_init();
     
     initialized_ = true;
@@ -317,6 +316,10 @@ bool Config::from_json(const std::string& config_path) {
         default_top_k = 64;
     } else if (model_type == ModelType::SMOL) {
         default_temperature = 0.2f;
+        default_top_p = 0.95f;
+        default_top_k = 20;
+    } else if (model_type == ModelType::LFM2) {
+        default_temperature = 0.3f;
         default_top_p = 0.95f;
         default_top_k = 20;
     } else if (model_type == ModelType::QWEN) {

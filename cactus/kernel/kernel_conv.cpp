@@ -17,11 +17,6 @@
 //
 // y[n,t,c*M+m] = sum_{k=0..K-1, t-k*d>=0} X[n, t-k*d, c] * W[c*M+m, k]
 
-static inline ptrdiff_t safe_ti(size_t t, size_t k, size_t dilation) {
-    return (ptrdiff_t)t - (ptrdiff_t)k * (ptrdiff_t)dilation;
-}
-
-
 constexpr size_t T_TILE_F16 = 2;
 
 void cactus_conv1d_causal_depthwise_f16(
@@ -154,8 +149,6 @@ void cactus_conv1d_causal_depthwise_f32(
                 // two accumulators for the two time points
                 float32x4_t vacc0_0 = vdupq_n_f32(0.f);
                 float32x4_t vacc0_1 = vdupq_n_f32(0.f);
-                float       tail0   = 0.f;
-                float       tail1   = 0.f;
 
                 // Tap blocks: 8 at a time (two 4-lane vfma blocks)
                 size_t k = 0;

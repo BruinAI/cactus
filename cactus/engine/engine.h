@@ -47,7 +47,6 @@ struct Config {
     float default_top_p = 0.95f;
     size_t default_top_k = 20;
 
-    // LFM2-specific fields
     std::vector<std::string> layer_types;
     size_t conv_L_cache = 0;
 
@@ -217,11 +216,11 @@ private:
 class ConvCache {
 public:
     struct CircularView {
-        const void* ptr1;   // R_Tensor: [0, head)
+        const void* ptr1;
         size_t len1;
-        const void* ptr2;   // L_Tensor: [head, L)
+        const void* ptr2; 
         size_t len2;
-        size_t total_len;   // always L
+        size_t total_len; 
     };
 
     void init(size_t layers, size_t hidden_dim, size_t window_len, Precision model_precision);
@@ -233,15 +232,15 @@ public:
 
     size_t num_layers = 0;
     size_t hidden_size = 0;
-    size_t window_size = 0;  // L
+    size_t window_size = 0;
     Precision precision = Precision::FP32;
     size_t element_size = 4;
 
 private:
     struct LayerState {
-        std::vector<uint8_t> data;  // size = L * hidden_size * element_size
-        size_t head = 0;            // next write position [0, L)
-        size_t count = 0;           // number of valid rows currently stored
+        std::vector<uint8_t> data;  
+        size_t head = 0; 
+        size_t count = 0; 
     };
 
     std::vector<LayerState> layer_states;
@@ -323,7 +322,7 @@ protected:
                                   ComputeBackend backend, bool use_cache = false, size_t position_offset = 0) = 0;
     void update_kv_cache(CactusGraph* gb, size_t seq_len);
     virtual void post_init() {}
-    virtual void post_execute_updates(CactusGraph* gb, size_t seq_len) {}
+    virtual void post_execute_updates(CactusGraph*, size_t) {}
     Config config_;
     std::unique_ptr<Tokenizer> tokenizer_;
 
