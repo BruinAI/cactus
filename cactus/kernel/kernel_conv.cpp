@@ -10,19 +10,12 @@
 #include <cstddef>
 #include <iostream>
 
-// Layouts:
-// X: [N, L, C_in]
-// W: [C_in * M, 1, K]   (packed as [C_out, K], where C_out = C_in*M)
-// Y: [N, L, C_out]
-//
-// y[n,t,c*M+m] = sum_{k=0..K-1, t-k*d>=0} X[n, t-k*d, c] * W[c*M+m, k]
-
 constexpr size_t T_TILE_F16 = 2;
 
 void cactus_conv1d_causal_depthwise_f16(
-    const __fp16* input,    // [N, L, C]
-    const __fp16* weight,   // [C, 1, K] forward order (fp16)
-    __fp16* output,         // [N, L, C]
+    const __fp16* input, 
+    const __fp16* weight, 
+    __fp16* output,      
     size_t N, size_t L, size_t C, size_t K, size_t dilation)
 {
     const size_t in_bs  = L * C;
@@ -33,7 +26,6 @@ void cactus_conv1d_causal_depthwise_f16(
         __fp16*       Yb = output + n * out_bs;
 
         for (size_t c = 0; c < C; ++c) {
-            // Pre-reverse weights (convert to f32 here to avoid repeated casts)
             std::vector<float> wrev(K);
             const __fp16* Wc = weight + c * K;
             for (size_t k = 0; k < K; ++k) wrev[k] = (float)Wc[K - 1 - k];
@@ -46,7 +38,7 @@ void cactus_conv1d_causal_depthwise_f16(
 
                 size_t k = 0;
                 for (; k + 8 <= K; k += 8) {
-                    // taps k..k+3
+                 
                     float x0_0=0, x1_0=0, x2_0=0, x3_0=0;
                     float x0_1=0, x1_1=0, x2_1=0, x3_1=0;
                     {
@@ -74,7 +66,6 @@ void cactus_conv1d_causal_depthwise_f16(
                     vacc0 = vfmaq_f32(vacc0, xv0, wv0);
                     vacc1 = vfmaq_f32(vacc1, yv0, wv0);
 
-                    // taps k+4..k+7
                     float a0_0=0, a1_0=0, a2_0=0, a3_0=0;
                     float a0_1=0, a1_1=0, a2_1=0, a3_1=0;
                     {
@@ -122,43 +113,36 @@ void cactus_conv1d_causal_depthwise_f16(
 
 
 void cactus_conv1d_causal_depthwise_f32(
-    const float* input,     // [N, L, C] (inner stride C)
-    const float* weight,    // [C, 1, K] forward order
-    float* output,          // [N, L, C]
+    const float* input, 
+    const float* weight,
+    float* output,      
     size_t N, size_t L, size_t C, size_t K, size_t dilation)
 {
     const size_t T_TILE_F32 = 2;
     const size_t in_bs  = L * C;
     const size_t out_bs = L * C;
 
-    // process batch, channel
     for (size_t n = 0; n < N; ++n) {
         const float* Xb = input  + n * in_bs;
         float*       Yb = output + n * out_bs;
 
         for (size_t c = 0; c < C; ++c) {
-            // Pre-reverse weights for this channel (one-time, cheap, improves inner-loop)
             std::vector<float> wrev(K);
             const float* Wc = weight + c * K;
             for (size_t k = 0; k < K; ++k) wrev[k] = Wc[K - 1 - k];
 
-            // Walk time in tiles of 2
             for (size_t t0 = 0; t0 < L; t0 += T_TILE_F32) {
                 const size_t t1 = std::min(t0 + 1, L - 1);
 
-                // two accumulators for the two time points
                 float32x4_t vacc0_0 = vdupq_n_f32(0.f);
                 float32x4_t vacc0_1 = vdupq_n_f32(0.f);
 
-                // Tap blocks: 8 at a time (two 4-lane vfma blocks)
                 size_t k = 0;
                 for (; k + 8 <= K; k += 8) {
-                    // prefetch upcoming input rows lightly
                     if (t0 + 4 < L) __builtin_prefetch(Xb + (t0 + 4) * C + c);
 
-                    // -------- taps k..k+3
-                    float x0_0 = 0.f, x1_0 = 0.f, x2_0 = 0.f, x3_0 = 0.f; // for t0
-                    float x0_1 = 0.f, x1_1 = 0.f, x2_1 = 0.f, x3_1 = 0.f; // for t1
+                    float x0_0 = 0.f, x1_0 = 0.f, x2_0 = 0.f, x3_0 = 0.f; 
+                    float x0_1 = 0.f, x1_1 = 0.f, x2_1 = 0.f, x3_1 = 0.f; 
                     {
                         ptrdiff_t xt0 = (ptrdiff_t)t0 - (ptrdiff_t)((k + 0) * dilation);
                         ptrdiff_t xt1 = (ptrdiff_t)t0 - (ptrdiff_t)((k + 1) * dilation);
@@ -170,7 +154,6 @@ void cactus_conv1d_causal_depthwise_f32(
                         if (xt2 >= 0) x2_0 = Xb[(size_t)xt2 * C + c];
                         if (xt3 >= 0) x3_0 = Xb[(size_t)xt3 * C + c];
 
-                        // second time point (t1)
                         ptrdiff_t yu0 = (ptrdiff_t)t1 - (ptrdiff_t)((k + 0) * dilation);
                         ptrdiff_t yu1 = (ptrdiff_t)t1 - (ptrdiff_t)((k + 1) * dilation);
                         ptrdiff_t yu2 = (ptrdiff_t)t1 - (ptrdiff_t)((k + 2) * dilation);
@@ -190,7 +173,6 @@ void cactus_conv1d_causal_depthwise_f32(
                     vacc0_0 = vfmaq_f32(vacc0_0, xv0, wv0);
                     vacc0_1 = vfmaq_f32(vacc0_1, yv0, wv0);
 
-                    // -------- taps k+4..k+7
                     float a0_0 = 0.f, a1_0 = 0.f, a2_0 = 0.f, a3_0 = 0.f;
                     float a0_1 = 0.f, a1_1 = 0.f, a2_1 = 0.f, a3_1 = 0.f;
                     {
@@ -224,14 +206,11 @@ void cactus_conv1d_causal_depthwise_f32(
                     vacc0_1 = vfmaq_f32(vacc0_1, yv1, wv1);
                 }
 
-                // reduce vector accumulators
                 float acc0 = vaddvq_f32(vacc0_0) + vaddvq_f32(vacc0_1);
-                float acc1 = vaddvq_f32(vacc0_1); // (vacc0_1 already included above for t1 vector parts)
-                // fix: we summed vacc0_1 twice; correct way:
+                float acc1 = vaddvq_f32(vacc0_1); 
                 acc0 = vaddvq_f32(vacc0_0);
                 acc1 = vaddvq_f32(vacc0_1);
 
-                // scalar tail taps
                 for (; k < K; ++k) {
                     ptrdiff_t x0 = (ptrdiff_t)t0 - (ptrdiff_t)(k * dilation);
                     if (x0 >= 0) acc0 += wrev[k] * Xb[(size_t)x0 * C + c];
@@ -239,9 +218,7 @@ void cactus_conv1d_causal_depthwise_f32(
                     if (x1 >= 0) acc1 += wrev[k] * Xb[(size_t)x1 * C + c];
                 }
 
-                // store t0
                 Yb[t0 * C + c] = acc0;
-                // store t1 if it belongs to this tile
                 if (t0 + 1 < L) {
                     Yb[t1 * C + c] = acc1;
                 }
