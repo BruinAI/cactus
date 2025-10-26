@@ -29,7 +29,7 @@ enum class OpType {
     ADD, ADD_CLIPPED, SUBTRACT, MULTIPLY, DIVIDE,
     MATMUL, TRANSPOSE, RESHAPE, SLICE, GATHER, EMBEDDING,
     SUM, MEAN, VARIANCE, MIN, MAX,
-    RMS_NORM, ROPE, SOFTMAX, ATTENTION, CONV1D_CAUSAL,
+    RMS_NORM, LAYER_NORM, ROPE, SOFTMAX, ATTENTION, CONV1D_CAUSAL,
     SCALAR_ADD, SCALAR_SUBTRACT, SCALAR_MULTIPLY, SCALAR_DIVIDE, SCALAR_EXP, SCALAR_SQRT, SCALAR_COS, SCALAR_SIN,
     SILU, GELU,
     SAMPLE, CONCAT,
@@ -212,6 +212,7 @@ public:
     
     size_t matmul(size_t input1, size_t input2, bool pretransposed_rhs = false, ComputeBackend backend = ComputeBackend::CPU);
     size_t transpose(size_t input, ComputeBackend backend = ComputeBackend::CPU);
+    size_t transposeN(size_t input, const std::vector<size_t>& permutation, ComputeBackend backend = ComputeBackend::CPU);
     size_t reshape(size_t input, const std::vector<size_t>& new_shape);
     size_t slice(size_t input, int axis, size_t start, size_t length);
     size_t index(size_t input, size_t index_value, int dim);
@@ -232,6 +233,7 @@ public:
     size_t layernorm(size_t input, size_t weight, size_t bias, float epsilon = 1e-5f);
     size_t topk(size_t input, size_t k);
     size_t rms_norm(size_t input, size_t weight, float epsilon = 1e-5f);
+    size_t layer_norm(size_t input, size_t weight, size_t bias, float epsilon = 1e-6f);
     size_t rope(size_t input, float theta, size_t position_offset = 0, ComputeBackend backend = ComputeBackend::CPU);
     size_t softmax(size_t input, int axis = -1);
     size_t attention(size_t query, size_t key, size_t value, float scale, bool is_causal = true, ComputeBackend backend = ComputeBackend::CPU);

@@ -140,6 +140,23 @@ size_t CactusGraph::transpose(size_t input, ComputeBackend backend) {
     return add_node(OpType::TRANSPOSE, {input}, output_shape, params);
 }
 
+size_t CactusGraph::transposeN(size_t input, const std::vector<size_t>& permutation, ComputeBackend backend) {
+    const auto& input_buffer = get_output_buffer(input);
+    if (permutation.size() != input_buffer.shape.size()) {
+        throw std::runtime_error("transposeN permutation size must match tensor rank");
+    }
+    std::vector<size_t> output_shape(permutation.size());
+    for (size_t i = 0; i < permutation.size(); ++i) {
+        size_t p = permutation[i];
+        if (p >= input_buffer.shape.size()) {
+            throw std::runtime_error("transposeN permutation index out of range");
+        }
+        output_shape[i] = input_buffer.shape[p];
+    }
+    OpParams params{.permutation = permutation, .backend = backend};
+    return add_node(OpType::TRANSPOSE, {input}, output_shape, params);
+}
+
 
 size_t CactusGraph::reshape(size_t input, const std::vector<size_t>& new_shape) {
     OpParams params{.new_shape = new_shape};
@@ -277,6 +294,11 @@ size_t CactusGraph::max(size_t input, int axis) {
 size_t CactusGraph::rms_norm(size_t input, size_t weight, float epsilon) {
     OpParams params{.epsilon = epsilon};
     return add_node(OpType::RMS_NORM, {input, weight}, {}, params);
+}
+
+size_t CactusGraph::layer_norm(size_t input, size_t weight, size_t bias, float epsilon) {
+    OpParams params{.epsilon = epsilon};
+    return add_node(OpType::LAYER_NORM, {input, weight, bias}, {}, params);
 }
 
 size_t CactusGraph::rope(size_t input, float theta, size_t position_offset, ComputeBackend backend) {

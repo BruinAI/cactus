@@ -468,6 +468,83 @@ void compute_fused_node(GraphNode& node, const std::vector<std::unique_ptr<Graph
             }
             break;
         }
+        case OpType::LAYER_NORM: {
+            const auto& input_buffer = nodes[node_index_map.at(node.input_ids[0])]->output_buffer;
+            const auto& weight_buffer = nodes[node_index_map.at(node.input_ids[1])]->output_buffer;
+            const auto& bias_buffer = nodes[node_index_map.at(node.input_ids[2])]->output_buffer;
+            
+            if (input_buffer.shape.size() != 2) {
+                throw std::runtime_error("Layer normalization requires 2D input tensor [seq_len, hidden_dim], got " + 
+                                        std::to_string(input_buffer.shape.size()) + "D tensor");
+            }
+            
+            size_t seq_len = input_buffer.shape[0];
+            size_t hidden_dim = input_buffer.shape[1];
+            
+            if (input_buffer.precision == Precision::FP32) {
+                const float* input = input_buffer.data_as<float>();
+                const float* weight = weight_buffer.data_as<float>();
+                const float* bias = bias_buffer.data_as<float>();
+                float* output = node.output_buffer.data_as<float>();
+                float eps = node.params.epsilon;
+                
+                for (size_t i = 0; i < seq_len; ++i) {
+                    const float* row = input + i * hidden_dim;
+                    float* out = output + i * hidden_dim;
+                    
+                    float mean = 0.0f;
+                    for (size_t j = 0; j < hidden_dim; ++j) {
+                        mean += row[j];
+                    }
+                    mean /= static_cast<float>(hidden_dim);
+                    
+                    float var = 0.0f;
+                    for (size_t j = 0; j < hidden_dim; ++j) {
+                        float diff = row[j] - mean;
+                        var += diff * diff;
+                    }
+                    var /= static_cast<float>(hidden_dim);
+                    
+                    float inv_std = 1.0f / sqrtf(var + eps);
+                    for (size_t j = 0; j < hidden_dim; ++j) {
+                        out[j] = (row[j] - mean) * inv_std * weight[j] + bias[j];
+                    }
+                }
+            } else if (input_buffer.precision == Precision::FP16) {
+                const __fp16* input = input_buffer.data_as<__fp16>();
+                const __fp16* weight = weight_buffer.data_as<__fp16>();
+                const __fp16* bias = bias_buffer.data_as<__fp16>();
+                __fp16* output = node.output_buffer.data_as<__fp16>();
+                float eps = node.params.epsilon;
+                
+                for (size_t i = 0; i < seq_len; ++i) {
+                    const __fp16* row = input + i * hidden_dim;
+                    __fp16* out = output + i * hidden_dim;
+                    
+                    float mean = 0.0f;
+                    for (size_t j = 0; j < hidden_dim; ++j) {
+                        mean += static_cast<float>(row[j]);
+                    }
+                    mean /= static_cast<float>(hidden_dim);
+                    
+                    float var = 0.0f;
+                    for (size_t j = 0; j < hidden_dim; ++j) {
+                        float diff = static_cast<float>(row[j]) - mean;
+                        var += diff * diff;
+                    }
+                    var /= static_cast<float>(hidden_dim);
+                    
+                    float inv_std = 1.0f / sqrtf(var + eps);
+                    for (size_t j = 0; j < hidden_dim; ++j) {
+                        float normalized = (static_cast<float>(row[j]) - mean) * inv_std;
+                        out[j] = static_cast<__fp16>(normalized * static_cast<float>(weight[j]) + static_cast<float>(bias[j]));
+                    }
+                }
+            } else {
+                throw std::runtime_error("Layer normalization only supports FP32 and FP16 precision");
+            }
+            break;
+        }
         case OpType::ROPE: {
             if (node.params.backend == ComputeBackend::NPU) {
                 throw std::runtime_error("NPU RoPE operation not yet implemented");

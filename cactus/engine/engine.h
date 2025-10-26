@@ -31,7 +31,27 @@ struct Config {
     uint32_t moe_every_n_layers = 0;
     bool tie_word_embeddings = true;
 
-    enum class ModelType {QWEN = 0, GEMMA = 1, SMOL = 2, NOMIC = 3, LFM2 = 4};
+    uint32_t vision_hidden_dim = 0;
+    uint32_t vision_num_layers = 0;
+    uint32_t vision_attention_heads = 0;
+    uint32_t vision_image_size = 0;
+    uint32_t vision_patch_size = 0;
+    uint32_t vision_num_channels = 3;
+    uint32_t vision_embed_dim = 0;
+    uint32_t visual_tokens_per_img = 0;
+    bool use_pixel_shuffle = false;
+    uint32_t pixel_shuffle_factor = 1;
+    bool use_image_tokens = false;
+    bool use_layout_tags = false;
+    uint32_t image_seq_len = 64;
+
+    uint32_t global_image_size = 2048;
+    uint32_t max_tile_size = 512;
+    float rescale_factor = 0.00392156862745098f;
+    float image_mean = 0.5f;
+    float image_std = 0.5f;
+
+    enum class ModelType {QWEN = 0, GEMMA = 1, SMOL = 2, NOMIC = 3, SMOLVLM = 4, LFM2 = 5};
     ModelType model_type = ModelType::QWEN;
 
     enum class Activation {GELU = 0, SILU = 1};
@@ -72,6 +92,16 @@ struct ChatMessage {
     std::string content;
 };
 
+struct ImageBatch {
+    // Preprocessed image data in CHW float32 layout
+    std::vector<float> data;
+    uint32_t width = 0;
+    uint32_t height = 0;
+    uint32_t channels = 0;
+    // Pixel mask: 1 for valid pixels, 0 for padding (row-major HxW)
+    std::vector<uint8_t> pixel_mask;
+};
+
 class Tokenizer {
 public:
     virtual ~Tokenizer() = default;
@@ -89,19 +119,30 @@ public:
     virtual bool has_chat_template() const { return has_chat_template_; }
 
     virtual bool load_vocabulary_with_config(const std::string& vocab_file, const std::string& merges_file, const std::string& config_file) = 0;
+    
+    uint32_t get_image_token_id() const { return image_token_id_; }
+    uint32_t get_fake_token_id() const { return fake_token_id_; }
+    uint32_t get_global_img_token_id() const { return global_img_token_id_; }
+    
+    void load_special_tokens(const std::string& added_tokens_path);
+
 
 protected:
-
-    enum class ModelType { UNKNOWN, QWEN, GEMMA, LFM2 , SMOL, BERT };
+    enum class ModelType { UNKNOWN, QWEN, GEMMA, LFM2, SMOL, SMOLVLM, BERT };
     ModelType model_type_ = ModelType::UNKNOWN;
     bool has_chat_template_ = false;
     std::string chat_template_;
+    
+    uint32_t image_token_id_ = 49190;  // <image>
+    uint32_t fake_token_id_ = 49189;   // <fake_token_around_image>
+    uint32_t global_img_token_id_ = 49152;  // <global-img>
 
     void detect_model_type(const std::string& config_path);
     std::string format_qwen_style(const std::vector<ChatMessage>& messages, bool add_generation_prompt, const std::string& tools_json) const;
     std::string format_gemma_style(const std::vector<ChatMessage>& messages, bool add_generation_prompt, const std::string& tools_json) const;
     std::string format_lfm2_style(const std::vector<ChatMessage>& messages, bool add_generation_prompt, const std::string& tools_json) const;
     std::string format_smol_style(const std::vector<ChatMessage>& messages, bool add_generation_prompt, const std::string& tools_json) const;
+    std::string format_smolvlm_style(const std::vector<ChatMessage>& messages, bool add_generation_prompt, const std::string& tools_json) const;
 };
 
 class BPETokenizer : public Tokenizer {
@@ -305,6 +346,11 @@ public:
     bool init(const std::string& model_folder, size_t context_size, const std::string& system_prompt = "");
     uint32_t generate(const std::vector<uint32_t>& tokens, float temperature = -1.0f, float top_p = -1.0f,
                       size_t top_k = 0, const std::string& profile_file = "");
+
+    // Image-aware generation entrypoint. Default implementation forwards to generate()
+    virtual uint32_t generate_with_images(const std::vector<uint32_t>& tokens, const std::vector<ImageBatch>& images,
+                                          float temperature = -1.0f, float top_p = -1.0f,
+                                          size_t top_k = 0, const std::string& profile_file = "");
 
     std::vector<float> get_embeddings(const std::vector<uint32_t>& tokens, bool pooled = true, const std::string& profile_file = "");
 

@@ -79,6 +79,13 @@ bool Model::init(const std::string& model_folder, size_t context_size, const std
         return false;
     }
     
+    std::string added_tokens_file = model_folder + "/added_tokens.json";
+    std::ifstream added_tokens_check(added_tokens_file);
+    if (added_tokens_check.good()) {
+        added_tokens_check.close();
+        tokenizer_->load_special_tokens(added_tokens_file);
+    }
+    
     auto* gb = new CactusGraph();
     graph_handle_ = gb;
     
@@ -169,6 +176,12 @@ uint32_t Model::generate(const std::vector<uint32_t>& tokens, float temperature,
     
     auto* output_ptr = gb->get_output(sampled_token_id);
     return *static_cast<uint32_t*>(output_ptr);
+}
+
+uint32_t Model::generate_with_images(const std::vector<uint32_t>& tokens, const std::vector<ImageBatch>& images,
+                                     float temperature, float top_p, size_t top_k, const std::string& profile_file) {
+    (void)images;
+    return generate(tokens, temperature, top_p, top_k, profile_file);
 }
 
 void Model::update_kv_cache(CactusGraph* gb, size_t seq_len) {
@@ -283,6 +296,24 @@ bool Config::from_json(const std::string& config_path) {
         else if (key == "num_top_experts") num_top_experts = std::stoul(value);
         else if (key == "moe_every_n_layers") moe_every_n_layers = std::stoul(value);
         else if (key == "tie_word_embeddings") tie_word_embeddings = (value == "true" || value == "1");
+        else if (key == "vision_hidden_dim") vision_hidden_dim = std::stoul(value);
+        else if (key == "vision_num_layers") vision_num_layers = std::stoul(value);
+        else if (key == "vision_attention_heads") vision_attention_heads = std::stoul(value);
+        else if (key == "vision_image_size") vision_image_size = std::stoul(value);
+        else if (key == "vision_patch_size") vision_patch_size = std::stoul(value);
+        else if (key == "vision_num_channels") vision_num_channels = std::stoul(value);
+        else if (key == "vision_embed_dim") vision_embed_dim = std::stoul(value);
+        else if (key == "visual_tokens_per_img") visual_tokens_per_img = std::stoul(value);
+        else if (key == "use_pixel_shuffle") use_pixel_shuffle = (value == "true" || value == "1");
+        else if (key == "pixel_shuffle_factor") pixel_shuffle_factor = std::stoul(value);
+        else if (key == "use_image_tokens") use_image_tokens = (value == "true" || value == "1");
+        else if (key == "use_layout_tags") use_layout_tags = (value == "true" || value == "1");
+        else if (key == "image_seq_len") image_seq_len = std::stoul(value);
+        else if (key == "global_image_size") global_image_size = std::stoul(value);
+        else if (key == "max_tile_size") max_tile_size = std::stoul(value);
+        else if (key == "rescale_factor") rescale_factor = std::stof(value);
+        else if (key == "image_mean") image_mean = std::stof(value);
+        else if (key == "image_std") image_std = std::stof(value);
         else if (key == "precision") {
             if (value == "INT8") precision = Precision::INT8;
             else if (value == "FP16") precision = Precision::FP16;
@@ -291,6 +322,7 @@ bool Config::from_json(const std::string& config_path) {
         else if (key == "model_type") {
             if (value == "gemma" || value == "GEMMA") model_type = ModelType::GEMMA;
             else if (value == "lfm2" || value == "LFM2") model_type = ModelType::LFM2;
+            else if (value == "smolvlm" || value == "SMOLVLM" || value == "SmolVLM") model_type = ModelType::SMOLVLM;
             else if (value == "smol" || value == "SMOL" || value == "Smol") model_type = ModelType::SMOL;
             else if (value == "bert" || value == "BERT") model_type = ModelType::NOMIC;
             else model_type = ModelType::QWEN;
@@ -318,8 +350,17 @@ bool Config::from_json(const std::string& config_path) {
         default_temperature = 0.2f;
         default_top_p = 0.95f;
         default_top_k = 20;
+<<<<<<< HEAD
     } else if (model_type == ModelType::LFM2) {
         default_temperature = 0.3f;
+=======
+    } else if (model_type == ModelType::SMOLVLM) {
+        default_temperature = 0.2f;
+        default_top_p = 0.95f;
+        default_top_k = 20;
+    } else if (model_type == ModelType::QWEN) {
+        default_temperature = 0.6f;
+>>>>>>> origin/justin/smol
         default_top_p = 0.95f;
         default_top_k = 20;
     } else if (model_type == ModelType::QWEN) {
@@ -352,6 +393,8 @@ std::unique_ptr<Model> create_model(const std::string& model_folder) {
             return std::make_unique<LFM2Model>(config);
         case Config::ModelType::SMOL:
             return std::make_unique<SmolModel>(config);
+        case Config::ModelType::SMOLVLM:
+            return std::make_unique<SmolVLMModel>(config);
         case Config::ModelType::NOMIC:
             return std::make_unique<NomicModel>(config);
         default:

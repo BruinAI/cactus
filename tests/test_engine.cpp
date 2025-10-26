@@ -1,4 +1,6 @@
 #include "test_utils.h"
+#include <fstream>
+#include <filesystem>
 #include <chrono>
 #include <cstring>
 #include <cstdlib>
@@ -252,6 +254,55 @@ bool test_tool_call() {
     return result > 0 && stream_data.token_count > 0;
 }
 
+bool test_image_input() {
+    std::string model_path_str(g_model_path);
+    if (model_path_str.find("vlm") == std::string::npos) {
+        std::cout << "Skipping image input test: model is not a VLM." << std::endl;
+        return true;
+    }
+
+    std::string vision_file = model_path_str + std::string("/vision_patch_embedding.weights");
+    std::ifstream vf(vision_file);
+    if (!vf.good()) {
+        std::cout << "Skipping image input test: vision weights not found." << std::endl;
+        return true;
+    }
+    vf.close();
+
+    cactus_model_t model = cactus_init(g_model_path, 2048);
+    if (!model) {
+        std::cerr << "Failed to initialize model for image test" << std::endl;
+        return false;
+    }
+
+    std::filesystem::path rel_img_path = std::filesystem::path("assets/test_image2.png");
+    std::filesystem::path abs_img_path = std::filesystem::absolute(rel_img_path);
+    std::string img_path_str = abs_img_path.string();
+    std::string messages_json = "[";
+    messages_json += "{\"role\": \"user\", \"content\": [";
+    messages_json += "{\"type\": \"image\", \"path\": \"" + img_path_str + "\"},";
+    messages_json += "{\"type\": \"text\", \"text\": \"Describe what is happening in this image in two sentences.\"}";
+    messages_json += "]}";
+    messages_json += "]";
+
+    const std::string& messages_ref = messages_json;
+    const char* messages = messages_ref.c_str();
+
+    StreamingTestData stream_data;
+    stream_data.token_count = 0;
+
+    char response[4096];
+
+    std::cout << "\n=== Image Input Test ===" << std::endl;
+    int result = cactus_complete(model, messages, response, sizeof(response), g_options, nullptr,
+                                streaming_callback, &stream_data);
+
+    std::cout << "\nFinal Response JSON:\n" << response << "\n" << std::endl;
+
+    cactus_destroy(model);
+
+    return result > 0 && stream_data.token_count > 0;
+}
 
 int main() {
     TestUtils::TestRunner runner("Engine Tests");
@@ -260,6 +311,9 @@ int main() {
     runner.run_test("generation_control", test_generation_control());
     runner.run_test("conversation", test_conversation());
     runner.run_test("tool_calls", test_tool_call());
+    runner.run_test("incremental_processing", test_incremental_processing());
+    runner.run_test("ffi_with_tools", test_ffi_with_tools());
+    runner.run_test("image_input", test_image_input());
     runner.print_summary();
     return runner.all_passed() ? 0 : 1;
 }
