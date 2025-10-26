@@ -343,5 +343,67 @@ protected:
 
 std::unique_ptr<Model> create_model(const std::string& model_folder);
 
+/**
+ * SigLip2Preprocessor: Image preprocessing for SigLip2 vision models
+ * 
+ * Handles complete image preprocessing pipeline:
+ * - Image loading from files or memory
+ * - RGB conversion, resizing, rescaling, normalization
+ * - Patch extraction and padding with attention masks
+ */
+class SigLip2Preprocessor {
+public:
+    struct Config {
+        int patch_size = 16;
+        int max_num_patches = 256;
+        bool do_resize = true;
+        bool do_rescale = true;
+        bool do_normalize = true;
+        bool do_convert_rgb = true;
+        float rescale_factor = 1.0f / 255.0f;
+        float image_mean[3] = {0.5f, 0.5f, 0.5f};
+        float image_std[3] = {0.5f, 0.5f, 0.5f};
+        float binary_search_eps = 1e-5f;
+    };
+
+    struct PreprocessedImage {
+        std::vector<float> pixel_values;      // Shape: (max_num_patches, patch_size*patch_size*3)
+        std::vector<int> pixel_attention_mask; // Shape: (max_num_patches,)
+        int num_patches_height;
+        int num_patches_width;
+        int actual_num_patches;               // Number of non-padded patches
+        
+        ~PreprocessedImage();
+    };
+
+    explicit SigLip2Preprocessor(const Config& config);
+    SigLip2Preprocessor();  // Add default constructor
+    ~SigLip2Preprocessor();
+
+    // Load and preprocess an image from a file path
+    PreprocessedImage preprocess_from_file(const std::string& image_path);
+    
+    // Preprocess an image already loaded in memory
+    PreprocessedImage preprocess_from_memory(const unsigned char* img_data, int width, int height, int channels);
+
+private:
+    Config config_;
+
+    // Helper methods
+    std::vector<unsigned char> convert_to_rgb(const unsigned char* img_data, int width, int height, int channels);
+    int get_scaled_image_size(float scale, int size, int patch_size);
+    std::pair<int, int> get_image_size_for_max_num_patches(
+        int image_height, int image_width, int patch_size, int max_num_patches, float eps);
+    std::vector<unsigned char> resize_image(
+        const unsigned char* img_data, int src_width, int src_height,
+        int dst_width, int dst_height, int channels);
+    std::vector<float> normalize_image(const unsigned char* img_data, int width, int height, int channels);
+    std::vector<std::vector<float>> convert_image_to_patches(
+        const std::vector<float>& image, int width, int height, int channels, int patch_size);
+    PreprocessedImage pad_patches(
+        const std::vector<std::vector<float>>& patches,
+        int width, int height, int patch_size, int max_num_patches);
+};
+
 }
 }
