@@ -290,17 +290,37 @@ private:
         size_t output_norm_weight;
 
         struct LayerWeights {
-            size_t attn_q_weight;
-            size_t attn_k_weight;
-            size_t attn_v_weight;
-            size_t attn_output_weight;
-            size_t input_layernorm_weight;
-            size_t attn_q_norm_weight;
-            size_t attn_k_norm_weight;
-            size_t pre_feedforward_layernorm_weight;
-            size_t post_feedforward_layernorm_weight;
-            size_t fc_weight;
-            size_t post_attention_layernorm_weight;
+            size_t encoder_attn_q_weight;
+            size_t encoder_attn_k_weight;
+            size_t encoder_attn_v_weight;
+            size_t encoder_attn_q_bias;
+            size_t encoder_attn_v_bias;
+            size_t encoder_attn_output_weight;
+            size_t encoder_attn_otuput_bias;
+
+            size_t post_encoder_layernorm_weight1;
+            size_t post_encoder_layernorm_bias1;
+
+            size_t ffn1_weight;
+            size_t ffn1_bias;
+            size_t ffn2_weight;
+            size_t ffn2_bias;
+
+            size_t post_ffn_layernorm_weight1;
+            size_t post_ffn_layernorm_bias1;
+            
+            size_t self_attn_q_weight;
+            size_t self_attn_k_weight;
+            size_t self_attn_v_weight;
+            size_t self_attn_q_bias;
+            size_t self_attn_v_bias;
+            size_t self_attn_output_weight;
+            size_t self_attn_otuput_bias;
+
+            size_t post_attn_layernorm_weight1;
+            size_t post_attn_layernorm_bias1;
+
+
         };
 
         std::vector<LayerWeights> layers;
