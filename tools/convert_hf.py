@@ -42,40 +42,48 @@ def save_tensor_with_header(tensor, output_path, precision='FP32', transpose=Fal
             precision = 'FP16'
     
     if precision == 'INT8':
-        qmin, qmax = -128, 127
-        standard_scale = (max_val - min_val) / (qmax - qmin) if max_val != min_val else 1.0
+
+        if(model_type == 'llama' or  model_type == 'Llama'):
+            qmin, qmax = 0, 255
+            scale = (np.max(original_data) - np.min(original_data)) / (qmax - qmin)
+            zero_point = np.round(qmax - np.max(original_data) / scale)
+            quantized = np.clip(np.round(original_data / scale + zero_point), qmin, qmax).astype(np.uint8)
         
-        standard_zero_point = qmax - max_val / standard_scale
-        standard_zero_point_clipped = np.clip(np.round(standard_zero_point), qmin, qmax)
-        test_quantized = np.clip(np.round(original_data / standard_scale + standard_zero_point_clipped), qmin, qmax)
-        test_saturation = np.sum(np.abs(test_quantized) >= 127) / original_data.size
-        
-        saturation_threshold = args.saturation_threshold if args else 0.01
-        if test_saturation > saturation_threshold:
-            outlier_percentile = args.outlier_percentile if args else 0.01
-            lower_percentile = np.percentile(original_data, outlier_percentile)
-            upper_percentile = np.percentile(original_data, 100 - outlier_percentile)
+        else:
+            qmin, qmax = -128, 127
+            standard_scale = (max_val - min_val) / (qmax - qmin) if max_val != min_val else 1.0
             
-            mean_val = np.mean(original_data)
-            std_val = np.std(original_data)
-            sigma_multiplier = args.sigma_multiplier if args else 3.5
-            three_sigma_min = mean_val - sigma_multiplier * std_val
-            three_sigma_max = mean_val + sigma_multiplier * std_val
+            standard_zero_point = qmax - max_val / standard_scale
+            standard_zero_point_clipped = np.clip(np.round(standard_zero_point), qmin, qmax)
+            test_quantized = np.clip(np.round(original_data / standard_scale + standard_zero_point_clipped), qmin, qmax)
+            test_saturation = np.sum(np.abs(test_quantized) >= 127) / original_data.size
             
-            clipped_min = max(min_val, min(lower_percentile, three_sigma_min))
-            clipped_max = min(max_val, max(upper_percentile, three_sigma_max))
-            
-            range_threshold = args.range_threshold if args else 0.5
-            if (clipped_max - clipped_min) < range_threshold * (max_val - min_val):
+            saturation_threshold = args.saturation_threshold if args else 0.01
+            if test_saturation > saturation_threshold:
+                outlier_percentile = args.outlier_percentile if args else 0.01
+                lower_percentile = np.percentile(original_data, outlier_percentile)
+                upper_percentile = np.percentile(original_data, 100 - outlier_percentile)
+                
+                mean_val = np.mean(original_data)
+                std_val = np.std(original_data)
+                sigma_multiplier = args.sigma_multiplier if args else 3.5
+                three_sigma_min = mean_val - sigma_multiplier * std_val
+                three_sigma_max = mean_val + sigma_multiplier * std_val
+                
+                clipped_min = max(min_val, min(lower_percentile, three_sigma_min))
+                clipped_max = min(max_val, max(upper_percentile, three_sigma_max))
+                
+                range_threshold = args.range_threshold if args else 0.5
+                if (clipped_max - clipped_min) < range_threshold * (max_val - min_val):
+                    clipped_min = min_val
+                    clipped_max = max_val
+            else:
                 clipped_min = min_val
                 clipped_max = max_val
-        else:
-            clipped_min = min_val
-            clipped_max = max_val
-        
-        abs_max = max(abs(clipped_min), abs(clipped_max))
-        scale = abs_max / 127.0 if abs_max != 0 else 1.0
-        
+            
+            abs_max = max(abs(clipped_min), abs(clipped_max))
+            scale = abs_max / 127.0 if abs_max != 0 else 1.0
+            
         quantized_data = np.clip(np.round(original_data / scale), qmin, qmax).astype(np.int8)
 
         dequantized_data = quantized_data.astype(np.float32) * scale
