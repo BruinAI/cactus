@@ -314,6 +314,15 @@ bool Config::from_json(const std::string& config_path) {
         else if (key == "rescale_factor") rescale_factor = std::stof(value);
         else if (key == "image_mean") image_mean = std::stof(value);
         else if (key == "image_std") image_std = std::stof(value);
+        else if (key == "downsample_factor") downsample_factor = std::stoul(value);
+        else if (key == "min_tiles") min_tiles = std::stoul(value);
+        else if (key == "max_tiles") max_tiles = std::stoul(value);
+        else if (key == "use_thumbnail") use_thumbnail = (value == "true" || value == "1");
+        else if (key == "min_image_tokens") min_image_tokens = std::stoul(value);
+        else if (key == "max_image_tokens") max_image_tokens = std::stoul(value);
+        else if (key == "tile_size") tile_size = std::stoul(value);
+        else if (key == "max_pixels_tolerance") max_pixels_tolerance = std::stof(value);
+        else if (key == "do_image_splitting") do_image_splitting = (value == "true" || value == "1");
         else if (key == "precision") {
             if (value == "INT8") precision = Precision::INT8;
             else if (value == "FP16") precision = Precision::FP16;
@@ -399,6 +408,14 @@ std::unique_ptr<Model> create_model(const std::string& model_folder) {
         default:
             return std::make_unique<QwenModel>(config);
     }
+}
+
+void Model::capture_debug_node(uint32_t layer_idx, const std::string& name, size_t node_id) {
+    debug_nodes_.push_back({layer_idx, name, node_id});
+}
+
+void Model::clear_debug_nodes() {
+    debug_nodes_.clear();
 }
 
 }

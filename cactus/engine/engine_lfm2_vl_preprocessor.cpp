@@ -31,37 +31,65 @@ int Lfm2VlPreprocessor::round_by_factor(int number, int factor) {
     return ((number + factor / 2) / factor) * factor;
 }
 
-std::pair<int, int> Lfm2VlPreprocessor::smart_resize(int height, int width) {
-    int total_factor = config_.patch_size * config_.downsample_factor;
-    int smart_resize_min_pixels = config_.min_image_tokens * config_.patch_size * config_.patch_size * 
-                                   config_.downsample_factor * config_.downsample_factor;
-    int smart_resize_max_pixels = config_.max_image_tokens * config_.patch_size * config_.patch_size * 
-                                   config_.downsample_factor * config_.downsample_factor;
+// helpers
+static inline int tokens_from_size(int h, int w, int patch, int dwn) {
+    // patches per dim = h/patch, w/patch (divisible due to snap)
+    const int ph = h / patch;
+    const int pw = w / patch;
+    // downsampled tokens per dim: ceil(ph/dwn), ceil(pw/dwn)
+    const int th = (ph + dwn - 1) / dwn;
+    const int tw = (pw + dwn - 1) / dwn;
+    return th * tw;
+}
 
-    int h_bar = std::max(total_factor, round_by_factor(height, total_factor));
-    int w_bar = std::max(total_factor, round_by_factor(width, total_factor));
 
-    if (h_bar * w_bar > smart_resize_max_pixels) {
-        float beta = std::sqrt(static_cast<float>(height * width) / smart_resize_max_pixels);
-        h_bar = std::max(total_factor, static_cast<int>(std::floor(height / beta / total_factor)) * total_factor);
-        w_bar = std::max(total_factor, static_cast<int>(std::floor(width / beta / total_factor)) * total_factor);
-    } else if (h_bar * w_bar < smart_resize_min_pixels) {
-        float beta = std::sqrt(static_cast<float>(smart_resize_min_pixels) / (height * width));
-        h_bar = static_cast<int>(std::ceil(height * beta / total_factor)) * total_factor;
-        w_bar = static_cast<int>(std::ceil(width * beta / total_factor)) * total_factor;
+std::pair<int,int> Lfm2VlPreprocessor::smart_resize(int height, int width) {
+    const int patch = config_.patch_size;
+    const int mult  = config_.patch_size * config_.downsample_factor;
+    const int64_t min_pixels = (int64_t)config_.min_image_tokens * patch * patch * config_.downsample_factor * config_.downsample_factor;
+    const int64_t max_pixels = (int64_t)config_.max_image_tokens * patch * patch * config_.downsample_factor * config_.downsample_factor;
+
+    int h_bar = std::max(patch, round_by_factor(height, patch));
+    int w_bar = std::max(patch, round_by_factor(width,  patch));
+    printf("[smart_resize] in=%dx%d  rounded=%dx%d  min_px=%lld max_px=%lld\n",
+           width, height, w_bar, h_bar, (long long)min_pixels, (long long)max_pixels);
+
+    if ((int64_t)h_bar * w_bar > max_pixels) {
+        float beta = std::sqrt((float)height * (float)width / (float)max_pixels);
+        h_bar = std::max(patch, (int)std::floor(height / beta / patch) * patch);
+        w_bar = std::max(patch, (int)std::floor(width  / beta / patch) * patch);
+        printf("[smart_resize] scale-down beta=%.4f -> %dx%d\n", beta, w_bar, h_bar);
+    } else if ((int64_t)h_bar * w_bar < min_pixels) {
+        float beta = std::sqrt((float)min_pixels / ((float)height * (float)width));
+        h_bar = (int)std::ceil(height * beta / patch) * patch;
+        w_bar = (int)std::ceil(width  * beta / patch) * patch;
+        printf("[smart_resize] scale-up   beta=%.4f -> %dx%d\n", beta, w_bar, h_bar);
     }
 
-    return {w_bar, h_bar};
+    int new_h = std::max(mult, round_by_factor(h_bar, mult));
+    int new_w = std::max(mult, round_by_factor(w_bar, mult));
+    printf("[smart_resize] snap_to_%d -> %dx%d\n", mult, new_w, new_h);
+    return {new_w, new_h};
 }
 
+
 bool Lfm2VlPreprocessor::is_image_too_large(int height, int width) {
-    int total_factor = config_.patch_size * config_.downsample_factor;
-    int h_bar = std::max(config_.patch_size, round_by_factor(height, total_factor));
-    int w_bar = std::max(config_.patch_size, round_by_factor(width, total_factor));
-    int max_pixels = config_.max_image_tokens * config_.patch_size * config_.patch_size * 
-                     config_.downsample_factor * config_.downsample_factor;
-    return h_bar * w_bar > max_pixels * config_.max_pixels_tolerance;
+    const int patch = config_.patch_size;               // 16
+    const int dwn   = config_.downsample_factor;        // 2
+    const int h_bar = std::max(patch, round_by_factor(height, patch));
+    const int w_bar = std::max(patch, round_by_factor(width,  patch));
+
+    const int64_t lhs = (int64_t)h_bar * (int64_t)w_bar;
+    const int64_t max_pixels = (int64_t)config_.max_image_tokens * patch * patch * dwn * dwn;
+    const double thresh = (double)max_pixels * config_.max_pixels_tolerance;
+
+    printf("[too_large] raw=%dx%d  h_bar=%d w_bar=%d  lhs=%lld  max_pixels=%lld  tol=%.3f  thresh=%.1f  -> %d\n",
+           width, height, h_bar, w_bar, (long long)lhs, (long long)max_pixels, config_.max_pixels_tolerance, thresh,
+           (int)(lhs > thresh));
+
+    return lhs > thresh;
 }
+
 
 std::pair<int, int> Lfm2VlPreprocessor::find_closest_aspect_ratio(float aspect_ratio, int width, int height) {
     float best_ratio_diff = std::numeric_limits<float>::infinity();
@@ -100,18 +128,26 @@ std::pair<int, int> Lfm2VlPreprocessor::find_closest_aspect_ratio(float aspect_r
         }
     }
 
+    printf("[grid_search] best gw=%d gh=%d  best_ratio=%.6f\n",
+        best_ratio.first, best_ratio.second, (float)best_ratio.first / best_ratio.second);
+ 
     return best_ratio;
 }
 
-std::pair<int, int> Lfm2VlPreprocessor::get_grid_layout(int height, int width) {
-    float aspect_ratio = static_cast<float>(width) / height;
+std::pair<int,int> Lfm2VlPreprocessor::get_grid_layout(int height, int width) {
+    float aspect_ratio = (float)width / (float)height;
+    printf("[grid] want aspect=%.6f  min_tiles=%d max_tiles=%d  tile=%d\n",
+           aspect_ratio, config_.min_tiles, config_.max_tiles, config_.tile_size);
+
     auto [grid_width, grid_height] = find_closest_aspect_ratio(aspect_ratio, width, height);
-    
-    int target_width = config_.tile_size * grid_width;
+    printf("[grid] chosen gw=%d gh=%d  -> target=%dx%d\n",
+           grid_width, grid_height, grid_width * config_.tile_size, grid_height * config_.tile_size);
+
+    int target_width  = config_.tile_size * grid_width;
     int target_height = config_.tile_size * grid_height;
-    
     return {target_width, target_height};
 }
+
 
 Lfm2VlPreprocessor::PreprocessedImage Lfm2VlPreprocessor::preprocess_from_file(const std::string& image_path) {
     int width, height, channels;
@@ -149,12 +185,34 @@ Lfm2VlPreprocessor::PreprocessedImage Lfm2VlPreprocessor::preprocess_from_memory
     PreprocessedImage result;
 
     // Smart resize to get target dimensions
+    // Smart resize first (snap to multiples of 32)
     auto [new_width, new_height] = smart_resize(height, width);
-    result.image_width = new_width;
+    result.image_width  = new_width;
     result.image_height = new_height;
 
-    // Check if image splitting is needed
-    bool do_split = config_.do_image_splitting && is_image_too_large(height, width);
+    const int patch = config_.patch_size;
+    const int dwn   = config_.downsample_factor;
+
+    auto tokens_from_size = [](int h, int w, int patch, int dwn) {
+        const int ph = h / patch, pw = w / patch;
+        const int th = (ph + dwn - 1) / dwn;
+        const int tw = (pw + dwn - 1) / dwn;
+        return th * tw;
+    };
+
+    const int single_tokens = tokens_from_size(new_height, new_width, patch, dwn);
+    const bool split_by_pixels = config_.do_image_splitting && is_image_too_large(height, width);
+    const bool split_by_budget = config_.do_image_splitting &&
+                                (single_tokens >= config_.max_image_tokens) &&
+                                (single_tokens <= config_.max_num_patches);
+    const bool do_split = split_by_pixels || split_by_budget;
+
+    printf("[decision] raw=%dx%d new=%dx%d single_tokens=%d  per_tile=%d  total_cap=%d  split_pixels=%d split_budget=%d  -> do_split=%d\n",
+        width, height, new_width, new_height, single_tokens,
+        config_.max_image_tokens, config_.max_num_patches,
+        (int)split_by_pixels, (int)split_by_budget, (int)do_split);
+
+
     
     std::vector<std::vector<float>> all_tile_patches;
     
@@ -220,11 +278,17 @@ Lfm2VlPreprocessor::PreprocessedImage Lfm2VlPreprocessor::preprocess_from_memory
         all_tile_patches = convert_image_to_patches(normalized_data, new_width, new_height, channels, config_.patch_size);
     }
 
-    // Calculate tokens per tile (after downsampling)
-    int patches_per_tile_side = config_.tile_size / config_.patch_size;
-    result.tokens_per_tile = static_cast<int>(std::ceil(static_cast<float>(patches_per_tile_side) / config_.downsample_factor));
-    result.tokens_per_tile *= result.tokens_per_tile;
-    
+    // Calculate tokens per tile (after downsampling), path-aware
+    if (do_split) {
+        // each tile is 512x512
+        const int patches_per_tile_side = config_.tile_size / config_.patch_size;  // 512/16 = 32
+        const int tokens_side = (patches_per_tile_side + dwn - 1) / dwn;           // ceil(32/2) = 16
+        result.tokens_per_tile = tokens_side * tokens_side;                        // 256
+    } else {
+        // single-view path: tokens come from the smart-resized dimensions
+        result.tokens_per_tile = tokens_from_size(result.image_height, result.image_width, patch, dwn);
+    }
+
     // Calculate thumbnail tokens if enabled
     result.thumbnail_tokens = 0;
     if (config_.use_thumbnail && do_split && result.image_rows * result.image_cols > 1) {
@@ -259,6 +323,11 @@ Lfm2VlPreprocessor::PreprocessedImage Lfm2VlPreprocessor::preprocess_from_memory
     result.thumbnail_tokens = saved_thumbnail_tokens;
     result.num_patches_height = config_.tile_size / config_.patch_size;
     result.num_patches_width = config_.tile_size / config_.patch_size;
+
+    printf("[tokens] grid=%dx%d  per_tile=%d  thumb=%d  -> total=%d\n",
+        result.image_cols, result.image_rows, result.tokens_per_tile, result.thumbnail_tokens,
+        result.image_cols * result.image_rows * result.tokens_per_tile + result.thumbnail_tokens);
+ 
 
     return result;
 }

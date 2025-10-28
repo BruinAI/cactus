@@ -28,6 +28,7 @@ enum class OpType {
     INPUT, PRECISION_CAST,
     ADD, ADD_CLIPPED, SUBTRACT, MULTIPLY, DIVIDE,
     MATMUL, TRANSPOSE, RESHAPE, SLICE, GATHER, EMBEDDING,
+    BILINEAR_INTERPOLATION,
     SUM, MEAN, VARIANCE, MIN, MAX,
     RMS_NORM, LAYER_NORM, ROPE, SOFTMAX, ATTENTION, CONV1D_CAUSAL,
     SCALAR_ADD, SCALAR_SUBTRACT, SCALAR_MULTIPLY, SCALAR_DIVIDE, SCALAR_EXP, SCALAR_SQRT, SCALAR_COS, SCALAR_SIN,
@@ -146,6 +147,8 @@ struct OpParams {
     
     size_t index_value = 0;  // For INDEX operation
     size_t num_classes = 0;  // For scatter operations
+    size_t dst_height = 0;  // For BILINEAR_INTERPOLATION operation
+    size_t dst_width = 0;   // For BILINEAR_INTERPOLATION operation
 };
 
 struct GraphNode {
@@ -229,6 +232,7 @@ public:
     void set_quantization_scale(size_t node_id, float scale);
     size_t embedding(const std::string& filename, size_t indices);
     size_t embedding(size_t embedding_tensor, size_t indices);
+    size_t bilinear_interpolation(size_t pos_embeds, size_t dst_height, size_t dst_width);
 
     size_t layernorm(size_t input, size_t weight, size_t bias, float epsilon = 1e-5f);
     size_t topk(size_t input, size_t k);

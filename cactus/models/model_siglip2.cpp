@@ -117,112 +117,40 @@ size_t Siglip2VisionModel::build_vision_embeddings(CactusGraph* gb,
     }
     
     // Create input node for pixel values (already in patch format from preprocessor)
-    size_t patches_input = gb->input({static_cast<size_t>(num_tokens), static_cast<size_t>(patch_dim)}, Precision::FP32);
-    gb->set_input(patches_input, preprocessed_image.pixel_values.data(), Precision::FP32);
+    size_t patches_input_fp32 = gb->input({static_cast<size_t>(num_tokens), static_cast<size_t>(patch_dim)}, Precision::FP32);
+    gb->set_input(patches_input_fp32, preprocessed_image.pixel_values.data(), Precision::FP32);
+    capture_debug_node(0, "vision_patches_input_fp32", patches_input_fp32);
+    
+    // Cast to FP16 to match weight precision
+    size_t patches_input = gb->precision_cast(patches_input_fp32, Precision::FP16);
+    capture_debug_node(0, "vision_patches_input", patches_input);
     
     // Apply patch embedding (linear projection)
     size_t reshaped_weight = gb->reshape(
         vision_weight_nodes_.patch_embedding_weight,
         {static_cast<size_t>(config_.vision_embed_dim), static_cast<size_t>(patch_dim)}
     );
+    capture_debug_node(0, "vision_reshaped_weight", reshaped_weight);
     size_t patch_embeds = gb->matmul(patches_input, reshaped_weight, true, backend);
-    patch_embeds = gb->add(patch_embeds, vision_weight_nodes_.patch_embedding_bias);
-    
-    // Bilinear interpolation of positional embeddings
-    // Position embeddings are stored as (num_positions, embed_dim) where num_positions = src_height * src_width
-    // For LFM2-VL with tiling: interpolate for a single tile, then broadcast to all tiles
-    
-    // Get source position embeddings data
-    const auto& pos_embed_buf = gb->get_output_buffer(vision_weight_nodes_.position_embedding);
-    int total_pos_embeds = static_cast<int>(pos_embed_buf.shape[0]);
-    int embed_dim = static_cast<int>(pos_embed_buf.shape[1]);
-    const float* pos_embed_data = static_cast<const float*>(gb->get_output(vision_weight_nodes_.position_embedding));
-    
-    // Check for nan/inf in position embeddings
-    for (int i = 0; i < std::min(100, total_pos_embeds * embed_dim); ++i) {
-        if (std::isnan(pos_embed_data[i]) || std::isinf(pos_embed_data[i])) {
-            throw std::runtime_error(
-                "Invalid value in position embeddings at index " + std::to_string(i) + 
-                ": " + std::to_string(pos_embed_data[i])
-            );
-        }
-    }
-    
-    // Source grid is square (standard for ViT-style position embeddings)
-    int src_height = static_cast<int>(std::sqrt(total_pos_embeds));
-    int src_width = src_height;
-    
-    // Target dimensions: tokens per tile after downsampling
-    // Each tile has the same positional embeddings applied
-    int tokens_per_tile = preprocessed_image.tokens_per_tile;
-    int dst_height = static_cast<int>(std::sqrt(tokens_per_tile));
+    capture_debug_node(0, "vision_patch_embeds", patch_embeds);
+    size_t added_patch_embeds = gb->add(patch_embeds, vision_weight_nodes_.patch_embedding_bias);
+    capture_debug_node(0, "vision_added_patch_embeds", added_patch_embeds);
+
+    // Compute destination grid dimensions for position embedding interpolation
+    int dst_height = static_cast<int>(std::sqrt(preprocessed_image.tokens_per_tile));
     int dst_width = dst_height;
     
-    // Perform bilinear interpolation for a single tile using vectors
-    std::vector<float> tile_pos_embeds(tokens_per_tile * embed_dim);
-    
-    // Compute scale factors for coordinate mapping
-    float scale_h = (src_height > 1 && dst_height > 1) 
-                    ? static_cast<float>(src_height - 1) / static_cast<float>(dst_height - 1)
-                    : 0.0f;
-    float scale_w = (src_width > 1 && dst_width > 1)
-                    ? static_cast<float>(src_width - 1) / static_cast<float>(dst_width - 1)
-                    : 0.0f;
-    
-    // Interpolate position embeddings for a single tile
-    for (int dst_y = 0; dst_y < dst_height; ++dst_y) {
-        for (int dst_x = 0; dst_x < dst_width; ++dst_x) {
-            // Map to source coordinates (fractional)
-            float src_y_float = dst_y * scale_h;
-            float src_x_float = dst_x * scale_w;
-            
-            // Get 4 nearest neighbors (integer coordinates)
-            int y0 = static_cast<int>(std::floor(src_y_float));
-            int x0 = static_cast<int>(std::floor(src_x_float));
-            int y1 = std::min(y0 + 1, src_height - 1);
-            int x1 = std::min(x0 + 1, src_width - 1);
-            
-            // Compute fractional parts (how far between integer coordinates)
-            float dy = src_y_float - y0;
-            float dx = src_x_float - x0;
-            
-            // Compute bilinear weights
-            float w00 = (1.0f - dx) * (1.0f - dy);  // Top-left
-            float w01 = dx * (1.0f - dy);            // Top-right
-            float w10 = (1.0f - dx) * dy;            // Bottom-left
-            float w11 = dx * dy;                     // Bottom-right
-            
-            // Source indices in flat array (row-major: idx = y * width + x)
-            int idx00 = (y0 * src_width + x0) * embed_dim;
-            int idx01 = (y0 * src_width + x1) * embed_dim;
-            int idx10 = (y1 * src_width + x0) * embed_dim;
-            int idx11 = (y1 * src_width + x1) * embed_dim;
-            
-            // Output index
-            int out_idx = (dst_y * dst_width + dst_x) * embed_dim;
-            
-            // Interpolate all embedding dimensions
-            for (int d = 0; d < embed_dim; ++d) {
-                tile_pos_embeds[out_idx + d] = 
-                    pos_embed_data[idx00 + d] * w00 +
-                    pos_embed_data[idx01 + d] * w01 +
-                    pos_embed_data[idx10 + d] * w10 +
-                    pos_embed_data[idx11 + d] * w11;
-            }
-        }
-    }
-    
-    // Create graph node for single tile position embeddings
-    size_t tile_pos_embeds_node = gb->input(
-        {static_cast<size_t>(tokens_per_tile), static_cast<size_t>(embed_dim)}, 
-        Precision::FP32
+    size_t tile_pos_embeds_node = gb->bilinear_interpolation(
+        vision_weight_nodes_.position_embedding,
+        static_cast<size_t>(dst_height),
+        static_cast<size_t>(dst_width)
     );
-    gb->set_input(tile_pos_embeds_node, tile_pos_embeds.data(), Precision::FP32);
+    capture_debug_node(0, "vision_pos_embeds", tile_pos_embeds_node);
     
     // Reshape patch embeddings to separate tiles: (num_tokens, embed_dim) -> (num_tiles, tokens_per_tile, embed_dim)
     size_t reshaped_patches = gb->reshape(
-        patch_embeds,
-        {static_cast<size_t>(num_tiles), static_cast<size_t>(tokens_per_tile), static_cast<size_t>(embed_dim)}
+        added_patch_embeds,
+        {static_cast<size_t>(num_tiles), static_cast<size_t>(preprocessed_image.tokens_per_tile), static_cast<size_t>(config_.vision_embed_dim)}
     );
     
     // Add position embeddings (broadcasts across tile dimension)
@@ -232,8 +160,9 @@ size_t Siglip2VisionModel::build_vision_embeddings(CactusGraph* gb,
     // Reshape back to (num_tokens, embed_dim)
     size_t embeddings = gb->reshape(
         embeddings_with_pos,
-        {static_cast<size_t>(num_tokens), static_cast<size_t>(embed_dim)}
+        {static_cast<size_t>(num_tokens), static_cast<size_t>(config_.vision_embed_dim)}
     );
+    capture_debug_node(0, "vision_embeddings", embeddings);
     
     return embeddings;
 }
@@ -245,12 +174,15 @@ size_t Siglip2VisionModel::build_vision_attention(CactusGraph* gb, size_t hidden
     // Project to Q, K, V
     size_t q = gb->matmul(hidden_states, layer.attn_q_weight, true, backend);
     q = gb->add(q, layer.attn_q_bias);
+    capture_debug_node(layer_idx, "vision_attn_q", q);
     
     size_t k = gb->matmul(hidden_states, layer.attn_k_weight, true, backend);
     k = gb->add(k, layer.attn_k_bias);
+    capture_debug_node(layer_idx, "vision_attn_k", k);
     
     size_t v = gb->matmul(hidden_states, layer.attn_v_weight, true, backend);
     v = gb->add(v, layer.attn_v_bias);
+    capture_debug_node(layer_idx, "vision_attn_v", v);
 
     // Reshape for multi-head attention
     const size_t num_heads = static_cast<size_t>(config_.vision_attention_heads);
@@ -265,6 +197,7 @@ size_t Siglip2VisionModel::build_vision_attention(CactusGraph* gb, size_t hidden
     // Scaled dot-product attention
     float scale = 1.0f / std::sqrt(static_cast<float>(head_dim));
     size_t attn_output = gb->attention(q_4d, k_4d, v_4d, scale, false, backend);
+    capture_debug_node(layer_idx, "vision_attn_scores", attn_output);
     
     // Reshape back
     size_t attn_2d = gb->reshape(attn_output, {seq_len, num_heads * head_dim});
@@ -272,6 +205,7 @@ size_t Siglip2VisionModel::build_vision_attention(CactusGraph* gb, size_t hidden
     // Output projection
     size_t output = gb->matmul(attn_2d, layer.attn_output_weight, true, backend);
     output = gb->add(output, layer.attn_output_bias);
+    capture_debug_node(layer_idx, "vision_attn_output", output);
     
     return output;
 }
@@ -283,13 +217,16 @@ size_t Siglip2VisionModel::build_vision_mlp(CactusGraph* gb, size_t hidden_state
     // FC1
     size_t fc1_output = gb->matmul(hidden_states, layer.mlp_fc1_weight, true, backend);
     fc1_output = gb->add(fc1_output, layer.mlp_fc1_bias);
+    capture_debug_node(layer_idx, "vision_mlp_fc1", fc1_output);
     
     // Activation (GELU for SigLip2)
     size_t activated = gb->gelu(fc1_output);
+    capture_debug_node(layer_idx, "vision_mlp_gelu", activated);
     
     // FC2
     size_t fc2_output = gb->matmul(activated, layer.mlp_fc2_weight, true, backend);
     fc2_output = gb->add(fc2_output, layer.mlp_fc2_bias);
+    capture_debug_node(layer_idx, "vision_mlp_fc2", fc2_output);
     
     return fc2_output;
 }
@@ -302,15 +239,19 @@ size_t Siglip2VisionModel::build_vision_transformer_layer(CactusGraph* gb, size_
     size_t residual = hidden_states;
     size_t normalized = gb->layer_norm(hidden_states, layer.layer_norm1_weight, 
                                       layer.layer_norm1_bias, config_.layer_norm_eps);
+    capture_debug_node(layer_idx, "vision_attn_norm", normalized);
     size_t attn_output = build_vision_attention(gb, normalized, layer_idx, backend);
     hidden_states = gb->add(residual, attn_output);
+    capture_debug_node(layer_idx, "vision_after_attn", hidden_states);
     
     // Pre-norm architecture: LayerNorm -> MLP -> Residual
     residual = hidden_states;
     normalized = gb->layer_norm(hidden_states, layer.layer_norm2_weight, 
                                layer.layer_norm2_bias, config_.layer_norm_eps);
+    capture_debug_node(layer_idx, "vision_mlp_norm", normalized);
     size_t mlp_output = build_vision_mlp(gb, normalized, layer_idx, backend);
     hidden_states = gb->add(residual, mlp_output);
+    capture_debug_node(layer_idx, "vision_after_mlp", hidden_states);
     
     return hidden_states;
 }
@@ -332,6 +273,7 @@ size_t Siglip2VisionModel::forward_vision(CactusGraph* gb,
                                    vision_weight_nodes_.post_layernorm_weight,
                                    vision_weight_nodes_.post_layernorm_bias,
                                    config_.layer_norm_eps);
+    capture_debug_node(config_.vision_num_layers, "vision_post_norm", hidden_states);
     
     // Return last_hidden_state (no pooling head - vision_use_head: false)
     return hidden_states;

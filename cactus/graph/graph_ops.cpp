@@ -414,6 +414,69 @@ void compute_fused_node(GraphNode& node, const std::vector<std::unique_ptr<Graph
             }
             break;
         }
+        case OpType::BILINEAR_INTERPOLATION: {
+            const auto& pos_embeds_buffer = nodes[node_index_map.at(node.input_ids[0])]->output_buffer;
+            
+            int total_pos_embeds = static_cast<int>(pos_embeds_buffer.shape[0]);
+            int embed_dim = static_cast<int>(pos_embeds_buffer.shape[1]);
+            
+            int src_height = static_cast<int>(std::sqrt(total_pos_embeds));
+            int src_width = src_height;
+            
+            int dst_height = static_cast<int>(node.params.dst_height);
+            int dst_width = static_cast<int>(node.params.dst_width);
+            
+            float scale_h = (src_height > 1 && dst_height > 1) 
+                            ? static_cast<float>(src_height - 1) / static_cast<float>(dst_height - 1)
+                            : 0.0f;
+            float scale_w = (src_width > 1 && dst_width > 1)
+                            ? static_cast<float>(src_width - 1) / static_cast<float>(dst_width - 1)
+                            : 0.0f;
+            
+            std::vector<float> pos_embed_fp32(total_pos_embeds * embed_dim);
+            const __fp16* pos_embed_fp16 = pos_embeds_buffer.data_as<__fp16>();
+            for (int i = 0; i < total_pos_embeds * embed_dim; ++i) {
+                pos_embed_fp32[i] = static_cast<float>(pos_embed_fp16[i]);
+            }
+            
+            float* output = node.output_buffer.data_as<float>();
+            
+            for (int dst_y = 0; dst_y < dst_height; ++dst_y) {
+                for (int dst_x = 0; dst_x < dst_width; ++dst_x) {
+                    float src_y_float = dst_y * scale_h;
+                    float src_x_float = dst_x * scale_w;
+                    
+                    int y0 = static_cast<int>(std::floor(src_y_float));
+                    int x0 = static_cast<int>(std::floor(src_x_float));
+                    int y1 = std::min(y0 + 1, src_height - 1);
+                    int x1 = std::min(x0 + 1, src_width - 1);
+                    
+                    float dy = src_y_float - y0;
+                    float dx = src_x_float - x0;
+                    
+                    float w00 = (1.0f - dx) * (1.0f - dy);
+                    float w01 = dx * (1.0f - dy);
+                    float w10 = (1.0f - dx) * dy;
+                    float w11 = dx * dy;
+                    
+                    int idx00 = (y0 * src_width + x0) * embed_dim;
+                    int idx01 = (y0 * src_width + x1) * embed_dim;
+                    int idx10 = (y1 * src_width + x0) * embed_dim;
+                    int idx11 = (y1 * src_width + x1) * embed_dim;
+                    
+                    int out_idx = (dst_y * dst_width + dst_x) * embed_dim;
+                    
+                    for (int d = 0; d < embed_dim; ++d) {
+                        output[out_idx + d] = 
+                            pos_embed_fp32[idx00 + d] * w00 +
+                            pos_embed_fp32[idx01 + d] * w01 +
+                            pos_embed_fp32[idx10 + d] * w10 +
+                            pos_embed_fp32[idx11 + d] * w11;
+                    }
+                }
+            }
+            break;
+        }
         case OpType::RMS_NORM: {
             const auto& input_buffer = nodes[node_index_map.at(node.input_ids[0])]->output_buffer;
             const auto& weight_buffer = nodes[node_index_map.at(node.input_ids[1])]->output_buffer;

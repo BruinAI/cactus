@@ -627,6 +627,19 @@ size_t CactusGraph::embedding(size_t embedding_tensor, size_t indices) {
     return add_node(OpType::EMBEDDING, {embedding_tensor, indices}, output_shape, params);
 }
 
+size_t CactusGraph::bilinear_interpolation(size_t pos_embeds, size_t dst_height, size_t dst_width) {
+    const auto& pos_embeds_buffer = get_output_buffer(pos_embeds);
+    size_t embed_dim = pos_embeds_buffer.shape[1];
+    std::vector<size_t> output_shape = {dst_height * dst_width, embed_dim};
+    
+    OpParams params;
+    params.dst_height = dst_height;
+    params.dst_width = dst_width;
+    params.output_precision = Precision::FP32;
+    
+    return add_node(OpType::BILINEAR_INTERPOLATION, {pos_embeds}, output_shape, params);
+}   
+
 size_t CactusGraph::precision_cast(size_t input, Precision target_precision) {
     OpParams params{};
     params.output_precision = target_precision;

@@ -32,4 +32,9 @@ foreach(TEST_FILE ${TEST_SOURCES})
     message(STATUS "Added test: ${TEST_NAME}")
 endforeach()
 
+add_executable(siglip2_debug_runner siglip2_debug_runner.cpp)
+target_link_libraries(siglip2_debug_runner PRIVATE ${CACTUS_LIB})
+target_include_directories(siglip2_debug_runner PRIVATE ${CACTUS_ROOT})
+message(STATUS "Added runner: siglip2_debug_runner")
+
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
