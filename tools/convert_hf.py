@@ -7,7 +7,7 @@ import argparse
 from pathlib import Path
 
 try:
-    from transformers import AutoTokenizer, AutoModelForCausalLM, AutoProcessor, AutoModelForImageTextToText, AutoModel
+    from transformers import AutoTokenizer, AutoModelForCausalLM, AutoProcessor, AutoModelForImageTextToText, AutoModel, AutoConfig, Lfm2VlForConditionalGeneration
     import torch
     # Note: for SmolVLM, we also need Pillow + num2words + torchvision
 except ImportError:
@@ -1001,6 +1001,38 @@ def convert_processors(processor, model_name, output_dir):
         except Exception:
             pass
     
+
+def _pick_dtype():
+    if torch.cuda.is_available():
+        if torch.cuda.is_bf16_supported():
+            return torch.bfloat16
+        # fall back to fp16 on GPU
+        return torch.float16
+    return torch.float32
+
+def _is_lfm2_vl(model_name: str, cfg) -> bool:
+    if getattr(cfg, "model_type", None) == "lfm2-vl":
+        return True
+    # also catch common repo names
+    name = (model_name or "").lower()
+    return "lfm2-vl" in name
+
+def _vision_weight_sanity(model):
+    ok = True
+    vt = getattr(model, "vision_tower", None)
+    try:
+        emb = vt.vision_model.embeddings
+        w_mean = emb.patch_embedding.weight.detach().abs().mean().item()
+        p_mean = emb.position_embedding.weight.detach().abs().mean().item()
+        print(f"[sanity] |patch W| mean={w_mean:.5f} |pos W| mean={p_mean:.5f}")
+        # heuristics: randomly init’d weights often have small similar scales;
+        # pretrained pos tables usually have noticeably different stats
+        if w_mean < 1e-3 or p_mean < 1e-3:
+            ok = False
+    except Exception:
+        pass
+    return ok
+
 def convert_hf_to_cactus_vlm(model_name, output_dir, precision='INT8', cache_dir=None, args=None):
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -1027,40 +1059,71 @@ def convert_hf_to_cactus_vlm(model_name, output_dir, precision='INT8', cache_dir
             print(f"Install with: pip install {' '.join(missing_deps)}")
             sys.exit(1)
 
+        # Load processor (this is correct for LFM2-VL)
         processor = AutoProcessor.from_pretrained(
             model_name,
             cache_dir=cache_dir,
             trust_remote_code=True
         )
-        model = AutoModelForImageTextToText.from_pretrained(
-            model_name,
-            cache_dir=cache_dir,
-            trust_remote_code=True,
-            torch_dtype=torch.float32
-        )
 
-        tokenizer = None
-        try:
-            tokenizer = processor.tokenizer
-        except Exception:
-            tokenizer = None
+        # Decide the correct model class
+        cfg = AutoConfig.from_pretrained(model_name, cache_dir=cache_dir, trust_remote_code=True)
+        dtype = _pick_dtype()
+        print(f"[info] selected torch_dtype={dtype}")
 
+        if _is_lfm2_vl(model_name, cfg):
+            print("[info] Detected LFM2-VL checkpoint; loading Lfm2VlForConditionalGeneration")
+            model = Lfm2VlForConditionalGeneration.from_pretrained(
+                model_name,
+                cache_dir=cache_dir,
+                trust_remote_code=True,
+                torch_dtype=dtype,
+            )
+        else:
+            # If you truly support other VLM families, load their exact classes here.
+            # Fallback to AutoModelForImageTextToText is kept as a last resort,
+            # but beware it may initialize heads randomly for unknown architectures.
+            from transformers import AutoModelForImageTextToText
+            print("[warn] Non-LFM2-VL model; using AutoModelForImageTextToText (may re-init heads)")
+            model = AutoModelForImageTextToText.from_pretrained(
+                model_name,
+                cache_dir=cache_dir,
+                trust_remote_code=True,
+                torch_dtype=dtype,
+            )
+
+        # Optional tokenizer extraction (AutoProcessor usually provides it)
+        tokenizer = getattr(processor, "tokenizer", None)
         if tokenizer is None:
+            from transformers import AutoTokenizer
             tokenizer = AutoTokenizer.from_pretrained(
                 model_name,
                 cache_dir=cache_dir,
                 trust_remote_code=True
             )
+
+        # ---- NEW: quick sanity on vision weights to catch random init
+        if _is_lfm2_vl(model_name, cfg):
+            ok = _vision_weight_sanity(model)
+            if not ok:
+                print("[error] Vision embeddings look randomly initialized. "
+                      "Double-check model class/ckpt or set trust_remote_code=True.")
+                sys.exit(1)
+
+        # Convert processor assets
         try:
             convert_processors(processor, model_name, output_dir)
         except Exception as e:
             print(f"  Warning: convert_processors failed: {e}")
+
     except Exception as e:
         print(f"Error: {e}")
         sys.exit(1)
 
+    # Proceed to weight export / quantization
     config = convert_hf_model_weights_vlm(model, output_dir, precision, args)
 
+    # Preserve your original precision field behavior
     if precision == 'INT8':
         config['precision'] = "FP16"
     else:
