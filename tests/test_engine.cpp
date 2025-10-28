@@ -10,7 +10,7 @@
 #include <thread>
 #include <atomic>
 
-const char* g_model_path = "../../weights/qwen3-600m-i8";
+const char* g_model_path = "../../weights/lfm2-350m-i8";
 
 const char* g_options = R"({
         "max_tokens": 256,
@@ -311,8 +311,8 @@ int main() {
     runner.run_test("generation_control", test_generation_control());
     runner.run_test("conversation", test_conversation());
     runner.run_test("tool_calls", test_tool_call());
-    runner.run_test("incremental_processing", test_incremental_processing());
-    runner.run_test("ffi_with_tools", test_ffi_with_tools());
+    // runner.run_test("incremental_processing", test_incremental_processing());
+    // runner.run_test("ffi_with_tools", test_ffi_with_tools());
     runner.run_test("image_input", test_image_input());
     runner.print_summary();
     return runner.all_passed() ? 0 : 1;

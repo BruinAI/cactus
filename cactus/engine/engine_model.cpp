@@ -350,17 +350,16 @@ bool Config::from_json(const std::string& config_path) {
         default_temperature = 0.2f;
         default_top_p = 0.95f;
         default_top_k = 20;
-<<<<<<< HEAD
     } else if (model_type == ModelType::LFM2) {
         default_temperature = 0.3f;
-=======
+        default_top_p = 0.95f;
+        default_top_k = 20;
     } else if (model_type == ModelType::SMOLVLM) {
         default_temperature = 0.2f;
         default_top_p = 0.95f;
         default_top_k = 20;
     } else if (model_type == ModelType::QWEN) {
         default_temperature = 0.6f;
->>>>>>> origin/justin/smol
         default_top_p = 0.95f;
         default_top_k = 20;
     } else if (model_type == ModelType::QWEN) {

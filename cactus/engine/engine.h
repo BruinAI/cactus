@@ -50,6 +50,17 @@ struct Config {
     float rescale_factor = 0.00392156862745098f;
     float image_mean = 0.5f;
     float image_std = 0.5f;
+    
+    // LFM2-VL specific image processing parameters
+    uint32_t downsample_factor = 2;
+    uint32_t min_tiles = 2;
+    uint32_t max_tiles = 10;
+    bool use_thumbnail = false;
+    uint32_t min_image_tokens = 64;
+    uint32_t max_image_tokens = 256;
+    uint32_t tile_size = 512;
+    float max_pixels_tolerance = 2.0f;
+    bool do_image_splitting = true;
 
     enum class ModelType {QWEN = 0, GEMMA = 1, SMOL = 2, NOMIC = 3, SMOLVLM = 4, LFM2 = 5};
     ModelType model_type = ModelType::QWEN;
@@ -388,6 +399,80 @@ protected:
 };
 
 std::unique_ptr<Model> create_model(const std::string& model_folder);
+
+/**
+ * Lfm2VlPreprocessor: Image preprocessing for LFM2-VL Fast vision models
+ * 
+ * Handles complete image preprocessing pipeline:
+ * - Smart resizing with min/max image tokens
+ * - Optional image splitting into tiles with grid layout
+ * - Optional thumbnail generation
+ * - Patch extraction and padding with attention masks
+ */
+class Lfm2VlPreprocessor {
+public:
+    struct Config {
+        int patch_size = 16;
+        int downsample_factor = 2;
+        int min_tiles = 2;
+        int max_tiles = 10;
+        bool use_thumbnail = false;
+        int min_image_tokens = 64;
+        int max_image_tokens = 256;
+        int tile_size = 512;
+        float max_pixels_tolerance = 2.0f;
+        bool do_resize = true;
+        bool do_rescale = true;
+        bool do_normalize = true;
+        bool do_convert_rgb = true;
+        bool do_image_splitting = true;
+        float rescale_factor = 1.0f / 255.0f;
+        float image_mean[3] = {0.5f, 0.5f, 0.5f};
+        float image_std[3] = {0.5f, 0.5f, 0.5f};
+    };
+
+    struct PreprocessedImage {
+        std::vector<float> pixel_values;       // Shape: (seq_len, patch_size*patch_size*3)
+        std::vector<int> pixel_attention_mask; // Shape: (seq_len,)
+        int num_patches_height;                 // Patches per tile
+        int num_patches_width;                  // Patches per tile
+        int actual_num_patches;                 // Total actual patches (tiles + thumbnail)
+        
+        // LFM2-VL specific metadata
+        int image_rows;                         // Grid height (num tiles vertically)
+        int image_cols;                         // Grid width (num tiles horizontally)
+        int image_height;                       // Resized image height
+        int image_width;                        // Resized image width
+        int tokens_per_tile;                    // Downsampled tokens per tile
+        int thumbnail_tokens;                   // Tokens in thumbnail (if enabled)
+        
+        ~PreprocessedImage();
+    };
+
+    explicit Lfm2VlPreprocessor(const Config& config);
+    Lfm2VlPreprocessor();
+    ~Lfm2VlPreprocessor();
+
+    PreprocessedImage preprocess_from_file(const std::string& image_path);
+    PreprocessedImage preprocess_from_memory(const unsigned char* img_data, int width, int height, int channels);
+
+private:
+    Config config_;
+
+    std::vector<unsigned char> convert_to_rgb(const unsigned char* img_data, int width, int height, int channels);
+    std::pair<int, int> smart_resize(int height, int width);
+    bool is_image_too_large(int height, int width);
+    std::pair<int, int> get_grid_layout(int height, int width);
+    std::pair<int, int> find_closest_aspect_ratio(float aspect_ratio, int width, int height);
+    std::vector<unsigned char> resize_image(const unsigned char* img_data, int src_width, int src_height,
+                                           int dst_width, int dst_height, int channels);
+    std::vector<float> normalize_image(const unsigned char* img_data, int width, int height, int channels);
+    std::vector<std::vector<float>> convert_image_to_patches(
+        const std::vector<float>& image, int width, int height, int channels, int patch_size);
+    PreprocessedImage pad_patches(const std::vector<std::vector<float>>& patches,
+                                  int width, int height, int patch_size, int max_num_patches);
+    int round_by_factor(int number, int factor);
+};
 
 /**
  * SigLip2Preprocessor: Image preprocessing for SigLip2 vision models

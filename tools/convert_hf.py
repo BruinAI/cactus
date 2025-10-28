@@ -317,7 +317,7 @@ def convert_hf_model_weights(model, output_dir, precision='INT8', args=None):
             (['mlp.experts.mlp.w2'], precision, f'layer_{i}_mlp_expert_{{channel}}.mlp2.weights', True),
             (['mlp.router.layer.weight'], precision, f'layer_{i}_mlp_router.layer.weights', False),
         ]
-
+        found = False
         for name_patterns, tensor_precision, output_name, should_transpose in weight_patterns:
             found = False
             for pattern in name_patterns:
@@ -369,11 +369,11 @@ def convert_hf_model_weights(model, output_dir, precision='INT8', args=None):
                     saved_tensor_full_names.add(attn_name)
                     found = True
     
-    if saved_tensor_full_names != set(state_dict.keys()):
-        print(f"Warning: Unsaved tensors: {set(state_dict.keys()) - saved_tensor_full_names}")
-            
-        if not found:
-            missing_tensors.append((i, output_name, name_patterns))
+            if saved_tensor_full_names != set(state_dict.keys()):
+                print(f"Warning: Unsaved tensors: {set(state_dict.keys()) - saved_tensor_full_names}")
+                    
+                if not found:
+                    missing_tensors.append((i, output_name, name_patterns))
     
     if missing_tensors:
         missing_report = output_dir / "missing_weights.txt"
@@ -472,6 +472,9 @@ def convert_hf_model_weights_vlm(model, output_dir, precision='INT8', args=None)
         print(f"  Warning: Unknown VLM model type '{model_type_str}', defaulting to 'smolvlm'")
 
 
+    # LFM2-VL specific config
+    downsample_factor = int(_cfg_get(config, 'downsample_factor', 2))
+    
     model_config = {
         'vocab_size': int(text_vocab),
         'model_type': detected_model_type,
@@ -495,13 +498,21 @@ def convert_hf_model_weights_vlm(model, output_dir, precision='INT8', args=None)
         'pixel_shuffle_factor': int(pixel_shuffle_factor),
         'use_image_tokens': bool(use_image_tokens),
         'use_layout_tags': bool(use_layout_tags),
-        'tie_word_embeddings': tie_word_embeddings
+        'tie_word_embeddings': tie_word_embeddings,
+        'downsample_factor': int(downsample_factor)
     }
 
-    embed_names = ['model.embed_tokens.weight', 'embed_tokens.weight', 'embeddings.weight', 'transformer.wte.weight', 'model.text_model.embed_tokens.weight']
+    embed_names = ['model.language_model.embed_tokens.weight', 'model.embed_tokens.weight', 'embed_tokens.weight', 'embeddings.weight', 'transformer.wte.weight', 'model.text_model.embed_tokens.weight']
     for name in embed_names:
         if name in state_dict:
             save_tensor_with_header(state_dict[name], output_dir / "token_embeddings.weights", precision, transpose=False, stats_tracker=quantization_stats, args=args, model_type=detected_model_type)
+            break
+    
+    # LFM2-VL embedding norm
+    embedding_norm_names = ['model.language_model.embedding_norm.weight']
+    for name in embedding_norm_names:
+        if name in state_dict:
+            save_tensor_with_header(state_dict[name], output_dir / "token_embedding_norm.weights", precision, stats_tracker=quantization_stats, args=args, model_type=detected_model_type)
             break
 
     if not tie_word_embeddings:
@@ -520,10 +531,15 @@ def convert_hf_model_weights_vlm(model, output_dir, precision='INT8', args=None)
             break
 
     vision_items = [
+        ('model.vision_tower.vision_model.embeddings.patch_embedding.weight', 'vision_patch_embedding.weights'),
         ('model.vision_model.embeddings.patch_embedding.weight', 'vision_patch_embedding.weights'),
+        ('model.vision_tower.vision_model.embeddings.patch_embedding.bias', 'vision_patch_embedding.bias.weights'),
         ('model.vision_model.embeddings.patch_embedding.bias', 'vision_patch_embedding.bias.weights'),
+        ('model.vision_tower.vision_model.embeddings.position_embedding.weight', 'vision_position_embedding.weights'),
         ('model.vision_model.embeddings.position_embedding.weight', 'vision_position_embedding.weights'),
+        ('model.vision_tower.vision_model.post_layernorm.weight', 'vision_post_layernorm.weights'),
         ('model.vision_model.post_layernorm.weight', 'vision_post_layernorm.weights'),
+        ('model.vision_tower.vision_model.post_layernorm.bias', 'vision_post_layernorm.bias.weights'),
         ('model.vision_model.post_layernorm.bias', 'vision_post_layernorm.bias.weights')
     ]
     for key, outname in vision_items:
@@ -533,19 +549,37 @@ def convert_hf_model_weights_vlm(model, output_dir, precision='INT8', args=None)
     # detect number of vision encoder layers
     import re
     max_v_idx = -1
+    vision_prefix = None
     for k in state_dict.keys():
-        m = re.search(r'model\.vision_model\.encoder\.layers\.(\d+)\.', k)
+        # Check vision_tower prefix first (LFM2-VL)
+        m = re.search(r'model\.vision_tower\.vision_model\.encoder\.layers\.(\d+)\.', k)
         if m:
+            vision_prefix = 'model.vision_tower.vision_model.encoder.layers.'
             try:
                 idx = int(m.group(1))
                 if idx > max_v_idx:
                     max_v_idx = idx
             except Exception:
                 pass
+        # Check model.vision_model prefix
+        if not vision_prefix:
+            m = re.search(r'model\.vision_model\.encoder\.layers\.(\d+)\.', k)
+            if m:
+                vision_prefix = 'model.vision_model.encoder.layers.'
+                try:
+                    idx = int(m.group(1))
+                    if idx > max_v_idx:
+                        max_v_idx = idx
+                except Exception:
+                    pass
+    
+    if not vision_prefix:
+        vision_prefix = 'model.vision_model.encoder.layers.'
+    
     vision_layers = max_v_idx + 1 if max_v_idx >= 0 else 0
 
     for i_v in range(vision_layers):
-        vpref = f'model.vision_model.encoder.layers.{i_v}.'
+        vpref = f'{vision_prefix}{i_v}.'
         for fname, out in [
             (vpref + 'layer_norm1.weight', f'vision_layer_{i_v}_layer_norm1.weights'),
             (vpref + 'layer_norm1.bias', f'vision_layer_{i_v}_layer_norm1.bias.weights'),
@@ -577,6 +611,19 @@ def convert_hf_model_weights_vlm(model, output_dir, precision='INT8', args=None)
             if fname in state_dict:
                 save_tensor_with_header(state_dict[fname], output_dir / out, precision, stats_tracker=quantization_stats, args=args, model_type=detected_model_type)
 
+    # Multi-modal projector (LFM2-VL)
+    projector_weights = [
+        ('model.multi_modal_projector.linear_1.weight', 'projector_linear1.weights'),
+        ('model.multi_modal_projector.linear_1.bias', 'projector_linear1.bias.weights'),
+        ('model.multi_modal_projector.linear_2.weight', 'projector_linear2.weights'),
+        ('model.multi_modal_projector.linear_2.bias', 'projector_linear2.bias.weights'),
+        ('model.multi_modal_projector.layer_norm.weight', 'projector_layer_norm.weights'),
+        ('model.multi_modal_projector.layer_norm.bias', 'projector_layer_norm.bias.weights'),
+    ]
+    for key, outname in projector_weights:
+        if key in state_dict:
+            save_tensor_with_header(state_dict[key], output_dir / outname, precision, stats_tracker=quantization_stats, args=args, model_type=detected_model_type)
+    
     connector_keys = [
         'model.connector.modality_projection.proj.weight',
         'connector.modality_projection.proj.weight',
@@ -590,7 +637,7 @@ def convert_hf_model_weights_vlm(model, output_dir, precision='INT8', args=None)
 
     num_layers = int(model_config.get('num_layers', 0))
     for i in range(num_layers):
-        layer_prefixes = [f'model.text_model.layers.{i}.', f'model.layers.{i}.', f'layers.{i}.', f'transformer.h.{i}.']
+        layer_prefixes = [f'model.language_model.layers.{i}.', f'model.text_model.layers.{i}.', f'model.layers.{i}.', f'layers.{i}.', f'transformer.h.{i}.']
 
         layer_prefix = None
         for prefix in layer_prefixes:
@@ -601,18 +648,29 @@ def convert_hf_model_weights_vlm(model, output_dir, precision='INT8', args=None)
         if not layer_prefix:
             continue
 
+        # Conv layers for LFM2
+        conv_patterns = [
+            ('conv.conv.weight', f'layer_{i}_conv_conv.weights'),
+            ('conv.in_proj.weight', f'layer_{i}_conv_in_proj.weights'),
+            ('conv.out_proj.weight', f'layer_{i}_conv_out_proj.weights'),
+        ]
+        for suffix, outname in conv_patterns:
+            fname = layer_prefix + suffix
+            if fname in state_dict:
+                save_tensor_with_header(state_dict[fname], output_dir / outname, precision, stats_tracker=quantization_stats, args=args, model_type=detected_model_type)
+        
         weight_patterns = [
             (['self_attn.q_proj.weight', 'attn.q_proj.weight', 'attn.c_attn.weight'], precision, f'layer_{i}_attn_q.weights', False),
             (['self_attn.k_proj.weight', 'attn.k_proj.weight'], precision, f'layer_{i}_attn_k.weights', False),
             (['self_attn.v_proj.weight', 'attn.v_proj.weight'], precision, f'layer_{i}_attn_v.weights', False),
-            (['self_attn.o_proj.weight', 'attn.o_proj.weight', 'attn.c_proj.weight'], precision, f'layer_{i}_attn_output.weights', False),
-            (['input_layernorm.weight', 'ln_1.weight'], precision, f'layer_{i}_input_norm.weights', False),
+            (['self_attn.out_proj.weight', 'self_attn.o_proj.weight', 'attn.o_proj.weight', 'attn.c_proj.weight'], precision, f'layer_{i}_attn_output.weights', False),
+            (['operator_norm.weight', 'input_layernorm.weight', 'ln_1.weight'], precision, f'layer_{i}_input_norm.weights', False),
             (['self_attn.q_norm.weight', 'self_attn.q_layernorm.weight'], precision, f'layer_{i}_attn_q_norm.weights', False),
             (['self_attn.k_norm.weight', 'self_attn.k_layernorm.weight'], precision, f'layer_{i}_attn_k_norm.weights', False),
-            (['mlp.gate_proj.weight', 'mlp.c_fc.weight'], precision, f'layer_{i}_ffn_gate.weights', False),
-            (['mlp.up_proj.weight'], precision, f'layer_{i}_ffn_up.weights', False),
-            (['mlp.down_proj.weight', 'mlp.c_proj.weight'], precision, f'layer_{i}_ffn_down.weights', False),
-            (['post_attention_layernorm.weight', 'ln_2.weight'], precision, f'layer_{i}_post_attn_norm.weights', False),
+            (['feed_forward.w1.weight', 'mlp.gate_proj.weight', 'mlp.c_fc.weight'], precision, f'layer_{i}_ffn_gate.weights', False),
+            (['feed_forward.w3.weight', 'mlp.up_proj.weight'], precision, f'layer_{i}_ffn_up.weights', False),
+            (['feed_forward.w2.weight', 'mlp.down_proj.weight', 'mlp.c_proj.weight'], precision, f'layer_{i}_ffn_down.weights', False),
+            (['ffn_norm.weight', 'post_attention_layernorm.weight', 'ln_2.weight'], precision, f'layer_{i}_post_attn_norm.weights', False),
             (['pre_feedforward_layernorm.weight'], precision, f'layer_{i}_pre_ffn_norm.weights', False),
             (['post_feedforward_layernorm.weight'], precision, f'layer_{i}_post_ffn_norm.weights', False),
         ]
@@ -1029,7 +1087,7 @@ def convert_hf_to_cactus(model_name, output_dir, precision='INT8', cache_dir=Non
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    if 'vlm' in str(model_name).lower():
+    if 'vl' in str(model_name).lower():
         return convert_hf_to_cactus_vlm(model_name, output_dir, precision, cache_dir, args)
 
     print(f"Converting {model_name} to {precision}...")

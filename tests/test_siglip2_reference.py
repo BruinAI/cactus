@@ -1,255 +1,201 @@
 """
-SigLip2 Reference Implementation Test Script
-============================================
-This script uses the HuggingFace reference implementation to preprocess
-an image and outputs results that can be compared with the C++ implementation.
+SigLip2 Reference Implementation Test Script (Hugging Face Processor)
+====================================================================
+This script uses the official Hugging Face SigLIP-2 image processor
+to preprocess an image and writes results you can compare with your C++
+implementation.
 
 Usage in Google Colab:
-1. Upload your test image
-2. Run this script
-3. Compare output with C++ implementation
+1) !pip install -q transformers pillow numpy
+2) Upload your test image (or pass a path/URL you can read)
+3) Run:  python test_siglip2_hf.py <image_path> [output_path] [ckpt]
+
+Defaults:
+- ckpt = 'google/siglip2-base-patch16-naflex'
 """
 
-import numpy as np
-from PIL import Image
 import sys
+import io
+import os
+import numpy as np
+from typing import Optional
+from PIL import Image
 
-# The reference code from image_processing_siglip2.py
-import math
-from functools import lru_cache
+def load_image(path_or_url: str) -> Image.Image:
+    if path_or_url.startswith("http://") or path_or_url.startswith("https://"):
+        import requests
+        resp = requests.get(path_or_url, timeout=30)
+        resp.raise_for_status()
+        return Image.open(io.BytesIO(resp.content)).convert("RGB")
+    else:
+        return Image.open(path_or_url).convert("RGB")
 
-@lru_cache(maxsize=256)
-def get_image_size_for_max_num_patches(
-    image_height: int, image_width: int, patch_size: int, max_num_patches: int, eps: float = 1e-5
-) -> tuple[int, int]:
+def save_output_hf(result: dict, output_path: str, patch_size_hint: Optional[int] = None):
     """
-    Determine image size based on max number of patches, ensure dimensions are divisible by patch size and image is at least 1 patch.
+    Save outputs from the HF processor call. For NaFlex checkpoints, the dict may contain:
+      - pixel_values: (1, C, H, W)
+      - pixel_attention_mask: (1, H, W) or (H, W)
+      - spatial_shapes: (1, 2)  (height, width)
+    For fixed-size SigLIP-2 checkpoints, only pixel_values is typically returned.
     """
-    def get_scaled_image_size(scale: float, size: int, patch_size: int) -> int:
-        scaled_size = size * scale
-        scaled_size = math.ceil(scaled_size / patch_size) * patch_size  # make divisible by patch_size
-        scaled_size = max(patch_size, scaled_size)  # ensure at least 1 patch
-        return int(scaled_size)
-
-    # Binary search for optimal scale
-    scale_min, scale_max = eps / 10, 100.0
-    while (scale_max - scale_min) >= eps:
-        scale = (scale_min + scale_max) / 2
-        target_height = get_scaled_image_size(scale, image_height, patch_size)
-        target_width = get_scaled_image_size(scale, image_width, patch_size)
-        num_patches = (target_height / patch_size) * (target_width / patch_size)
-
-        if num_patches <= max_num_patches:
-            scale_min = scale
-        else:
-            scale_max = scale
-
-    scale = scale_min
-    target_height = get_scaled_image_size(scale, image_height, patch_size)
-    target_width = get_scaled_image_size(scale, image_width, patch_size)
-    return target_height, target_width
-
-
-def convert_image_to_patches(image: np.ndarray, patch_size: int) -> np.ndarray:
-    """
-    Convert 3D array image of shape (image_height, image_width, num_channels) into 2D array of patches of shape
-    (num_patches_height * num_patches_width, patch_size * patch_size * num_channels).
-    """
-    image_height, image_width, num_channels = image.shape
-    num_patches_height = image_height // patch_size
-    num_patches_width = image_width // patch_size
-    patched_image = image.reshape(num_patches_height, patch_size, num_patches_width, patch_size, num_channels)
-    patched_image = patched_image.transpose(0, 2, 1, 3, 4)
-    patched_image = patched_image.reshape(num_patches_height * num_patches_width, -1)
-    return patched_image
-
-
-def pad_along_first_dim(array: np.ndarray, target_length: int, pad_value: int = 0) -> tuple[np.ndarray, np.ndarray]:
-    """
-    Pad the array along the first dimension.
-    """
-    current_length = array.shape[0]
-    padding_length = target_length - current_length
-    mask = np.ones((target_length,), dtype=np.int32)
-    if padding_length > 0:
-        paddings = [(0, padding_length)] + [(0, 0)] * (array.ndim - 1)
-        array = np.pad(array, paddings, mode="constant", constant_values=pad_value)
-        mask[-padding_length:] = 0
-    return array, mask
-
-
-def preprocess_image(image_path, patch_size=16, max_num_patches=256, 
-                     rescale_factor=1/255, image_mean=None, image_std=None):
-    """
-    Preprocess image following the exact SigLip2 pipeline
-    """
-    if image_mean is None:
-        image_mean = [0.5, 0.5, 0.5]
-    if image_std is None:
-        image_std = [0.5, 0.5, 0.5]
-    
-    # Load image
-    image = Image.open(image_path)
-    
-    # Convert to RGB
-    image = image.convert('RGB')
-    
-    # Convert to numpy array
-    image = np.array(image)  # Shape: (H, W, 3), dtype: uint8
-    
-    # Get target size
-    height, width = get_image_size_for_max_num_patches(
-        image_height=image.shape[0],
-        image_width=image.shape[1],
-        patch_size=patch_size,
-        max_num_patches=max_num_patches,
-    )
-    
-    # Resize using PIL (BILINEAR)
-    if height != image.shape[0] or width != image.shape[1]:
-        pil_img = Image.fromarray(image)
-        pil_img = pil_img.resize((width, height), Image.BILINEAR)
-        image = np.array(pil_img)
-    
-    # Rescale: [0, 255] -> [0, 1]
-    image = image.astype(np.float32) * rescale_factor
-    
-    # Normalize: (pixel - mean) / std
-    image_mean_np = np.array(image_mean, dtype=np.float32)
-    image_std_np = np.array(image_std, dtype=np.float32)
-    image = (image - image_mean_np) / image_std_np
-    
-    # Convert to patches
-    patches = convert_image_to_patches(image, patch_size)
-    
-    # Pad patches
-    patches, mask = pad_along_first_dim(patches, max_num_patches)
-    
-    # Calculate spatial shapes
-    num_patches_height = image.shape[0] // patch_size
-    num_patches_width = image.shape[1] // patch_size
-    
-    return {
-        'pixel_values': patches,
-        'pixel_attention_mask': mask,
-        'num_patches_height': num_patches_height,
-        'num_patches_width': num_patches_width,
-        'actual_num_patches': num_patches_height * num_patches_width
-    }
-
-
-def save_output(result, output_path):
-    """Save preprocessing results to file"""
-    with open(output_path, 'w') as f:
+    with open(output_path, "w") as f:
         f.write("=== METADATA ===\n")
-        f.write(f"num_patches_height: {result['num_patches_height']}\n")
-        f.write(f"num_patches_width: {result['num_patches_width']}\n")
-        f.write(f"actual_num_patches: {result['actual_num_patches']}\n")
-        f.write(f"pixel_values_shape: {result['pixel_values'].shape}\n")
-        f.write("\n")
-        
-        # Attention mask
-        f.write("=== ATTENTION MASK ===\n")
-        mask = result['pixel_attention_mask']
-        for i in range(len(mask)):
-            f.write(str(mask[i]))
-            if (i + 1) % 16 == 0:
-                f.write("\n")
-            else:
-                f.write(" ")
-        f.write("\n\n")
-        
-        # First 5 patches statistics
-        f.write("=== FIRST 5 PATCHES STATISTICS ===\n")
-        pixel_values = result['pixel_values']
-        for patch_idx in range(min(5, len(mask))):
-            if mask[patch_idx] == 0:
-                continue
-            
-            f.write(f"Patch {patch_idx}:\n")
-            patch = pixel_values[patch_idx]
-            f.write(f"  Min: {patch.min():.6f}\n")
-            f.write(f"  Max: {patch.max():.6f}\n")
-            f.write(f"  Mean: {patch.mean():.6f}\n")
-            f.write(f"  First 10 values: {' '.join(f'{v:.6f}' for v in patch[:10])}\n")
-        f.write("\n")
-        
-        # First patch complete values
-        f.write("=== FIRST PATCH COMPLETE VALUES ===\n")
-        if mask[0] == 1:
-            first_patch = pixel_values[0]
-            for i in range(min(len(first_patch), 768)):  # 16*16*3 = 768
-                f.write(f"{first_patch[i]:.6f}")
-                if (i + 1) % 8 == 0:
-                    f.write("\n")
-                else:
-                    f.write(" ")
-        f.write("\n\n")
-        
-        # Global statistics
-        f.write("=== GLOBAL STATISTICS ===\n")
-        valid_patches = np.sum(mask)
-        valid_pixel_values = pixel_values[mask == 1]
-        f.write(f"Valid patches: {valid_patches}\n")
-        f.write(f"Global min: {valid_pixel_values.min():.6f}\n")
-        f.write(f"Global max: {valid_pixel_values.max():.6f}\n")
-        f.write(f"Global mean: {valid_pixel_values.mean():.6f}\n")
+        pv = result.get("pixel_values", None)
+        if pv is None:
+            f.write("pixel_values: None (unexpected)\n")
+            return
 
+        # Ensure numpy array
+        if not isinstance(pv, np.ndarray):
+            try:
+                pv = pv.detach().cpu().numpy()  # torch tensor -> numpy
+            except Exception:
+                raise RuntimeError("Unsupported pixel_values type; expected NumPy or torch.Tensor.")
+
+        f.write(f"pixel_values_shape: {pv.shape}\n")
+        f.write(f"pixel_values_dtype: {pv.dtype}\n")
+
+        # Pull CHW and batch dims if present
+        if pv.ndim == 4:
+            b, c, h, w = pv.shape
+        elif pv.ndim == 3:
+            # Some processors may return unbatched CHW
+            c, h, w = pv.shape
+            b = 1
+            pv = pv[None, ...]
+        else:
+            raise ValueError(f"Unsupported pixel_values shape: {pv.shape}")
+
+        # Optional fields (NaFlex-aware processors)
+        pam = result.get("pixel_attention_mask", None)
+        ss = result.get("spatial_shapes", None)
+
+        if pam is not None:
+            if isinstance(pam, np.ndarray):
+                pam_np = pam
+            else:
+                try:
+                    pam_np = pam.detach().cpu().numpy()
+                except Exception:
+                    raise RuntimeError("Unsupported pixel_attention_mask type; expected NumPy or torch.Tensor.")
+            f.write(f"pixel_attention_mask_shape: {pam_np.shape}\n")
+        else:
+            f.write("pixel_attention_mask: None (likely a non-NaFlex checkpoint)\n")
+
+        if ss is not None:
+            if isinstance(ss, np.ndarray):
+                ss_np = ss
+            else:
+                try:
+                    ss_np = ss.detach().cpu().numpy()
+                except Exception:
+                    raise RuntimeError("Unsupported spatial_shapes type; expected NumPy or torch.Tensor.")
+            f.write(f"spatial_shapes: {ss_np.tolist()}\n")
+        else:
+            f.write("spatial_shapes: None (likely a fixed-size checkpoint)\n")
+
+        # Basic stats for the first (or only) image in batch
+        f.write("\n=== STATISTICS (first image) ===\n")
+        first = pv[0]  # (C,H,W)
+        per_channel_means = [f"{float(first[i].mean()):.6f}" for i in range(first.shape[0])]
+        f.write(f"Per-channel means: {per_channel_means}\n")
+        f.write(f"Global min: {float(first.min()):.6f}\n")
+        f.write(f"Global max: {float(first.max()):.6f}\n")
+        f.write(f"Global mean: {float(first.mean()):.6f}\n")
+
+        # Dump a small slice so you can spot-check numeric parity
+        f.write("\n=== SAMPLE VALUES (first channel, top-left 8x8) ===\n")
+        sample = first[0, :8, :8].reshape(-1)
+        for i, v in enumerate(sample):
+            f.write(f"{float(v):.6f} ")
+            if (i + 1) % 8 == 0:
+                f.write("\n")
+
+        # If an attention mask exists, print it (it's 1D for NaFlex)
+        if pam is not None:
+            f.write("\n=== ATTENTION MASK (1D, num_patches) ===\n")
+            pam1d = pam_np[0] if pam_np.ndim == 2 else pam_np  # Remove batch dim if present
+            # Print 16 values per line for readability
+            for i in range(0, len(pam1d), 16):
+                row = pam1d[i:i+16]
+                f.write(" ".join(str(int(x)) for x in row) + "\n")
+            # Summary
+            num_valid = int(pam1d.sum())
+            num_padding = len(pam1d) - num_valid
+            f.write(f"\nValid patches: {num_valid}, Padding: {num_padding}\n")
+
+        # If you want to *estimate* patch grid (for comparison) and you know patch size:
+        if patch_size_hint is not None:
+            f.write("\n=== PATCH GRID ESTIMATE (using patch_size_hint) ===\n")
+            est_h = h // patch_size_hint
+            est_w = w // patch_size_hint
+            f.write(f"estimated_num_patches_height: {est_h}\n")
+            f.write(f"estimated_num_patches_width:  {est_w}\n")
+            f.write(f"estimated_total_patches:      {est_h * est_w}\n")
 
 def main():
     if len(sys.argv) < 2:
-        print("Usage: python test_siglip2_reference.py <image_path> [output_path]")
-        print("Example: python test_siglip2_reference.py test_image.png output_python.txt")
+        print("Usage: python test_siglip2_hf.py <image_path_or_url> [output_path] [ckpt]")
+        print("Example: python test_siglip2_hf.py test_image.png output_python.txt google/siglip2-base-patch16-naflex")
         return
-    
+
     image_path = sys.argv[1]
-    output_path = sys.argv[2] if len(sys.argv) > 2 else "siglip2_output_python.txt"
-    
-    print("=== SigLip2 Reference Implementation Test ===")
+    output_path = sys.argv[2] if len(sys.argv) > 2 else "siglip2_output_hf.txt"
+    ckpt = sys.argv[3] if len(sys.argv) > 3 else "google/siglip2-base-patch16-naflex"
+
+    print("=== SigLip2 HF Processor Test ===")
     print(f"Image: {image_path}")
-    print()
-    
+    print(f"Checkpoint: {ckpt}\n")
+
+    # Lazy import transformers
+    from transformers import AutoImageProcessor
+
     try:
-        # Preprocess image
-        print("Loading and preprocessing image...")
-        result = preprocess_image(
-            image_path,
-            patch_size=16,
-            max_num_patches=256,
-            rescale_factor=1/255,
-            image_mean=[0.5, 0.5, 0.5],
-            image_std=[0.5, 0.5, 0.5]
-        )
-        
-        # Print results
-        print("\n=== Preprocessing Results ===")
-        print(f"Number of patches (height x width): {result['num_patches_height']} x {result['num_patches_width']}")
-        print(f"Actual number of patches: {result['actual_num_patches']}")
-        print(f"Padded to: {len(result['pixel_attention_mask'])} patches")
-        print(f"Pixel values shape: {result['pixel_values'].shape}")
-        print(f"Pixel values dtype: {result['pixel_values'].dtype}")
-        
-        # Statistics
-        valid_mask = result['pixel_attention_mask'] == 1
-        valid_pixels = result['pixel_values'][valid_mask]
-        print(f"\nPixel value range: [{valid_pixels.min():.6f}, {valid_pixels.max():.6f}]")
-        print(f"Valid patches (mask=1): {np.sum(valid_mask)}")
-        
-        # Save output
-        print(f"\nSaving detailed output to: {output_path}")
-        save_output(result, output_path)
-        
-        print("\n✓ Success!")
-        print("\nNext steps:")
-        print("1. Compare this output with the C++ output")
-        print("2. Check that metadata, masks, and pixel values match")
-        
+        # Load image
+        print("Loading image...")
+        image = load_image(image_path)  # PIL RGB
+
+        # Load the processor bound to the checkpoint.
+        # For SigLIP-2, this instantiates Siglip2ImageProcessor under the hood.
+        print("Loading HF image processor...")
+        processor = AutoImageProcessor.from_pretrained(ckpt)
+
+        # Run official preprocessing. By default this performs resizing (NaFlex-aware),
+        # channel reordering to CHW, rescale/normalize etc., returning a dict.
+        # Use PyTorch tensors (the fast processor only supports "pt").
+        print("Preprocessing via HF processor...")
+        processed = processor(images=image, return_tensors="pt")
+
+        # Save results
+        print(f"Saving detailed output to: {output_path}")
+        # If you know the patch size for your checkpoint, pass it here to estimate patch grid.
+        # Most SigLIP-2 models use patch_size=16.
+        save_output_hf(processed, output_path, patch_size_hint=16)
+
+        # Console summary
+        pv = processed["pixel_values"]
+        if not isinstance(pv, np.ndarray):
+            pv = pv.detach().cpu().numpy()
+        print("\n=== Summary ===")
+        print(f"pixel_values shape: {pv.shape} (batch, C, H, W)")
+        print(f"pixel_values dtype: {pv.dtype}")
+        if "pixel_attention_mask" in processed:
+            pam = processed["pixel_attention_mask"]
+            if not isinstance(pam, np.ndarray):
+                pam = pam.detach().cpu().numpy()
+            print(f"pixel_attention_mask shape: {pam.shape}")
+        if "spatial_shapes" in processed:
+            ss = processed["spatial_shapes"]
+            if not isinstance(ss, np.ndarray):
+                ss = ss.detach().cpu().numpy()
+            print(f"spatial_shapes: {ss.tolist()}")
+
+        print("\n✓ Success! Compare these values/shapes with your C++ implementation.")
+
     except Exception as e:
         print(f"Error: {e}")
         import traceback
         traceback.print_exc()
 
-
 if __name__ == "__main__":
     main()
-

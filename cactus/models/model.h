@@ -198,6 +198,102 @@ private:
 };
 
 
+class Siglip2VisionModel : public Model {
+public:
+    Siglip2VisionModel();
+    explicit Siglip2VisionModel(const Config& cfg);
+    ~Siglip2VisionModel() override = default;
+
+    // Process preprocessed image patches through vision encoder
+    // This overload uses the model's own graph (for standalone usage)
+    size_t forward_vision(const Lfm2VlPreprocessor::PreprocessedImage& preprocessed_image);
+    
+    // This overload accepts an external graph pointer (for integration with larger models)
+    size_t forward_vision(CactusGraph* gb, 
+                         const Lfm2VlPreprocessor::PreprocessedImage& preprocessed_image,
+                         ComputeBackend backend);
+    
+    // Get vision features (pooled output) for an image
+    std::vector<float> get_image_features(const std::string& image_path);
+    std::vector<float> get_image_features(const Lfm2VlPreprocessor::PreprocessedImage& preprocessed_image);
+    
+    // Get the output node ID for image features (for composing with other models)
+    size_t get_image_features_node(const Lfm2VlPreprocessor::PreprocessedImage& preprocessed_image);
+    
+    // Get the preprocessor instance (for testing/standalone usage)
+    Lfm2VlPreprocessor& get_preprocessor() { return preprocessor_; }
+    const Lfm2VlPreprocessor& get_preprocessor() const { return preprocessor_; }
+
+protected:
+    size_t build_vision_embeddings(CactusGraph* gb, const Lfm2VlPreprocessor::PreprocessedImage& preprocessed_image,
+                                   ComputeBackend backend);
+    
+    size_t build_vision_transformer_layer(CactusGraph* gb, size_t hidden_states, uint32_t layer_idx,
+                                         ComputeBackend backend);
+    
+    size_t build_vision_attention(CactusGraph* gb, size_t hidden_states, uint32_t layer_idx,
+                                  ComputeBackend backend);
+    
+    size_t build_vision_mlp(CactusGraph* gb, size_t hidden_states, uint32_t layer_idx,
+                           ComputeBackend backend);
+
+    void load_weights_to_graph(CactusGraph* gb) override;
+    size_t forward(const std::vector<uint32_t>& tokens, bool use_cache = false) override;
+    
+    // Stub implementations for Model pure virtual methods (not used for vision-only model)
+    size_t build_attention(CactusGraph* gb, size_t normalized_input, uint32_t layer_idx,
+                          ComputeBackend backend, bool use_cache = false, size_t position_offset = 0) override;
+    size_t build_mlp(CactusGraph* gb, size_t normalized_h, uint32_t layer_idx,
+                    ComputeBackend backend) const override;
+    size_t build_transformer_block(CactusGraph* gb, size_t hidden, uint32_t layer_idx,
+                                  ComputeBackend backend, bool use_cache = false, size_t position_offset = 0) override;
+
+private:
+    struct VisionWeightNodeIDs {
+        // Patch embedding
+        size_t patch_embedding_weight;
+        size_t patch_embedding_bias;
+        
+        // Position embedding
+        size_t position_embedding;
+        
+        // Post layer norm
+        size_t post_layernorm_weight;
+        size_t post_layernorm_bias;
+        
+        // Note: Pooling head not used (vision_use_head: false in LFM2-VL)
+
+        struct VisionLayerWeights {
+            // Self attention
+            size_t attn_q_weight;
+            size_t attn_k_weight;
+            size_t attn_v_weight;
+            size_t attn_output_weight;
+            size_t attn_q_bias;
+            size_t attn_k_bias;
+            size_t attn_v_bias;
+            size_t attn_output_bias;
+            
+            // Layer norms
+            size_t layer_norm1_weight;
+            size_t layer_norm1_bias;
+            size_t layer_norm2_weight;
+            size_t layer_norm2_bias;
+            
+            // MLP
+            size_t mlp_fc1_weight;
+            size_t mlp_fc1_bias;
+            size_t mlp_fc2_weight;
+            size_t mlp_fc2_bias;
+        };
+
+        std::vector<VisionLayerWeights> vision_layers;
+    } vision_weight_nodes_;
+    
+    Lfm2VlPreprocessor preprocessor_;
+};
+
+
 class LFM2Model : public Model {
 public:
     LFM2Model();

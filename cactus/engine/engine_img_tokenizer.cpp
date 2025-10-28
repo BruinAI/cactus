@@ -4,12 +4,9 @@
 #include <algorithm>
 #include <stdexcept>
 
-// Include stb_image headers
-#define STB_IMAGE_IMPLEMENTATION
-#include "../ffi/stb_image_impl.h"
-
-#define STB_IMAGE_RESIZE_IMPLEMENTATION
-#include "../ffi/stb_image_resize_impl.h"
+// Include stb_image headers (implementation is in cactus_ffi.cpp)
+#include "../ffi/stb_image.h"
+#include "../ffi/stb_image_resize2.h"
 
 namespace cactus {
 namespace engine {
@@ -323,3 +320,4 @@ SigLip2Preprocessor::PreprocessedImage SigLip2Preprocessor::pad_patches(
 
 } // namespace engine
 } // namespace cactus
+
