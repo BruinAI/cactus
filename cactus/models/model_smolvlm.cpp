@@ -3,6 +3,7 @@
 #include <cmath>
 #include <stdexcept>
 #include <set>
+#include <vector>
 
 namespace cactus {
 namespace engine {
@@ -97,6 +98,8 @@ size_t SmolVLMModel::build_vision_embeddings(CactusGraph* gb, const std::vector<
         int num_patches_w = ib.width / patch_size;
         int num_patches = num_patches_h * num_patches_w;
 
+        (void)num_patches_h; (void)num_patches_w; (void)num_patches;
+
         size_t patch_dim = static_cast<size_t>(ib.channels) * patch_size * patch_size;
         size_t patches_input = gb->input({static_cast<size_t>(num_patches), patch_dim}, Precision::FP32);
         std::vector<float> patch_data(static_cast<size_t>(num_patches) * patch_dim);
@@ -125,12 +128,12 @@ size_t SmolVLMModel::build_vision_embeddings(CactusGraph* gb, const std::vector<
             vision_weight_nodes_.vision_proj_weight,
             {static_cast<size_t>(config_.vision_embed_dim), patch_dim}
         );
-        size_t patch_embeds = gb->matmul(patches_input, reshaped_w, true, backend);
+    size_t patch_embeds = gb->matmul(patches_input, reshaped_w, true, backend);
         if (vision_weight_nodes_.vision_proj_bias != 0) {
             patch_embeds = gb->add(patch_embeds, vision_weight_nodes_.vision_proj_bias);
         }
         
-        size_t embeddings = patch_embeds;
+    size_t embeddings = patch_embeds;
         if (vision_weight_nodes_.vision_position_embedding != 0) {
             int patch_size = config_.vision_patch_size;
             int num_patches_h = ib.height / patch_size;
@@ -204,25 +207,21 @@ size_t SmolVLMModel::build_vision_embeddings(CactusGraph* gb, const std::vector<
 }
 
 size_t SmolVLMModel::build_combined_input(CactusGraph* graph, size_t vision_embeds, const std::vector<uint32_t>& tokens,
-                                ComputeBackend backend, uint32_t& prefix_len) {
-    if (!initialized_ || !graph_handle_) {
-        throw std::runtime_error("Model not initialized - call init() first");
-    }
-
+                                           ComputeBackend backend, uint32_t& prefix_len) {
+    size_t token_count = tokens.size();
     (void)backend;
 
-    size_t token_count = tokens.size();
     size_t token_input_node = graph->input({token_count}, Precision::FP32);
-
     std::vector<float> token_data(token_count);
-    for (size_t i = 0; i < token_count; ++i) token_data[i] = static_cast<float>(tokens[i]);
+    for (size_t i = 0; i < token_count; ++i) {
+        token_data[i] = static_cast<float>(tokens[i]);
+    }
     graph->set_input(token_input_node, token_data.data(), Precision::FP32);
-
-    size_t token_embeddings = graph->embedding(embedding_node_id_, token_input_node);
+    size_t all_token_embeddings = graph->embedding(embedding_node_id_, token_input_node);
 
     if (vision_embeds == 0) {
-        prefix_len = 0;
-        return token_embeddings;
+        prefix_len = static_cast<uint32_t>(token_count);
+        return all_token_embeddings;
     }
 
     uint32_t IMAGE_TOKEN_ID = tokenizer_ ? tokenizer_->get_image_token_id() : 49190;
@@ -232,78 +231,90 @@ size_t SmolVLMModel::build_combined_input(CactusGraph* graph, size_t vision_embe
             image_token_positions.push_back(i);
         }
     }
-    
+
     if (image_token_positions.empty()) {
-        prefix_len = 0;
-        return token_embeddings;
+        prefix_len = static_cast<uint32_t>(token_count);
+        return all_token_embeddings;
     }
-    
+
     uint32_t patch_size = config_.image_seq_len;
     size_t num_image_tokens = image_token_positions.size();
     if (num_image_tokens % patch_size != 0) {
-        throw std::runtime_error("Number of <image> tokens (" + std::to_string(num_image_tokens) + 
+        throw std::runtime_error("Number of <image> tokens (" + std::to_string(num_image_tokens) +
                                ") must be divisible by image_seq_len (" + std::to_string(patch_size) + ")");
     }
-    
+
     const auto& vision_buf = graph->get_output_buffer(vision_embeds);
     if (vision_buf.shape.size() < 2) {
         throw std::runtime_error("Vision embeddings must be 2D [num_tokens, embed_dim]");
     }
     size_t num_vision_tokens = vision_buf.shape[0];
-    
     size_t num_blocks = num_image_tokens / patch_size;
     if (num_vision_tokens != num_blocks * patch_size) {
-        throw std::runtime_error("Vision tokens (" + std::to_string(num_vision_tokens) + 
-                               ") doesn't match expected (" + std::to_string(num_blocks * patch_size) + 
+        throw std::runtime_error("Vision tokens (" + std::to_string(num_vision_tokens) +
+                               ") doesn't match expected (" + std::to_string(num_blocks * patch_size) +
                                ") for " + std::to_string(num_blocks) + " image blocks");
     }
 
-    size_t result_node = 0;
-    bool has_result = false;
+    std::vector<size_t> segments;
     size_t text_cursor = 0;
-    size_t image_token_cursor = 0;
 
-    auto append_text_segment = [&](size_t start, size_t end) {
-        if (end <= start) return;
-        std::vector<uint32_t> seg(tokens.begin() + start, tokens.begin() + end);
-        std::vector<float> seg_data(seg.size());
-        for (size_t i = 0; i < seg.size(); ++i) seg_data[i] = static_cast<float>(seg[i]);
-        size_t seg_input = graph->input({seg.size()}, Precision::FP32);
-        graph->set_input(seg_input, seg_data.data(), Precision::FP32);
-        size_t seg_embeds = graph->embedding(embedding_node_id_, seg_input);
-        if (!has_result) { result_node = seg_embeds; has_result = true; }
-        else { result_node = graph->concat(result_node, seg_embeds, 0); }
-    };
+    size_t i = 0;
+    while (i < image_token_positions.size()) {
+        size_t img_start_pos = image_token_positions[i];
 
-    for (size_t i = 0; i < token_count; ++i) {
-        if (tokens[i] == IMAGE_TOKEN_ID) {
-            if (i > text_cursor) {
-                append_text_segment(text_cursor, i);
+        if (img_start_pos > text_cursor) {
+            std::vector<float> text_indices;
+            for (size_t j = text_cursor; j < img_start_pos; ++j) {
+                text_indices.push_back(static_cast<float>(j));
             }
-            
-            size_t block_idx = image_token_cursor / patch_size;
-            size_t local_idx = image_token_cursor % patch_size;
-            
-            size_t global_idx = block_idx * patch_size + local_idx;
-            std::vector<float> idx_data = {static_cast<float>(global_idx)};
-            size_t idx_node = graph->input({1}, Precision::FP32);
-            graph->set_input(idx_node, idx_data.data(), Precision::FP32);
-            size_t vision_embed = graph->gather(vision_embeds, idx_node);
-            
-            if (!has_result) { result_node = vision_embed; has_result = true; }
-            else { result_node = graph->concat(result_node, vision_embed, 0); }
-            
-            image_token_cursor++;
-            text_cursor = i + 1;
+            size_t indices_node = graph->input({text_indices.size()}, Precision::FP32);
+            graph->set_input(indices_node, text_indices.data(), Precision::FP32);
+            size_t text_segment = graph->gather(all_token_embeddings, indices_node);
+            segments.push_back(text_segment);
         }
+
+        size_t consecutive_count = 1;
+        while (i + consecutive_count < image_token_positions.size() &&
+               image_token_positions[i + consecutive_count] == image_token_positions[i + consecutive_count - 1] + 1) {
+            consecutive_count++;
+        }
+
+       std::vector<float> vision_indices;
+        for (size_t j = 0; j < consecutive_count; ++j) {
+            vision_indices.push_back(static_cast<float>(i + j));
+        }
+        size_t vision_idx_node = graph->input({vision_indices.size()}, Precision::FP32);
+        graph->set_input(vision_idx_node, vision_indices.data(), Precision::FP32);
+        size_t vision_segment = graph->gather(vision_embeds, vision_idx_node);
+        segments.push_back(vision_segment);
+
+        text_cursor = image_token_positions[i + consecutive_count - 1] + 1;
+        i += consecutive_count;
     }
-    
+
     if (text_cursor < token_count) {
-        append_text_segment(text_cursor, token_count);
+        std::vector<float> text_indices;
+        for (size_t j = text_cursor; j < token_count; ++j) {
+            text_indices.push_back(static_cast<float>(j));
+        }
+        size_t indices_node = graph->input({text_indices.size()}, Precision::FP32);
+        graph->set_input(indices_node, text_indices.data(), Precision::FP32);
+        size_t text_segment = graph->gather(all_token_embeddings, indices_node);
+        segments.push_back(text_segment);
+    }
+
+    if (segments.empty()) {
+        throw std::runtime_error("No segments created in build_combined_input");
+    }
+
+    size_t result = segments[0];
+    for (size_t j = 1; j < segments.size(); ++j) {
+        result = graph->concat(result, segments[j], 0);
     }
 
     prefix_len = static_cast<uint32_t>(token_count);
-    return has_result ? result_node : token_embeddings;
+    return result;
 }
 
 size_t SmolVLMModel::pixel_shuffle(CactusGraph* gb, size_t input, int scale_factor) {
@@ -404,18 +415,32 @@ size_t SmolVLMModel::forward_mm(const std::vector<uint32_t>& tokens,const std::v
     auto backend = config_.default_backend == Config::Backend::CPU ? ComputeBackend::CPU : ComputeBackend::NPU;
 
     size_t vision_seq = 0;
+    size_t nodes_after_vision = 0;
+    size_t vision_concats = 0;
+
     if (!images.empty()) {
         vision_seq = build_vision_embeddings(gb, images, backend);
+        nodes_after_vision = gb->nodes_.size();
+        for (const auto& node : gb->nodes_) if (node->op_type == OpType::CONCAT) vision_concats++;
     }
 
     uint32_t prefix_len = 0;
     size_t combined = build_combined_input(gb, vision_seq, tokens, backend, prefix_len);
+
+    size_t nodes_after_combined = gb->nodes_.size();
+    size_t total_concats = 0;
+    for (const auto& node : gb->nodes_) {
+        if (node->op_type == OpType::CONCAT) total_concats++;
+    }
+    (void)nodes_after_combined; (void)nodes_after_vision; (void)total_concats; (void)vision_concats;
+
 
     size_t hidden = combined;
     size_t position_offset = use_cache ? kv_cache_.get_total_seq_len() : 0;
 
     for (uint32_t layer_idx = 0; layer_idx < config_.num_layers; ++layer_idx) {
         hidden = build_transformer_block(gb, hidden, layer_idx, backend, use_cache, position_offset);
+        (void)layer_idx;
     }
 
     auto final_hidden = gb->rms_norm(hidden, weight_nodes_.output_norm_weight, config_.layer_norm_eps);
@@ -439,7 +464,7 @@ uint32_t SmolVLMModel::generate_with_images(const std::vector<uint32_t>& tokens,
     gb->execute();
     update_kv_cache(gb, tokens.size());
 
-    auto* output_ptr = gb->get_output(sampled_token_id);
+    void* output_ptr = gb->get_output(sampled_token_id);
     return *static_cast<uint32_t*>(output_ptr);
 }
 

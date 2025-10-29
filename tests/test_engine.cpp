@@ -10,7 +10,7 @@
 #include <thread>
 #include <atomic>
 
-const char* g_model_path = "../../weights/qwen3-600m-i8";
+const char* g_model_path = "../../weights/smolvlm2-500m-instruct-fp16";
 
 const char* g_options = R"({
         "max_tokens": 256,
@@ -261,7 +261,7 @@ bool test_ffi_with_tools() {
     return result > 0 && stream_data.token_count > 0;
 }
 
-bool test_image_input() {
+bool test_image_input_path() {
     std::string model_path_str(g_model_path);
     if (model_path_str.find("vlm") == std::string::npos) {
         std::cout << "Skipping image input test: model is not a VLM." << std::endl;
@@ -311,6 +311,53 @@ bool test_image_input() {
     return result > 0 && stream_data.token_count > 0;
 }
 
+bool test_image_input_url() {
+    std::string model_path_str(g_model_path);
+    if (model_path_str.find("vlm") == std::string::npos) {
+        std::cout << "Skipping image input test: model is not a VLM." << std::endl;
+        return true;
+    }
+
+    std::string vision_file = model_path_str + std::string("/vision_patch_embedding.weights");
+    std::ifstream vf(vision_file);
+    if (!vf.good()) {
+        std::cout << "Skipping image input test: vision weights not found." << std::endl;
+        return true;
+    }
+    vf.close();
+
+    cactus_model_t model = cactus_init(g_model_path, 2048);
+    if (!model) {
+        std::cerr << "Failed to initialize model for image test" << std::endl;
+        return false;
+    }
+
+    std::string messages_json = "[";
+    messages_json += "{\"role\": \"user\", \"content\": [";
+    messages_json += "{\"type\": \"image\", \"path\": \"https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/p-blog/candy.JPG\"},";
+    messages_json += "{\"type\": \"text\", \"text\": \"What animal is on the candy?\"}";
+    messages_json += "]}";
+    messages_json += "]";
+
+    const std::string& messages_ref = messages_json;
+    const char* messages = messages_ref.c_str();
+
+    StreamingTestData stream_data;
+    stream_data.token_count = 0;
+
+    char response[4096];
+
+    std::cout << "\n=== Image Input Test ===" << std::endl;
+    int result = cactus_complete(model, messages, response, sizeof(response), g_options, nullptr,
+                                streaming_callback, &stream_data);
+
+    std::cout << "\nFinal Response JSON:\n" << response << "\n" << std::endl;
+
+    cactus_destroy(model);
+
+    return result > 0 && stream_data.token_count > 0;
+}
+
 int main() {
     TestUtils::TestRunner runner("Engine Tests");
     runner.run_test("engine_forward_decode_benchmark", test_ffi());  
@@ -318,7 +365,8 @@ int main() {
     runner.run_test("generation_control", test_generation_control());
     runner.run_test("incremental_processing", test_incremental_processing());
     runner.run_test("ffi_with_tools", test_ffi_with_tools());
-    runner.run_test("image_input", test_image_input());
+    runner.run_test("image_input_local_path", test_image_input_path());
+    //runner.run_test("image_input_url", test_image_input_url());
     runner.print_summary();
     return runner.all_passed() ? 0 : 1;
 }

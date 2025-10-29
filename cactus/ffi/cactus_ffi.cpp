@@ -62,7 +62,8 @@ static std::pair<int,int> resize_for_vision_encoder(int width, int height, int v
 
 static void convert_to_chw_float_and_normalize(unsigned char* pixels, int w, int h, int c, ImageBatch &out, float rescale, const std::array<float,3>& mean, const std::array<float,3>& std) {
     (void)c;
-    out.height = h;
+    out.width = static_cast<uint32_t>(w);
+    out.height = static_cast<uint32_t>(h);
     out.channels = 3;
     out.data.assign((size_t)3 * w * h, 0.0f);
     out.pixel_mask.assign((size_t)w * h, 1);
@@ -118,6 +119,34 @@ static std::vector<std::vector<unsigned char>> split_image_tiles(unsigned char* 
     }
     out_tile_w = max_size; out_tile_h = max_size;
     return tiles;
+}
+
+static std::string resolve_image_path(const std::string &attempt) {
+    try {
+        std::filesystem::path p(attempt);
+        if (std::filesystem::exists(p)) return p.string();
+
+        std::string base = p.filename().string();
+        auto cwd = std::filesystem::current_path();
+
+        std::filesystem::path cur = cwd;
+        for (int i = 0; i < 6; ++i) {
+            std::filesystem::path cand1 = cur / "tests" / "assets" / base;
+            if (std::filesystem::exists(cand1)) return cand1.string();
+            std::filesystem::path cand2 = cur / "assets" / base;
+            if (std::filesystem::exists(cand2)) return cand2.string();
+            cur = cur.parent_path();
+            if (cur == cur.root_path()) break;
+        }
+
+        // As a last resort, try the basename in the original attempt's parent directory
+        std::filesystem::path parent = p.parent_path();
+        std::filesystem::path alt = parent / base;
+        if (std::filesystem::exists(alt)) return alt.string();
+    } catch (...) {
+        // ignore filesystem errors and fall through
+    }
+    return attempt;
 }
 
 
@@ -507,7 +536,8 @@ int cactus_complete(
 
             for (const auto& path : image_paths) {
                 int w=0,h=0,c=0;
-                unsigned char* data = stbi_load(path.c_str(), &w, &h, &c, 3);
+                std::string resolved = resolve_image_path(path);
+                unsigned char* data = stbi_load(resolved.c_str(), &w, &h, &c, 3);
                 if (!data) {
                     tiles_per_image.push_back(0);
                     grid_dims_per_image.push_back({0, 0});
@@ -538,6 +568,8 @@ int cactus_complete(
                     int out_w = in_w;
                     int out_h = in_h;
                     std::tie(out_w, out_h) = resize_for_vision_encoder(in_w, in_h, vision_size, patch_size, shuffle_factor);
+
+                    (void)in_w; (void)in_h; (void)out_w; (void)out_h; (void)vision_size; (void)patch_size; (void)shuffle_factor;
 
                     std::vector<unsigned char> resized_pixels;
                     if (out_w != in_w || out_h != in_h) {
@@ -665,6 +697,7 @@ int cactus_complete(
 
         uint32_t next_token;
         bool use_images = !preprocessed_images.empty() && wrapper->model->get_config().model_type == cactus::engine::Config::ModelType::SMOLVLM;
+        (void)use_images; (void)preprocessed_images;
         if (tokens_to_process.empty()) {
             if (use_images) next_token = wrapper->model->generate_with_images({}, preprocessed_images, temperature, top_p, top_k);
             else next_token = wrapper->model->generate({}, temperature, top_p, top_k);
