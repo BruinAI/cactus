@@ -107,12 +107,43 @@ void dump_node_output(CactusGraph* gb, size_t node_id,
     out << "  Min=" << min_val << " Max=" << max_val 
         << " Mean=" << (sum / data.size()) << std::endl;
     
-    out << "  First 32 values:";
+    // Print first 32 values (position 0)
+    out << "  First 32 values (pos 0):";
     for (size_t i = 0; i < std::min(size_t(32), data.size()); ++i) {
         if (i % 8 == 0) out << "\n    ";
         out << std::setw(10) << std::setprecision(5) << data[i];
     }
     out << std::endl;
+    
+    // If we have a multi-dimensional tensor with a sequence dimension, 
+    // also print values from other sequence positions
+    if (buf.shape.size() >= 2 && buf.shape[0] > 1) {
+        size_t seq_len = buf.shape[0];
+        size_t stride = 1;
+        for (size_t i = 1; i < buf.shape.size(); ++i) {
+            stride *= buf.shape[i];
+        }
+        
+        // Print values from positions 1, 2, and last position
+        std::vector<size_t> positions_to_check;
+        if (seq_len > 1) positions_to_check.push_back(1);
+        if (seq_len > 2) positions_to_check.push_back(2);
+        if (seq_len > 10) positions_to_check.push_back(seq_len - 1);  // last position
+        
+        for (size_t pos : positions_to_check) {
+            if (pos < seq_len) {
+                out << "  Values at position " << pos << ":";
+                size_t start_idx = pos * stride;
+                for (size_t i = 0; i < std::min(size_t(24), stride); ++i) {
+                    if (i % 8 == 0) out << "\n    ";
+                    if (start_idx + i < data.size()) {
+                        out << std::setw(10) << std::setprecision(5) << data[start_idx + i];
+                    }
+                }
+                out << std::endl;
+            }
+        }
+    }
 }
 
 } // namespace

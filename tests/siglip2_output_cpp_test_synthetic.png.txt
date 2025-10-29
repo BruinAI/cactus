@@ -1,0 +1,18 @@
+=== METADATA ===
+grid_rows: 1
+grid_cols: 1
+num_tiles: 1
+tokens_per_tile: 256
+thumbnail_tokens: 0
+total_tokens: -175410896
+pixel_values_shape: (-175410896, 768)
+
+=== FIRST 5 TOKENS STATISTICS ===
+
+=== FIRST TOKEN COMPLETE VALUES ===
+
+=== GLOBAL STATISTICS ===
+Total tokens: -175410896
+Global min: -1.000000
+Global max: 1.000000
+Global mean: 0.000000
