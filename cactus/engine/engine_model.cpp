@@ -9,6 +9,7 @@
 #include <dirent.h>
 #include <algorithm>
 #include <set>
+#include <sstream>
 
 namespace cactus {
 namespace engine {
@@ -130,6 +131,8 @@ bool Model::init(const std::string& model_folder, size_t context_size, const std
     cache_k_output_nodes_.resize(config_.num_layers);
     cache_v_output_nodes_.resize(config_.num_layers);
     
+    post_init();
+    
     initialized_ = true;
     
     std::string warmup_text = system_prompt.empty() ? "Henry" : system_prompt;
@@ -168,7 +171,7 @@ uint32_t Model::generate(const std::vector<uint32_t>& tokens, float temperature,
     } else {
         gb->execute();
     }
-
+    post_execute_updates(gb, tokens.size());
     update_kv_cache(gb, tokens.size());
     
     auto* output_ptr = gb->get_output(sampled_token_id);
@@ -205,7 +208,7 @@ std::vector<float> Model::get_embeddings(const std::vector<uint32_t>& tokens, bo
         } else {
             gb->execute();
         }
-
+        post_execute_updates(gb, tokens.size());
         auto* pooled_ptr = gb->get_output(pooled_hidden);
         const auto& pooled_buffer = gb->get_output_buffer(pooled_hidden);
 
@@ -229,6 +232,7 @@ std::vector<float> Model::get_embeddings(const std::vector<uint32_t>& tokens, bo
         } else {
             gb->execute();
         }
+        post_execute_updates(gb, tokens.size());
 
         size_t total_size = output_buffer.total_size;
         embeddings.resize(total_size);
@@ -254,7 +258,6 @@ std::vector<float> Model::get_embeddings(const std::vector<uint32_t>& tokens, bo
 
     return embeddings;
 }
-
 
 bool Config::from_json(const std::string& config_path) {
     std::ifstream file(config_path);
@@ -319,9 +322,23 @@ bool Config::from_json(const std::string& config_path) {
         else if (key == "model_type") {
             if (value == "gemma" || value == "GEMMA") model_type = ModelType::GEMMA;
             else if (value == "smolvlm" || value == "SMOLVLM" || value == "SmolVLM") model_type = ModelType::SMOLVLM;
+            else if (value == "lfm2" || value == "LFM2") model_type = ModelType::LFM2;
             else if (value == "smol" || value == "SMOL" || value == "Smol") model_type = ModelType::SMOL;
             else if (value == "bert" || value == "BERT") model_type = ModelType::NOMIC;
             else model_type = ModelType::QWEN;
+        }
+        else if (key == "conv_L_cache") conv_L_cache = static_cast<size_t>(std::stoul(value));
+        else if (key == "layer_types") {
+            layer_types.clear();
+            std::stringstream ss(value);
+            std::string item;
+            while (std::getline(ss, item, ',')) {
+                if (!item.empty()) {
+                    item.erase(0, item.find_first_not_of(" \t"));
+                    item.erase(item.find_last_not_of(" \t") + 1);
+                    if (!item.empty()) layer_types.push_back(item);
+                }
+            }
         }
     }
 
@@ -337,9 +354,13 @@ bool Config::from_json(const std::string& config_path) {
         default_temperature = 0.2f;
         default_top_p = 0.95f;
         default_top_k = 20;
-    } else if (model_type == ModelType::QWEN) {
-        default_temperature = 0.6f;
+    } else if (model_type == ModelType::LFM2) {
+        default_temperature = 0.3f;
         default_top_p = 0.95f;
+        default_top_k = 20;
+    } else if (model_type == ModelType::QWEN) {
+        default_temperature = 0.7f;
+        default_top_p = 0.8f;
         default_top_k = 20;
     }
 
@@ -363,6 +384,8 @@ std::unique_ptr<Model> create_model(const std::string& model_folder) {
             return std::make_unique<QwenModel>(config);
         case Config::ModelType::GEMMA:
             return std::make_unique<GemmaModel>(config);
+        case Config::ModelType::LFM2:
+            return std::make_unique<LFM2Model>(config);
         case Config::ModelType::SMOL:
             return std::make_unique<SmolModel>(config);
         case Config::ModelType::SMOLVLM:

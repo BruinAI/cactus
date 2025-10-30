@@ -1,6 +1,6 @@
 <img src="assets/banner.jpg" alt="Logo" style="border-radius: 30px; width: 100%;">
 
-Energy-efficient kernels & inference engine for phones. 
+Fastest kernels & energy-efficient inference engine for phones. 
 
 ## Why Cactus?
 - Phones run on battery, GPUs drain energy and heat the devices. 
@@ -11,27 +11,29 @@ Energy-efficient kernels & inference engine for phones.
 ## Performance (CPU only)
 
 - Speed for various sizes can be estimated proportionally
-- INT4 wiil give 30% gains when merged 
+- INT4 will give 2x gains when merged
 - GPUs yield gains but drain battery, will be passed on for NPUs
 
 | Device                        |  Qwen3-INT8-600m (toks/sec) |  
 |:------------------------------|:------------------------:|
-| iPhone 17 Pro                 | 74 |
-| Galaxy S25 Ultra / 16 Pro     | 58 |
-| iPhone 16 / Galaxy S25 / Nothing 3 | 52 |
-| iPhone 15 Pro                 | 48 |
-| iPhone 14 Pro / OnePlus 13 5G | 47 |
-| Galaxy S24 Ultra / iPhone 15  | 42 |
-| OnePlus Open / Galaxy S23     | 41 |
-| iPhone 13 Pro / OnePlus 12    | 38 |
-| iPhone 13 mini / Redmi K70 Ultra / Xiaomi 13 / OnePlus 11 | 27 |
-| Pixel 6a / Nothing 3a / iPhone X / Galaxy S21 | 16 |
+| iPhone 17 Pro                 | 75 |
+| Galaxy S25 Ultra / 16 Pro     | 60 |
+| iPhone 16 / Galaxy S25 / Nothing 3 | 53 |
+| iPhone 15 Pro                 | 49 |
+| iPhone 14 Pro / OnePlus 13 5G | 48 |
+| Galaxy S24 Ultra / iPhone 15  | 43 |
+| OnePlus Open / Galaxy S23     | 42 |
+| iPhone 13 Pro / OnePlus 12    | 39 |
+| iPhone 13 mini / Redmi K70 Ultra / Xiaomi 13 / OnePlus 11 | 28 |
+| Pixel 6a / Nothing 3a / iPhone X / Galaxy S21 | 17 |
 
 ## File Size Comparison
 
+- INT4 will reduce file size 2x 
+
 | Format | Size (Qwen3-0.6B-INT8) |
 |--------|------------------------|
-| Cactus | 370-420 MB |
+| Cactus | 370MB |
 | ONNX/TFLite/MLX | 600 MB |
 | GGUF | 800 MB |
 | Executorch | 944 MB |
@@ -180,15 +182,17 @@ Vanilla M3 CPU-only can run Qwen3-600m-INT8 at 60-70 toks/sec, just run the foll
 ```
 
 ## Generating weights from HuggingFace 
-Use any of the following (270m, 360m, 600m, 1B, 1.7B activated params):
+Use any of the (270m, 350m, 360m, 600m, 750m, 1B, 1.2B, 1.7B activated params):
 ```bash
 # Language models
 python3 tools/convert_hf.py google/gemma-3-270m-it weights/gemma3-270m/ --precision INT8
+python3 tools/convert_hf.py LiquidAI/LFM2-350M weights/lfm2-350m/ --precision INT8
 python3 tools/convert_hf.py HuggingFaceTB/SmolLM2-360m-Instruct weights/smollm2-360m/ --precision INT8
-python3 tools/convert_hf.py Qwen/Qwen3-0.6B weights/qwen3-600m/ --precision INT8
+python3 tools/convert_hf.py Qwen/Qwen3-0.6B weights/qwen3-600m/ --precision INT8 
+python3 tools/convert_hf.py LiquidAI/LFM2-700M weights/lfm2-700m/ --precision INT8
 python3 tools/convert_hf.py google/gemma-3-1b-it weights/gemma3-1b/ --precision INT8
+python3 tools/convert_hf.py LiquidAI/LFM2-1.2B weights/lfm2-1.2B/ --precision INT8
 python3 tools/convert_hf.py Qwen/Qwen3-1.7B weights/qwen3-1.7B/ --precision INT8
-python3 tools/convert_hf.py HuggingFaceTB/SmolLM2-1.7B-Instruct weights/smollm2-1.7B/ --precision INT8
 
 # Embedding models
 python3 tools/convert_hf.py Qwen/Qwen3-Embedding-0.6B weights/qwen3-embed-600m/ --precision INT8
@@ -197,13 +201,8 @@ python3 tools/convert_hf.py nomic-ai/nomic-embed-text-v2-moe weights/nomic/ --pr
 
 Simply replace the weight path `tests/test_engine.cpp` with your choice.
 
-## Roadmap:
-- Llama, LFM, SmolVLM, Whisper, Kitten, Neuphonic
-- Python tools for porting any Torch/JAX to cactus
-- GPTQ & NPU/DSP/ISP for high-end phones 
-
 ## Limitations
-While Cactus can be used for all Apple devices including Macbooks, for computers/AMD/Intel/Nvidia generally, 
+While Cactus can be used for all ARM devices including Macbooks & Qualcomm PCs, for computers/AMD/Intel/Nvidia generally, 
 please use HuggingFace, Llama.cpp, Ollama, vLLM, MLX. They're built for those, support x86, and are all great! 
 
 ## Contributing
