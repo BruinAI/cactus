@@ -319,8 +319,6 @@ private:
 
             size_t post_attn_layernorm_weight1;
             size_t post_attn_layernorm_bias1;
-
-
         };
 
         std::vector<LayerWeights> layers;
