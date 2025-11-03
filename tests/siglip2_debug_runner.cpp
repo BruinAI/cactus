@@ -15,7 +15,8 @@ namespace {
 
 void print_usage() {
     std::cerr << "Usage: siglip2_debug_runner --model <model_dir> --image <image_path>\n"
-              << "       [--dump-output <file>] [--dump-layers <file>]\n";
+              << "       [--dump-output <file>] [--dump-layers <file>] [--dump-patch-embeds <file>]\n"
+              << "       [--dump-node <name:path>] [--dump-node <layer:name:path>] (may repeat)\n";
 }
 
 void print_tensor_stats(const std::vector<float>& data, const std::string& name, size_t limit = 16) {
@@ -146,6 +147,65 @@ void dump_node_output(CactusGraph* gb, size_t node_id,
     }
 }
 
+std::vector<float> extract_node_data(CactusGraph* gb, size_t node_id) {
+    const auto& buf = gb->get_output_buffer(node_id);
+    void* output_ptr = gb->get_output(node_id);
+    if (!output_ptr) {
+        return {};
+    }
+
+    size_t total_size = 1;
+    for (auto dim : buf.shape) {
+        total_size *= dim;
+    }
+
+    std::vector<float> data(total_size);
+    if (buf.precision == Precision::FP32) {
+        const float* ptr = static_cast<const float*>(output_ptr);
+        std::copy(ptr, ptr + total_size, data.begin());
+    } else if (buf.precision == Precision::FP16) {
+        const __fp16* ptr = static_cast<const __fp16*>(output_ptr);
+        for (size_t i = 0; i < total_size; ++i) {
+            data[i] = static_cast<float>(ptr[i]);
+        }
+    } else if (buf.precision == Precision::INT8) {
+        const int8_t* ptr = static_cast<const int8_t*>(output_ptr);
+        float scale = buf.quantization_scale;
+        for (size_t i = 0; i < total_size; ++i) {
+            data[i] = ptr[i] * scale;
+        }
+    }
+
+    return data;
+}
+
+bool write_tensor_binary(const std::string& path, const std::vector<float>& data,
+                         const std::vector<size_t>& shape) {
+    if (data.empty()) {
+        return false;
+    }
+
+    std::ofstream out(path, std::ios::binary);
+    if (!out.is_open()) {
+        return false;
+    }
+
+    const char magic[8] = {'S','2','V','I','S','P','E','M'};
+    out.write(magic, sizeof(magic));
+    uint32_t version = 1;
+    out.write(reinterpret_cast<const char*>(&version), sizeof(version));
+
+    uint32_t rank = static_cast<uint32_t>(shape.size());
+    out.write(reinterpret_cast<const char*>(&rank), sizeof(rank));
+    for (size_t dim : shape) {
+        uint32_t dim32 = static_cast<uint32_t>(dim);
+        out.write(reinterpret_cast<const char*>(&dim32), sizeof(dim32));
+    }
+
+    out.write(reinterpret_cast<const char*>(data.data()), data.size() * sizeof(float));
+    return true;
+}
+
 } // namespace
 
 using namespace cactus::engine;
@@ -155,6 +215,13 @@ int main(int argc, char** argv) {
     std::string image_path;
     std::string dump_output_path;
     std::string dump_layers_path;
+    std::string dump_patch_embeds_path;
+    struct NodeDumpRequest {
+        int layer_idx;
+        std::string name;
+        std::string path;
+    };
+    std::vector<NodeDumpRequest> node_dump_requests;
     
     for (int i = 1; i < argc; ++i) {
         std::string arg(argv[i]);
@@ -166,6 +233,40 @@ int main(int argc, char** argv) {
             dump_output_path = argv[++i];
         } else if (arg == "--dump-layers" && i + 1 < argc) {
             dump_layers_path = argv[++i];
+        } else if (arg == "--dump-patch-embeds" && i + 1 < argc) {
+            dump_patch_embeds_path = argv[++i];
+        } else if (arg == "--dump-node" && i + 1 < argc) {
+            std::string spec = argv[++i];
+            NodeDumpRequest request;
+            request.layer_idx = -1;
+
+            size_t first_colon = spec.find(':');
+            if (first_colon == std::string::npos) {
+                std::cerr << "Invalid --dump-node spec: " << spec << std::endl;
+                return 1;
+            }
+
+            size_t second_colon = spec.find(':', first_colon + 1);
+            if (second_colon == std::string::npos) {
+                request.name = spec.substr(0, first_colon);
+                request.path = spec.substr(first_colon + 1);
+            } else {
+                std::string layer_str = spec.substr(0, first_colon);
+                try {
+                    request.layer_idx = std::stoi(layer_str);
+                } catch (const std::exception&) {
+                    std::cerr << "Invalid layer index in --dump-node spec: " << spec << std::endl;
+                    return 1;
+                }
+                request.name = spec.substr(first_colon + 1, second_colon - first_colon - 1);
+                request.path = spec.substr(second_colon + 1);
+            }
+
+            if (request.name.empty() || request.path.empty()) {
+                std::cerr << "Invalid --dump-node spec: " << spec << std::endl;
+                return 1;
+            }
+            node_dump_requests.push_back(std::move(request));
         } else {
             std::cerr << "Unknown argument: " << arg << std::endl;
             print_usage();
@@ -274,6 +375,51 @@ int main(int argc, char** argv) {
         }
     }
     
+    if (!dump_patch_embeds_path.empty()) {
+        auto it = std::find_if(debug_nodes.begin(), debug_nodes.end(), [](const Model::DebugNode& node) {
+            return node.name == "vision_added_patch_embeds";
+        });
+
+        if (it != debug_nodes.end()) {
+            auto data = extract_node_data(gb, it->node_id);
+            const auto& buf = gb->get_output_buffer(it->node_id);
+            bool ok = write_tensor_binary(dump_patch_embeds_path, data, buf.shape);
+            if (ok) {
+                std::cout << "Wrote patch embeddings to: " << dump_patch_embeds_path << std::endl;
+            } else {
+                std::cerr << "Failed to write patch embeddings to: " << dump_patch_embeds_path << std::endl;
+            }
+        } else {
+            std::cerr << "Patch embeddings node not found in debug nodes." << std::endl;
+        }
+    }
+
+    for (const auto& request : node_dump_requests) {
+        auto it = std::find_if(debug_nodes.begin(), debug_nodes.end(), [&](const Model::DebugNode& node) {
+            bool name_match = node.name == request.name;
+            bool layer_match = (request.layer_idx < 0) || (static_cast<int>(node.layer_idx) == request.layer_idx);
+            return name_match && layer_match;
+        });
+
+        if (it == debug_nodes.end()) {
+            std::cerr << "Debug node not found for dump: name='" << request.name << "'";
+            if (request.layer_idx >= 0) {
+                std::cerr << " layer=" << request.layer_idx;
+            }
+            std::cerr << std::endl;
+            continue;
+        }
+
+        auto data = extract_node_data(gb, it->node_id);
+        const auto& buf = gb->get_output_buffer(it->node_id);
+        bool ok = write_tensor_binary(request.path, data, buf.shape);
+        if (ok) {
+            std::cout << "Wrote node dump ('" << request.name << "') to: " << request.path << std::endl;
+        } else {
+            std::cerr << "Failed to write node dump to: " << request.path << std::endl;
+        }
+    }
+
     if (!dump_layers_path.empty()) {
         std::ofstream layer_out(dump_layers_path);
         if (layer_out.is_open()) {

@@ -2,6 +2,10 @@
 #include <iostream>
 #include <iomanip>
 #include <string>
+#include <fstream>
+#include <filesystem>
+#include <cstdint>
+#include <vector>
 
 using namespace cactus::engine;
 
@@ -16,11 +20,13 @@ void print_first_values(const std::vector<float>& data, int count, const std::st
 
 int main(int argc, char** argv) {
     if (argc < 2) {
-        std::cerr << "Usage: " << argv[0] << " <image_path>" << std::endl;
+        std::cerr << "Usage: " << argv[0] << " <image_path> [output_path]" << std::endl;
         return 1;
     }
 
     std::string image_path = argv[1];
+    std::filesystem::path output_path = (argc >= 3) ? std::filesystem::path(argv[2]) : std::filesystem::path("preprocessed_output.bin");
+
     std::cout << "Testing LFM2-VL Preprocessor" << std::endl;
     std::cout << "================================" << std::endl;
     std::cout << "Image: " << image_path << std::endl << std::endl;
@@ -34,6 +40,72 @@ int main(int argc, char** argv) {
 
     try {
         auto result = preprocessor.preprocess_from_file(image_path);
+
+        if (!output_path.parent_path().empty()) {
+            std::filesystem::create_directories(output_path.parent_path());
+        }
+
+        std::ofstream dump_file(output_path, std::ios::binary);
+        if (!dump_file) {
+            throw std::runtime_error("Failed to open dump file: " + output_path.string());
+        }
+
+        auto write_bytes = [&](const void* data, size_t size) {
+            dump_file.write(reinterpret_cast<const char*>(data), static_cast<std::streamsize>(size));
+            if (!dump_file) {
+                throw std::runtime_error("Failed while writing dump file: " + output_path.string());
+            }
+        };
+
+        auto write_u32 = [&](uint32_t value) {
+            write_bytes(&value, sizeof(value));
+        };
+
+        auto write_u64 = [&](uint64_t value) {
+            write_bytes(&value, sizeof(value));
+        };
+
+        auto write_i32 = [&](int32_t value) {
+            write_bytes(&value, sizeof(value));
+        };
+
+        const char magic[8] = {'L','F','M','2','D','U','M','P'};
+        write_bytes(magic, sizeof(magic));
+        write_u32(1); // version
+
+        write_u32(static_cast<uint32_t>(result.image_rows));
+        write_u32(static_cast<uint32_t>(result.image_cols));
+        write_u32(static_cast<uint32_t>(result.image_height));
+        write_u32(static_cast<uint32_t>(result.image_width));
+        write_u32(static_cast<uint32_t>(result.num_tiles));
+        write_u32(static_cast<uint32_t>(result.max_patches_per_tile));
+        write_u32(static_cast<uint32_t>(result.patch_dim));
+        write_u32(static_cast<uint32_t>(result.tokens_per_tile));
+        write_u32(static_cast<uint32_t>(result.thumbnail_tokens));
+        write_u32(static_cast<uint32_t>(result.num_patches_height));
+        write_u32(static_cast<uint32_t>(result.num_patches_width));
+        write_u32(static_cast<uint32_t>(result.actual_num_patches));
+
+        const uint64_t pixel_values_size = static_cast<uint64_t>(result.pixel_values.size());
+        write_u64(pixel_values_size);
+        write_bytes(result.pixel_values.data(), pixel_values_size * sizeof(float));
+
+        const uint64_t mask_size = static_cast<uint64_t>(result.pixel_attention_mask.size());
+        write_u64(mask_size);
+        if (!result.pixel_attention_mask.empty()) {
+            std::vector<int32_t> mask32(result.pixel_attention_mask.begin(), result.pixel_attention_mask.end());
+            write_bytes(mask32.data(), mask32.size() * sizeof(int32_t));
+        }
+
+        const uint32_t spatial_entries = static_cast<uint32_t>(result.spatial_shapes.size());
+        write_u32(spatial_entries);
+        for (const auto& shape : result.spatial_shapes) {
+            write_i32(static_cast<int32_t>(shape.first));
+            write_i32(static_cast<int32_t>(shape.second));
+        }
+
+        dump_file.close();
+        std::cout << "Dumped full tensors to: " << output_path << std::endl << std::endl;
 
         // Calculate number of tiles (including thumbnail if present)
         int num_regular_tiles = result.image_rows * result.image_cols;

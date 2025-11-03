@@ -487,9 +487,9 @@ private:
     bool is_image_too_large(int height, int width);
     std::pair<int, int> get_grid_layout(int height, int width);
     std::pair<int, int> find_closest_aspect_ratio(float aspect_ratio, int width, int height);
-    std::vector<unsigned char> resize_image(const unsigned char* img_data, int src_width, int src_height,
-                                           int dst_width, int dst_height, int channels);
-    std::vector<float> normalize_image(const unsigned char* img_data, int width, int height, int channels);
+    std::vector<float> resize_image(const unsigned char* img_data, int src_width, int src_height,
+                                    int dst_width, int dst_height, int channels);
+    std::vector<float> normalize_image(const float* img_data, int width, int height, int channels);
     std::vector<std::vector<float>> convert_image_to_patches(
         const std::vector<float>& image, int width, int height, int channels, int patch_size);
     PreprocessedImage pad_patches(const std::vector<std::vector<float>>& tile_patches,

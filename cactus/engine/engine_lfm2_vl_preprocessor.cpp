@@ -206,7 +206,7 @@ Lfm2VlPreprocessor::PreprocessedImage Lfm2VlPreprocessor::preprocess_from_memory
     std::vector<std::pair<int, int>> spatial_shapes;
     spatial_shapes.reserve(expected_tiles);
 
-    auto normalize_and_patchify = [&](const unsigned char* data_ptr, int img_width, int img_height) {
+    auto normalize_and_patchify = [&](const float* data_ptr, int img_width, int img_height) {
         if (img_height % patch != 0 || img_width % patch != 0) {
             throw std::runtime_error("Image dimensions must be divisible by patch size");
         }
@@ -231,28 +231,29 @@ Lfm2VlPreprocessor::PreprocessedImage Lfm2VlPreprocessor::preprocess_from_memory
         printf("[debug] grid_target_width=%d grid_target_height=%d grid_cols=%d grid_rows=%d\n",
                grid_target_width, grid_target_height, grid_cols, grid_rows);
 
-        std::vector<unsigned char> resized_grid = resize_image(
+        std::vector<float> resized_grid = resize_image(
             source_data, width, height, grid_target_width, grid_target_height, expected_channels);
 
-        std::vector<unsigned char> tile_buffer(
+        std::vector<float> tile_buffer(
             static_cast<size_t>(config_.tile_size) * config_.tile_size * expected_channels);
 
         for (int row = 0; row < grid_rows; ++row) {
             for (int col = 0; col < grid_cols; ++col) {
                 for (int y = 0; y < config_.tile_size; ++y) {
-                    const unsigned char* src_row = resized_grid.data() +
+                    const float* src_row = resized_grid.data() +
                         ((row * config_.tile_size + y) * grid_target_width + col * config_.tile_size) *
                         expected_channels;
-                    unsigned char* dst_row = tile_buffer.data() + (y * config_.tile_size) * expected_channels;
-                    std::memcpy(dst_row, src_row,
-                                static_cast<size_t>(config_.tile_size) * expected_channels);
+                    float* dst_row = tile_buffer.data() + (y * config_.tile_size) * expected_channels;
+                    std::copy_n(src_row,
+                                static_cast<size_t>(config_.tile_size) * expected_channels,
+                                dst_row);
                 }
                 normalize_and_patchify(tile_buffer.data(), config_.tile_size, config_.tile_size);
             }
         }
 
         if (config_.use_thumbnail && grid_rows * grid_cols != 1) {
-            std::vector<unsigned char> thumbnail_bytes = resize_image(
+            std::vector<float> thumbnail_bytes = resize_image(
                 source_data, width, height, resized_width, resized_height, expected_channels);
             normalize_and_patchify(thumbnail_bytes.data(), resized_width, resized_height);
             thumbnail_added = true;
@@ -263,14 +264,15 @@ Lfm2VlPreprocessor::PreprocessedImage Lfm2VlPreprocessor::preprocess_from_memory
 
         const bool needs_resize = config_.do_resize && (width != target_width || height != target_height);
 
-        std::vector<unsigned char> resized_image;
+        std::vector<float> resized_image;
         if (needs_resize) {
             resized_image = resize_image(source_data, width, height, target_width, target_height, expected_channels);
             normalize_and_patchify(resized_image.data(), target_width, target_height);
         } else {
-            resized_image.assign(
-                source_data,
-                source_data + static_cast<size_t>(width) * height * expected_channels);
+            resized_image.resize(static_cast<size_t>(width) * height * expected_channels);
+            for (size_t idx = 0; idx < resized_image.size(); ++idx) {
+                resized_image[idx] = static_cast<float>(source_data[idx]);
+            }
             normalize_and_patchify(resized_image.data(), width, height);
             target_width = width;
             target_height = height;
@@ -339,17 +341,23 @@ std::vector<unsigned char> Lfm2VlPreprocessor::convert_to_rgb(
     return rgb_data;
 }
 
-std::vector<unsigned char> Lfm2VlPreprocessor::resize_image(
+std::vector<float> Lfm2VlPreprocessor::resize_image(
     const unsigned char* img_data, int src_width, int src_height,
     int dst_width, int dst_height, int channels) {
     
-    std::vector<unsigned char> resized_data(dst_width * dst_height * channels);
+    const size_t src_elements = static_cast<size_t>(src_width) * src_height * channels;
+    std::vector<float> src_float(src_elements);
+    for (size_t idx = 0; idx < src_elements; ++idx) {
+        src_float[idx] = static_cast<float>(img_data[idx]);
+    }
+
+    std::vector<float> resized_data(static_cast<size_t>(dst_width) * dst_height * channels);
     
     stbir_pixel_layout layout = (channels == 1) ? STBIR_1CHANNEL : 
                                 (channels == 3) ? STBIR_RGB : STBIR_RGBA;
     
-    unsigned char* result = stbir_resize_uint8_linear(
-        img_data, src_width, src_height, 0,
+    float* result = stbir_resize_float_linear(
+        src_float.data(), src_width, src_height, 0,
         resized_data.data(), dst_width, dst_height, 0,
         layout
     );
@@ -362,7 +370,7 @@ std::vector<unsigned char> Lfm2VlPreprocessor::resize_image(
 }
 
 std::vector<float> Lfm2VlPreprocessor::normalize_image(
-    const unsigned char* img_data, int width, int height, int channels) {
+    const float* img_data, int width, int height, int channels) {
     
     size_t total_pixels = width * height * channels;
     std::vector<float> normalized(total_pixels);
@@ -370,7 +378,7 @@ std::vector<float> Lfm2VlPreprocessor::normalize_image(
     for (size_t i = 0; i < width * height; ++i) {
         for (int c = 0; c < channels; ++c) {
             size_t idx = i * channels + c;
-            float pixel = static_cast<float>(img_data[idx]);
+            float pixel = img_data[idx];
             
             if (config_.do_rescale) {
                 pixel *= config_.rescale_factor;
