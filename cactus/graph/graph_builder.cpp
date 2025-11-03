@@ -327,6 +327,8 @@ size_t CactusGraph::conv1d_causal(size_t input, size_t weight, size_t, size_t di
     return add_node(OpType::CONV1D_CAUSAL, {input, weight}, {}, params);
 }
 
+size_t CactusGraph::conv1d(size_t input, size_t weight, size)
+
 
 size_t CactusGraph::concat(size_t input1, size_t input2, int axis) {
     const auto& buffer1 = get_output_buffer(input1);

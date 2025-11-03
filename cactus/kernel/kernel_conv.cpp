@@ -115,6 +115,7 @@ void cactus_conv1d_causal_depthwise_f16(
 void cactus_conv1d_causal_depthwise_f32(
     const float* input, 
     const float* weight,
+    const float* bias,
     float* output,      
     size_t N, size_t L, size_t C, size_t K, size_t dilation)
 {
@@ -225,4 +226,116 @@ void cactus_conv1d_causal_depthwise_f32(
             }
         }
     }
+}
+
+
+void cactus_conv1d(
+    const float* input,
+    const float* weight,
+    float* output,
+    size_t N, size_t L, size_t C, size_t K, size_t B, size_t dilation
+){
+    const size_t T_TILE_F32 = 2;
+
+    for (size_t n = 0; n < N; ++n) {
+
+        const float* Xb = input + n * (L * C);
+
+        for (size_t c = 0; c < C; ++c) {
+            std::vector<float> wrev(K);
+            const float* Wc = weight + c * K;
+            //No need for reversal... plain not causal
+            for (size_t k = 0; k < K; ++k) wrev[k] = Wc[k];
+
+            for (size_t t0 = 1; t0 < L-1; t0 += T_TILE_F32) {
+                const size_t t1 = std::min(t0 + 1, L - 1);
+
+                float32x4_t vacc0_0 = vdupq_n_f32(0.f);
+                float32x4_t vacc0_1 = vdupq_n_f32(0.f);
+
+
+                size_t k = 0;
+                    //Removed conditional to check if weight within kernel size (this conv is specialized for kernels of length 3)
+                    __builtin_prefetch(Xb + (t0 + 3) * C + c);
+
+                    float x0_0 = 0.f, x1_0 = 0.f, x2_0 = 0.f;
+                    float x0_1 = 0.f, x1_1 = 0.f, x2_1 = 0.f;
+                    {
+                        ptrdiff_t xt0 = (ptrdiff_t)t0 - (ptrdiff_t)((k + 0) * dilation);
+                        ptrdiff_t xt1 = (ptrdiff_t)t0 - (ptrdiff_t)((k + 1) * dilation);
+                        ptrdiff_t xt2 = (ptrdiff_t)t0 - (ptrdiff_t)((k + 2) * dilation);
+
+                        if (xt0 >= 0) x0_0 = Xb[(size_t)xt0 * C + c];
+                        if (xt1 >= 0) x1_0 = Xb[(size_t)xt1 * C + c];
+                        if (xt2 >= 0) x2_0 = Xb[(size_t)xt2 * C + c];
+
+                        ptrdiff_t yu0 = (ptrdiff_t)t1 - (ptrdiff_t)((k + 0) * dilation);
+                        ptrdiff_t yu1 = (ptrdiff_t)t1 - (ptrdiff_t)((k + 1) * dilation);
+                        ptrdiff_t yu2 = (ptrdiff_t)t1 - (ptrdiff_t)((k + 2) * dilation);
+                        if (yu0 >= 0) x0_1 = Xb[(size_t)yu0 * C + c];
+                        if (yu1 >= 0) x1_1 = Xb[(size_t)yu1 * C + c];
+                        if (yu2 >= 0) x2_1 = Xb[(size_t)yu2 * C + c];
+                    }
+
+                    float32x4_t xv0 = {x0_0, x1_0, x2_0, 0.f};
+                    float32x4_t yv0 = {x0_1, x1_1, x2_1, 0.f};
+
+                    float w0 = wrev[k+0], w1 = wrev[k+1], w2 = wrev[k+2], w3 = wrev[k+3];
+                    float32x4_t wv0 = {w0, w1, w2, w3};
+
+                    vacc0_0 = vfmaq_f32(vacc0_0, xv0, wv0);
+                    vacc0_1 = vfmaq_f32(vacc0_1, yv0, wv0);
+
+                    float a0_0 = 0.f, a1_0 = 0.f, a2_0 = 0.f, a3_0 = 0.f;
+                    float a0_1 = 0.f, a1_1 = 0.f, a2_1 = 0.f, a3_1 = 0.f;
+                    {
+                        ptrdiff_t xt0 = (ptrdiff_t)t0 - (ptrdiff_t)((k + 4) * dilation);
+                        ptrdiff_t xt1 = (ptrdiff_t)t0 - (ptrdiff_t)((k + 5) * dilation);
+                        ptrdiff_t xt2 = (ptrdiff_t)t0 - (ptrdiff_t)((k + 6) * dilation);
+                        ptrdiff_t xt3 = (ptrdiff_t)t0 - (ptrdiff_t)((k + 7) * dilation);
+
+                        if (xt0 >= 0) a0_0 = input[(size_t)xt0 * C + c];
+                        if (xt1 >= 0) a1_0 = input[(size_t)xt1 * C + c];
+                        if (xt2 >= 0) a2_0 = input[(size_t)xt2 * C + c];
+
+                        ptrdiff_t yu0 = (ptrdiff_t)t1 - (ptrdiff_t)((k + 4) * dilation);
+                        ptrdiff_t yu1 = (ptrdiff_t)t1 - (ptrdiff_t)((k + 5) * dilation);
+                        ptrdiff_t yu2 = (ptrdiff_t)t1 - (ptrdiff_t)((k + 6) * dilation);
+                        ptrdiff_t yu3 = (ptrdiff_t)t1 - (ptrdiff_t)((k + 7) * dilation);
+                        if (yu0 >= 0) a0_1 = Xb[(size_t)yu0 * C + c];
+                        if (yu1 >= 0) a1_1 = Xb[(size_t)yu1 * C + c];
+                        if (yu2 >= 0) a2_1 = Xb[(size_t)yu2 * C + c];
+                        if (yu3 >= 0) a3_1 = Xb[(size_t)yu3 * C + c];
+                    }
+
+                    float32x4_t xv1 = {a0_0, a1_0, a2_0, a3_0};
+                    float32x4_t yv1 = {a0_1, a1_1, a2_1, a3_1};
+
+                //     float u0 = wrev[k+4], u1 = wrev[k+5], u2 = wrev[k+6], u3 = wrev[k+7];
+                //     float32x4_t wv1 = {u0, u1, u2, u3};
+
+                //     vacc0_0 = vfmaq_f32(vacc0_0, xv1, wv1);
+                //     vacc0_1 = vfmaq_f32(vacc0_1, yv1, wv1);
+                // }
+
+                // float acc0 = vaddvq_f32(vacc0_0) + vaddvq_f32(vacc0_1);
+                // float acc1 = vaddvq_f32(vacc0_1); 
+                // acc0 = vaddvq_f32(vacc0_0);
+                // acc1 = vaddvq_f32(vacc0_1);
+
+                // for (; k < K; ++k) {
+                //     ptrdiff_t x0 = (ptrdiff_t)t0 - (ptrdiff_t)(k * dilation);
+                //     if (x0 >= 0) acc0 += wrev[k] * Xb[(size_t)x0 * C + c];
+                //     ptrdiff_t x1 = (ptrdiff_t)t1 - (ptrdiff_t)(k * dilation);
+                //     if (x1 >= 0) acc1 += wrev[k] * Xb[(size_t)x1 * C + c];
+                // }
+
+                // Yb[t0 * C + c] = acc0;
+                // if (t0 + 1 < L) {
+                //     Yb[t1 * C + c] = acc1;
+                // }
+            }
+        }
+    }
+
 }
