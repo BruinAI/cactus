@@ -431,7 +431,7 @@ public:
         int downsample_factor = 2;
         int min_tiles = 2;
         int max_tiles = 10;
-        bool use_thumbnail = false;
+    bool use_thumbnail = true;
         int min_image_tokens = 64;
         int max_image_tokens = 256;
         int max_num_patches = 1024;
