@@ -55,9 +55,10 @@ struct Config {
     uint32_t downsample_factor = 2;
     uint32_t min_tiles = 2;
     uint32_t max_tiles = 10;
-    bool use_thumbnail = false;
+    bool use_thumbnail = true;
     uint32_t min_image_tokens = 64;
     uint32_t max_image_tokens = 256;
+        uint32_t max_num_patches = 1024;
     uint32_t tile_size = 512;
     float max_pixels_tolerance = 2.0f;
     bool do_image_splitting = true;
@@ -449,16 +450,23 @@ public:
     struct PreprocessedImage {
         std::vector<float> pixel_values;       // Shape: (seq_len, patch_size*patch_size*3)
         std::vector<int> pixel_attention_mask; // Shape: (seq_len,)
-        int num_patches_height;                 // Patches per tile
-        int num_patches_width;                  // Patches per tile
+        std::vector<std::pair<int,int>> spatial_shapes;  // [height, width] in patches for each tile
+    std::vector<size_t> pixel_values_shape;           // Logical shape for pixel_values tensor
+    std::vector<size_t> pixel_attention_mask_shape;   // Logical shape for attention mask tensor
+    std::vector<size_t> spatial_shapes_shape;         // Logical shape for spatial_shapes tensor
+        int num_patches_height;                 // Patches per tile (for regular tiles)
+        int num_patches_width;                  // Patches per tile (for regular tiles)
         int actual_num_patches;                 // Total actual patches (tiles + thumbnail)
+        int num_tiles;                          // Total number of tiles (including thumbnail)
+        int patch_dim;                          // Elements per patch (patch_size^2 * channels)
+        int max_patches_per_tile;               // Max padded patches per tile (including thumbnail)
         
         // LFM2-VL specific metadata
         int image_rows;                         // Grid height (num tiles vertically)
         int image_cols;                         // Grid width (num tiles horizontally)
         int image_height;                       // Resized image height
         int image_width;                        // Resized image width
-        int tokens_per_tile;                    // Downsampled tokens per tile
+        int tokens_per_tile;                    // Downsampled tokens per tile (after downsampling)
         int thumbnail_tokens;                   // Tokens in thumbnail (if enabled)
         
         ~PreprocessedImage();
@@ -484,8 +492,10 @@ private:
     std::vector<float> normalize_image(const unsigned char* img_data, int width, int height, int channels);
     std::vector<std::vector<float>> convert_image_to_patches(
         const std::vector<float>& image, int width, int height, int channels, int patch_size);
-    PreprocessedImage pad_patches(const std::vector<std::vector<float>>& patches,
-                                  int width, int height, int patch_size, int max_num_patches);
+    PreprocessedImage pad_patches(const std::vector<std::vector<float>>& tile_patches,
+                                  const std::vector<std::pair<int,int>>& spatial_shapes,
+                                  int patch_dim,
+                                  int max_patches_per_tile);
     int round_by_factor(int number, int factor);
 };
 

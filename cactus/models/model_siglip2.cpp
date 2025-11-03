@@ -20,6 +20,7 @@ Siglip2VisionModel::Siglip2VisionModel(const Config& cfg) : Model(cfg) {
     preprocessor_config.use_thumbnail = config_.use_thumbnail;
     preprocessor_config.min_image_tokens = static_cast<int>(config_.min_image_tokens);
     preprocessor_config.max_image_tokens = static_cast<int>(config_.max_image_tokens);
+    preprocessor_config.max_num_patches = static_cast<int>(config_.max_num_patches);
     preprocessor_config.tile_size = static_cast<int>(config_.tile_size);
     preprocessor_config.max_pixels_tolerance = config_.max_pixels_tolerance;
     preprocessor_config.do_resize = true;
@@ -89,18 +90,19 @@ void Siglip2VisionModel::load_weights_to_graph(CactusGraph* gb) {
 size_t Siglip2VisionModel::build_vision_embeddings(CactusGraph* gb, 
                                                    const Lfm2VlPreprocessor::PreprocessedImage& preprocessed_image,
                                    ComputeBackend backend) {
-    // Get preprocessed patches
-    // Note: pixel_values are already downsampled, so use tokens_per_tile * num_tiles
-    int num_tiles = preprocessed_image.image_rows * preprocessed_image.image_cols;
-    int num_tokens = preprocessed_image.tokens_per_tile * num_tiles + preprocessed_image.thumbnail_tokens;
-    int patch_dim = config_.vision_patch_size * config_.vision_patch_size * 3;
+    // Use the preprocessed image structure fully
+    const int num_tiles = preprocessed_image.num_tiles;
+    const int max_patches = preprocessed_image.max_patches_per_tile;
+    const int patch_dim = preprocessed_image.patch_dim;
+    const int total_patches = num_tiles * max_patches;
     
     // Validate pixel_values size
-    size_t expected_size = static_cast<size_t>(num_tokens) * static_cast<size_t>(patch_dim);
+    size_t expected_size = static_cast<size_t>(total_patches) * static_cast<size_t>(patch_dim);
     if (preprocessed_image.pixel_values.size() != expected_size) {
         throw std::runtime_error(
             "Pixel values size mismatch: expected " + std::to_string(expected_size) + 
-            " (tokens=" + std::to_string(num_tokens) + " * patch_dim=" + std::to_string(patch_dim) + ")" +
+            " (tiles=" + std::to_string(num_tiles) + " * max_patches=" + std::to_string(max_patches) + 
+            " * patch_dim=" + std::to_string(patch_dim) + ")" +
             " but got " + std::to_string(preprocessed_image.pixel_values.size())
         );
     }
@@ -116,8 +118,12 @@ size_t Siglip2VisionModel::build_vision_embeddings(CactusGraph* gb,
         }
     }
     
-    // Create input node for pixel values (already in patch format from preprocessor)
-    size_t patches_input_fp32 = gb->input({static_cast<size_t>(num_tokens), static_cast<size_t>(patch_dim)}, Precision::FP32);
+    // Create input node using the pre-computed shape
+    // Shape: (num_tiles * max_patches, patch_dim) - flattened for matmul
+    size_t patches_input_fp32 = gb->input(
+        {static_cast<size_t>(total_patches), static_cast<size_t>(patch_dim)}, 
+        Precision::FP32
+    );
     gb->set_input(patches_input_fp32, preprocessed_image.pixel_values.data(), Precision::FP32);
     capture_debug_node(0, "vision_patches_input_fp32", patches_input_fp32);
     
@@ -136,34 +142,70 @@ size_t Siglip2VisionModel::build_vision_embeddings(CactusGraph* gb,
     size_t added_patch_embeds = gb->add(patch_embeds, vision_weight_nodes_.patch_embedding_bias);
     capture_debug_node(0, "vision_added_patch_embeds", added_patch_embeds);
 
-    // Compute destination grid dimensions for position embedding interpolation
-    int dst_height = static_cast<int>(std::sqrt(preprocessed_image.tokens_per_tile));
-    int dst_width = dst_height;
+    // Process position embeddings per-tile (matching HF's resize_positional_embeddings)
+    std::vector<size_t> tile_pos_embeddings;
+    tile_pos_embeddings.reserve(num_tiles);
     
-    size_t tile_pos_embeds_node = gb->bilinear_interpolation(
-        vision_weight_nodes_.position_embedding,
-        static_cast<size_t>(dst_height),
-        static_cast<size_t>(dst_width)
-    );
-    capture_debug_node(0, "vision_pos_embeds", tile_pos_embeds_node);
+    for (int tile_idx = 0; tile_idx < num_tiles; ++tile_idx) {
+        auto [tile_h, tile_w] = preprocessed_image.spatial_shapes[tile_idx];
+        int actual_patches = tile_h * tile_w;
+        
+        // Interpolate position embedding to this tile's specific size
+        // Base position embedding is stored as sqrt(num_patches) x sqrt(num_patches) grid
+        size_t tile_pos = gb->bilinear_interpolation(
+            vision_weight_nodes_.position_embedding,
+            static_cast<size_t>(tile_h),
+            static_cast<size_t>(tile_w)
+        ); // -> (tile_h * tile_w, embed_dim)
+        
+        capture_debug_node(tile_idx, "vision_tile_pos_" + std::to_string(tile_idx), tile_pos);
+        
+        // Pad to max_patches if needed (for thumbnail which is typically smaller)
+        size_t padded_pos;
+        if (actual_patches < max_patches) {
+            // Pad with zeros - these will be masked out by pixel_attention_mask
+            int pad_size = max_patches - actual_patches;
+            std::vector<float> zero_data(pad_size * config_.vision_embed_dim, 0.0f);
+            size_t zero_pad = gb->input(
+                {static_cast<size_t>(pad_size), static_cast<size_t>(config_.vision_embed_dim)}, 
+                Precision::FP32
+            );
+            gb->set_input(zero_pad, zero_data.data(), Precision::FP32);
+            
+            padded_pos = gb->concat(tile_pos, zero_pad, /*axis=*/0);
+            capture_debug_node(tile_idx, "vision_padded_pos_" + std::to_string(tile_idx), padded_pos);
+        } else {
+            padded_pos = tile_pos;  // Already exact size (1024 patches)
+        }
+        
+        tile_pos_embeddings.push_back(padded_pos);
+    }
     
-    // Reshape patch embeddings to separate tiles: (num_tokens, embed_dim) -> (num_tiles, tokens_per_tile, embed_dim)
-    size_t reshaped_patches = gb->reshape(
-        added_patch_embeds,
-        {static_cast<size_t>(num_tiles), static_cast<size_t>(preprocessed_image.tokens_per_tile), static_cast<size_t>(config_.vision_embed_dim)}
-    );
+    // Concatenate all tile position embeddings
+    // Chain concat operations for all tiles
+    // Shape: (num_tiles * max_patches, embed_dim)
+    size_t all_pos = tile_pos_embeddings[0];
+    for (size_t i = 1; i < tile_pos_embeddings.size(); ++i) {
+        all_pos = gb->concat(all_pos, tile_pos_embeddings[i], /*axis=*/0);
+    }
+    capture_debug_node(0, "vision_all_pos_embeddings", all_pos);
     
-    // Add position embeddings (broadcasts across tile dimension)
-    // (num_tiles, tokens_per_tile, embed_dim) + (tokens_per_tile, embed_dim) -> (num_tiles, tokens_per_tile, embed_dim)
-    size_t embeddings_with_pos = gb->add(reshaped_patches, tile_pos_embeds_node);
+    // Cast to match patch embeddings precision and add
+    size_t pos_cast = gb->precision_cast(all_pos, Precision::FP16);
+    size_t embeddings = gb->add(added_patch_embeds, pos_cast);
+    capture_debug_node(0, "vision_final_embeddings", embeddings);
     
-    // Reshape back to (num_tokens, embed_dim)
-    size_t embeddings = gb->reshape(
-        embeddings_with_pos,
-        {static_cast<size_t>(num_tokens), static_cast<size_t>(config_.vision_embed_dim)}
-    );
-    capture_debug_node(0, "vision_embeddings", embeddings);
-    
+    int total_valid_patches = 0;
+    for (int i = 0; i < num_tiles; ++i) {
+        auto [h, w] = preprocessed_image.spatial_shapes[i];
+        total_valid_patches += h * w;
+    }
+
+    // Slice off padding (if any)
+    if (total_valid_patches < total_patches) {
+        embeddings = gb->slice(embeddings, /*axis=*/0, /*start=*/0, /*end=*/total_valid_patches);
+    }
+
     return embeddings;
 }
 
@@ -201,7 +243,8 @@ size_t Siglip2VisionModel::build_vision_attention(CactusGraph* gb, size_t hidden
     
     // Reshape back
     size_t attn_2d = gb->reshape(attn_output, {seq_len, num_heads * head_dim});
-    
+    capture_debug_node(layer_idx, "vision_attn_2d", attn_2d);  // <-- ADD THIS
+
     // Output projection
     size_t output = gb->matmul(attn_2d, layer.attn_output_weight, true, backend);
     output = gb->add(output, layer.attn_output_bias);

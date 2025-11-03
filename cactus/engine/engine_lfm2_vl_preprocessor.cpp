@@ -1,8 +1,10 @@
 #include "engine.h"
+#include <algorithm>
 #include <cmath>
 #include <cstring>
-#include <algorithm>
+#include <limits>
 #include <stdexcept>
+#include <vector>
 
 // Include stb_image headers (implementation is in cactus_ffi.cpp)
 #include "../ffi/stb_image.h"
@@ -28,66 +30,58 @@ Lfm2VlPreprocessor::Lfm2VlPreprocessor() : config_() {}
 Lfm2VlPreprocessor::~Lfm2VlPreprocessor() = default;
 
 int Lfm2VlPreprocessor::round_by_factor(int number, int factor) {
-    return ((number + factor / 2) / factor) * factor;
+    if (factor == 0) {
+        return number;
+    }
+    double scaled = static_cast<double>(number) / static_cast<double>(factor);
+    long long rounded = std::llround(scaled);
+    return static_cast<int>(rounded * factor);
 }
-
-// helpers
-static inline int tokens_from_size(int h, int w, int patch, int dwn) {
-    // patches per dim = h/patch, w/patch (divisible due to snap)
-    const int ph = h / patch;
-    const int pw = w / patch;
-    // downsampled tokens per dim: ceil(ph/dwn), ceil(pw/dwn)
-    const int th = (ph + dwn - 1) / dwn;
-    const int tw = (pw + dwn - 1) / dwn;
-    return th * tw;
-}
-
 
 std::pair<int,int> Lfm2VlPreprocessor::smart_resize(int height, int width) {
-    const int patch = config_.patch_size;
-    const int mult  = config_.patch_size * config_.downsample_factor;
-    const int64_t min_pixels = (int64_t)config_.min_image_tokens * patch * patch * config_.downsample_factor * config_.downsample_factor;
-    const int64_t max_pixels = (int64_t)config_.max_image_tokens * patch * patch * config_.downsample_factor * config_.downsample_factor;
+    const int total_factor = config_.patch_size * config_.downsample_factor;
+    const int64_t min_pixels = static_cast<int64_t>(config_.min_image_tokens) *
+                               config_.patch_size * config_.patch_size *
+                               config_.downsample_factor * config_.downsample_factor;
+    const int64_t max_pixels = static_cast<int64_t>(config_.max_image_tokens) *
+                               config_.patch_size * config_.patch_size *
+                               config_.downsample_factor * config_.downsample_factor;
 
-    int h_bar = std::max(patch, round_by_factor(height, patch));
-    int w_bar = std::max(patch, round_by_factor(width,  patch));
-    printf("[smart_resize] in=%dx%d  rounded=%dx%d  min_px=%lld max_px=%lld\n",
-           width, height, w_bar, h_bar, (long long)min_pixels, (long long)max_pixels);
+    int h_bar = std::max(total_factor, round_by_factor(height, total_factor));
+    int w_bar = std::max(total_factor, round_by_factor(width, total_factor));
 
-    if ((int64_t)h_bar * w_bar > max_pixels) {
-        float beta = std::sqrt((float)height * (float)width / (float)max_pixels);
-        h_bar = std::max(patch, (int)std::floor(height / beta / patch) * patch);
-        w_bar = std::max(patch, (int)std::floor(width  / beta / patch) * patch);
-        printf("[smart_resize] scale-down beta=%.4f -> %dx%d\n", beta, w_bar, h_bar);
-    } else if ((int64_t)h_bar * w_bar < min_pixels) {
-        float beta = std::sqrt((float)min_pixels / ((float)height * (float)width));
-        h_bar = (int)std::ceil(height * beta / patch) * patch;
-        w_bar = (int)std::ceil(width  * beta / patch) * patch;
-        printf("[smart_resize] scale-up   beta=%.4f -> %dx%d\n", beta, w_bar, h_bar);
+    if (static_cast<int64_t>(h_bar) * static_cast<int64_t>(w_bar) > max_pixels) {
+        double beta = std::sqrt((static_cast<double>(height) * static_cast<double>(width)) /
+                                static_cast<double>(max_pixels));
+        h_bar = std::max(total_factor,
+                         static_cast<int>(std::floor(height / beta / total_factor)) * total_factor);
+        w_bar = std::max(total_factor,
+                         static_cast<int>(std::floor(width / beta / total_factor)) * total_factor);
+    } else if (static_cast<int64_t>(h_bar) * static_cast<int64_t>(w_bar) < min_pixels) {
+        double beta = std::sqrt(static_cast<double>(min_pixels) /
+                                (static_cast<double>(height) * static_cast<double>(width)));
+        h_bar = std::max(total_factor,
+                         static_cast<int>(std::ceil(height * beta / total_factor)) * total_factor);
+        w_bar = std::max(total_factor,
+                         static_cast<int>(std::ceil(width * beta / total_factor)) * total_factor);
     }
 
-    int new_h = std::max(mult, round_by_factor(h_bar, mult));
-    int new_w = std::max(mult, round_by_factor(w_bar, mult));
-    printf("[smart_resize] snap_to_%d -> %dx%d\n", mult, new_w, new_h);
-    return {new_w, new_h};
+    return {w_bar, h_bar};
 }
 
 
 bool Lfm2VlPreprocessor::is_image_too_large(int height, int width) {
-    const int patch = config_.patch_size;               // 16
-    const int dwn   = config_.downsample_factor;        // 2
-    const int h_bar = std::max(patch, round_by_factor(height, patch));
-    const int w_bar = std::max(patch, round_by_factor(width,  patch));
+    const int total_factor = config_.patch_size * config_.downsample_factor;
+    const int h_bar = std::max(config_.patch_size, round_by_factor(height, total_factor));
+    const int w_bar = std::max(config_.patch_size, round_by_factor(width, total_factor));
 
-    const int64_t lhs = (int64_t)h_bar * (int64_t)w_bar;
-    const int64_t max_pixels = (int64_t)config_.max_image_tokens * patch * patch * dwn * dwn;
-    const double thresh = (double)max_pixels * config_.max_pixels_tolerance;
+    const int64_t pixels = static_cast<int64_t>(h_bar) * static_cast<int64_t>(w_bar);
+    const double max_pixels = static_cast<double>(config_.max_image_tokens) *
+                              config_.patch_size * config_.patch_size *
+                              config_.downsample_factor * config_.downsample_factor *
+                              config_.max_pixels_tolerance;
 
-    printf("[too_large] raw=%dx%d  h_bar=%d w_bar=%d  lhs=%lld  max_pixels=%lld  tol=%.3f  thresh=%.1f  -> %d\n",
-           width, height, h_bar, w_bar, (long long)lhs, (long long)max_pixels, config_.max_pixels_tolerance, thresh,
-           (int)(lhs > thresh));
-
-    return lhs > thresh;
+    return static_cast<double>(pixels) > max_pixels;
 }
 
 
@@ -112,6 +106,9 @@ std::pair<int, int> Lfm2VlPreprocessor::find_closest_aspect_ratio(float aspect_r
     // Remove duplicates and sort
     std::sort(target_ratios.begin(), target_ratios.end());
     target_ratios.erase(std::unique(target_ratios.begin(), target_ratios.end()), target_ratios.end());
+    std::sort(target_ratios.begin(), target_ratios.end(), [](const auto& a, const auto& b) {
+        return (a.first * a.second) < (b.first * b.second);
+    });
 
     for (const auto& ratio : target_ratios) {
         float target_aspect_ratio = static_cast<float>(ratio.first) / ratio.second;
@@ -128,20 +125,12 @@ std::pair<int, int> Lfm2VlPreprocessor::find_closest_aspect_ratio(float aspect_r
         }
     }
 
-    printf("[grid_search] best gw=%d gh=%d  best_ratio=%.6f\n",
-        best_ratio.first, best_ratio.second, (float)best_ratio.first / best_ratio.second);
- 
     return best_ratio;
 }
 
 std::pair<int,int> Lfm2VlPreprocessor::get_grid_layout(int height, int width) {
     float aspect_ratio = (float)width / (float)height;
-    printf("[grid] want aspect=%.6f  min_tiles=%d max_tiles=%d  tile=%d\n",
-           aspect_ratio, config_.min_tiles, config_.max_tiles, config_.tile_size);
-
     auto [grid_width, grid_height] = find_closest_aspect_ratio(aspect_ratio, width, height);
-    printf("[grid] chosen gw=%d gh=%d  -> target=%dx%d\n",
-           grid_width, grid_height, grid_width * config_.tile_size, grid_height * config_.tile_size);
 
     int target_width  = config_.tile_size * grid_width;
     int target_height = config_.tile_size * grid_height;
@@ -165,169 +154,157 @@ Lfm2VlPreprocessor::PreprocessedImage Lfm2VlPreprocessor::preprocess_from_file(c
 
 Lfm2VlPreprocessor::PreprocessedImage Lfm2VlPreprocessor::preprocess_from_memory(
     const unsigned char* img_data, int width, int height, int channels) {
-    
     if (!img_data) {
         throw std::runtime_error("Invalid image data pointer");
     }
 
-    // Convert to RGB if needed
+    const int expected_channels = 3;
     std::vector<unsigned char> rgb_data;
-    if (config_.do_convert_rgb && channels != 3) {
+    const unsigned char* source_data = img_data;
+    int source_channels = channels;
+
+    if (config_.do_convert_rgb && channels != expected_channels) {
         rgb_data = convert_to_rgb(img_data, width, height, channels);
-        img_data = rgb_data.data();
-        channels = 3;
+        source_data = rgb_data.data();
+        source_channels = expected_channels;
     }
 
-    if (channels != 3) {
+    if (source_channels != expected_channels) {
         throw std::runtime_error("Image must have 3 channels (RGB)");
     }
 
-    PreprocessedImage result;
-
-    // Smart resize to get target dimensions
-    // Smart resize first (snap to multiples of 32)
-    auto [new_width, new_height] = smart_resize(height, width);
-    result.image_width  = new_width;
-    result.image_height = new_height;
-
     const int patch = config_.patch_size;
-    const int dwn   = config_.downsample_factor;
+    const int downsample = config_.downsample_factor;
+    const int patch_dim = patch * patch * expected_channels;
 
-    auto tokens_from_size = [](int h, int w, int patch, int dwn) {
-        const int ph = h / patch, pw = w / patch;
-        const int th = (ph + dwn - 1) / dwn;
-        const int tw = (pw + dwn - 1) / dwn;
-        return th * tw;
+    if (patch <= 0) {
+        throw std::runtime_error("Patch size must be positive");
+    }
+    if (config_.tile_size % patch != 0) {
+        throw std::runtime_error("Tile size must be divisible by patch size");
+    }
+
+    auto [resized_width, resized_height] = smart_resize(height, width);
+
+    const int patches_per_tile_side = config_.tile_size / patch;
+    const int tile_patch_count = patches_per_tile_side * patches_per_tile_side;
+    const int thumbnail_patch_cap = config_.max_image_tokens * downsample * downsample;
+    int max_patches_per_tile = config_.max_num_patches;
+    max_patches_per_tile = std::max(max_patches_per_tile, tile_patch_count);
+    max_patches_per_tile = std::max(max_patches_per_tile, thumbnail_patch_cap);
+
+    const bool allow_splitting = config_.do_image_splitting;
+    const bool should_split = allow_splitting && is_image_too_large(height, width);
+
+    size_t expected_tiles = should_split ? static_cast<size_t>(config_.max_tiles) : 1;
+    if (should_split && config_.use_thumbnail) {
+        expected_tiles += 1;
+    }
+
+    std::vector<std::vector<float>> tile_patches;
+    tile_patches.reserve(expected_tiles);
+    std::vector<std::pair<int, int>> spatial_shapes;
+    spatial_shapes.reserve(expected_tiles);
+
+    auto normalize_and_patchify = [&](const unsigned char* data_ptr, int img_width, int img_height) {
+        if (img_height % patch != 0 || img_width % patch != 0) {
+            throw std::runtime_error("Image dimensions must be divisible by patch size");
+        }
+        std::vector<float> normalized = normalize_image(data_ptr, img_width, img_height, expected_channels);
+        auto patches = convert_image_to_patches(normalized, img_width, img_height, expected_channels, patch);
+        std::vector<float> flattened(patches.size() * patch_dim);
+        for (size_t idx = 0; idx < patches.size(); ++idx) {
+            std::copy(patches[idx].begin(), patches[idx].end(), flattened.begin() + idx * patch_dim);
+        }
+        tile_patches.push_back(std::move(flattened));
+        spatial_shapes.emplace_back(img_height / patch, img_width / patch);
     };
 
-    const int single_tokens = tokens_from_size(new_height, new_width, patch, dwn);
-    const bool split_by_pixels = config_.do_image_splitting && is_image_too_large(height, width);
-    const bool split_by_budget = config_.do_image_splitting &&
-                                (single_tokens >= config_.max_image_tokens) &&
-                                (single_tokens <= config_.max_num_patches);
-    const bool do_split = split_by_pixels || split_by_budget;
+    int grid_rows = 1;
+    int grid_cols = 1;
+    bool thumbnail_added = false;
 
-    printf("[decision] raw=%dx%d new=%dx%d single_tokens=%d  per_tile=%d  total_cap=%d  split_pixels=%d split_budget=%d  -> do_split=%d\n",
-        width, height, new_width, new_height, single_tokens,
-        config_.max_image_tokens, config_.max_num_patches,
-        (int)split_by_pixels, (int)split_by_budget, (int)do_split);
-
-
-    
-    std::vector<std::vector<float>> all_tile_patches;
-    
-    if (do_split) {
-        // Get grid layout for splitting
+    if (should_split) {
         auto [grid_target_width, grid_target_height] = get_grid_layout(height, width);
-        int grid_cols = grid_target_width / config_.tile_size;
-        int grid_rows = grid_target_height / config_.tile_size;
-        
-        result.image_rows = grid_rows;
-        result.image_cols = grid_cols;
-        
-        // Resize to grid dimensions
-        std::vector<unsigned char> resized_data = resize_image(img_data, width, height, 
-                                                               grid_target_width, grid_target_height, channels);
-        
-        // Split into tiles and process each one
+        grid_cols = grid_target_width / config_.tile_size;
+        grid_rows = grid_target_height / config_.tile_size;
+        printf("[debug] grid_target_width=%d grid_target_height=%d grid_cols=%d grid_rows=%d\n",
+               grid_target_width, grid_target_height, grid_cols, grid_rows);
+
+        std::vector<unsigned char> resized_grid = resize_image(
+            source_data, width, height, grid_target_width, grid_target_height, expected_channels);
+
+        std::vector<unsigned char> tile_buffer(
+            static_cast<size_t>(config_.tile_size) * config_.tile_size * expected_channels);
+
         for (int row = 0; row < grid_rows; ++row) {
             for (int col = 0; col < grid_cols; ++col) {
-                // Extract tile
-                std::vector<unsigned char> tile_data(config_.tile_size * config_.tile_size * channels);
                 for (int y = 0; y < config_.tile_size; ++y) {
-                    for (int x = 0; x < config_.tile_size; ++x) {
-                        int src_y = row * config_.tile_size + y;
-                        int src_x = col * config_.tile_size + x;
-                        int src_idx = (src_y * grid_target_width + src_x) * channels;
-                        int dst_idx = (y * config_.tile_size + x) * channels;
-                        for (int c = 0; c < channels; ++c) {
-                            tile_data[dst_idx + c] = resized_data[src_idx + c];
-                        }
-                    }
+                    const unsigned char* src_row = resized_grid.data() +
+                        ((row * config_.tile_size + y) * grid_target_width + col * config_.tile_size) *
+                        expected_channels;
+                    unsigned char* dst_row = tile_buffer.data() + (y * config_.tile_size) * expected_channels;
+                    std::memcpy(dst_row, src_row,
+                                static_cast<size_t>(config_.tile_size) * expected_channels);
                 }
-                
-                // Normalize and patchify tile
-                std::vector<float> tile_normalized = normalize_image(tile_data.data(), config_.tile_size, 
-                                                                     config_.tile_size, channels);
-                auto tile_patches = convert_image_to_patches(tile_normalized, config_.tile_size, 
-                                                            config_.tile_size, channels, config_.patch_size);
-                
-                // Add tile patches to collection
-                all_tile_patches.insert(all_tile_patches.end(), tile_patches.begin(), tile_patches.end());
+                normalize_and_patchify(tile_buffer.data(), config_.tile_size, config_.tile_size);
             }
         }
-        
-        // Optionally add thumbnail after all tiles
-        if (config_.use_thumbnail && grid_rows * grid_cols > 1) {
-            std::vector<unsigned char> thumbnail_data = resize_image(img_data, width, height, 
-                                                                    new_width, new_height, channels);
-            std::vector<float> thumbnail_normalized = normalize_image(thumbnail_data.data(), 
-                                                                      new_width, new_height, channels);
-            auto thumbnail_patches = convert_image_to_patches(thumbnail_normalized, new_width, 
-                                                             new_height, channels, config_.patch_size);
-            all_tile_patches.insert(all_tile_patches.end(), thumbnail_patches.begin(), thumbnail_patches.end());
+
+        if (config_.use_thumbnail && grid_rows * grid_cols != 1) {
+            std::vector<unsigned char> thumbnail_bytes = resize_image(
+                source_data, width, height, resized_width, resized_height, expected_channels);
+            normalize_and_patchify(thumbnail_bytes.data(), resized_width, resized_height);
+            thumbnail_added = true;
         }
     } else {
-        // No splitting - single tile
-        result.image_rows = 1;
-        result.image_cols = 1;
-        
-        std::vector<unsigned char> resized_data = resize_image(img_data, width, height, 
-                                                               new_width, new_height, channels);
-        std::vector<float> normalized_data = normalize_image(resized_data.data(), new_width, new_height, channels);
-        all_tile_patches = convert_image_to_patches(normalized_data, new_width, new_height, channels, config_.patch_size);
+        int target_width = resized_width;
+        int target_height = resized_height;
+
+        const bool needs_resize = config_.do_resize && (width != target_width || height != target_height);
+
+        std::vector<unsigned char> resized_image;
+        if (needs_resize) {
+            resized_image = resize_image(source_data, width, height, target_width, target_height, expected_channels);
+            normalize_and_patchify(resized_image.data(), target_width, target_height);
+        } else {
+            resized_image.assign(
+                source_data,
+                source_data + static_cast<size_t>(width) * height * expected_channels);
+            normalize_and_patchify(resized_image.data(), width, height);
+            target_width = width;
+            target_height = height;
+            resized_width = target_width;
+            resized_height = target_height;
+        }
+
+        grid_rows = 1;
+        grid_cols = 1;
     }
 
-    // Calculate tokens per tile (after downsampling), path-aware
-    if (do_split) {
-        // each tile is 512x512
-        const int patches_per_tile_side = config_.tile_size / config_.patch_size;  // 512/16 = 32
-        const int tokens_side = (patches_per_tile_side + dwn - 1) / dwn;           // ceil(32/2) = 16
-        result.tokens_per_tile = tokens_side * tokens_side;                        // 256
+    PreprocessedImage result = pad_patches(tile_patches, spatial_shapes, patch_dim, max_patches_per_tile);
+
+    result.image_rows = grid_rows;
+    result.image_cols = grid_cols;
+    result.image_width = resized_width;
+    result.image_height = resized_height;
+
+    auto compute_tokens = [&](int patches_h, int patches_w) -> int {
+        int tokens_h = (patches_h + downsample - 1) / downsample;
+        int tokens_w = (patches_w + downsample - 1) / downsample;
+        return tokens_h * tokens_w;
+    };
+
+    result.tokens_per_tile = spatial_shapes.empty()
+                                 ? 0
+                                 : compute_tokens(spatial_shapes.front().first, spatial_shapes.front().second);
+
+    if (thumbnail_added && !spatial_shapes.empty()) {
+        const auto& thumb_shape = spatial_shapes.back();
+        result.thumbnail_tokens = compute_tokens(thumb_shape.first, thumb_shape.second);
     } else {
-        // single-view path: tokens come from the smart-resized dimensions
-        result.tokens_per_tile = tokens_from_size(result.image_height, result.image_width, patch, dwn);
+        result.thumbnail_tokens = 0;
     }
-
-    // Calculate thumbnail tokens if enabled
-    result.thumbnail_tokens = 0;
-    if (config_.use_thumbnail && do_split && result.image_rows * result.image_cols > 1) {
-        int thumb_h_patches = new_height / config_.patch_size;
-        int thumb_w_patches = new_width / config_.patch_size;
-        int thumb_h_tokens = static_cast<int>(std::ceil(static_cast<float>(thumb_h_patches) / config_.downsample_factor));
-        int thumb_w_tokens = static_cast<int>(std::ceil(static_cast<float>(thumb_w_patches) / config_.downsample_factor));
-        result.thumbnail_tokens = thumb_h_tokens * thumb_w_tokens;
-    }
-    
-    // Total sequence length
-    int tile_tokens = result.image_rows * result.image_cols * result.tokens_per_tile;
-    int seq_len = tile_tokens + result.thumbnail_tokens;
-    
-    // Store metadata before padding
-    int saved_rows = result.image_rows;
-    int saved_cols = result.image_cols;
-    int saved_width = result.image_width;
-    int saved_height = result.image_height;
-    int saved_tokens_per_tile = result.tokens_per_tile;
-    int saved_thumbnail_tokens = result.thumbnail_tokens;
-    
-    // Pad to sequence length
-    result = pad_patches(all_tile_patches, config_.tile_size, config_.tile_size, config_.patch_size, seq_len);
-    
-    // Restore metadata
-    result.image_rows = saved_rows;
-    result.image_cols = saved_cols;
-    result.image_width = saved_width;
-    result.image_height = saved_height;
-    result.tokens_per_tile = saved_tokens_per_tile;
-    result.thumbnail_tokens = saved_thumbnail_tokens;
-    result.num_patches_height = config_.tile_size / config_.patch_size;
-    result.num_patches_width = config_.tile_size / config_.patch_size;
-
-    printf("[tokens] grid=%dx%d  per_tile=%d  thumb=%d  -> total=%d\n",
-        result.image_cols, result.image_rows, result.tokens_per_tile, result.thumbnail_tokens,
-        result.image_cols * result.image_rows * result.tokens_per_tile + result.thumbnail_tokens);
- 
 
     return result;
 }
@@ -443,28 +420,77 @@ std::vector<std::vector<float>> Lfm2VlPreprocessor::convert_image_to_patches(
 }
 
 Lfm2VlPreprocessor::PreprocessedImage Lfm2VlPreprocessor::pad_patches(
-    const std::vector<std::vector<float>>& patches,
-    int width, int height, int patch_size, int max_num_patches) {
-    
-    PreprocessedImage result;
-    
-    int actual_num_patches = patches.size();
-    int patch_elements = patches.empty() ? 0 : patches[0].size();
-    
-    result.num_patches_height = height / patch_size;
-    result.num_patches_width = width / patch_size;
-    result.actual_num_patches = actual_num_patches;
+    const std::vector<std::vector<float>>& tile_patches,
+    const std::vector<std::pair<int,int>>& spatial_shapes,
+    int patch_dim,
+    int max_patches_per_tile) {
 
-    // Initialize with zeros (padding)
-    result.pixel_values.resize(max_num_patches * patch_elements, 0.0f);
-    result.pixel_attention_mask.resize(max_num_patches, 0);
-
-    // Copy actual patches
-    for (int i = 0; i < actual_num_patches && i < max_num_patches; ++i) {
-        std::copy(patches[i].begin(), patches[i].end(), 
-                 result.pixel_values.begin() + i * patch_elements);
-        result.pixel_attention_mask[i] = 1;
+    if (tile_patches.size() != spatial_shapes.size()) {
+        throw std::runtime_error("Mismatch between tile data and spatial shapes");
     }
+
+    PreprocessedImage result;
+
+    const int num_tiles = static_cast<int>(tile_patches.size());
+    result.num_tiles = num_tiles;
+    result.patch_dim = patch_dim;
+    result.max_patches_per_tile = max_patches_per_tile;
+    result.spatial_shapes = spatial_shapes;
+    result.actual_num_patches = 0;
+
+    const size_t total_values = static_cast<size_t>(num_tiles) * max_patches_per_tile * patch_dim;
+    result.pixel_values.assign(total_values, 0.0f);
+    result.pixel_attention_mask.assign(static_cast<size_t>(num_tiles) * max_patches_per_tile, 0);
+
+    for (int tile_idx = 0; tile_idx < num_tiles; ++tile_idx) {
+        const auto& [patches_h, patches_w] = spatial_shapes[tile_idx];
+        const int actual_patches = patches_h * patches_w;
+
+        if (actual_patches > max_patches_per_tile) {
+            throw std::runtime_error("Actual patches exceed max_patches_per_tile");
+        }
+
+        const auto& flattened = tile_patches[tile_idx];
+        const size_t expected_size = static_cast<size_t>(actual_patches) * patch_dim;
+        if (flattened.size() != expected_size) {
+            throw std::runtime_error("Tile patch data has unexpected size");
+        }
+
+        float* destination = result.pixel_values.data() +
+                             static_cast<size_t>(tile_idx) * max_patches_per_tile * patch_dim;
+        std::memcpy(destination, flattened.data(), expected_size * sizeof(float));
+
+        int mask_offset = tile_idx * max_patches_per_tile;
+        for (int p = 0; p < actual_patches; ++p) {
+            result.pixel_attention_mask[mask_offset + p] = 1;
+        }
+
+        result.actual_num_patches += actual_patches;
+    }
+
+    if (!spatial_shapes.empty()) {
+        result.num_patches_height = spatial_shapes.front().first;
+        result.num_patches_width = spatial_shapes.front().second;
+    } else {
+        result.num_patches_height = 0;
+        result.num_patches_width = 0;
+    }
+
+    result.pixel_values_shape = {
+        static_cast<size_t>(num_tiles),
+        static_cast<size_t>(max_patches_per_tile),
+        static_cast<size_t>(patch_dim)
+    };
+
+    result.pixel_attention_mask_shape = {
+        static_cast<size_t>(num_tiles),
+        static_cast<size_t>(max_patches_per_tile)
+    };
+
+    result.spatial_shapes_shape = {
+        static_cast<size_t>(num_tiles),
+        static_cast<size_t>(2)
+    };
 
     return result;
 }

@@ -10,6 +10,6 @@ make siglip2_debug_runner
 
 ./siglip2_debug_runner \
     --model /home/karen/Documents/cactus/weights/lfm2-vl-350m-fp16 \
-    --image ../test_synthetic.png \
+    --image ../istockphoto-184978580-2048x2048.jpg\
     --dump-output siglip2_final_features.txt \
     --dump-layers siglip2_layer_debug.txt
