@@ -1,24 +1,6 @@
 <img src="assets/banner.jpg" alt="Logo" style="border-radius: 30px; width: 100%;">
 
-Fastest kernels & energy-efficient inference engine for all phones: old, new, budget or high-end. 
-
-```
-┌─────────────────┐
-│   Cactus FFI    │ ←── OpenAI compatible C API for integration  
-└─────────────────┘
-         │
-┌─────────────────┐
-│  Cactus Engine  │ ←── High-level transformer engine
-└─────────────────┘
-         │
-┌─────────────────┐  
-│  Cactus Graph   │ ←── Unified zero-copy computation graph 
-└─────────────────┘
-         │
-┌─────────────────┐
-│ Cactus Kernels  │ ←── Low-level ARM-specific SIMD operations
-└─────────────────┘
-```
+Fast, lightweight, cross-platform & energy-efficient AI inference framework for all phones, from old and budget to high-end. 
 
 ## Cactus Graph 
 Cactus Graph is a general numerical computing framework for implementing 
@@ -27,23 +9,27 @@ any model, like PyTorch for phones.
 ```cpp
 #include cactus.h
 
+// Create a Cactus Graph and define the inputs
 CactusGraph graph;
-
 auto a = graph.input({2, 3}, Precision::FP16);
 auto b = graph.input({3, 4}, Precision::INT8);
 
+// Define the model or computation flow once
 auto x1 = graph.matmul(a, b, false);
 auto x2 = graph.transpose(x1);
 auto result = graph.matmul(b, x2, true);
 
+// Assign data to the inputs
 float a_data[6] = {1.1f, 2.3f, 3.4f, 4.2f, 5.7f, 6.8f};
 float b_data[12] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12};
-
 graph.set_input(a, a_data, Precision::FP16);
 graph.set_input(b, b_data, Precision::INT8);
-graph.execute();
 
+// Execute the graph and retrieve output 
+graph.execute();
 void* output_data = graph.get_output(result);
+
+// Reset graph and run on diffferent input data
 graph.hard_reset(); 
 
 ```
@@ -54,23 +40,29 @@ Cactus Engine is an AI inference engine built on top of Cactus Graphs.
 ```cpp
 #include cactus.h
 
+// Initialiaze the model with the weight paths
 cactus_model_t model = cactus_init("path/to/weight/folder", 2048);
 
+// Define and maintain your conversation JSON
 const char* messages = R"([
     {"role": "system", "content": "You are a helpful assistant."},
     {"role": "user", "content": "My name is Henry Ndubuaku"}
 ])";
 
+// Define your generation options
 const char* options = R"({
     "max_tokens": 50,
     "stop_sequences": ["<|im_end|>"]
 })";
 
-char response[1024]; // 
+// Create the outout buffer to write your results
+char response[1024];
+
+// Call the Cactus Complete API
 int result = cactus_complete(model, messages, response, sizeof(response), options, nullptr, nullptr, nullptr);
 ```
+Example response from Gemma3-270m-INT8
 ```json
-// Example response from Gemma3 270m INT8:
 {
     "success": true,
     "response": "Hi there! I'm just a friendly assistant.",
@@ -124,7 +116,7 @@ You can run these codes directly on M-series Macbooks since they are ARM-based.
 Vanilla M3 CPU-only can run Qwen3-600m-INT8 at 60+ toks/sec, just run the following: 
 
 ```bash
-./tests/run.sh 
+tests/run.sh 
 ```
 
 ## Generating weights from HuggingFace 
@@ -132,19 +124,20 @@ Vanilla M3 CPU-only can run Qwen3-600m-INT8 at 60+ toks/sec, just run the follow
 Run one of the following 
 
 ```bash
-# Language models
-python3 tools/convert_hf.py google/gemma-3-270m-it weights/gemma3-270m/ --precision INT8
-python3 tools/convert_hf.py LiquidAI/LFM2-350M weights/lfm2-350m/ --precision INT8
-python3 tools/convert_hf.py HuggingFaceTB/SmolLM2-360m-Instruct weights/smollm2-360m/ --precision INT8
-python3 tools/convert_hf.py Qwen/Qwen3-0.6B weights/qwen3-600m/ --precision INT8 # supports tool call
-python3 tools/convert_hf.py LiquidAI/LFM2-700M weights/lfm2-700m/ --precision INT8
-python3 tools/convert_hf.py google/gemma-3-1b-it weights/gemma3-1b/ --precision INT8
-python3 tools/convert_hf.py LiquidAI/LFM2-1.2B weights/lfm2-1.2B/ --precision INT8
-python3 tools/convert_hf.py Qwen/Qwen3-1.7B weights/qwen3-1.7B/ --precision INT8
+# Language models (INT8)
+python3 tools/convert_hf.py google/gemma-3-270m-it weights/gemma3-270m/
+python3 tools/convert_hf.py LiquidAI/LFM2-350M weights/lfm2-350m/  # supports tool call
+python3 tools/convert_hf.py HuggingFaceTB/SmolLM2-360m-Instruct weights/smollm2-360m/ 
+python3 tools/convert_hf.py Qwen/Qwen3-0.6B weights/qwen3-600m/  # supports tool call
+python3 tools/convert_hf.py LiquidAI/LFM2-700M weights/lfm2-700m/ # supports tool call
+python3 tools/convert_hf.py google/gemma-3-1b-it weights/gemma3-1b/  
+python3 tools/convert_hf.py LiquidAI/LFM2-1.2B weights/lfm2-1.2B/ # supports tool call
+python3 tools/convert_hf.py Qwen/Qwen3-1.7B weights/qwen3-1.7B/ # supports tool call
+python3 tools/convert_hf.py HuggingFaceTB/SmolLM2-1.7B-Instruct weights/smollm2-1.7b/ 
 
-# Embedding-only models
-python3 tools/convert_hf.py Qwen/Qwen3-Embedding-0.6B weights/qwen3-embed-600m/ --precision INT8
-python3 tools/convert_hf.py nomic-ai/nomic-embed-text-v2-moe weights/nomic/ --precision INT8
+# Embedding-only models 
+python3 tools/convert_hf.py Qwen/Qwen3-Embedding-0.6B weights/qwen3-embed-600m/ 
+python3 tools/convert_hf.py nomic-ai/nomic-embed-text-v2-moe weights/nomic/ 
 ```
 
 Then replace the model path in `tests/test_engine.cpp` with your choice.
@@ -166,4 +159,3 @@ Then replace the model path in `tests/test_engine.cpp` with your choice.
 
 - [iOS Demo](https://apps.apple.com/gb/app/cactus-chat/id6744444212)
 - [Android Demo](https://play.google.com/store/apps/details?id=com.rshemetsubuser.myapp)
-
