@@ -29,7 +29,7 @@ For Gemma models (using prompt mode, not function calling):
 # Test with simple_python category on gemma-3-270m-it
 bfcl generate \
   --model google/gemma-3-270m-it \
-  --test-category simple_python \
+  --test-category simple_python,simple_java,simple_javascript \
   --num-gpus 1 \
   --backend vllm
 
@@ -56,7 +56,7 @@ Results will be saved to: `result/google/gemma-3-270m-it/` or `result/google/gem
 # Evaluate the generated responses for 270m model
 bfcl evaluate \
   --model google/gemma-3-270m-it \
-  --test-category simple_python
+  --test-category simple_python,simple_java,simple_javascript
 
 # Evaluate for 1b model
 bfcl evaluate \

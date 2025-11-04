@@ -6,28 +6,140 @@
 
 ### 1\. Define Function Calling Format
 
+**IMPORTANT:** Gemma 3 only supports `user` and `model` roles. The `system` role is NOT supported.
+System instructions and tool definitions must be prepended to the first user message.
+
+Reference: [Gemma 3 Formatting Guide](https://ai.google.dev/gemma/docs/formatting)
+
 #### Tool Definitions
 
-- Json list in system prompt of dict of all tools wrapped by \<tools\>, \</tools\>
+- Simple instruction: `"Available tools:\n"`
+- Followed by JSON list of all tools wrapped by `<tools>`, `</tools>`
+- Prepended to the **first user message** (NOT in a separate system turn)
+- Uses Qwen-style XML tags for compatibility
 
 #### Tool Calling
 
-- Model provided json dict describing each tool wrapped by \<tool\_call\>, \</tool\_call?  
-- NOTHING ELSE ALLOWED IN THAT PROMPT
+- Model provides JSON dict describing each tool wrapped by `<tool_call>`, `</tool_call>`
+- Format: `{"name": "<function-name>", "args": {...}}`
+- Can generate multiple tool calls in sequence
+- May include reasoning text before/after tool calls
 
 #### Tool Responding
 
-- Use user chat role wrapped by \<tool\_response\>, \</tool\_response\>  
-- Return json Dict inside of xml element
+- Use `user` chat role with results wrapped by `<tool_response>`, `</tool_response>`
+- Format: `{"name": "<function-name>", "result": {...}}`
+- Return JSON dict inside XML element
 
-#### Altogether
+#### Complete Example
 
-- Just copied what Qwen does for tool calling
+```
+<bos><start_of_turn>user
+Here are the available tools that you can use:
+<tools>
+[
+  {
+    "name": "get_current_weather",
+    "description": "Get the current weather in a given location",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "location": {
+          "type": "string",
+          "description": "The city and state, e.g. San Francisco, CA"
+        }
+      },
+      "required": ["location"]
+    }
+  },
+  {
+    "name": "get_top_news",
+    "description": "Get the top news headline for a given location",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "location": {
+          "type": "string",
+          "description": "The city and state, e.g. Boston, MA"
+        }
+      },
+      "required": ["location"]
+    }
+  }
+]
+</tools>
 
-| \<start\_of\_turn\>system \<tools\> \[   {     "name": "get\_current\_weather",     "description": "Get the current weather in a given location",     "parameters": {       "type": "OBJECT",       "properties": {         "location": {           "type": "STRING",           "description": "The city and state, e.g. San Francisco, CA"         }       },       "required": \["location"\]     }   },   {     "name": "get\_top\_news",     "description": "Get the top news headline for a given location",     "parameters": {       "type": "OBJECT",       "properties": {         "location": {           "type": "STRING",           "description": "The city and state, e.g. Boston, MA"         }       },       "required": \["location"\]     }   } \] \</tools\>\<end\_of\_turn\> \<start\_of\_turn\>user What's the weather in Boston and what's the top news headline there?\<end\_of\_turn\> \<start\_of\_turn\>model Searching up Boston’s Weather and News \<tool\_call\> {   "name": "get\_current\_weather",   "args": {     "location": "Boston, MA"   } } \</tool\_call\> \<tool\_call\> {   "name": "get\_top\_news",   "args": {     "location": "Boston, MA"   } } \</tool\_call\>\<end\_of\_turn\> \<start\_of\_turn\>user \<tool\_response\> {   "name": "get\_current\_weather",   "result": {     "temperature": 72,     "condition": "Sunny"   } } \</tool\_response\> \<tool\_response\> {   "name": "get\_top\_news",   "result": {     "headline": "Red Sox Win 9-0 against the Phillies\!",     "source": "Boston Globe"   } } \</tool\_response\>\<end\_of\_turn\> \<start\_of\_turn\>model In Boston, the weather is 72°F and the Red Sox just won 9-0 against the Phillies\!\<end\_of\_turn\>  |
-| :---- |
+What's the weather in Boston and what's the top news headline there?<end_of_turn>
+<start_of_turn>model
+Searching up Boston's Weather and News
+<tool_call>
+{
+  "name": "get_current_weather",
+  "args": {
+    "location": "Boston, MA"
+  }
+}
+</tool_call>
+<tool_call>
+{
+  "name": "get_top_news",
+  "args": {
+    "location": "Boston, MA"
+  }
+}
+</tool_call><end_of_turn>
+<start_of_turn>user
+<tool_response>
+{
+  "name": "get_current_weather",
+  "result": {
+    "temperature": 72,
+    "condition": "Sunny"
+  }
+}
+</tool_response>
+<tool_response>
+{
+  "name": "get_top_news",
+  "result": {
+    "headline": "Red Sox Win 9-0 against the Phillies!",
+    "source": "Boston Globe"
+  }
+}
+</tool_response><end_of_turn>
+<start_of_turn>model
+In Boston, the weather is 72°F and the Red Sox just won 9-0 against the Phillies!<end_of_turn>
+```
 
-- Credit: [https://gemini.google.com/app/7c7315d5163cbb74](https://gemini.google.com/app/7c7315d5163cbb74)
+#### With System Instructions
+
+If a system prompt is provided (e.g., from BFCL test cases), prepend it to the first user message:
+
+```
+<bos><start_of_turn>user
+You are a helpful weather assistant.
+
+Available tools:
+<tools>
+[...]
+</tools>
+
+What's the weather in Paris?<end_of_turn>
+<start_of_turn>model
+<tool_call>
+{
+  "name": "get_current_weather",
+  "args": {"location": "Paris, France"}
+}
+</tool_call><end_of_turn>
+```
+
+**Key Points:**
+- System instructions come FIRST in the user message (if present)
+- Then "Available tools:" instruction
+- Then tools definition in `<tools>` tags
+- Then actual user query
+- All within a single `<start_of_turn>user` ... `<end_of_turn>` block
 
 ### 2\. Setup Eval with BFCL
 
