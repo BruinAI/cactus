@@ -39,6 +39,8 @@ private:
             size_t input_layernorm_weight;
             size_t attn_q_norm_weight;
             size_t attn_k_norm_weight;
+            size_t pre_feedforward_layernorm_weight;
+            size_t post_feedforward_layernorm_weight;
             size_t ffn_gate_weight;
             size_t ffn_up_weight;
             size_t ffn_down_weight;
@@ -94,9 +96,6 @@ private:
         std::vector<LayerWeights> layers;
     } weight_nodes_;
 };
-
-
-
 class SmolModel : public Model{
 public:
     SmolModel();
@@ -206,10 +205,10 @@ public:
 
     // Process preprocessed image patches through vision encoder
     // This overload uses the model's own graph (for standalone usage)
-    size_t forward_vision(const Lfm2VlPreprocessor::PreprocessedImage& preprocessed_image);
+    virtual size_t forward_vision(const Lfm2VlPreprocessor::PreprocessedImage& preprocessed_image);
     
     // This overload accepts an external graph pointer (for integration with larger models)
-    size_t forward_vision(CactusGraph* gb, 
+    virtual size_t forward_vision(CactusGraph* gb, 
                          const Lfm2VlPreprocessor::PreprocessedImage& preprocessed_image,
                          ComputeBackend backend);
     
@@ -248,7 +247,7 @@ protected:
     size_t build_transformer_block(CactusGraph* gb, size_t hidden, uint32_t layer_idx,
                                   ComputeBackend backend, bool use_cache = false, size_t position_offset = 0) override;
 
-private:
+protected:
     struct VisionWeightNodeIDs {
         // Patch embedding
         size_t patch_embedding_weight;
@@ -291,6 +290,22 @@ private:
     } vision_weight_nodes_;
     
     Lfm2VlPreprocessor preprocessor_;
+};
+
+class Siglip2VisionModelTileAblation : public Siglip2VisionModel {
+public:
+    explicit Siglip2VisionModelTileAblation(const Config& cfg);
+    ~Siglip2VisionModelTileAblation() override = default;
+
+    size_t forward_vision(const Lfm2VlPreprocessor::PreprocessedImage& preprocessed_image) override;
+    size_t forward_vision(CactusGraph* gb,
+                          const Lfm2VlPreprocessor::PreprocessedImage& preprocessed_image,
+                          ComputeBackend backend) override;
+
+private:
+    size_t forward_tiles_independently(CactusGraph* gb,
+                                        const Lfm2VlPreprocessor::PreprocessedImage& preprocessed_image,
+                                        ComputeBackend backend);
 };
 
 

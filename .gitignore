@@ -16,4 +16,6 @@ apple/*.xcframework
 apple/libcactus.a
 *.a
 
+*.bin
+
 reference_code

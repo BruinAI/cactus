@@ -5,9 +5,12 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
+#include <filesystem>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
+#include <memory>
+#include <system_error>
 #include <string>
 #include <vector>
 
@@ -16,7 +19,8 @@ namespace {
 void print_usage() {
     std::cerr << "Usage: siglip2_debug_runner --model <model_dir> --image <image_path>\n"
               << "       [--dump-output <file>] [--dump-layers <file>] [--dump-patch-embeds <file>]\n"
-              << "       [--dump-node <name:path>] [--dump-node <layer:name:path>] (may repeat)\n";
+              << "       [--dump-node <name:path>] [--dump-node <layer:name:path>] (may repeat)\n"
+              << "       [--dump-layer0-suite <dir>] [--per-tile-ablation]\n";
 }
 
 void print_tensor_stats(const std::vector<float>& data, const std::string& name, size_t limit = 16) {
@@ -216,6 +220,8 @@ int main(int argc, char** argv) {
     std::string dump_output_path;
     std::string dump_layers_path;
     std::string dump_patch_embeds_path;
+    std::string dump_layer0_suite_dir;
+    bool use_tile_ablation = false;
     struct NodeDumpRequest {
         int layer_idx;
         std::string name;
@@ -267,6 +273,10 @@ int main(int argc, char** argv) {
                 return 1;
             }
             node_dump_requests.push_back(std::move(request));
+        } else if (arg == "--dump-layer0-suite" && i + 1 < argc) {
+            dump_layer0_suite_dir = argv[++i];
+        } else if (arg == "--per-tile-ablation") {
+            use_tile_ablation = true;
         } else {
             std::cerr << "Unknown argument: " << arg << std::endl;
             print_usage();
@@ -298,9 +308,16 @@ int main(int argc, char** argv) {
     std::cout << "  vision_attention_heads: " << config.vision_attention_heads << std::endl;
     std::cout << std::endl;
     
-    Siglip2VisionModel model(config);
-    
-    if (!model.init(model_dir, 0)) {
+    std::unique_ptr<Siglip2VisionModel> model;
+    if (use_tile_ablation) {
+        std::cout << "Per-tile ablation: enabled (tiles processed independently)" << std::endl;
+        model = std::make_unique<Siglip2VisionModelTileAblation>(config);
+    } else {
+        std::cout << "Per-tile ablation: disabled" << std::endl;
+        model = std::make_unique<Siglip2VisionModel>(config);
+    }
+
+    if (!model->init(model_dir, 0)) {
         std::cerr << "Failed to initialize model" << std::endl;
         return 1;
     }
@@ -309,7 +326,7 @@ int main(int argc, char** argv) {
     std::cout << std::endl;
     
     std::cout << "Preprocessing image..." << std::endl;
-    auto preprocessed = model.get_preprocessor().preprocess_from_file(image_path);
+    auto preprocessed = model->get_preprocessor().preprocess_from_file(image_path);
     
     std::cout << "Image preprocessing complete:" << std::endl;
     std::cout << "  Grid: " << preprocessed.image_rows << "x" << preprocessed.image_cols << std::endl;
@@ -321,17 +338,41 @@ int main(int argc, char** argv) {
     std::cout << std::endl;
     
     std::cout << "Running vision forward pass..." << std::endl;
-    size_t output_node = model.forward_vision(preprocessed);
+    size_t output_node = model->forward_vision(preprocessed);
     
-    auto* gb = static_cast<CactusGraph*>(model.graph_handle_);
+    auto* gb = static_cast<CactusGraph*>(model->graph_handle_);
     gb->execute();
     
     std::cout << "Forward pass complete" << std::endl;
     std::cout << std::endl;
     
-    const auto& debug_nodes = model.get_debug_nodes();
+    const auto& debug_nodes = model->get_debug_nodes();
     std::cout << "Captured " << debug_nodes.size() << " debug nodes" << std::endl;
     std::cout << std::endl;
+
+    auto find_debug_node = [&](const std::string& target_name, int target_layer) -> const Model::DebugNode* {
+        auto it = std::find_if(debug_nodes.begin(), debug_nodes.end(), [&](const Model::DebugNode& node) {
+            bool name_match = node.name == target_name;
+            bool layer_match = target_layer < 0 || static_cast<int>(node.layer_idx) == target_layer;
+            return name_match && layer_match;
+        });
+        if (it == debug_nodes.end()) {
+            return nullptr;
+        }
+        return &(*it);
+    };
+
+    auto collect_debug_nodes = [&](const std::string& target_name, int target_layer) {
+        std::vector<const Model::DebugNode*> matches;
+        for (const auto& node : debug_nodes) {
+            bool name_match = node.name == target_name;
+            bool layer_match = target_layer < 0 || static_cast<int>(node.layer_idx) == target_layer;
+            if (name_match && layer_match) {
+                matches.push_back(&node);
+            }
+        }
+        return matches;
+    };
     
     const auto& output_buf = gb->get_output_buffer(output_node);
     size_t total_output_size = 1;
@@ -417,6 +458,106 @@ int main(int argc, char** argv) {
             std::cout << "Wrote node dump ('" << request.name << "') to: " << request.path << std::endl;
         } else {
             std::cerr << "Failed to write node dump to: " << request.path << std::endl;
+        }
+    }
+
+    if (!dump_layer0_suite_dir.empty()) {
+        std::filesystem::path suite_path(dump_layer0_suite_dir);
+        std::error_code ec;
+        std::filesystem::create_directories(suite_path, ec);
+        if (ec) {
+            std::cerr << "Failed to create dump directory '" << dump_layer0_suite_dir << "': "
+                      << ec.message() << std::endl;
+        } else {
+            struct LayerDumpSpec {
+                const char* debug_name;
+                int layer_idx;
+                const char* filename;
+            };
+
+            const LayerDumpSpec specs[] = {
+                {"vision_all_pos_embeddings", 0, "layer0_position_embedding.bin"},
+                {"vision_attn_k", 0, "layer0_self_attn_k_proj.bin"},
+                {"vision_attn_v", 0, "layer0_self_attn_v_proj.bin"},
+                {"vision_attn_output", 0, "layer0_self_attn_out_proj.bin"},
+                {"vision_mlp_fc2", 0, "layer0_mlp.bin"},
+            };
+
+            for (const auto& spec : specs) {
+                auto nodes = collect_debug_nodes(spec.debug_name, spec.layer_idx);
+                if (nodes.empty()) {
+                    std::cerr << "Layer0 suite: debug node '" << spec.debug_name << "' (layer="
+                              << spec.layer_idx << ") not found" << std::endl;
+                    continue;
+                }
+
+                std::vector<float> combined_data;
+                std::vector<size_t> combined_shape;
+                bool shape_error = false;
+
+                for (const auto* node : nodes) {
+                    auto data = extract_node_data(gb, node->node_id);
+                    const auto& buf = gb->get_output_buffer(node->node_id);
+
+                    if (data.empty()) {
+                        continue;
+                    }
+
+                    if (combined_shape.empty()) {
+                        combined_shape = buf.shape;
+                        if (!combined_shape.empty()) {
+                            combined_shape[0] = 0;
+                        }
+                    } else {
+                        if (combined_shape.size() != buf.shape.size()) {
+                            shape_error = true;
+                            break;
+                        }
+                        for (size_t dim = 1; dim < buf.shape.size(); ++dim) {
+                            if (combined_shape[dim] != buf.shape[dim]) {
+                                shape_error = true;
+                                break;
+                            }
+                        }
+                        if (shape_error) {
+                            break;
+                        }
+                    }
+
+                    combined_data.insert(combined_data.end(), data.begin(), data.end());
+                    if (!combined_shape.empty()) {
+                        combined_shape[0] += buf.shape.empty() ? 0 : buf.shape[0];
+                    }
+                }
+
+                if (shape_error || combined_data.empty()) {
+                    std::cerr << "Layer0 suite: incompatible shapes for debug node '" << spec.debug_name
+                              << "' when combining tile outputs" << std::endl;
+                    continue;
+                }
+
+                std::filesystem::path out_path = suite_path / spec.filename;
+                bool ok = write_tensor_binary(out_path.string(), combined_data,
+                                              combined_shape.empty() ? std::vector<size_t>{combined_data.size()} : combined_shape);
+                if (ok) {
+                    std::cout << "Wrote layer0 suite dump ('" << spec.debug_name << "') to: "
+                              << out_path << std::endl;
+                } else {
+                    std::cerr << "Failed to write layer0 suite dump to: " << out_path << std::endl;
+                }
+            }
+        }
+
+        if (!final_features.empty()) {
+            std::filesystem::path final_path = suite_path / "final_hidden_states.bin";
+            bool ok = write_tensor_binary(final_path.string(), final_features, output_buf.shape);
+            if (ok) {
+                std::cout << "Wrote final hidden states to: " << final_path << std::endl;
+            } else {
+                std::cerr << "Failed to write final hidden states to: " << final_path << std::endl;
+            }
+        } else {
+            std::cerr << "Final features buffer was empty; skipping final hidden state dump" << std::endl;
         }
     }
 
