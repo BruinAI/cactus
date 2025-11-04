@@ -4,7 +4,7 @@ Fine-tuning Gemma models for Cactus using Google Tunix.
 
 ## Notebooks
 
-- `lora_gemma.ipynb` - LoRA and QLoRA fine-tuning
+- `lora_gemma.ipynb` - LoRA fine-tuning
 - `grpo_gemma.ipynb` - GRPO (Group Relative Policy Optimization)
 - `dpo_gemma.ipynb` - DPO (Direct Preference Optimization)
 
@@ -73,27 +73,6 @@ HF_TOKEN=
 KAGGLE_USERNAME=
 KAGGLE_KEY=
 WANDB_API_KEY=
-```
-
-## Loading Saved Safetensors Models
-
-To load a saved safetensors model back into JAX (with a given local_path):
-
-```python
-import os
-import jax
-import jax.numpy as jnp
-from tunix.models.gemma3 import params_safetensors as params_safetensors_lib
-
-
-local_path = '[PLACEHOLDER]'
-MESH = [(1, 1), ("fsdp", "tp")]
-
-mesh = jax.make_mesh(*MESH)
-with mesh:
-  model = params_safetensors_lib.create_model_from_safe_tensors(
-      os.path.abspath(local_path), (model_config), mesh, dtype=jnp.bfloat16
-  )
 ```
 
 ## Notes
