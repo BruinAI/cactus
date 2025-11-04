@@ -1,6 +1,6 @@
 # BFCL Usage Guide
 
-## Setup on TPU VM
+## Setup
 
 ```bash
 # 1. Clone repo and checkout branch
@@ -19,20 +19,6 @@ pip install -e evaluation/bfcl/berkeley-function-call-leaderboard
 bfcl --help
 ```
 
-## Setup on Local Mac
-
-**Note**: Cannot run evaluations on Mac (requires GPU). Only for code viewing.
-
-```bash
-# Initialize BFCL submodule (if not already done)
-git submodule update --init --recursive
-
-# Activate venv and verify
-cd gemma_tool_use
-source .venv/bin/activate
-bfcl --help
-```
-
 ## Running Evaluations
 
 ### Step 1: Generate Model Responses
@@ -40,36 +26,50 @@ bfcl --help
 For Gemma models (using prompt mode, not function calling):
 
 ```bash
-# Test with simple_python category on gemma-3-1b-it
+# Test with simple_python category on gemma-3-270m-it
+bfcl generate \
+  --model google/gemma-3-270m-it \
+  --test-category simple_python \
+  --num-gpus 1 \
+  --backend vllm
+
+# Test with gemma-3-1b-it
 bfcl generate \
   --model google/gemma-3-1b-it \
   --test-category simple_python \
-  --num-gpus 1
+  --num-gpus 1 \
+  --backend vllm
 
 # For multiple categories
 bfcl generate \
-  --model google/gemma-3-1b-it \
+  --model google/gemma-3-270m-it \
   --test-category simple_python,parallel,multiple \
-  --num-gpus 1
+  --num-gpus 1 \
+  --backend vllm
 ```
 
-Results will be saved to: `result/google/gemma-3-1b-it/`
+Results will be saved to: `result/google/gemma-3-270m-it/` or `result/google/gemma-3-1b-it/`
 
 ### Step 2: Evaluate Generated Responses
 
 ```bash
-# Evaluate the generated responses
+# Evaluate the generated responses for 270m model
+bfcl evaluate \
+  --model google/gemma-3-270m-it \
+  --test-category simple_python
+
+# Evaluate for 1b model
 bfcl evaluate \
   --model google/gemma-3-1b-it \
   --test-category simple_python
 
 # For multiple categories
 bfcl evaluate \
-  --model google/gemma-3-1b-it \
+  --model google/gemma-3-270m-it \
   --test-category simple_python,parallel,multiple
 ```
 
-Results will be saved to: `score/google/gemma-3-1b-it/`
+Results will be saved to: `score/google/gemma-3-270m-it/` or `score/google/gemma-3-1b-it/`
 
 ### Step 3: View Results
 
@@ -113,17 +113,24 @@ Category groups:
 
 ## Quick Test Command
 
-For a quick baseline test on gemma-3-1b-it:
+For a quick baseline test:
 
 ```bash
-# Run simple_python category only (fastest)
-bfcl generate --model google/gemma-3-1b-it --test-category simple_python --num-gpus 1
+# Run simple_python category on gemma-3-270m-it (smallest/fastest)
+bfcl generate --model google/gemma-3-270m-it --test-category simple_python --num-gpus 1 --backend vllm
+bfcl evaluate --model google/gemma-3-270m-it --test-category simple_python
+
+# Or test on gemma-3-1b-it
+bfcl generate --model google/gemma-3-1b-it --test-category simple_python --num-gpus 1 --backend vllm
 bfcl evaluate --model google/gemma-3-1b-it --test-category simple_python
 ```
 
 ## Notes
 
 - Gemma models are supported in **Prompt mode** only (not FC mode)
-- Generation requires GPU (will use vllm or sglang backend)
+- Supported models: `google/gemma-3-270m-it`, `google/gemma-3-1b-it`, `google/gemma-3-4b-it`, `google/gemma-3-12b-it`, `google/gemma-3-27b-it`
+- Generation requires GPU or TPU (will use vllm or sglang backend)
+- **For TPU VMs**: Use `--backend vllm` and `--num-gpus 1` (tensor parallelism >1 not yet stable on v5litepod-8)
+- **First run on TPU**: Expect 20-30 minutes for XLA compilation; subsequent runs are much faster (~5 min)
 - Results are saved relative to the BFCL directory
 - Use `--allow-overwrite` or `-o` to regenerate existing results
