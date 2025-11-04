@@ -130,7 +130,23 @@ bfcl evaluate --model google/gemma-3-1b-it --test-category simple_python
 - Gemma models are supported in **Prompt mode** only (not FC mode)
 - Supported models: `google/gemma-3-270m-it`, `google/gemma-3-1b-it`, `google/gemma-3-4b-it`, `google/gemma-3-12b-it`, `google/gemma-3-27b-it`
 - Generation requires GPU or TPU (will use vllm or sglang backend)
-- **For TPU VMs**: Use `--backend vllm` and `--num-gpus 1` (tensor parallelism >1 not yet stable on v5litepod-8)
+- **For TPU VMs**: Use `--backend vllm` and `--num-gpus 1`
+  - **Gemma-3-270m-it**: Must use `--num-gpus 1` (has 1 KV head, incompatible with tensor parallelism)
+  - **Gemma-3-1b-it**: Likely also requires `--num-gpus 1` due to similar architecture
+  - Larger models may support higher TP values depending on their KV head count
+  - Tensor parallelism divides by `num_key_value_heads`, not `num_attention_heads`
 - **First run on TPU**: Expect 20-30 minutes for XLA compilation; subsequent runs are much faster (~5 min)
-- Results are saved relative to the BFCL directory
+- **Results location**: Saved to `result/google/gemma-3-270m-it/<test-category>.json`
 - Use `--allow-overwrite` or `-o` to regenerate existing results
+
+## Running Parallel Evaluations on TPU v5litepod-8
+
+Since each evaluation only uses 1 TPU chip, you can run **8 parallel evaluations** to utilize all chips:
+
+```bash
+# Use the provided script
+cd gemma_tool_use/evaluation
+./run_parallel_bfcl.sh
+```
+
+This runs 8 different test categories simultaneously, each on its own vLLM server (ports 8000-8007). Logs are saved to `bfcl_<category>.log`.
