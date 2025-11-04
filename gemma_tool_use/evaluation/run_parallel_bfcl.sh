@@ -6,16 +6,16 @@ MODEL="google/gemma-3-270m-it"
 NUM_GPUS=1
 BACKEND="vllm"
 
-# 8 non-live single-turn categories (fastest to evaluate)
+# 8 diverse test categories covering different aspects
 CATEGORIES=(
     "simple_python"
     "simple_java"
     "simple_javascript"
     "parallel"
-    "multiple"
-    "parallel_multiple"
     "irrelevance"
     "multi_turn_base"
+    "memory_kv"
+    "memory_vector"
 )
 
 # Starting port for vLLM servers
@@ -68,4 +68,4 @@ echo ""
 echo "All evaluations complete! Results saved to: result/$MODEL/"
 echo ""
 echo "Run evaluation with:"
-echo "  bfcl evaluate --model $MODEL --test-category simple_python,simple_java,simple_javascript,parallel,multiple,parallel_multiple,irrelevance,multi_turn_base"
+echo "  bfcl evaluate --model $MODEL --test-category simple_python,simple_java,simple_javascript,parallel,irrelevance,multi_turn_base,memory_kv,memory_vector"
