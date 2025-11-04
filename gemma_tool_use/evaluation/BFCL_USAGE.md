@@ -1,19 +1,37 @@
 # BFCL Usage Guide
 
-## Setup
-
-BFCL is installed in a uv virtual environment.
+## Setup on TPU VM
 
 ```bash
-# Activate the virtual environment
-cd gemma_tool_use
-source .venv/bin/activate
+# 1. Clone repo and checkout branch
+git clone <your-repo-url>
+cd cactus
+git checkout gemma-tool-use
 
-# To reinstall or update BFCL
-uv pip install -e evaluation/bfcl/gorilla/berkeley-function-call-leaderboard
+# 2. Initialize BFCL submodule
+git submodule update --init --recursive
+
+# 3. Navigate to gemma_tool_use and install BFCL
+cd gemma_tool_use
+pip install -e evaluation/bfcl/berkeley-function-call-leaderboard
+
+# 4. Verify
+bfcl --help
 ```
 
-Once activated, the `bfcl` command will be available in your shell.
+## Setup on Local Mac
+
+**Note**: Cannot run evaluations on Mac (requires GPU). Only for code viewing.
+
+```bash
+# Initialize BFCL submodule (if not already done)
+git submodule update --init --recursive
+
+# Activate venv and verify
+cd gemma_tool_use
+source .venv/bin/activate
+bfcl --help
+```
 
 ## Running Evaluations
 
