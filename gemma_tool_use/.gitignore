@@ -1,0 +1,30 @@
+# Virtual environment
+.venv/
+
+# BFCL outputs
+result/
+score/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Model weights and checkpoints
+weights/
+checkpoints/
+outputs/
+
+# Logs
+logs/
+*.log
+
+# Data cache
+data_cache/
+
+# Environment variables
+.env
