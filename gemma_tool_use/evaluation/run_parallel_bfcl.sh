@@ -15,7 +15,7 @@ CATEGORIES=(
     "irrelevance"
     "multi_turn_base"
     "memory_kv"
-    "memory_vector"
+    "web_search_base"
 )
 
 # Starting port for vLLM servers
@@ -68,4 +68,4 @@ echo ""
 echo "All evaluations complete! Results saved to: result/$MODEL/"
 echo ""
 echo "Run evaluation with:"
-echo "  bfcl evaluate --model $MODEL --test-category simple_python,simple_java,simple_javascript,parallel,irrelevance,multi_turn_base,memory_kv,memory_vector"
+echo "  bfcl evaluate --model $MODEL --test-category simple_python,simple_java,simple_javascript,parallel,irrelevance,multi_turn_base,memory_kv,web_search_base"
