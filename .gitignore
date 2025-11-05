@@ -15,3 +15,7 @@ apple/build-static/
 apple/*.xcframework
 apple/libcactus.a
 *.a
+
+*.bin
+test.cpp
+test

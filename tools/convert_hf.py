@@ -246,7 +246,7 @@ def convert_hf_model_weights(model, output_dir, precision='INT8', args=None):
 
 
     elif model_type_str == 'whisper':
-        weights = ['model.decoder.embed_tokens.weight', 'model.decoder.embed_positions.weight', 'model.decoder.layer_norm.weight', 'model.decoder.layer_norm.bias', 'proj_out.weight']
+        weights = ['model.decoder.embed_tokens.weight', 'model.decoder.embed_positions.weight', 'model.decoder.layer_norm.weight', 'model.decoder.layer_norm.bias', 'proj_out.weight', 'model.encoder.embed_positions.weight', 'model.encoder.conv1.bias', 'model.encoder.conv1.weight', 'model.encoder.conv2.bias', 'model.encoder.conv2.weight', 'model.encoder.layer_norm.bias', 'model.encoder.layer_norm.weight']
         save_names = ['token_embeddings.weights', 'position_embeddings.weights', 'output_norm.weights', 'output_norm.bias', 'output_layer.weights']
         for name, save_name in zip(weights, save_names):
             if name in state_dict:
