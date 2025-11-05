@@ -8,7 +8,7 @@ namespace cactus {
 namespace engine {
 
 Siglip2VisionModel::Siglip2VisionModel() : Model() {
-    config_.model_type = Config::ModelType::SMOLVLM;  // We'll need a SIGLIP2 type
+    config_.model_type = Config::ModelType::SIGLIP2;
 }
 
 Siglip2VisionModel::Siglip2VisionModel(const Config& cfg) : Model(cfg) {

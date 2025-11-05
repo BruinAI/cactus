@@ -2,6 +2,7 @@
 #include <fstream>
 #include <sstream>
 #include <algorithm>
+#include "../ffi/stb_image.h"
 
 namespace cactus {
 namespace engine {
@@ -27,9 +28,6 @@ void Tokenizer::detect_model_type(const std::string& config_path) {
                 break;
             } else if(line.find("lfm2") != std::string::npos) {
                 model_type_ = ModelType::LFM2;
-            } else if (line.find("smolvlm") != std::string::npos) {
-                model_type_ = ModelType::SMOLVLM;
-                break;
             } else if (line.find("smol") != std::string::npos) {
                 model_type_ = ModelType::SMOL;
                 break;
@@ -86,6 +84,20 @@ std::vector<uint32_t> Tokenizer::apply_chat_template(const std::vector<ChatMessa
 }
 
 std::string Tokenizer::format_chat_prompt(const std::vector<ChatMessage>& messages, bool add_generation_prompt, const std::string& tools_json) const {
+    // Check if any messages have type="image" to determine if this is LFM2-VL
+    bool has_images = false;
+    for (const auto& msg : messages) {
+        if (msg.type == "image") {
+            has_images = true;
+            break;
+        }
+    }
+    
+    // If LFM2 model with images, use LFM2-VL formatting
+    if (model_type_ == ModelType::LFM2 && has_images) {
+        return format_lfm2_vl_style(messages, add_generation_prompt, tools_json);
+    }
+    
     switch (model_type_) {
         case ModelType::QWEN:
             return format_qwen_style(messages, add_generation_prompt, tools_json);
@@ -95,8 +107,6 @@ std::string Tokenizer::format_chat_prompt(const std::vector<ChatMessage>& messag
             return format_lfm2_style(messages, add_generation_prompt, tools_json);
         case ModelType::SMOL:
             return format_smol_style(messages, add_generation_prompt, tools_json);
-        case ModelType::SMOLVLM:
-            return format_smolvlm_style(messages, add_generation_prompt, tools_json);
         default:
             return format_qwen_style(messages, add_generation_prompt, tools_json);
     }
@@ -167,6 +177,122 @@ std::string Tokenizer::format_lfm2_style(const std::vector<ChatMessage>& message
     for (const auto& msg : messages) {
         result += "<|im_start|>" + msg.role + "\n";
         result += msg.content;
+        result += "<|im_end|>\n";
+    }
+
+    if (add_generation_prompt) {
+        result += "<|im_start|>assistant\n";
+    }
+
+    return result;
+}
+
+std::string Tokenizer::format_lfm2_vl_style(
+    const std::vector<ChatMessage>& messages,
+    bool add_generation_prompt,
+    const std::string& tools_json) const
+{
+    if (!tools_json.empty()) {
+        return "ERROR: Tool calls are not supported for LFM2-VL models";
+    }
+
+    std::string result = "<|startoftext|>";
+    
+    // Group consecutive messages by role to handle interleaved text/image content
+    std::string current_role;
+    std::string current_content;
+    
+    for (size_t i = 0; i < messages.size(); ++i) {
+        const auto& msg = messages[i];
+        
+        // If role changes, output previous message
+        if (!current_role.empty() && current_role != msg.role) {
+            result += "<|im_start|>" + current_role + "\n";
+            result += current_content;
+            result += "<|im_end|>\n";
+            current_content.clear();
+        }
+        
+        current_role = msg.role;
+        
+        // Handle based on message type
+        if (msg.type == "image") {
+            // Load image to get dimensions
+            int width = 0, height = 0, channels = 0;
+            unsigned char* img_data = stbi_load(msg.content.c_str(), &width, &height, &channels, 0);
+            
+            if (img_data) {
+                // Use preprocessor to compute spatial shapes and grid dimensions
+                Lfm2VlPreprocessor preprocessor;
+                auto shape_result = preprocessor.compute_spatial_shapes(height, width);
+                
+                // Config values (should match model config)
+                int downsample_factor = 2;
+                bool use_thumbnail = true;
+                
+                // Get actual grid dimensions from preprocessor
+                int grid_rows = shape_result.grid_rows;
+                int grid_cols = shape_result.grid_cols;
+                int num_tiles = grid_rows * grid_cols;
+                
+                // Expand placeholder
+                current_content += "<|image_start|>";
+                
+                if (num_tiles > 1) {
+                    // Multiple tiles - emit row/col tokens
+                    for (int tile_idx = 0; tile_idx < num_tiles; ++tile_idx) {
+                        int row = tile_idx / grid_cols;
+                        int col = tile_idx % grid_cols;
+                        
+                        current_content += "<|img_row_" + std::to_string(row + 1) + "_col_" + std::to_string(col + 1) + "|>";
+                        
+                        // Calculate tokens for this tile: tile_height * tile_width / downsample_factor^2
+                        auto [tile_height, tile_width] = shape_result.shapes[tile_idx];
+                        int tile_tokens = (tile_height * tile_width) / (downsample_factor * downsample_factor);
+                        
+                        for (int t = 0; t < tile_tokens; ++t) {
+                            current_content += "<image>";
+                        }
+                    }
+                    
+                    // Add thumbnail if present
+                    if (use_thumbnail && static_cast<size_t>(num_tiles) < shape_result.shapes.size()) {
+                        current_content += "<|img_thumbnail|>";
+                        
+                        auto [thumb_height, thumb_width] = shape_result.shapes[num_tiles];
+                        int thumbnail_tokens = (thumb_height * thumb_width) / (downsample_factor * downsample_factor);
+                        
+                        for (int t = 0; t < thumbnail_tokens; ++t) {
+                            current_content += "<image>";
+                        }
+                    }
+                } else if (num_tiles == 1) {
+                    // Single tile - just thumbnail
+                    auto [thumb_height, thumb_width] = shape_result.shapes[0];
+                    int thumbnail_tokens = (thumb_height * thumb_width) / (downsample_factor * downsample_factor);
+                    
+                    for (int t = 0; t < thumbnail_tokens; ++t) {
+                        current_content += "<image>";
+                    }
+                }
+                
+                current_content += "<|image_end|>";
+                
+                stbi_image_free(img_data);
+            } else {
+                // If image fails to load, just put a placeholder
+                current_content += "<image>";
+            }
+        } else {
+            // Regular text content
+            current_content += msg.content;
+        }
+    }
+    
+    // Output final message
+    if (!current_role.empty()) {
+        result += "<|im_start|>" + current_role + "\n";
+        result += current_content;
         result += "<|im_end|>\n";
     }
 
@@ -250,49 +376,6 @@ std::string Tokenizer::format_smol_style(const std::vector<ChatMessage>& message
 
     if (add_generation_prompt) {
         result += "<|im_start|>assistant\n";
-    }
-
-    return result;
-}
-
-std::string Tokenizer::format_smolvlm_style(const std::vector<ChatMessage>& messages, bool add_generation_prompt, const std::string& tools_json) const {
-    if (!tools_json.empty()) {
-        return "ERROR: Tool calls are currently not supported for SmolVLM models";
-    }
-
-    // if first message isn't system, add one
-    std::string result;
-
-    if (!messages.empty() && messages.front().role != "system") {
-        result += "System: You are a helpful AI assistant named SmolVLM, trained by Hugging Face<end_of_utterance>\n";
-    }
-
-    for (const auto& msg : messages) {
-        std::string role = msg.role;
-        if (!role.empty()) {
-            role[0] = static_cast<char>(::toupper(role[0]));
-            for (size_t i = 1; i < role.size(); ++i) role[i] = static_cast<char>(::tolower(role[i]));
-        }
-
-        std::string content = msg.content;
-        size_t first_non_ws = content.find_first_not_of(" \t\n\r");
-        if (first_non_ws != std::string::npos) content = content.substr(first_non_ws);
-
-        bool starts_with_image = false;
-        const std::string image_marker = "<image>";
-        if (content.size() >= image_marker.size() && content.compare(0, image_marker.size(), image_marker) == 0) {
-            starts_with_image = true;
-        }
-
-        result += role;
-        result += (starts_with_image ? ":" : ": ");
-
-        result += msg.content;
-        result += "<end_of_utterance>\n";
-    }
-
-    if (add_generation_prompt) {
-        result += "Assistant:";
     }
 
     return result;

@@ -178,9 +178,9 @@ uint32_t Model::generate(const std::vector<uint32_t>& tokens, float temperature,
     return *static_cast<uint32_t*>(output_ptr);
 }
 
-uint32_t Model::generate_with_images(const std::vector<uint32_t>& tokens, const std::vector<ImageBatch>& images,
+uint32_t Model::generate_with_images(const std::vector<uint32_t>& tokens, const std::vector<std::string>& image_paths,
                                      float temperature, float top_p, size_t top_k, const std::string& profile_file) {
-    (void)images;
+    (void)image_paths;
     return generate(tokens, temperature, top_p, top_k, profile_file);
 }
 
@@ -331,7 +331,6 @@ bool Config::from_json(const std::string& config_path) {
         else if (key == "model_type") {
             if (value == "gemma" || value == "GEMMA") model_type = ModelType::GEMMA;
             else if (value == "lfm2" || value == "LFM2") model_type = ModelType::LFM2;
-            else if (value == "smolvlm" || value == "SMOLVLM" || value == "SmolVLM") model_type = ModelType::SMOLVLM;
             else if (value == "smol" || value == "SMOL" || value == "Smol") model_type = ModelType::SMOL;
             else if (value == "bert" || value == "BERT") model_type = ModelType::NOMIC;
             else model_type = ModelType::QWEN;
@@ -361,10 +360,6 @@ bool Config::from_json(const std::string& config_path) {
         default_top_k = 20;
     } else if (model_type == ModelType::LFM2) {
         default_temperature = 0.3f;
-        default_top_p = 0.95f;
-        default_top_k = 20;
-    } else if (model_type == ModelType::SMOLVLM) {
-        default_temperature = 0.2f;
         default_top_p = 0.95f;
         default_top_k = 20;
     } else if (model_type == ModelType::QWEN) {
@@ -401,8 +396,6 @@ std::unique_ptr<Model> create_model(const std::string& model_folder) {
             return std::make_unique<LFM2Model>(config);
         case Config::ModelType::SMOL:
             return std::make_unique<SmolModel>(config);
-        case Config::ModelType::SMOLVLM:
-            return std::make_unique<SmolVLMModel>(config);
         case Config::ModelType::NOMIC:
             return std::make_unique<NomicModel>(config);
         default:

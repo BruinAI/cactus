@@ -137,6 +137,66 @@ std::pair<int,int> Lfm2VlPreprocessor::get_grid_layout(int height, int width) {
     return {target_width, target_height};
 }
 
+Lfm2VlPreprocessor::SpatialShapeResult Lfm2VlPreprocessor::compute_spatial_shapes(int height, int width) {
+    if (height <= 0 || width <= 0) {
+        throw std::runtime_error("Image dimensions must be positive");
+    }
+
+    if (config_.patch_size <= 0) {
+        throw std::runtime_error("Patch size must be positive");
+    }
+
+    const int patch = config_.patch_size;
+    auto [resized_width, resized_height] = smart_resize(height, width);
+    const bool should_split = config_.do_image_splitting && is_image_too_large(height, width);
+
+    SpatialShapeResult result;
+    result.grid_rows = 1;
+    result.grid_cols = 1;
+
+    if (should_split) {
+        if (config_.tile_size % patch != 0) {
+            throw std::runtime_error("Tile size must be divisible by patch size");
+        }
+
+        auto [grid_target_width, grid_target_height] = get_grid_layout(height, width);
+        result.grid_cols = grid_target_width / config_.tile_size;
+        result.grid_rows = grid_target_height / config_.tile_size;
+
+        const int patches_per_tile_side = config_.tile_size / patch;
+        const auto tile_shape = std::make_pair(patches_per_tile_side, patches_per_tile_side);
+
+        result.shapes.reserve(static_cast<size_t>(result.grid_rows) * result.grid_cols + 1);
+        for (int row = 0; row < result.grid_rows; ++row) {
+            for (int col = 0; col < result.grid_cols; ++col) {
+                result.shapes.push_back(tile_shape);
+            }
+        }
+
+        if (config_.use_thumbnail && result.grid_rows * result.grid_cols != 1) {
+            if (resized_height % patch != 0 || resized_width % patch != 0) {
+                throw std::runtime_error("Resized thumbnail dimensions must be divisible by patch size");
+            }
+            result.shapes.emplace_back(resized_height / patch, resized_width / patch);
+        }
+    } else {
+        int target_width = resized_width;
+        int target_height = resized_height;
+        if (!config_.do_resize) {
+            target_width = width;
+            target_height = height;
+        }
+
+        if (target_height % patch != 0 || target_width % patch != 0) {
+            throw std::runtime_error("Target dimensions must be divisible by patch size");
+        }
+
+        result.shapes.emplace_back(target_height / patch, target_width / patch);
+    }
+
+    return result;
+}
+
 
 Lfm2VlPreprocessor::PreprocessedImage Lfm2VlPreprocessor::preprocess_from_file(const std::string& image_path) {
     int width, height, channels;

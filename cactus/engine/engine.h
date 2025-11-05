@@ -13,6 +13,8 @@ class CactusGraph;
 namespace cactus {
 namespace engine {
 
+class Lfm2VlPreprocessor;
+
 struct Config {
     uint32_t vocab_size = 151936;
     uint32_t bos_token_id = 151643;
@@ -63,7 +65,7 @@ struct Config {
     float max_pixels_tolerance = 2.0f;
     bool do_image_splitting = true;
 
-    enum class ModelType {QWEN = 0, GEMMA = 1, SMOL = 2, NOMIC = 3, SMOLVLM = 4, LFM2 = 5};
+    enum class ModelType {QWEN = 0, GEMMA = 1, SMOL = 2, NOMIC = 3, LFM2 = 5, SIGLIP2 = 6};
     ModelType model_type = ModelType::QWEN;
 
     enum class Activation {GELU = 0, SILU = 1};
@@ -102,16 +104,7 @@ struct MergeRule {
 struct ChatMessage {
     std::string role;
     std::string content;
-};
-
-struct ImageBatch {
-    // Preprocessed image data in CHW float32 layout
-    std::vector<float> data;
-    uint32_t width = 0;
-    uint32_t height = 0;
-    uint32_t channels = 0;
-    // Pixel mask: 1 for valid pixels, 0 for padding (row-major HxW)
-    std::vector<uint8_t> pixel_mask;
+    std::string type;  // "text" or "image" (path to image file)
 };
 
 class Tokenizer {
@@ -140,7 +133,7 @@ public:
 
 
 protected:
-    enum class ModelType { UNKNOWN, QWEN, GEMMA, LFM2, SMOL, SMOLVLM, BERT };
+    enum class ModelType { UNKNOWN, QWEN, GEMMA, LFM2, SMOL, BERT };
     ModelType model_type_ = ModelType::UNKNOWN;
     bool has_chat_template_ = false;
     std::string chat_template_;
@@ -153,8 +146,8 @@ protected:
     std::string format_qwen_style(const std::vector<ChatMessage>& messages, bool add_generation_prompt, const std::string& tools_json) const;
     std::string format_gemma_style(const std::vector<ChatMessage>& messages, bool add_generation_prompt, const std::string& tools_json) const;
     std::string format_lfm2_style(const std::vector<ChatMessage>& messages, bool add_generation_prompt, const std::string& tools_json) const;
+    std::string format_lfm2_vl_style(const std::vector<ChatMessage>& messages, bool add_generation_prompt, const std::string& tools_json) const;
     std::string format_smol_style(const std::vector<ChatMessage>& messages, bool add_generation_prompt, const std::string& tools_json) const;
-    std::string format_smolvlm_style(const std::vector<ChatMessage>& messages, bool add_generation_prompt, const std::string& tools_json) const;
 };
 
 class BPETokenizer : public Tokenizer {
@@ -367,7 +360,7 @@ public:
                       size_t top_k = 0, const std::string& profile_file = "");
 
     // Image-aware generation entrypoint. Default implementation forwards to generate()
-    virtual uint32_t generate_with_images(const std::vector<uint32_t>& tokens, const std::vector<ImageBatch>& images,
+    virtual uint32_t generate_with_images(const std::vector<uint32_t>& tokens, const std::vector<std::string>& image_paths,
                                           float temperature = -1.0f, float top_p = -1.0f,
                                           size_t top_k = 0, const std::string& profile_file = "");
 
@@ -472,12 +465,19 @@ public:
         ~PreprocessedImage();
     };
 
+    struct SpatialShapeResult {
+        std::vector<std::pair<int, int>> shapes;  // (height, width) in patches for each tile + thumbnail
+        int grid_rows;                             // Number of rows in the tile grid
+        int grid_cols;                             // Number of columns in the tile grid
+    };
+
     explicit Lfm2VlPreprocessor(const Config& config);
     Lfm2VlPreprocessor();
     ~Lfm2VlPreprocessor();
 
     PreprocessedImage preprocess_from_file(const std::string& image_path);
     PreprocessedImage preprocess_from_memory(const unsigned char* img_data, int width, int height, int channels);
+    SpatialShapeResult compute_spatial_shapes(int height, int width);
 
 private:
     Config config_;

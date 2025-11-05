@@ -309,13 +309,9 @@ int main(int argc, char** argv) {
     std::cout << std::endl;
     
     std::unique_ptr<Siglip2VisionModel> model;
-    if (use_tile_ablation) {
-        std::cout << "Per-tile ablation: enabled (tiles processed independently)" << std::endl;
-        model = std::make_unique<Siglip2VisionModelTileAblation>(config);
-    } else {
-        std::cout << "Per-tile ablation: disabled" << std::endl;
-        model = std::make_unique<Siglip2VisionModel>(config);
-    }
+    
+    model = std::make_unique<Siglip2VisionModel>(config);
+
 
     if (!model->init(model_dir, 0)) {
         std::cerr << "Failed to initialize model" << std::endl;

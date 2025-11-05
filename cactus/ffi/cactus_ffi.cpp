@@ -30,96 +30,6 @@ struct CactusModel {
     CactusModel() : should_stop(false) {}
 };
 
-static std::pair<int,int> resize_preserve_aspect(int width, int height, int longest_edge) {
-    if (longest_edge <= 0) return {width, height};
-    if (width >= height) {
-        int nw = longest_edge;
-        int nh = static_cast<int>(std::round(nw * (double)height / (double)width));
-        if (nh % 2 != 0) nh++;
-        return {nw, nh};
-    } else {
-        int nh = longest_edge;
-        int nw = static_cast<int>(std::round(nh * (double)width / (double)height));
-        if (nw % 2 != 0) nw++;
-        return {nw, nh};
-    }
-}
-
-static std::pair<int,int> resize_for_vision_encoder(int width, int height, int vision_encoder_max_size, int patch_size, int pixel_shuffle_factor) {
-    if (vision_encoder_max_size <= 0) return {width, height};
-
-    int max_dim = std::max(width, height);
-
-    int target_size = ((max_dim + vision_encoder_max_size - 1) / vision_encoder_max_size) * vision_encoder_max_size;
-
-    int alignment = patch_size * pixel_shuffle_factor;
-    if (target_size % alignment != 0) {
-        target_size = ((target_size + alignment - 1) / alignment) * alignment;
-    }
-
-    return {target_size, target_size};
-}
-
-static void convert_to_chw_float_and_normalize(unsigned char* pixels, int w, int h, int c, ImageBatch &out, float rescale, const std::array<float,3>& mean, const std::array<float,3>& std) {
-    (void)c;
-    out.height = h;
-    out.channels = 3;
-    out.data.assign((size_t)3 * w * h, 0.0f);
-    out.pixel_mask.assign((size_t)w * h, 1);
-
-    size_t plane = (size_t)w * h;
-    for (int y = 0; y < h; ++y) {
-        for (int x = 0; x < w; ++x) {
-            int idx = (y * w + x) * 3;
-            float r = pixels[idx + 0] * rescale;
-            float g = pixels[idx + 1] * rescale;
-            float b = pixels[idx + 2] * rescale;
-            out.data[0 * plane + y * w + x] = (r - mean[0]) / std[0];
-            out.data[1 * plane + y * w + x] = (g - mean[1]) / std[1];
-            out.data[2 * plane + y * w + x] = (b - mean[2]) / std[2];
-        }
-    }
-}
-
-static std::vector<std::vector<unsigned char>> split_image_tiles(unsigned char* pixels, int w, int h, int c, int max_size, int &out_tile_w, int &out_tile_h, int &out_grid_rows, int &out_grid_cols) {
-    std::vector<std::vector<unsigned char>> tiles;
-    if (w <= max_size && h <= max_size) {
-        out_tile_w = w; out_tile_h = h;
-        out_grid_rows = 1; out_grid_cols = 1;
-        tiles.emplace_back(pixels, pixels + w*h*c);
-        return tiles;
-    }
-    int num_splits_h = (h + max_size - 1) / max_size;
-    int num_splits_w = (w + max_size - 1) / max_size;
-    out_grid_rows = num_splits_h;
-    out_grid_cols = num_splits_w;
-    int optimal_h = (h + num_splits_h - 1) / num_splits_h;
-    int optimal_w = (w + num_splits_w - 1) / num_splits_w;
-    for (int r = 0; r < num_splits_h; ++r) {
-        for (int cidx = 0; cidx < num_splits_w; ++cidx) {
-            int sx = cidx * optimal_w;
-            int sy = r * optimal_h;
-            int ex = std::min(sx + optimal_w, w);
-            int ey = std::min(sy + optimal_h, h);
-            int tw = ex - sx;
-            int th = ey - sy;
-            std::vector<unsigned char> tile((size_t)tw*th*3);
-            for (int yy = 0; yy < th; ++yy) {
-                for (int xx = 0; xx < tw; ++xx) {
-                    int src_idx = ((sy + yy) * w + (sx + xx)) * 3;
-                    int dst_idx = (yy * tw + xx) * 3;
-                    tile[dst_idx+0] = pixels[src_idx+0];
-                    tile[dst_idx+1] = pixels[src_idx+1];
-                    tile[dst_idx+2] = pixels[src_idx+2];
-                }
-            }
-            tiles.push_back(std::move(tile));
-        }
-    }
-    out_tile_w = max_size; out_tile_h = max_size;
-    return tiles;
-}
-
 
 static std::vector<ChatMessage> parse_messages_json(const std::string& json, std::vector<std::string>& out_image_paths, std::vector<size_t>& out_image_placeholder_indices) {
     std::vector<ChatMessage> messages;
@@ -185,7 +95,6 @@ static std::vector<ChatMessage> parse_messages_json(const std::string& json, std
             size_t arr_start = after_colon;
             int bracket_count = 1;
             size_t idx = arr_start + 1;
-            std::string assembled;
 
             while (idx < json.size() && bracket_count > 0) {
                 if (json[idx] == '{') {
@@ -214,8 +123,12 @@ static std::vector<ChatMessage> parse_messages_json(const std::string& json, std
                                 size_t tquote = obj.find('"', tcol);
                                 size_t tquote_end = obj.find('"', tquote + 1);
                                 std::string text = obj.substr(tquote + 1, tquote_end - tquote - 1);
-                                if (!assembled.empty()) assembled += " ";
-                                assembled += text;
+                                
+                                ChatMessage text_msg;
+                                text_msg.role = msg.role;
+                                text_msg.content = text;
+                                text_msg.type = "text";
+                                messages.push_back(text_msg);
                             }
                         } else if (type == "image") {
                             size_t path_pos = obj.find("\"path\"");
@@ -224,18 +137,22 @@ static std::vector<ChatMessage> parse_messages_json(const std::string& json, std
                                 size_t pquote = obj.find('"', pcol);
                                 size_t pquote_end = obj.find('"', pquote + 1);
                                 std::string relpath = obj.substr(pquote + 1, pquote_end - pquote - 1);
+                                
+                                std::string abs_path;
                                 try {
                                     std::filesystem::path p(relpath);
-                                    std::filesystem::path ap = std::filesystem::absolute(p);
-                                    out_image_paths.push_back(ap.string());
-                                    out_image_placeholder_indices.push_back(assembled.length());
-                                    if (!assembled.empty()) assembled += " ";
-                                    assembled += std::string("<image>");
+                                    abs_path = std::filesystem::absolute(p).string();
                                 } catch (...) {
-                                    out_image_placeholder_indices.push_back(assembled.length());
-                                    if (!assembled.empty()) assembled += " ";
-                                    assembled += std::string("<image>");
+                                    abs_path = relpath;
                                 }
+                                
+                                ChatMessage img_msg;
+                                img_msg.role = msg.role;
+                                img_msg.content = abs_path;
+                                img_msg.type = "image";
+                                messages.push_back(img_msg);
+                                
+                                out_image_paths.push_back(abs_path);
                             }
                         }
                     }
@@ -251,8 +168,6 @@ static std::vector<ChatMessage> parse_messages_json(const std::string& json, std
                 idx++;
             }
 
-            msg.content = assembled;
-            messages.push_back(msg);
             pos = json.find('{', idx);
             continue;
         }
@@ -487,78 +402,11 @@ int cactus_complete(
         
         wrapper->model->reset_cache();
         
+        // Parse messages - image paths are now in ChatMessage.content with type="image"
+        std::vector<std::string> image_paths;
+        std::vector<size_t> image_placeholder_indices;
+        auto messages = parse_messages_json(messages_json, image_paths, image_placeholder_indices);
         
-    std::vector<std::string> image_paths;
-    std::vector<size_t> image_placeholder_indices;
-    auto messages = parse_messages_json(messages_json, image_paths, image_placeholder_indices);
-    std::vector<ImageBatch> preprocessed_images;
-    std::vector<size_t> tiles_per_image;
-    std::vector<std::pair<int,int>> grid_dims_per_image;
-    if (!image_paths.empty()) {
-            const auto& cfg = wrapper->model->get_config();
-            int global_size = static_cast<int>(cfg.global_image_size);
-            int max_tile_size = static_cast<int>(cfg.max_tile_size);
-            int vision_size = static_cast<int>(cfg.vision_image_size);
-            int patch_size = static_cast<int>(cfg.vision_patch_size);
-            int shuffle_factor = static_cast<int>(cfg.pixel_shuffle_factor);
-            float rescale = cfg.rescale_factor;
-            std::array<float,3> mean = {cfg.image_mean, cfg.image_mean, cfg.image_mean};
-            std::array<float,3> stdv = {cfg.image_std, cfg.image_std, cfg.image_std};
-
-            for (const auto& path : image_paths) {
-                int w=0,h=0,c=0;
-                unsigned char* data = stbi_load(path.c_str(), &w, &h, &c, 3);
-                if (!data) {
-                    tiles_per_image.push_back(0);
-                    grid_dims_per_image.push_back({0, 0});
-                    continue;
-                }
-
-                auto [global_w, global_h] = resize_preserve_aspect(w, h, global_size);
-                std::vector<unsigned char> global_img;
-                if (global_w != w || global_h != h) {
-                    global_img.resize((size_t)global_w * global_h * 3);
-                    unsigned char *gptr = stbir_resize_uint8_linear(data, w, h, 0, global_img.data(), global_w, global_h, 0, STBIR_RGB);
-                    if (!gptr) {
-                        global_img.assign(data, data + w * h * 3);
-                        global_w = w; global_h = h;
-                    }
-                } else {
-                    global_img.assign(data, data + w * h * 3);
-                }
-
-                int tile_w=0, tile_h=0, grid_rows=0, grid_cols=0;
-                auto tiles = split_image_tiles(global_img.data(), global_w, global_h, 3, max_tile_size, tile_w, tile_h, grid_rows, grid_cols);
-                tiles_per_image.push_back(tiles.size());
-                grid_dims_per_image.push_back({grid_rows, grid_cols});
-
-                for (auto &tile : tiles) {
-                    int in_w = tile_w;
-                    int in_h = tile_h;
-                    int out_w = in_w;
-                    int out_h = in_h;
-                    std::tie(out_w, out_h) = resize_for_vision_encoder(in_w, in_h, vision_size, patch_size, shuffle_factor);
-
-                    std::vector<unsigned char> resized_pixels;
-                    if (out_w != in_w || out_h != in_h) {
-                        resized_pixels.resize((size_t)out_w * out_h * 3);
-                        unsigned char *res_ptr = stbir_resize_uint8_linear(tile.data(), in_w, in_h, 0, resized_pixels.data(), out_w, out_h, 0, STBIR_RGB);
-                        if (!res_ptr) {
-                            resized_pixels.assign(tile.begin(), tile.end());
-                            out_w = in_w; out_h = in_h;
-                        }
-                    } else {
-                        resized_pixels.assign(tile.begin(), tile.end());
-                    }
-
-                    ImageBatch ib;
-                    convert_to_chw_float_and_normalize(resized_pixels.data(), out_w, out_h, 3, ib, rescale, mean, stdv);
-                    preprocessed_images.push_back(std::move(ib));
-                }
-
-                stbi_image_free(data);
-            }
-        }
         if (messages.empty()) {
             std::string error_json = "{\"success\":false,\"error\":\"No messages provided\"}";
             std::strcpy(response_buffer, error_json.c_str());
@@ -606,52 +454,7 @@ int cactus_complete(
             return -1;
         }
 
-        if (!preprocessed_images.empty() && wrapper->model->get_config().model_type == cactus::engine::Config::ModelType::SMOLVLM) {
-            uint32_t image_seq_len = wrapper->model->get_config().image_seq_len;
-
-            std::string expanded_prompt;
-            size_t last_pos = 0;
-            size_t img_idx = 0;
-            size_t search_pos = 0;
-
-            while (search_pos < full_prompt.length() && img_idx < tiles_per_image.size()) {
-                size_t img_pos = full_prompt.find("<image>", search_pos);
-                if (img_pos == std::string::npos) break;
-
-                expanded_prompt += full_prompt.substr(last_pos, img_pos - last_pos);
-
-                size_t num_tiles = tiles_per_image[img_idx];
-                auto [grid_rows, grid_cols] = grid_dims_per_image[img_idx];
-
-                for (size_t tile = 0; tile < num_tiles; ++tile) {
-                    int row = static_cast<int>(tile / grid_cols);
-                    int col = static_cast<int>(tile % grid_cols);
-
-                    expanded_prompt += "<fake_token_around_image>";
-
-                    if (num_tiles > 1) {
-                        expanded_prompt += "<row_" + std::to_string(row + 1) + "_col_" + std::to_string(col + 1) + ">";
-                    }
-
-                    if (tile == 0) {
-                        expanded_prompt += "<global-img>";
-                    }
-
-                    for (uint32_t i = 0; i < image_seq_len; ++i) {
-                        expanded_prompt += "<image>";
-                    }
-                    expanded_prompt += "<fake_token_around_image>";
-                }
-
-                img_idx++;
-                search_pos = img_pos + 7;
-                last_pos = search_pos;
-            }
-
-            expanded_prompt += full_prompt.substr(last_pos);
-            full_prompt = expanded_prompt;
-        }
-
+        // Tokenize the formatted prompt (image expansion already handled by tokenizer)
         std::vector<uint32_t> tokens_to_process = tokenizer->encode(full_prompt);
         size_t prompt_tokens = tokens_to_process.size();
         
@@ -662,15 +465,12 @@ int cactus_complete(
         double time_to_first_token = 0.0;
         std::string decoded_so_far;  
 
-
+        // Generate first token
         uint32_t next_token;
-        bool use_images = !preprocessed_images.empty() && wrapper->model->get_config().model_type == cactus::engine::Config::ModelType::SMOLVLM;
         if (tokens_to_process.empty()) {
-            if (use_images) next_token = wrapper->model->generate_with_images({}, preprocessed_images, temperature, top_p, top_k);
-            else next_token = wrapper->model->generate({}, temperature, top_p, top_k);
+            next_token = wrapper->model->generate({}, temperature, top_p, top_k);
         } else {
-            if (use_images) next_token = wrapper->model->generate_with_images(tokens_to_process, preprocessed_images, temperature, top_p, top_k, "profile.txt");
-            else next_token = wrapper->model->generate(tokens_to_process, temperature, top_p, top_k, "profile.txt");
+            next_token = wrapper->model->generate(tokens_to_process, temperature, top_p, top_k, "profile.txt");
         }
 
         auto token_end = std::chrono::high_resolution_clock::now();
@@ -695,8 +495,7 @@ int cactus_complete(
                 }
 
                 std::vector<uint32_t> single_token = {next_token};
-                    if (use_images) next_token = wrapper->model->generate_with_images(single_token, preprocessed_images, temperature, top_p, top_k);
-                    else next_token = wrapper->model->generate(single_token, temperature, top_p, top_k);
+                next_token = wrapper->model->generate(single_token, temperature, top_p, top_k);
 
                 if (stop_tokens.count(next_token)) {
                     break;
