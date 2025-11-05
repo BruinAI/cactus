@@ -139,6 +139,7 @@ struct OpParams {
     ComputeBackend backend = ComputeBackend::CPU;
 
     size_t dilation = 1;
+    size_t stride = 1;
     float temperature = 1.0f;
     float top_p = 1.0f;
     size_t top_k = 0;
@@ -239,7 +240,7 @@ public:
     size_t attention(size_t query, size_t key, size_t value, float scale, size_t position_offset, size_t window_size, ComputeBackend backend = ComputeBackend::CPU);
 
     size_t conv1d_causal(size_t input, size_t weight, size_t kernel_size, size_t dilation = 1);
-    size_t conv1d_k3(size_t input, size_t weight, size_t kernel_size);
+    size_t conv1d_k3(size_t input, size_t weight, size_t stride);
     
     size_t sample(size_t logits, float temperature = 0.6f, float top_p = 0.95f, size_t top_k = 20);
     

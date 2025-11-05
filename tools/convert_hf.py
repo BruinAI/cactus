@@ -117,7 +117,7 @@ def save_tensor_with_header(tensor, output_path, precision='FP32', transpose=Fal
     
     data = data.flatten()
     
-    print(f"Saving {output_path.name}: {precision} {shape}")
+    #print(f"Saving {output_path.name}: {precision} {shape}")
     
     with open(output_path, 'wb') as f:
         ndim = len(shape)
@@ -174,6 +174,7 @@ def convert_hf_model_weights(model, output_dir, precision='INT8', args=None):
     }
 
     state_dict = model.state_dict()
+    print(model.state_dict)
     config = model.config
     saved_tensor_full_names = set()
     
@@ -246,8 +247,8 @@ def convert_hf_model_weights(model, output_dir, precision='INT8', args=None):
 
 
     elif model_type_str == 'whisper':
-        weights = ['model.decoder.embed_tokens.weight', 'model.decoder.embed_positions.weight', 'model.decoder.layer_norm.weight', 'model.decoder.layer_norm.bias', 'proj_out.weight', 'model.encoder.embed_positions.weight', 'model.encoder.conv1.bias', 'model.encoder.conv1.weight', 'model.encoder.conv2.bias', 'model.encoder.conv2.weight', 'model.encoder.layer_norm.bias', 'model.encoder.layer_norm.weight']
-        save_names = ['token_embeddings.weights', 'position_embeddings.weights', 'output_norm.weights', 'output_norm.bias', 'output_layer.weights']
+        weights = ['decoder.embed_tokens.weight', 'decoder.embed_positions.weight', 'decoder.layer_norm.weight', 'decoder.layer_norm.bias', 'proj_out.weight', 'encoder.embed_positions.weight', 'encoder.conv1.bias', 'encoder.conv1.weight', 'encoder.conv2.bias', 'encoder.conv2.weight', 'encoder.layer_norm.bias', 'encoder.layer_norm.weight']
+        save_names = ['decoder_token_embeddings.weights', 'decoder_position_embeddings.weights', 'decoder_output_norm.weights', 'decoder_output_norm.bias', 'output_layer.weights', 'encoder_position_embeddings', 'encoder_conv1_bias', 'encoder_conv1_weight', 'encoder_conv2_bias', 'encoder_conv2_weight', 'encoder_output_norm_bias', 'encoder_output_norm_weight']
         for name, save_name in zip(weights, save_names):
             if name in state_dict:
                 save_tensor_with_header(state_dict[name], output_dir / save_name, precision, transpose=False, stats_tracker=quantization_stats, args=args, model_type=detected_model_type)
@@ -279,18 +280,28 @@ def convert_hf_model_weights(model, output_dir, precision='INT8', args=None):
             break
 
     num_layers = model_config['num_layers']
+    print(num_layers)
     missing_tensors = []
     for i in range(num_layers):
         
-        layer_prefixes = [f'model.layers.{i}.', f'layers.{i}.', f'transformer.h.{i}.', f'encoder.layers.{i}.']
+        layer_prefixes = [f'model.layers.{i}.', f'layers.{i}.', f'transformer.h.{i}.', f'encoder.layers.{i}.', f'decoder.layers.{i}.', f'model.encoder.layers.{i}.', f'model.decoder.layers.{i}.']
         
-        layer_prefix = None
+        existing_prefixes = set() #Culprit
         for prefix in layer_prefixes:
-            if any(key.startswith(prefix) for key in state_dict.keys()):
-                layer_prefix = prefix
-                break
+            print(prefix)
+            for key in state_dict.keys():
+                if(key.startswith(prefix)):
+                    existing_prefixes.add(prefix)
 
-        if not layer_prefix:
+        # for thing in existing_prefixes:
+        #     print(thing)
+
+            # if any(key.startswith(prefix) for key in state_dict.keys()):
+            #     layer_prefix = prefix
+            #     break
+
+        if not existing_prefixes:
+            missing_tensors.append((i, "<no-layer-prefix>", ["<no-matching-prefix>"]))
             continue
 
         weight_patterns = [
@@ -346,6 +357,7 @@ def convert_hf_model_weights(model, output_dir, precision='INT8', args=None):
             (['fc1.bias'], precision, f'layer_{i}_mlp_fc1.bias', False),
             (['fc2.weight'], precision, f'layer_{i}_mlp_fc2.weights', False),
             (['fc2.bias'], precision, f'layer_{i}_mlp_fc2.bias', False),
+            (['self_attn.q_proj.weight'], precision, f'layer_{i}_self_attn_q_proj', False),
             (['self_attn_layer_norm.weight'], precision, f'layer_{i}_self_attn_norm.weights', False),
             (['self_attn_layer_norm.bias'], precision, f'layer_{i}_self_attn_norm.bias', False),
             (['encoder_attn_layer_norm.weight'], precision, f'layer_{i}_encoder_attn_norm.weights', False),
@@ -353,57 +365,58 @@ def convert_hf_model_weights(model, output_dir, precision='INT8', args=None):
             (['final_layer_norm.weight'], precision, f'layer_{i}_final_norm.weights', False),
             (['final_layer_norm.bias'], precision, f'layer_{i}_final_norm.bias', False),
         ]
-
-        for name_patterns, tensor_precision, output_name, should_transpose in weight_patterns:
-            found = False
-            for pattern in name_patterns:
-                full_name = layer_prefix + pattern
-                if full_name in state_dict:
-                    tensor = state_dict[full_name]
-                    if pattern.startswith('attn.Wqkv.') and model_type_str == 'nomic_bert':
-                        if tensor.ndim == 1:
-                            tensor = tensor.reshape(3, -1)
-                        elif tensor.ndim == 2:
-                            tensor = tensor.reshape(3, -1, tensor.size(-1))
-                        else:
-                            raise ValueError(f"Invalid tensor shape: {tensor.shape}")
-                        for j, ch in enumerate(['q', 'k', 'v']):
-                            channel_output_name = output_name.replace('{channel}', ch)
-                            save_tensor_with_header(tensor[j], output_dir / channel_output_name, tensor_precision, transpose=should_transpose, stats_tracker=quantization_stats, args=args, model_type=detected_model_type)
-                            saved_tensor_full_names.add(full_name)
+        for layer_prefix in existing_prefixes:
+            #Going to add a line here which will differentiate between encoder and decoder fc
+            for name_patterns, tensor_precision, output_name, should_transpose in weight_patterns:
+                found = False
+                for pattern in name_patterns:
+                    full_name = layer_prefix + pattern
+                    if full_name in state_dict:
+                        tensor = state_dict[full_name]
+                        if pattern.startswith('attn.Wqkv.') and model_type_str == 'nomic_bert':
+                            if tensor.ndim == 1:
+                                tensor = tensor.reshape(3, -1)
+                            elif tensor.ndim == 2:
+                                tensor = tensor.reshape(3, -1, tensor.size(-1))
+                            else:
+                                raise ValueError(f"Invalid tensor shape: {tensor.shape}")
+                            for j, ch in enumerate(['q', 'k', 'v']):
+                                channel_output_name = output_name.replace('{channel}', ch)
+                                save_tensor_with_header(tensor[j], output_dir / channel_output_name, tensor_precision, transpose=should_transpose, stats_tracker=quantization_stats, args=args, model_type=detected_model_type)
+                                saved_tensor_full_names.add(full_name)
+                            found = True
+                            break
+                        elif model_type_str == 'nomic_bert' and pattern.startswith('mlp.experts.') and 'bias' not in pattern:
+                            num_experts = model_config['num_experts']
+                            if tensor.ndim != 2:
+                                raise ValueError(f"Invalid tensor shape: {tensor.shape}")
+                            tensor = tensor.reshape(num_experts, -1, tensor.size(-1))
+                            for expert_idx in range(num_experts):
+                                expert_tensor = tensor[expert_idx]
+                                expert_output_name = output_name.replace('{channel}', str(expert_idx))
+                                save_tensor_with_header(expert_tensor, output_dir / expert_output_name, tensor_precision, transpose=should_transpose, stats_tracker=quantization_stats, args=args, model_type=detected_model_type)
+                                saved_tensor_full_names.add(full_name)
+                            found = True
+                            break
+                        save_tensor_with_header(tensor, output_dir / output_name, tensor_precision, transpose=should_transpose, stats_tracker=quantization_stats, args=args, model_type=detected_model_type)
+                        saved_tensor_full_names.add(full_name)
                         found = True
                         break
-                    elif model_type_str == 'nomic_bert' and pattern.startswith('mlp.experts.') and 'bias' not in pattern:
-                        num_experts = model_config['num_experts']
-                        if tensor.ndim != 2:
-                            raise ValueError(f"Invalid tensor shape: {tensor.shape}")
-                        tensor = tensor.reshape(num_experts, -1, tensor.size(-1))
-                        for expert_idx in range(num_experts):
-                            expert_tensor = tensor[expert_idx]
-                            expert_output_name = output_name.replace('{channel}', str(expert_idx))
-                            save_tensor_with_header(expert_tensor, output_dir / expert_output_name, tensor_precision, transpose=should_transpose, stats_tracker=quantization_stats, args=args, model_type=detected_model_type)
-                            saved_tensor_full_names.add(full_name)
+
+                if not found and 'c_attn.weight' in name_patterns[0]:
+                    attn_name = layer_prefix + 'attn.c_attn.weight'
+                    if attn_name in state_dict:
+                        combined_weight = state_dict[attn_name]
+                        hidden_size = combined_weight.shape[0]
+                        q_weight = combined_weight[:, :hidden_size]
+                        k_weight = combined_weight[:, hidden_size:2*hidden_size]
+                        v_weight = combined_weight[:, 2*hidden_size:]
+
+                        save_tensor_with_header(q_weight, output_dir / f'layer_{i}_attn_q.weights', precision, transpose=False, stats_tracker=quantization_stats, args=args, model_type=detected_model_type)
+                        save_tensor_with_header(k_weight, output_dir / f'layer_{i}_attn_k.weights', precision, transpose=False, stats_tracker=quantization_stats, args=args, model_type=detected_model_type)
+                        save_tensor_with_header(v_weight, output_dir / f'layer_{i}_attn_v.weights', precision, transpose=False, stats_tracker=quantization_stats, args=args, model_type=detected_model_type)
+                        saved_tensor_full_names.add(attn_name)
                         found = True
-                        break
-                    save_tensor_with_header(tensor, output_dir / output_name, tensor_precision, transpose=should_transpose, stats_tracker=quantization_stats, args=args, model_type=detected_model_type)
-                    saved_tensor_full_names.add(full_name)
-                    found = True
-                    break
-
-            if not found and 'c_attn.weight' in name_patterns[0]:
-                attn_name = layer_prefix + 'attn.c_attn.weight'
-                if attn_name in state_dict:
-                    combined_weight = state_dict[attn_name]
-                    hidden_size = combined_weight.shape[0]
-                    q_weight = combined_weight[:, :hidden_size]
-                    k_weight = combined_weight[:, hidden_size:2*hidden_size]
-                    v_weight = combined_weight[:, 2*hidden_size:]
-
-                    save_tensor_with_header(q_weight, output_dir / f'layer_{i}_attn_q.weights', precision, transpose=False, stats_tracker=quantization_stats, args=args, model_type=detected_model_type)
-                    save_tensor_with_header(k_weight, output_dir / f'layer_{i}_attn_k.weights', precision, transpose=False, stats_tracker=quantization_stats, args=args, model_type=detected_model_type)
-                    save_tensor_with_header(v_weight, output_dir / f'layer_{i}_attn_v.weights', precision, transpose=False, stats_tracker=quantization_stats, args=args, model_type=detected_model_type)
-                    saved_tensor_full_names.add(attn_name)
-                    found = True
     
     if saved_tensor_full_names != set(state_dict.keys()):
         print(f"Warning: Unsaved tensors: {set(state_dict.keys()) - saved_tensor_full_names}")
@@ -1070,27 +1083,42 @@ def convert_hf_to_cactus(model_name, output_dir, precision='INT8', cache_dir=Non
 
     print(f"Converting {model_name} to {precision}...")
 
-    try:
-        tokenizer = AutoTokenizer.from_pretrained(
+    if 'whisper' in str(model_name).lower():
+        print("Entered!")
+        tokenizer = tokenizer = AutoTokenizer.from_pretrained(
             model_name, 
             cache_dir=cache_dir,
             trust_remote_code=True,
         )
+
+        model = AutoModel.from_pretrained(
+            model_name,
+            cache_dir=cache_dir,
+            trust_remote_code=True,
+        )
+    
+    else:
         try:
-            model = AutoModelForCausalLM.from_pretrained(
-                model_name,
+            tokenizer = AutoTokenizer.from_pretrained(
+                model_name, 
                 cache_dir=cache_dir,
                 trust_remote_code=True,
             )
-        except ValueError:
-            model = AutoModel.from_pretrained(
-                model_name,
-                cache_dir=cache_dir,
-                trust_remote_code=True,
-            )
-    except Exception as e:
-        print(f"Error: {e}")
-        sys.exit(1)
+            try:
+                model = AutoModelForCausalLM.from_pretrained(
+                    model_name,
+                    cache_dir=cache_dir,
+                    trust_remote_code=True,
+                )
+            except ValueError:
+                model = AutoModel.from_pretrained(
+                    model_name,
+                    cache_dir=cache_dir,
+                    trust_remote_code=True,
+                )
+        except Exception as e:
+            print(f"Error: {e}")
+            sys.exit(1)
     
     config = convert_hf_model_weights(model, output_dir, precision, args)
 

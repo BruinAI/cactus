@@ -666,13 +666,22 @@ void compute_fused_node(GraphNode& node, const std::vector<std::unique_ptr<Graph
             const size_t C_out    = W.shape[0];
             const size_t C_in    = W.shape[1]; 
             const size_t K     = W.shape[2];
+            const size_t stride = node.params.stride;
 
             Y.shape = { N, L, C_out };
             Y.precision = X.precision;
 
+            if(K != 3){
+                throw std::runtime_error("Conv1d_k3 only supports kernel of size 3!");
+            }
+
+            if(X.precision != Precision::FP32){
+                throw std::runtime_error("Only FP32 is supported for conv1d_k3!");
+            }
+
             cactus_conv1d_f32_k3(
                     X.data_as<float>(), W.data_as<float>(), Y.data_as<float>(),
-                    N, L, C_in, C_out, K);
+                    N, L, C_in, C_out, stride);
 
             break;
             
