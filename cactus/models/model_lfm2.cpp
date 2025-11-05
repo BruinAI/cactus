@@ -317,10 +317,10 @@ size_t LFM2Model::build_transformer_block(CactusGraph* gb, size_t hidden, uint32
 }
 
 
-size_t LFM2Model::forward(CactusGraph* gb, const std::vector<uint32_t>& tokens, 
+size_t LFM2Model::forward(CactusGraph* gb, size_t input_embeddings, size_t seq_len,
                          ComputeBackend backend, bool use_cache) {
-    if (tokens.empty()) {
-        throw std::runtime_error("Token sequence cannot be empty");
+    if (seq_len == 0) {
+        throw std::runtime_error("Sequence length must be greater than zero");
     }
 
     if (conv_cache_bx_nodes_.size() != config_.num_layers) {
@@ -332,18 +332,29 @@ size_t LFM2Model::forward(CactusGraph* gb, const std::vector<uint32_t>& tokens,
         conv_cache_.reset();
     }
 
-    auto seq_len = static_cast<size_t>(tokens.size());
-
     size_t position_offset = use_cache ? kv_cache_.get_total_seq_len() : 0;
 
-    auto input_node_id = gb->input({seq_len}, Precision::FP32);
-    auto hidden = gb->embedding(embedding_node_id_, input_node_id);
-
+    size_t hidden = input_embeddings;
     for (uint32_t layer_idx = 0; layer_idx < config_.num_layers; layer_idx++) {
         hidden = build_transformer_block(gb, hidden, layer_idx, backend, use_cache, position_offset);
     }
 
     auto final_hidden = gb->rms_norm(hidden, weight_nodes_.output_norm_weight, config_.layer_norm_eps);
+    return final_hidden;
+}
+
+size_t LFM2Model::forward(CactusGraph* gb, const std::vector<uint32_t>& tokens, 
+                         ComputeBackend backend, bool use_cache) {
+    if (tokens.empty()) {
+        throw std::runtime_error("Token sequence cannot be empty");
+    }
+
+    auto seq_len = static_cast<size_t>(tokens.size());
+
+    auto input_node_id = gb->input({seq_len}, Precision::FP32);
+    auto hidden = gb->embedding(embedding_node_id_, input_node_id);
+
+    auto final_hidden = forward(gb, hidden, seq_len, backend, use_cache);
 
     std::vector<float> input_data(seq_len);
     for (size_t i = 0; i < seq_len; i++) {

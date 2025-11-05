@@ -444,9 +444,9 @@ public:
         std::vector<float> pixel_values;       // Shape: (seq_len, patch_size*patch_size*3)
         std::vector<int> pixel_attention_mask; // Shape: (seq_len,)
         std::vector<std::pair<int,int>> spatial_shapes;  // [height, width] in patches for each tile
-    std::vector<size_t> pixel_values_shape;           // Logical shape for pixel_values tensor
-    std::vector<size_t> pixel_attention_mask_shape;   // Logical shape for attention mask tensor
-    std::vector<size_t> spatial_shapes_shape;         // Logical shape for spatial_shapes tensor
+        std::vector<size_t> pixel_values_shape;           // Logical shape for pixel_values tensor
+        std::vector<size_t> pixel_attention_mask_shape;   // Logical shape for attention mask tensor
+        std::vector<size_t> spatial_shapes_shape;         // Logical shape for spatial_shapes tensor
         int num_patches_height;                 // Patches per tile (for regular tiles)
         int num_patches_width;                  // Patches per tile (for regular tiles)
         int actual_num_patches;                 // Total actual patches (tiles + thumbnail)

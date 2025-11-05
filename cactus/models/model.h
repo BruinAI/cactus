@@ -138,6 +138,8 @@ protected:
 
 
 class Siglip2VisionModel : public Model {
+    friend class Lfm2VlModel;  // Allow LFM2-VL to access protected members
+    
 public:
     struct VisionEmbeddingResult {
         size_t combined_embeddings;
@@ -240,6 +242,8 @@ protected:
 
 
 class LFM2Model : public Model {
+    friend class Lfm2VlModel;  // Allow LFM2-VL to access protected members
+    
 public:
     LFM2Model();
     explicit LFM2Model(const Config& config);
@@ -262,6 +266,7 @@ protected:
 
     size_t forward(const std::vector<uint32_t>& tokens, bool use_cache = false) override;
     size_t forward(CactusGraph* gb, const std::vector<uint32_t>& tokens, ComputeBackend backend, bool use_cache = false);
+    size_t forward(CactusGraph* gb, size_t input_embeddings, size_t seq_len, ComputeBackend backend, bool use_cache = false);
     void post_init() override;
     void post_execute_updates(CactusGraph* gb, size_t seq_len) override;
     void reset_cache() override;
@@ -364,6 +369,91 @@ private:
 
         std::vector<LayerWeights> layers;
     } weight_nodes_;
+};
+
+
+class Lfm2VlModel : public Model {
+public:
+    Lfm2VlModel();
+    explicit Lfm2VlModel(const Config& config);
+    ~Lfm2VlModel() override = default;
+
+    bool init(const std::string& model_folder, size_t context_size, const std::string& system_prompt = "");
+
+    // Main forward pass for vision-language model
+    size_t forward(const std::vector<uint32_t>& tokens, bool use_cache = false) override;
+    
+    // Vision-language forward with image input
+    size_t generate_with_images(
+        const std::vector<uint32_t>& tokens,
+        const std::vector<std::string>& image_paths,
+        bool use_cache = false);
+
+protected:
+    // Stub implementations for Model pure virtual methods
+    size_t build_attention(CactusGraph*, size_t, uint32_t, ComputeBackend, bool, size_t) override;
+    size_t build_mlp(CactusGraph*, size_t, uint32_t, ComputeBackend) const override;
+    size_t build_transformer_block(CactusGraph*, size_t, uint32_t, ComputeBackend, bool, size_t) override;
+    
+    void load_weights_to_graph(CactusGraph* gb) override;
+
+private:
+    struct ProjectedTileFeature {
+        size_t node_id;
+        size_t token_count;
+    };
+
+    struct TextEmbeddingInput {
+        size_t input_node;
+        std::vector<uint32_t> tokens;
+    };
+
+    struct MergedEmbeddingResult {
+        size_t node_id;
+        size_t seq_len;
+    };
+
+    // Get image features from vision tower and apply projection
+    std::vector<ProjectedTileFeature> get_image_features(
+        CactusGraph* gb,
+        const Lfm2VlPreprocessor::PreprocessedImage& preprocessed_image,
+        ComputeBackend backend);
+    
+    // Multimodal projector components
+    size_t build_multimodal_projector(
+        CactusGraph* gb,
+        size_t image_features,
+        size_t tile_h,
+        size_t tile_w,
+        ComputeBackend backend);
+    
+    // Pixel unshuffle operation
+    size_t pixel_unshuffle(CactusGraph* gb, size_t hidden_states, size_t height, size_t width, size_t channels);
+    
+    // Merge image embeddings into text embeddings
+    MergedEmbeddingResult merge_image_text_embeddings(
+        CactusGraph* gb,
+        const std::vector<uint32_t>& tokens,
+        const std::vector<std::vector<ProjectedTileFeature>>& image_embedding_nodes,
+        std::vector<TextEmbeddingInput>& text_embedding_inputs);
+
+    // Sub-models
+    Siglip2VisionModel vision_tower_;
+    LFM2Model language_model_;
+    Lfm2VlPreprocessor preprocessor_;
+    
+    // Multimodal projector weights
+    struct ProjectorWeights {
+        size_t layer_norm_weight;
+        size_t layer_norm_bias;
+        size_t linear_1_weight;
+        size_t linear_1_bias;
+        size_t linear_2_weight;
+        size_t linear_2_bias;
+    } projector_weights_;
+    
+    bool vision_weights_loaded_ = false;
+    bool language_weights_loaded_ = false;
 };
 
 }
