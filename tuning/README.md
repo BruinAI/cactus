@@ -75,6 +75,24 @@ KAGGLE_KEY=
 WANDB_API_KEY=
 ```
 
+## Loading Saved Safetensors Models
+
+To load a saved safetensors model back into JAX:
+
+```python
+import jax
+from flax import nnx
+from flax.traverse_util import unflatten_dict
+import safetensors.numpy as safe_np
+
+loaded_weights = safe_np.load_file(path + "/model.safetensors")
+nested_weights = unflatten_dict(loaded_weights, sep='.')
+nested_weights['layers'] = {int(k): v for k, v in nested_weights['layers'].items()}  # all integer-string keys must be casted to int
+
+model = gemma_lib.Gemma3(config=model_config, rngs=nnx.Rngs(params=jax.random.PRNGKey(0)))
+nnx.update(model, nested_weights)
+```
+
 ## Notes
 
 - **IMPORTANT**: Use `%pip` not `!pip` in notebooks!
