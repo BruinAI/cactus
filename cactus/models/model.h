@@ -261,6 +261,7 @@ protected:
                                   ComputeBackend backend, bool use_cache = false, size_t position_offset = 0) override;
 
     size_t forward(const std::vector<uint32_t>& tokens, bool use_cache = false) override;
+    size_t forward(CactusGraph* gb, const std::vector<uint32_t>& tokens, ComputeBackend backend, bool use_cache = false);
     void post_init() override;
     void post_execute_updates(CactusGraph* gb, size_t seq_len) override;
     void reset_cache() override;

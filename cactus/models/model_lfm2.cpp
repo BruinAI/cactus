@@ -317,17 +317,11 @@ size_t LFM2Model::build_transformer_block(CactusGraph* gb, size_t hidden, uint32
 }
 
 
-size_t LFM2Model::forward(const std::vector<uint32_t>& tokens, bool use_cache) {
-    if (!initialized_ || !graph_handle_) {
-        throw std::runtime_error("Model not initialized - call init() first");
-    }
-
+size_t LFM2Model::forward(CactusGraph* gb, const std::vector<uint32_t>& tokens, 
+                         ComputeBackend backend, bool use_cache) {
     if (tokens.empty()) {
         throw std::runtime_error("Token sequence cannot be empty");
     }
-
-    auto* gb = static_cast<CactusGraph*>(graph_handle_);
-    gb->soft_reset();
 
     if (conv_cache_bx_nodes_.size() != config_.num_layers) {
         conv_cache_bx_nodes_.assign(config_.num_layers, 0);
@@ -341,10 +335,6 @@ size_t LFM2Model::forward(const std::vector<uint32_t>& tokens, bool use_cache) {
     auto seq_len = static_cast<size_t>(tokens.size());
 
     size_t position_offset = use_cache ? kv_cache_.get_total_seq_len() : 0;
-
-    auto backend = config_.default_backend == Config::Backend::CPU
-        ? ComputeBackend::CPU
-        : ComputeBackend::NPU;
 
     auto input_node_id = gb->input({seq_len}, Precision::FP32);
     auto hidden = gb->embedding(embedding_node_id_, input_node_id);
@@ -362,6 +352,21 @@ size_t LFM2Model::forward(const std::vector<uint32_t>& tokens, bool use_cache) {
     gb->set_input(input_node_id, input_data.data(), Precision::FP32);
 
     return final_hidden;
+}
+
+size_t LFM2Model::forward(const std::vector<uint32_t>& tokens, bool use_cache) {
+    if (!initialized_ || !graph_handle_) {
+        throw std::runtime_error("Model not initialized - call init() first");
+    }
+
+    auto* gb = static_cast<CactusGraph*>(graph_handle_);
+    gb->soft_reset();
+
+    auto backend = config_.default_backend == Config::Backend::CPU
+        ? ComputeBackend::CPU
+        : ComputeBackend::NPU;
+
+    return forward(gb, tokens, backend, use_cache);
 }
 
 void LFM2Model::post_execute_updates(CactusGraph* gb, size_t) {
