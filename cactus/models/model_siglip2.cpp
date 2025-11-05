@@ -2,6 +2,7 @@
 #include "../graph/graph.h"
 #include <cmath>
 #include <stdexcept>
+#include <utility>
 
 namespace cactus {
 namespace engine {
@@ -87,126 +88,129 @@ void Siglip2VisionModel::load_weights_to_graph(CactusGraph* gb) {
     // The model outputs last_hidden_state directly without pooling
 }
 
-size_t Siglip2VisionModel::build_vision_embeddings(CactusGraph* gb, 
-                                                   const Lfm2VlPreprocessor::PreprocessedImage& preprocessed_image,
-                                   ComputeBackend backend) {
-    // Use the preprocessed image structure fully
+Siglip2VisionModel::VisionEmbeddingResult Siglip2VisionModel::build_vision_embeddings(
+    CactusGraph* gb,
+    const Lfm2VlPreprocessor::PreprocessedImage& preprocessed_image,
+    ComputeBackend backend) {
     const int num_tiles = preprocessed_image.num_tiles;
     const int max_patches = preprocessed_image.max_patches_per_tile;
     const int patch_dim = preprocessed_image.patch_dim;
-    const int total_patches = num_tiles * max_patches;
-    
-    // Validate pixel_values size
-    size_t expected_size = static_cast<size_t>(total_patches) * static_cast<size_t>(patch_dim);
+
+    const size_t expected_size = static_cast<size_t>(num_tiles) * static_cast<size_t>(max_patches) *
+                                 static_cast<size_t>(patch_dim);
     if (preprocessed_image.pixel_values.size() != expected_size) {
         throw std::runtime_error(
-            "Pixel values size mismatch: expected " + std::to_string(expected_size) + 
-            " (tiles=" + std::to_string(num_tiles) + " * max_patches=" + std::to_string(max_patches) + 
-            " * patch_dim=" + std::to_string(patch_dim) + ")" +
-            " but got " + std::to_string(preprocessed_image.pixel_values.size())
-        );
+            "Pixel values size mismatch: expected " + std::to_string(expected_size) +
+            " (tiles=" + std::to_string(num_tiles) + " * max_patches=" + std::to_string(max_patches) +
+            " * patch_dim=" + std::to_string(patch_dim) + ") but got " +
+            std::to_string(preprocessed_image.pixel_values.size()));
     }
-    
-    // Check for nan/inf in input data
-    for (size_t i = 0; i < std::min(size_t(100), preprocessed_image.pixel_values.size()); ++i) {
+
+    for (size_t i = 0; i < std::min<size_t>(100, preprocessed_image.pixel_values.size()); ++i) {
         float val = preprocessed_image.pixel_values[i];
         if (std::isnan(val) || std::isinf(val)) {
             throw std::runtime_error(
-                "Invalid value in pixel_values at index " + std::to_string(i) + 
-                ": " + std::to_string(val)
-            );
+                "Invalid value in pixel_values at index " + std::to_string(i) + ": " + std::to_string(val));
         }
     }
-    
-    // Create input node using the pre-computed shape
-    // Shape: (num_tiles * max_patches, patch_dim) - flattened for matmul
-    size_t patches_input_fp32 = gb->input(
-        {static_cast<size_t>(total_patches), static_cast<size_t>(patch_dim)}, 
-        Precision::FP32
-    );
-    gb->set_input(patches_input_fp32, preprocessed_image.pixel_values.data(), Precision::FP32);
-    capture_debug_node(0, "vision_patches_input_fp32", patches_input_fp32);
-    
-    // Cast to FP16 to match weight precision
-    size_t patches_input = gb->precision_cast(patches_input_fp32, Precision::FP16);
-    capture_debug_node(0, "vision_patches_input", patches_input);
-    
-    // Apply patch embedding (linear projection)
+
     size_t reshaped_weight = gb->reshape(
         vision_weight_nodes_.patch_embedding_weight,
-        {static_cast<size_t>(config_.vision_embed_dim), static_cast<size_t>(patch_dim)}
-    );
+        {static_cast<size_t>(config_.vision_embed_dim), static_cast<size_t>(patch_dim)});
     capture_debug_node(0, "vision_reshaped_weight", reshaped_weight);
-    size_t patch_embeds = gb->matmul(patches_input, reshaped_weight, true, backend);
-    capture_debug_node(0, "vision_patch_embeds", patch_embeds);
-    size_t added_patch_embeds = gb->add(patch_embeds, vision_weight_nodes_.patch_embedding_bias);
-    capture_debug_node(0, "vision_added_patch_embeds", added_patch_embeds);
 
-    // Process position embeddings per-tile (matching HF's resize_positional_embeddings)
-    std::vector<size_t> tile_pos_embeddings;
-    tile_pos_embeddings.reserve(num_tiles);
-    
+    std::vector<size_t> tile_inputs_fp32;
+    std::vector<size_t> tile_inputs_fp16;
+    std::vector<size_t> tile_patch_embeds;
+    std::vector<size_t> tile_patch_bias;
+    std::vector<size_t> tile_embeddings;
+    std::vector<size_t> tile_pos_nodes;
+
+    tile_inputs_fp32.reserve(static_cast<size_t>(num_tiles));
+    tile_inputs_fp16.reserve(static_cast<size_t>(num_tiles));
+    tile_patch_embeds.reserve(static_cast<size_t>(num_tiles));
+    tile_patch_bias.reserve(static_cast<size_t>(num_tiles));
+    tile_embeddings.reserve(static_cast<size_t>(num_tiles));
+    tile_pos_nodes.reserve(static_cast<size_t>(num_tiles));
+
     for (int tile_idx = 0; tile_idx < num_tiles; ++tile_idx) {
-        auto [tile_h, tile_w] = preprocessed_image.spatial_shapes[tile_idx];
-        int actual_patches = tile_h * tile_w;
-        
-        // Interpolate position embedding to this tile's specific size
-        // Base position embedding is stored as sqrt(num_patches) x sqrt(num_patches) grid
+        const auto& shape = preprocessed_image.spatial_shapes[tile_idx];
+        const int tile_h = shape.first;
+        const int tile_w = shape.second;
+        const int actual_patches = tile_h * tile_w;
+
+        if (actual_patches <= 0) {
+            continue;
+        }
+
+        const float* tile_data = preprocessed_image.pixel_values.data() +
+                                 static_cast<size_t>(tile_idx) * static_cast<size_t>(max_patches) *
+                                     static_cast<size_t>(patch_dim);
+
+        size_t tile_input_fp32 = gb->input(
+            {static_cast<size_t>(actual_patches), static_cast<size_t>(patch_dim)}, Precision::FP32);
+        gb->set_input(tile_input_fp32, tile_data, Precision::FP32);
+        capture_debug_node(tile_idx, "vision_tile_" + std::to_string(tile_idx) + "_patches_fp32", tile_input_fp32);
+
+        size_t tile_input = gb->precision_cast(tile_input_fp32, Precision::FP16);
+        capture_debug_node(tile_idx, "vision_tile_" + std::to_string(tile_idx) + "_patches", tile_input);
+
+        size_t tile_patch = gb->matmul(tile_input, reshaped_weight, true, backend);
+        size_t tile_bias = gb->add(tile_patch, vision_weight_nodes_.patch_embedding_bias);
+        capture_debug_node(tile_idx, "vision_tile_" + std::to_string(tile_idx) + "_patch_embeds", tile_bias);
+
         size_t tile_pos = gb->bilinear_interpolation(
             vision_weight_nodes_.position_embedding,
             static_cast<size_t>(tile_h),
-            static_cast<size_t>(tile_w)
-        ); // -> (tile_h * tile_w, embed_dim)
-        
+            static_cast<size_t>(tile_w));
         capture_debug_node(tile_idx, "vision_tile_pos_" + std::to_string(tile_idx), tile_pos);
-        
-        // Pad to max_patches if needed (for thumbnail which is typically smaller)
-        size_t padded_pos;
-        if (actual_patches < max_patches) {
-            // Pad with zeros - these will be masked out by pixel_attention_mask
-            int pad_size = max_patches - actual_patches;
-            std::vector<float> zero_data(pad_size * config_.vision_embed_dim, 0.0f);
-            size_t zero_pad = gb->input(
-                {static_cast<size_t>(pad_size), static_cast<size_t>(config_.vision_embed_dim)}, 
-                Precision::FP32
-            );
-            gb->set_input(zero_pad, zero_data.data(), Precision::FP32);
-            
-            padded_pos = gb->concat(tile_pos, zero_pad, /*axis=*/0);
-            capture_debug_node(tile_idx, "vision_padded_pos_" + std::to_string(tile_idx), padded_pos);
-        } else {
-            padded_pos = tile_pos;  // Already exact size (1024 patches)
+
+        size_t tile_pos_cast = gb->precision_cast(tile_pos, Precision::FP16);
+        size_t tile_embed = gb->add(tile_bias, tile_pos_cast);
+        capture_debug_node(tile_idx, "vision_tile_" + std::to_string(tile_idx) + "_embeddings", tile_embed);
+
+        tile_inputs_fp32.push_back(tile_input_fp32);
+        tile_inputs_fp16.push_back(tile_input);
+        tile_patch_embeds.push_back(tile_patch);
+        tile_patch_bias.push_back(tile_bias);
+        tile_embeddings.push_back(tile_embed);
+        tile_pos_nodes.push_back(tile_pos);
+    }
+
+    if (tile_embeddings.empty()) {
+        throw std::runtime_error("No valid tiles produced embeddings in build_vision_embeddings");
+    }
+
+    auto concat_nodes = [&](const std::vector<size_t>& nodes) {
+        if (nodes.empty()) {
+            throw std::runtime_error("Attempted to concatenate an empty node list");
         }
-        
-        tile_pos_embeddings.push_back(padded_pos);
-    }
-    
-    // Concatenate all tile position embeddings
-    // Chain concat operations for all tiles
-    // Shape: (num_tiles * max_patches, embed_dim)
-    size_t all_pos = tile_pos_embeddings[0];
-    for (size_t i = 1; i < tile_pos_embeddings.size(); ++i) {
-        all_pos = gb->concat(all_pos, tile_pos_embeddings[i], /*axis=*/0);
-    }
+        size_t combined = nodes.front();
+        for (size_t i = 1; i < nodes.size(); ++i) {
+            combined = gb->concat(combined, nodes[i], /*axis=*/0);
+        }
+        return combined;
+    };
+
+    size_t patches_input_fp32 = concat_nodes(tile_inputs_fp32);
+    capture_debug_node(0, "vision_patches_input_fp32", patches_input_fp32);
+
+    size_t patches_input = concat_nodes(tile_inputs_fp16);
+    capture_debug_node(0, "vision_patches_input", patches_input);
+
+    size_t patch_embeds = concat_nodes(tile_patch_embeds);
+    capture_debug_node(0, "vision_patch_embeds", patch_embeds);
+
+    size_t added_patch_embeds = concat_nodes(tile_patch_bias);
+    capture_debug_node(0, "vision_added_patch_embeds", added_patch_embeds);
+
+    size_t all_pos = concat_nodes(tile_pos_nodes);
     capture_debug_node(0, "vision_all_pos_embeddings", all_pos);
-    
-    // Cast to match patch embeddings precision and add
-    size_t pos_cast = gb->precision_cast(all_pos, Precision::FP16);
-    size_t embeddings = gb->add(added_patch_embeds, pos_cast);
+
+    size_t embeddings = concat_nodes(tile_embeddings);
     capture_debug_node(0, "vision_final_embeddings", embeddings);
-    
-    int total_valid_patches = 0;
-    for (int i = 0; i < num_tiles; ++i) {
-        auto [h, w] = preprocessed_image.spatial_shapes[i];
-        total_valid_patches += h * w;
-    }
 
-    // Slice off padding (if any)
-    if (total_valid_patches < total_patches) {
-        embeddings = gb->slice(embeddings, /*axis=*/0, /*start=*/0, /*end=*/total_valid_patches);
-    }
-
-    return embeddings;
+    return VisionEmbeddingResult{embeddings, std::move(tile_embeddings)};
 }
 
 size_t Siglip2VisionModel::build_vision_attention(CactusGraph* gb, size_t hidden_states, 
@@ -299,27 +303,52 @@ size_t Siglip2VisionModel::build_vision_transformer_layer(CactusGraph* gb, size_
     return hidden_states;
 }
 
-size_t Siglip2VisionModel::forward_vision(CactusGraph* gb, 
-                                          const Lfm2VlPreprocessor::PreprocessedImage& preprocessed_image,
-                                          ComputeBackend backend) {
-    // Build vision embeddings from preprocessed patches
-    size_t embeddings = build_vision_embeddings(gb, preprocessed_image, backend);
-    
-    // Pass through transformer layers
-    size_t hidden_states = embeddings;
-    for (uint32_t layer_idx = 0; layer_idx < config_.vision_num_layers; ++layer_idx) {
-        hidden_states = build_vision_transformer_layer(gb, hidden_states, layer_idx, backend);
+size_t Siglip2VisionModel::forward_vision(
+    CactusGraph* gb,
+    const Lfm2VlPreprocessor::PreprocessedImage& preprocessed_image,
+    ComputeBackend backend) {
+    auto embedding_result = build_vision_embeddings(gb, preprocessed_image, backend);
+
+    auto concat_nodes = [&](const std::vector<size_t>& nodes) {
+        if (nodes.empty()) {
+            throw std::runtime_error("Attempted to concatenate an empty node list in forward_vision");
+        }
+        size_t combined = nodes.front();
+        for (size_t i = 1; i < nodes.size(); ++i) {
+            combined = gb->concat(combined, nodes[i], /*axis=*/0);
+        }
+        return combined;
+    };
+
+    std::vector<size_t> tile_outputs;
+    tile_outputs.reserve(embedding_result.tile_embeddings.size());
+
+    for (size_t tile_idx = 0; tile_idx < embedding_result.tile_embeddings.size(); ++tile_idx) {
+        size_t hidden_states = embedding_result.tile_embeddings[tile_idx];
+        for (uint32_t layer_idx = 0; layer_idx < config_.vision_num_layers; ++layer_idx) {
+            hidden_states = build_vision_transformer_layer(gb, hidden_states, layer_idx, backend);
+        }
+
+        hidden_states = gb->layer_norm(hidden_states,
+                                       vision_weight_nodes_.post_layernorm_weight,
+                                       vision_weight_nodes_.post_layernorm_bias,
+                                       config_.layer_norm_eps);
+        capture_debug_node(config_.vision_num_layers,
+                           "vision_tile_" + std::to_string(tile_idx) + "_post_norm",
+                           hidden_states);
+
+        tile_outputs.push_back(hidden_states);
     }
-    
-    // Post layer norm
-    hidden_states = gb->layer_norm(hidden_states, 
-                                   vision_weight_nodes_.post_layernorm_weight,
-                                   vision_weight_nodes_.post_layernorm_bias,
-                                   config_.layer_norm_eps);
-    capture_debug_node(config_.vision_num_layers, "vision_post_norm", hidden_states);
-    
-    // Return last_hidden_state (no pooling head - vision_use_head: false)
-    return hidden_states;
+
+    if (tile_outputs.empty()) {
+        throw std::runtime_error("No tile outputs generated in forward_vision");
+    }
+
+    size_t combined_output = concat_nodes(tile_outputs);
+    capture_debug_node(config_.vision_num_layers, "vision_tile_ablation_final", combined_output);
+    capture_debug_node(config_.vision_num_layers, "vision_post_norm", combined_output);
+
+    return combined_output;
 }
 
 size_t Siglip2VisionModel::forward_vision(const Lfm2VlPreprocessor::PreprocessedImage& preprocessed_image) {

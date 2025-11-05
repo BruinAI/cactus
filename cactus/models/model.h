@@ -199,6 +199,11 @@ private:
 
 class Siglip2VisionModel : public Model {
 public:
+    struct VisionEmbeddingResult {
+        size_t combined_embeddings;
+        std::vector<size_t> tile_embeddings;
+    };
+
     Siglip2VisionModel();
     explicit Siglip2VisionModel(const Config& cfg);
     ~Siglip2VisionModel() override = default;
@@ -224,8 +229,9 @@ public:
     const Lfm2VlPreprocessor& get_preprocessor() const { return preprocessor_; }
 
 protected:
-    size_t build_vision_embeddings(CactusGraph* gb, const Lfm2VlPreprocessor::PreprocessedImage& preprocessed_image,
-                                   ComputeBackend backend);
+    VisionEmbeddingResult build_vision_embeddings(CactusGraph* gb,
+                                                  const Lfm2VlPreprocessor::PreprocessedImage& preprocessed_image,
+                                                  ComputeBackend backend);
     
     size_t build_vision_transformer_layer(CactusGraph* gb, size_t hidden_states, uint32_t layer_idx,
                                          ComputeBackend backend);
@@ -290,22 +296,6 @@ protected:
     } vision_weight_nodes_;
     
     Lfm2VlPreprocessor preprocessor_;
-};
-
-class Siglip2VisionModelTileAblation : public Siglip2VisionModel {
-public:
-    explicit Siglip2VisionModelTileAblation(const Config& cfg);
-    ~Siglip2VisionModelTileAblation() override = default;
-
-    size_t forward_vision(const Lfm2VlPreprocessor::PreprocessedImage& preprocessed_image) override;
-    size_t forward_vision(CactusGraph* gb,
-                          const Lfm2VlPreprocessor::PreprocessedImage& preprocessed_image,
-                          ComputeBackend backend) override;
-
-private:
-    size_t forward_tiles_independently(CactusGraph* gb,
-                                        const Lfm2VlPreprocessor::PreprocessedImage& preprocessed_image,
-                                        ComputeBackend backend);
 };
 
 
