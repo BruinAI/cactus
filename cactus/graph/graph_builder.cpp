@@ -10,7 +10,7 @@ static const char* op_type_names[] = {
     "ADD", "ADD_CLIPPED", "SUBTRACT", "MULTIPLY", "DIVIDE",
     "MATMUL", "TRANSPOSE", "RESHAPE", "SLICE", "GATHER", "EMBEDDING",
     "SUM", "MEAN", "VARIANCE", "MIN", "MAX",
-    "RMS_NORM", "ROPE", "SOFTMAX", "ATTENTION", "CONV1D_CAUSAL",
+    "RMS_NORM", "ROPE", "SOFTMAX", "ATTENTION", "CONV1D_CAUSAL", "CONV1D_K3"
     "SCALAR_ADD", "SCALAR_SUBTRACT", "SCALAR_MULTIPLY", "SCALAR_DIVIDE",
     "SCALAR_EXP", "SCALAR_SQRT", "SCALAR_COS", "SCALAR_SIN",
     "SILU", "GELU", "SAMPLE", "CONCAT",
@@ -327,7 +327,9 @@ size_t CactusGraph::conv1d_causal(size_t input, size_t weight, size_t, size_t di
     return add_node(OpType::CONV1D_CAUSAL, {input, weight}, {}, params);
 }
 
-size_t CactusGraph::conv1d(size_t input, size_t weight, size_t){}
+size_t CactusGraph::conv1d_k3(size_t input, size_t weight, size_t){
+    return add_node(OpType::CONV1D_K3, {input, weight}, {});
+}
 
 
 size_t CactusGraph::concat(size_t input1, size_t input2, int axis) {

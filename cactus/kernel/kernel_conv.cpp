@@ -230,9 +230,8 @@ void cactus_conv1d_causal_depthwise_f32(
 void cactus_conv1d_f32_k3(
     const float* input,
     const float* weight,
-    const float* bias,
     float* output,
-    size_t N, size_t L, size_t C_in, size_t C_out, size_t K, size_t dilation
+    size_t N, size_t L, size_t C_in, size_t C_out, size_t K
 ){
     const size_t T_TILE_F32 = 2;
     const size_t in_bs  = L * C_in;
@@ -320,9 +319,6 @@ void cactus_conv1d_f32_k3(
 
                 float acc0 = vaddvq_f32(vacc0_0);
                 float acc1 = vaddvq_f32(vacc0_1);
-
-                acc0 += bias[oc];
-                acc1 += bias[oc];
 
                 Yb[t0 * C_out + oc] = acc0;
                 if (t0 + 1 < L)
