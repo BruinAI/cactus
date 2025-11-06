@@ -384,10 +384,13 @@ public:
     size_t forward(const std::vector<uint32_t>& tokens, bool use_cache = false) override;
     
     // Vision-language forward with image input
-    size_t generate_with_images(
+    uint32_t generate_with_images(
         const std::vector<uint32_t>& tokens,
         const std::vector<std::string>& image_paths,
-        bool use_cache = false);
+        float temperature = -1.0f,
+        float top_p = -1.0f,
+        size_t top_k = 0,
+        const std::string& profile_file = "") override;
 
 protected:
     // Stub implementations for Model pure virtual methods
@@ -413,11 +416,23 @@ private:
         size_t seq_len;
     };
 
+    struct ForwardImageResult {
+        size_t final_hidden_node;
+        size_t seq_len;
+    };
+
     // Get image features from vision tower and apply projection
     std::vector<ProjectedTileFeature> get_image_features(
         CactusGraph* gb,
         const Lfm2VlPreprocessor::PreprocessedImage& preprocessed_image,
         ComputeBackend backend);
+
+    ForwardImageResult forward_images(
+        CactusGraph* gb,
+        const std::vector<uint32_t>& tokens,
+        const std::vector<std::string>& image_paths,
+        ComputeBackend backend,
+        bool use_cache);
     
     // Multimodal projector components
     size_t build_multimodal_projector(

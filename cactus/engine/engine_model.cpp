@@ -338,7 +338,15 @@ bool Config::from_json(const std::string& config_path) {
         else if (key == "conv_L_cache") conv_L_cache = static_cast<size_t>(std::stoul(value));
         else if (key == "layer_types") {
             layer_types.clear();
-            std::stringstream ss(value);
+            std::string sanitized;
+            sanitized.reserve(value.size());
+            for (char c : value) {
+                if (c == '[' || c == ']' || c == '\'' || c == '"') {
+                    continue;
+                }
+                sanitized.push_back(c);
+            }
+            std::stringstream ss(sanitized);
             std::string item;
             while (std::getline(ss, item, ',')) {
                 if (!item.empty()) {
@@ -385,6 +393,17 @@ std::unique_ptr<Model> create_model(const std::string& model_folder) {
 
     if (!config.from_json(config_path)) {
         return nullptr;
+    }
+    
+    const bool has_vision_support =
+    config.use_image_tokens ||
+    config.vision_num_layers > 0 ||
+    config.vision_embed_dim > 0 ||
+    config.vision_hidden_dim > 0 ||
+    config.visual_tokens_per_img > 0;
+
+    if (config.model_type == Config::ModelType::LFM2 && has_vision_support) {
+        return std::make_unique<Lfm2VlModel>(config);
     }
 
     switch (config.model_type) {

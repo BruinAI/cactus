@@ -470,7 +470,11 @@ int cactus_complete(
         if (tokens_to_process.empty()) {
             next_token = wrapper->model->generate({}, temperature, top_p, top_k);
         } else {
-            next_token = wrapper->model->generate(tokens_to_process, temperature, top_p, top_k, "profile.txt");
+            if (!image_paths.empty()) {
+                next_token = wrapper->model->generate_with_images(tokens_to_process, image_paths, temperature, top_p, top_k, "profile.txt");
+            } else {
+                next_token = wrapper->model->generate(tokens_to_process, temperature, top_p, top_k, "profile.txt");
+            }
         }
 
         auto token_end = std::chrono::high_resolution_clock::now();

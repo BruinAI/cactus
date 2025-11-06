@@ -276,9 +276,9 @@ def convert_hf_model_weights(model, output_dir, precision='INT8', args=None):
         })
 
     if detected_model_type == 'lfm2':
-        layer_types = getattr(cfg, 'layer_types', [])
+        layer_types = getattr(config, 'layer_types', [])
         model_config['layer_types'] = layer_types
-        model_config['conv_L_cache'] = getattr(cfg, 'conv_L_cache', 0)
+        model_config['conv_L_cache'] = getattr(config, 'conv_L_cache', 0)
     
     # Token embeddings - support both regular and VLM prefixes
     embed_names = [
@@ -303,7 +303,8 @@ def convert_hf_model_weights(model, output_dir, precision='INT8', args=None):
             embedding_found = True
     
     if embedding_found:
-        embedding_norm_names = {'emb_ln.weight': 'embedding_layernorm.weight', 'emb_ln.bias': 'embedding_layernorm.bias'}
+        embedding_norm_names = {'emb_ln.weight': 'embedding_layernorm.weight', 'emb_ln.bias': 'embedding_layernorm.bias', 
+                                 'model.language_model.embedding_norm.weight': 'embedding_norm.weights'}
         for name, file_name in embedding_norm_names.items():
             if name in state_dict:
                 save_tensor_with_header(state_dict[name], output_dir / file_name, precision, stats_tracker=quantization_stats, args=args, model_type=detected_model_type)
@@ -318,9 +319,8 @@ def convert_hf_model_weights(model, output_dir, precision='INT8', args=None):
                 saved_tensor_full_names.add(name)
                 break
                 
-    # Output norm (final norm before output head) - supports both regular and VLM prefixes
     output_norm_names = ['model.norm.weight', 'norm.weight', 'final_layernorm.weight', 'transformer.ln_f.weight', 
-                          'model.embedding_norm.weight', 'model.language_model.embedding_norm.weight', 'model.text_model.norm.weight']
+                          'model.embedding_norm.weight', 'model.text_model.norm.weight', '']
     for name in output_norm_names:
         if name in state_dict:
             tensor = state_dict[name]
@@ -461,7 +461,7 @@ def convert_hf_model_weights(model, output_dir, precision='INT8', args=None):
 
         # Conv layers for LFM2 (will be skipped if not present)
         conv_patterns = [
-            ('conv.conv.weight', f'layer_{i}_conv_depthwise.weights'),
+            ('conv.conv.weight', f'layer_{i}_conv_conv.weights'),
             ('conv.in_proj.weight', f'layer_{i}_conv_in_proj.weights'),
             ('conv.out_proj.weight', f'layer_{i}_conv_out_proj.weights'),
         ]

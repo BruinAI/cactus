@@ -5,6 +5,7 @@
 #include <limits>
 #include <stdexcept>
 #include <vector>
+#include <iostream>
 
 // Include stb_image headers (implementation is in cactus_ffi.cpp)
 #include "../ffi/stb_image.h"
@@ -35,6 +36,7 @@ int Lfm2VlPreprocessor::round_by_factor(int number, int factor) {
     }
     double scaled = static_cast<double>(number) / static_cast<double>(factor);
     long long rounded = std::llround(scaled);
+    std::cout << "[Lfm2VlPreprocessor::round_by_factor] number=" << number << " factor=" << factor << " result=" << static_cast<int>(rounded * factor) << std::endl;
     return static_cast<int>(rounded * factor);
 }
 
@@ -49,6 +51,7 @@ std::pair<int,int> Lfm2VlPreprocessor::smart_resize(int height, int width) {
 
     int h_bar = std::max(total_factor, round_by_factor(height, total_factor));
     int w_bar = std::max(total_factor, round_by_factor(width, total_factor));
+    std::cout << "[Lfm2VlPreprocessor::smart_resize] initial h_bar=" << h_bar << " w_bar=" << w_bar << std::endl;
 
     if (static_cast<int64_t>(h_bar) * static_cast<int64_t>(w_bar) > max_pixels) {
         double beta = std::sqrt((static_cast<double>(height) * static_cast<double>(width)) /
@@ -81,7 +84,9 @@ bool Lfm2VlPreprocessor::is_image_too_large(int height, int width) {
                               config_.downsample_factor * config_.downsample_factor *
                               config_.max_pixels_tolerance;
 
-    return static_cast<double>(pixels) > max_pixels;
+    bool result = static_cast<double>(pixels) > max_pixels;
+    std::cout << "[Lfm2VlPreprocessor::is_image_too_large] height=" << height << " width=" << width << " pixels=" << pixels << " limit=" << max_pixels << " result=" << result << std::endl;
+    return result;
 }
 
 
@@ -125,6 +130,7 @@ std::pair<int, int> Lfm2VlPreprocessor::find_closest_aspect_ratio(float aspect_r
         }
     }
 
+    std::cout << "[Lfm2VlPreprocessor::find_closest_aspect_ratio] aspect_ratio=" << aspect_ratio << " best_ratio=" << best_ratio.first << "x" << best_ratio.second << std::endl;
     return best_ratio;
 }
 
@@ -134,6 +140,7 @@ std::pair<int,int> Lfm2VlPreprocessor::get_grid_layout(int height, int width) {
 
     int target_width  = config_.tile_size * grid_width;
     int target_height = config_.tile_size * grid_height;
+    std::cout << "[Lfm2VlPreprocessor::get_grid_layout] width=" << width << " height=" << height << " grid_width=" << grid_width << " grid_height=" << grid_height << std::endl;
     return {target_width, target_height};
 }
 
@@ -149,6 +156,7 @@ Lfm2VlPreprocessor::SpatialShapeResult Lfm2VlPreprocessor::compute_spatial_shape
     const int patch = config_.patch_size;
     auto [resized_width, resized_height] = smart_resize(height, width);
     const bool should_split = config_.do_image_splitting && is_image_too_large(height, width);
+    std::cout << "[Lfm2VlPreprocessor::compute_spatial_shapes] height=" << height << " width=" << width << " resized_width=" << resized_width << " resized_height=" << resized_height << " should_split=" << should_split << std::endl;
 
     SpatialShapeResult result;
     result.grid_rows = 1;
@@ -162,6 +170,7 @@ Lfm2VlPreprocessor::SpatialShapeResult Lfm2VlPreprocessor::compute_spatial_shape
         auto [grid_target_width, grid_target_height] = get_grid_layout(height, width);
         result.grid_cols = grid_target_width / config_.tile_size;
         result.grid_rows = grid_target_height / config_.tile_size;
+    std::cout << "[Lfm2VlPreprocessor::compute_spatial_shapes] grid_cols=" << result.grid_cols << " grid_rows=" << result.grid_rows << std::endl;
 
         const int patches_per_tile_side = config_.tile_size / patch;
         const auto tile_shape = std::make_pair(patches_per_tile_side, patches_per_tile_side);
@@ -170,6 +179,7 @@ Lfm2VlPreprocessor::SpatialShapeResult Lfm2VlPreprocessor::compute_spatial_shape
         for (int row = 0; row < result.grid_rows; ++row) {
             for (int col = 0; col < result.grid_cols; ++col) {
                 result.shapes.push_back(tile_shape);
+                std::cout << "[Lfm2VlPreprocessor::compute_spatial_shapes] added tile shape=" << tile_shape.first << "x" << tile_shape.second << std::endl;
             }
         }
 
@@ -178,6 +188,7 @@ Lfm2VlPreprocessor::SpatialShapeResult Lfm2VlPreprocessor::compute_spatial_shape
                 throw std::runtime_error("Resized thumbnail dimensions must be divisible by patch size");
             }
             result.shapes.emplace_back(resized_height / patch, resized_width / patch);
+            std::cout << "[Lfm2VlPreprocessor::compute_spatial_shapes] added thumbnail shape" << std::endl;
         }
     } else {
         int target_width = resized_width;
@@ -192,6 +203,7 @@ Lfm2VlPreprocessor::SpatialShapeResult Lfm2VlPreprocessor::compute_spatial_shape
         }
 
         result.shapes.emplace_back(target_height / patch, target_width / patch);
+        std::cout << "[Lfm2VlPreprocessor::compute_spatial_shapes] single shape=" << result.shapes.back().first << "x" << result.shapes.back().second << std::endl;
     }
 
     return result;
@@ -208,6 +220,7 @@ Lfm2VlPreprocessor::PreprocessedImage Lfm2VlPreprocessor::preprocess_from_file(c
 
     PreprocessedImage result;
     result = preprocess_from_memory(img_data, width, height, channels);
+    std::cout << "[Lfm2VlPreprocessor::preprocess_from_file] image_path=" << image_path << " width=" << width << " height=" << height << " channels=" << channels << std::endl;
     stbi_image_free(img_data);
     return result;
 }
@@ -227,6 +240,7 @@ Lfm2VlPreprocessor::PreprocessedImage Lfm2VlPreprocessor::preprocess_from_memory
         rgb_data = convert_to_rgb(img_data, width, height, channels);
         source_data = rgb_data.data();
         source_channels = expected_channels;
+        std::cout << "[Lfm2VlPreprocessor::preprocess_from_memory] converted to RGB" << std::endl;
     }
 
     if (source_channels != expected_channels) {
@@ -245,6 +259,7 @@ Lfm2VlPreprocessor::PreprocessedImage Lfm2VlPreprocessor::preprocess_from_memory
     }
 
     auto [resized_width, resized_height] = smart_resize(height, width);
+    std::cout << "[Lfm2VlPreprocessor::preprocess_from_memory] resized_width=" << resized_width << " resized_height=" << resized_height << std::endl;
 
     const int patches_per_tile_side = config_.tile_size / patch;
     const int tile_patch_count = patches_per_tile_side * patches_per_tile_side;
@@ -255,6 +270,7 @@ Lfm2VlPreprocessor::PreprocessedImage Lfm2VlPreprocessor::preprocess_from_memory
 
     const bool allow_splitting = config_.do_image_splitting;
     const bool should_split = allow_splitting && is_image_too_large(height, width);
+    std::cout << "[Lfm2VlPreprocessor::preprocess_from_memory] allow_splitting=" << allow_splitting << " should_split=" << should_split << std::endl;
 
     size_t expected_tiles = should_split ? static_cast<size_t>(config_.max_tiles) : 1;
     if (should_split && config_.use_thumbnail) {
@@ -290,6 +306,7 @@ Lfm2VlPreprocessor::PreprocessedImage Lfm2VlPreprocessor::preprocess_from_memory
         grid_rows = grid_target_height / config_.tile_size;
         printf("[debug] grid_target_width=%d grid_target_height=%d grid_cols=%d grid_rows=%d\n",
                grid_target_width, grid_target_height, grid_cols, grid_rows);
+    std::cout << "[Lfm2VlPreprocessor::preprocess_from_memory] grid_cols=" << grid_cols << " grid_rows=" << grid_rows << std::endl;
 
         std::vector<float> resized_grid = resize_image(
             source_data, width, height, grid_target_width, grid_target_height, expected_channels);
@@ -309,6 +326,7 @@ Lfm2VlPreprocessor::PreprocessedImage Lfm2VlPreprocessor::preprocess_from_memory
                                 dst_row);
                 }
                 normalize_and_patchify(tile_buffer.data(), config_.tile_size, config_.tile_size);
+                std::cout << "[Lfm2VlPreprocessor::preprocess_from_memory] processed tile row=" << row << " col=" << col << std::endl;
             }
         }
 
@@ -317,6 +335,7 @@ Lfm2VlPreprocessor::PreprocessedImage Lfm2VlPreprocessor::preprocess_from_memory
                 source_data, width, height, resized_width, resized_height, expected_channels);
             normalize_and_patchify(thumbnail_bytes.data(), resized_width, resized_height);
             thumbnail_added = true;
+            std::cout << "[Lfm2VlPreprocessor::preprocess_from_memory] thumbnail added" << std::endl;
         }
     } else {
         int target_width = resized_width;
@@ -328,6 +347,7 @@ Lfm2VlPreprocessor::PreprocessedImage Lfm2VlPreprocessor::preprocess_from_memory
         if (needs_resize) {
             resized_image = resize_image(source_data, width, height, target_width, target_height, expected_channels);
             normalize_and_patchify(resized_image.data(), target_width, target_height);
+            std::cout << "[Lfm2VlPreprocessor::preprocess_from_memory] resized image for normalization" << std::endl;
         } else {
             resized_image.resize(static_cast<size_t>(width) * height * expected_channels);
             for (size_t idx = 0; idx < resized_image.size(); ++idx) {
@@ -338,6 +358,7 @@ Lfm2VlPreprocessor::PreprocessedImage Lfm2VlPreprocessor::preprocess_from_memory
             target_height = height;
             resized_width = target_width;
             resized_height = target_height;
+            std::cout << "[Lfm2VlPreprocessor::preprocess_from_memory] using original dimensions" << std::endl;
         }
 
         grid_rows = 1;
@@ -345,6 +366,7 @@ Lfm2VlPreprocessor::PreprocessedImage Lfm2VlPreprocessor::preprocess_from_memory
     }
 
     PreprocessedImage result = pad_patches(tile_patches, spatial_shapes, patch_dim, max_patches_per_tile);
+    std::cout << "[Lfm2VlPreprocessor::preprocess_from_memory] pad_patches returned num_tiles=" << result.num_tiles << std::endl;
 
     result.image_rows = grid_rows;
     result.image_cols = grid_cols;
@@ -360,10 +382,12 @@ Lfm2VlPreprocessor::PreprocessedImage Lfm2VlPreprocessor::preprocess_from_memory
     result.tokens_per_tile = spatial_shapes.empty()
                                  ? 0
                                  : compute_tokens(spatial_shapes.front().first, spatial_shapes.front().second);
+    std::cout << "[Lfm2VlPreprocessor::preprocess_from_memory] tokens_per_tile=" << result.tokens_per_tile << std::endl;
 
     if (thumbnail_added && !spatial_shapes.empty()) {
         const auto& thumb_shape = spatial_shapes.back();
         result.thumbnail_tokens = compute_tokens(thumb_shape.first, thumb_shape.second);
+        std::cout << "[Lfm2VlPreprocessor::preprocess_from_memory] thumbnail_tokens=" << result.thumbnail_tokens << std::endl;
     } else {
         result.thumbnail_tokens = 0;
     }
@@ -410,6 +434,7 @@ std::vector<float> Lfm2VlPreprocessor::resize_image(
     for (size_t idx = 0; idx < src_elements; ++idx) {
         src_float[idx] = static_cast<float>(img_data[idx]);
     }
+    std::cout << "[Lfm2VlPreprocessor::resize_image] src converted to float elements=" << src_elements << std::endl;
 
     std::vector<float> resized_data(static_cast<size_t>(dst_width) * dst_height * channels);
     
@@ -426,6 +451,7 @@ std::vector<float> Lfm2VlPreprocessor::resize_image(
         throw std::runtime_error("Failed to resize image");
     }
 
+    std::cout << "[Lfm2VlPreprocessor::resize_image] resized to " << dst_width << "x" << dst_height << std::endl;
     return resized_data;
 }
 
@@ -451,6 +477,7 @@ std::vector<float> Lfm2VlPreprocessor::normalize_image(
             normalized[idx] = pixel;
         }
     }
+    std::cout << "[Lfm2VlPreprocessor::normalize_image] normalized image with width=" << width << " height=" << height << std::endl;
 
     return normalized;
 }
@@ -509,6 +536,7 @@ Lfm2VlPreprocessor::PreprocessedImage Lfm2VlPreprocessor::pad_patches(
     const size_t total_values = static_cast<size_t>(num_tiles) * max_patches_per_tile * patch_dim;
     result.pixel_values.assign(total_values, 0.0f);
     result.pixel_attention_mask.assign(static_cast<size_t>(num_tiles) * max_patches_per_tile, 0);
+    std::cout << "[Lfm2VlPreprocessor::pad_patches] num_tiles=" << num_tiles << " max_patches_per_tile=" << max_patches_per_tile << " patch_dim=" << patch_dim << std::endl;
 
     for (int tile_idx = 0; tile_idx < num_tiles; ++tile_idx) {
         const auto& [patches_h, patches_w] = spatial_shapes[tile_idx];
@@ -527,6 +555,7 @@ Lfm2VlPreprocessor::PreprocessedImage Lfm2VlPreprocessor::pad_patches(
         float* destination = result.pixel_values.data() +
                              static_cast<size_t>(tile_idx) * max_patches_per_tile * patch_dim;
         std::memcpy(destination, flattened.data(), expected_size * sizeof(float));
+    std::cout << "[Lfm2VlPreprocessor::pad_patches] copied tile_idx=" << tile_idx << " actual_patches=" << actual_patches << std::endl;
 
         int mask_offset = tile_idx * max_patches_per_tile;
         for (int p = 0; p < actual_patches; ++p) {
@@ -549,6 +578,7 @@ Lfm2VlPreprocessor::PreprocessedImage Lfm2VlPreprocessor::pad_patches(
         static_cast<size_t>(max_patches_per_tile),
         static_cast<size_t>(patch_dim)
     };
+    std::cout << "[Lfm2VlPreprocessor::pad_patches] pixel_values_shape set" << std::endl;
 
     result.pixel_attention_mask_shape = {
         static_cast<size_t>(num_tiles),
@@ -559,6 +589,7 @@ Lfm2VlPreprocessor::PreprocessedImage Lfm2VlPreprocessor::pad_patches(
         static_cast<size_t>(num_tiles),
         static_cast<size_t>(2)
     };
+    std::cout << "[Lfm2VlPreprocessor::pad_patches] spatial_shapes_shape set" << std::endl;
 
     return result;
 }

@@ -37,14 +37,18 @@ void LFM2Model::post_init() {
         }
         size_t conv_window = config_.conv_L_cache > 0 ? config_.conv_L_cache - 1 : 0;
         conv_cache_.init(config_.num_layers, config_.hidden_dim, conv_window, cache_precision);
+        std::cout << "[LFM2Model::post_init] conv_cache_ initialized with conv_window=" << conv_window << std::endl;
     }
     last_forward_used_cache_ = false;
+    std::cout << "[LFM2Model::post_init] last_forward_used_cache_ reset" << std::endl;
 }
 
 void LFM2Model::reset_cache() {
     Model::reset_cache(); 
+    std::cout << "[LFM2Model::reset_cache] base cache reset" << std::endl;
     if (conv_cache_.window_size > 0) {
         conv_cache_.reset();
+        std::cout << "[LFM2Model::reset_cache] conv_cache_ reset" << std::endl;
     }
 }
 
@@ -52,10 +56,13 @@ bool LFM2Model::init(const std::string& model_folder, size_t context_size, const
     if (!Model::init(model_folder, context_size, system_prompt)) {
         return false;
     }
+    std::cout << "[LFM2Model::init] base Model::init succeeded for folder=" << model_folder << std::endl;
     if (weight_nodes_.layers.size() != config_.num_layers) {
         weight_nodes_.layers.resize(config_.num_layers);
+        std::cout << "[LFM2Model::init] resized weight_nodes_.layers to " << weight_nodes_.layers.size() << std::endl;
     }
     conv_cache_bx_nodes_.assign(config_.num_layers, 0);
+    std::cout << "[LFM2Model::init] conv_cache_bx_nodes_ assigned zeros size=" << conv_cache_bx_nodes_.size() << std::endl;
 
     return true;
 }
@@ -69,25 +76,31 @@ void LFM2Model::load_weights_to_graph(CactusGraph* gb) {
     }
 
     embedding_node_id_ = gb->mmap_embeddings(embedding_file_path_);
+    std::cout << "[LFM2Model::load_weights_to_graph] embedding_node_id_=" << embedding_node_id_ << std::endl;
     weight_nodes_.output_norm_weight = gb->mmap_weights(model_folder_path_ + "/output_norm.weights");
+    std::cout << "[LFM2Model::load_weights_to_graph] output_norm_weight node=" << weight_nodes_.output_norm_weight << std::endl;
 
     if (config_.tie_word_embeddings) {
         weight_nodes_.output_weight = embedding_node_id_;
         output_weight_node_id_ = embedding_node_id_;
+        std::cout << "[LFM2Model::load_weights_to_graph] tie_word_embeddings true, output_weight_node_id_=" << output_weight_node_id_ << std::endl;
     } else {
         weight_nodes_.output_weight = gb->mmap_weights(model_folder_path_ + "/output_weight.weights");
         output_weight_node_id_ = weight_nodes_.output_weight;
+        std::cout << "[LFM2Model::load_weights_to_graph] tie_word_embeddings false, output_weight_node_id_=" << output_weight_node_id_ << std::endl;
     }
 
     for (uint32_t i = 0; i < config_.num_layers; i++) {
         auto& layer_entry = weight_nodes_.layers[i];
         auto& layer = layer_entry.weights;
         std::string layer_prefix = model_folder_path_ + "/layer_" + std::to_string(i) + "_";
+        std::cout << "[LFM2Model::load_weights_to_graph] loading layer=" << i << std::endl;
 
         bool is_conv_layer = false;
         if (i < config_.layer_types.size()) {
             std::string layer_type = config_.layer_types[i];
             is_conv_layer = (layer_type == "conv" || layer_type == "CONV");
+            std::cout << "[LFM2Model::load_weights_to_graph] layer_type=" << layer_type << " is_conv_layer=" << is_conv_layer << std::endl;
         }
 
         if (is_conv_layer) {
@@ -95,6 +108,7 @@ void LFM2Model::load_weights_to_graph(CactusGraph* gb) {
             layer.conv_in_proj_weight = gb->mmap_weights(layer_prefix + "conv_in_proj.weights");
             layer.conv_out_proj_weight = gb->mmap_weights(layer_prefix + "conv_out_proj.weights");
             layer.conv_depthwise_weight = gb->mmap_weights(layer_prefix + "conv_depthwise.weights");
+            std::cout << "[LFM2Model::load_weights_to_graph] conv weights nodes: in_proj=" << layer.conv_in_proj_weight << " depthwise=" << layer.conv_depthwise_weight << " out_proj=" << layer.conv_out_proj_weight << std::endl;
         } else {
             layer_entry.type = WeightNodeIDs::LayerType::ATTENTION;
             layer.attn_q_weight = gb->mmap_weights(layer_prefix + "attn_q.weights");
@@ -103,6 +117,7 @@ void LFM2Model::load_weights_to_graph(CactusGraph* gb) {
             layer.attn_output_weight = gb->mmap_weights(layer_prefix + "attn_output.weights");
             layer.attn_q_norm_weight = gb->mmap_weights(layer_prefix + "attn_q_norm.weights");
             layer.attn_k_norm_weight = gb->mmap_weights(layer_prefix + "attn_k_norm.weights");
+            std::cout << "[LFM2Model::load_weights_to_graph] attention weights nodes for layer=" << i << std::endl;
         }
 
         layer.input_layernorm_weight = gb->mmap_weights(layer_prefix + "input_norm.weights");
@@ -110,6 +125,7 @@ void LFM2Model::load_weights_to_graph(CactusGraph* gb) {
         layer.ffn_gate_weight = gb->mmap_weights(layer_prefix + "ffn_gate.weights");
         layer.ffn_up_weight = gb->mmap_weights(layer_prefix + "ffn_up.weights");
         layer.ffn_down_weight = gb->mmap_weights(layer_prefix + "ffn_down.weights");
+        std::cout << "[LFM2Model::load_weights_to_graph] layer norms and ffn weights loaded for layer=" << i << std::endl;
     }
 }
 
@@ -119,34 +135,44 @@ size_t LFM2Model::build_conv1d(CactusGraph* gb, size_t input, uint32_t layer_idx
     const auto& layer       = layer_entry.weights;
 
     size_t in_proj = gb->matmul(input, layer.conv_in_proj_weight, true, backend);
+    std::cout << "[LFM2Model::build_conv1d] in_proj node=" << in_proj << std::endl;
 
     const auto& in_proj_buf = gb->get_output_buffer(in_proj);
     if (in_proj_buf.shape.size() != 2 || (in_proj_buf.shape[1] % 3) != 0) {
         throw std::runtime_error("Conv in_proj output must be [L, 3*C]");
     }
+    std::cout << "[LFM2Model::build_conv1d] in_proj shape dims=" << in_proj_buf.shape[0] << " x " << in_proj_buf.shape[1] << std::endl;
 
     const size_t L = in_proj_buf.shape[0];
     const size_t C = in_proj_buf.shape[1] / 3;
+    std::cout << "[LFM2Model::build_conv1d] L=" << L << " C=" << C << std::endl;
 
     size_t triplet = gb->reshape(in_proj, {L, static_cast<size_t>(3), C});
+    std::cout << "[LFM2Model::build_conv1d] triplet node=" << triplet << std::endl;
     size_t B = gb->slice(triplet, 1, 0, 1);
     size_t Cg = gb->slice(triplet, 1, 1, 1);
     size_t X = gb->slice(triplet, 1, 2, 1);
+    std::cout << "[LFM2Model::build_conv1d] slice nodes B=" << B << " Cg=" << Cg << " X=" << X << std::endl;
 
     B  = gb->reshape(B,  {L, C});
     Cg = gb->reshape(Cg, {L, C});
     X  = gb->reshape(X,  {L, C});
+    std::cout << "[LFM2Model::build_conv1d] reshaped B=" << B << " Cg=" << Cg << " X=" << X << std::endl;
 
     size_t Bx = gb->multiply(B, X);
+    std::cout << "[LFM2Model::build_conv1d] Bx node=" << Bx << std::endl;
 
     if (use_cache) {
         conv_cache_bx_nodes_[layer_idx] = Bx;
+        std::cout << "[LFM2Model::build_conv1d] cache enabled, storing Bx for layer=" << layer_idx << std::endl;
     } else {
         conv_cache_bx_nodes_[layer_idx] = 0;
+        std::cout << "[LFM2Model::build_conv1d] cache disabled, clearing conv_cache_bx_nodes_ for layer=" << layer_idx << std::endl;
     }
 
     const auto& wbuf = gb->get_output_buffer(layer.conv_depthwise_weight);
     size_t K = wbuf.shape.back(); 
+    std::cout << "[LFM2Model::build_conv1d] depthwise weight shape rank=" << wbuf.shape.size() << std::endl;
 
     size_t conv_w = layer.conv_depthwise_weight;
 
@@ -155,15 +181,19 @@ size_t LFM2Model::build_conv1d(CactusGraph* gb, size_t input, uint32_t layer_idx
         auto conv_w_quantization_scale = gb->get_output_buffer(conv_w).quantization_scale;
         conv_w = gb->reshape(conv_w, {wbuf.shape[0], static_cast<size_t>(1), K});
         gb->set_quantization_scale(conv_w, conv_w_quantization_scale);
+        std::cout << "[LFM2Model::build_conv1d] reshaped conv depthwise weight node=" << conv_w << " K=" << K << std::endl;
     } else if (wbuf.shape.size() != 3){
         throw std::runtime_error("Unexpected depthwise weight rank");
     }
     K = wbuf.shape.back();
+    std::cout << "[LFM2Model::build_conv1d] final kernel width K=" << K << std::endl;
 
     size_t conv_input_lc = Bx;
+    std::cout << "[LFM2Model::build_conv1d] conv_input_lc initial node=" << conv_input_lc << std::endl;
     
     if (use_cache && conv_cache_.window_size > 0) {
         auto view = conv_cache_.get_window(layer_idx);
+        std::cout << "[LFM2Model::build_conv1d] cache window view len1=" << view.len1 << " len2=" << view.len2 << std::endl;
         
         std::vector<size_t> segments;
 
@@ -171,38 +201,48 @@ size_t LFM2Model::build_conv1d(CactusGraph* gb, size_t input, uint32_t layer_idx
             size_t left_node = gb->input({view.len2, C}, conv_cache_.precision);
             gb->set_input(left_node, view.ptr2, conv_cache_.precision);
             segments.push_back(left_node);
+            std::cout << "[LFM2Model::build_conv1d] appended left cache segment node=" << left_node << std::endl;
         }
         if (view.len1 > 0) {
             size_t right_node = gb->input({view.len1, C}, conv_cache_.precision);
             gb->set_input(right_node, view.ptr1, conv_cache_.precision);
             segments.push_back(right_node);
+            std::cout << "[LFM2Model::build_conv1d] appended right cache segment node=" << right_node << std::endl;
         }
 
         if (!segments.empty()) {
             conv_input_lc = segments[0];
             for (size_t idx = 1; idx < segments.size(); ++idx) {
                 conv_input_lc = gb->concat(conv_input_lc, segments[idx], 0);
+                std::cout << "[LFM2Model::build_conv1d] concatenated cache segment idx=" << idx << " node=" << conv_input_lc << std::endl;
             }
             conv_input_lc = gb->concat(conv_input_lc, Bx, 0);
+            std::cout << "[LFM2Model::build_conv1d] concatenated Bx to cache segments node=" << conv_input_lc << std::endl;
         }
     }
 
     const auto& conv_input_buf = gb->get_output_buffer(conv_input_lc);
     size_t total_len = conv_input_buf.shape[0];
+    std::cout << "[LFM2Model::build_conv1d] conv_input total_len=" << total_len << std::endl;
 
     size_t x_nlc = gb->reshape(conv_input_lc, {static_cast<size_t>(1), total_len, C});
+    std::cout << "[LFM2Model::build_conv1d] x_nlc node=" << x_nlc << std::endl;
 
     const size_t dilation = 1;
     
     size_t y_nlc = gb->conv1d_causal(x_nlc, conv_w, K, dilation); 
+    std::cout << "[LFM2Model::build_conv1d] y_nlc node=" << y_nlc << std::endl;
 
     size_t start = total_len > L ? total_len - L : 0;
     size_t y_slice = gb->slice(y_nlc, 1, start, L);
     size_t y_lc = gb->reshape(y_slice, {L, C});
+    std::cout << "[LFM2Model::build_conv1d] y_slice start=" << start << " node=" << y_slice << " y_lc node=" << y_lc << std::endl;
 
     size_t gated = gb->multiply(Cg, y_lc); 
+    std::cout << "[LFM2Model::build_conv1d] gated node=" << gated << std::endl;
 
     size_t projected = gb->matmul(gated, layer.conv_out_proj_weight, true, backend); 
+    std::cout << "[LFM2Model::build_conv1d] projected node=" << projected << std::endl;
 
     return projected;
 }
@@ -214,38 +254,48 @@ size_t LFM2Model::build_attention(CactusGraph* gb, size_t normalized_input, uint
     const auto& layer = layer_entry.weights;
 
     auto q_proj_linear = gb->matmul(normalized_input, layer.attn_q_weight, true, backend);
+    std::cout << "[LFM2Model::build_attention] q_proj_linear node=" << q_proj_linear << std::endl;
     auto k_proj_linear = gb->matmul(normalized_input, layer.attn_k_weight, true, backend);
+    std::cout << "[LFM2Model::build_attention] k_proj_linear node=" << k_proj_linear << std::endl;
     auto v_proj_linear = gb->matmul(normalized_input, layer.attn_v_weight, true, backend);
+    std::cout << "[LFM2Model::build_attention] v_proj_linear node=" << v_proj_linear << std::endl;
 
     const auto& q_shape = gb->get_output_buffer(q_proj_linear).shape;
     size_t batch_seq = q_shape[0];
     size_t num_heads = config_.attention_heads;
     size_t head_dim = config_.attention_head_dim;
+    std::cout << "[LFM2Model::build_attention] batch_seq=" << batch_seq << " num_heads=" << num_heads << " head_dim=" << head_dim << std::endl;
     auto q_proj_reshaped = gb->reshape(q_proj_linear, {batch_seq * num_heads, head_dim});
     auto q_proj_norm = gb->rms_norm(q_proj_reshaped, layer.attn_q_norm_weight, config_.layer_norm_eps);
     auto q_proj = gb->reshape(q_proj_norm, {batch_seq, num_heads * head_dim});
+    std::cout << "[LFM2Model::build_attention] q_proj node=" << q_proj << std::endl;
 
     size_t num_kv_heads = config_.attention_kv_heads;
     auto k_proj_reshaped = gb->reshape(k_proj_linear, {batch_seq * num_kv_heads, head_dim});
     auto k_proj_norm = gb->rms_norm(k_proj_reshaped, layer.attn_k_norm_weight, config_.layer_norm_eps);
     auto k_proj = gb->reshape(k_proj_norm, {batch_seq, num_kv_heads * head_dim});
+    std::cout << "[LFM2Model::build_attention] k_proj node=" << k_proj << std::endl;
 
     size_t seq_len = batch_seq;
     auto q_proj_4d = gb->reshape(q_proj, {1, seq_len, config_.attention_heads, config_.attention_head_dim});
     auto k_proj_4d = gb->reshape(k_proj, {1, seq_len, config_.attention_kv_heads, config_.attention_head_dim});
     auto v_proj_4d = gb->reshape(v_proj_linear, {1, seq_len, config_.attention_kv_heads, config_.attention_head_dim});
+    std::cout << "[LFM2Model::build_attention] q_proj_4d=" << q_proj_4d << " k_proj_4d=" << k_proj_4d << " v_proj_4d=" << v_proj_4d << std::endl;
 
     if (config_.rope_theta > 0) {
         q_proj_4d = gb->rope(q_proj_4d, config_.rope_theta, position_offset);
         k_proj_4d = gb->rope(k_proj_4d, config_.rope_theta, position_offset);
+        std::cout << "[LFM2Model::build_attention] applied ROPE with position_offset=" << position_offset << std::endl;
     }
 
     size_t final_k = k_proj_4d;
     size_t final_v = v_proj_4d;
+    std::cout << "[LFM2Model::build_attention] initial final_k=" << final_k << " final_v=" << final_v << std::endl;
 
     if (use_cache && !kv_cache_.is_empty()) {
         auto k_view = kv_cache_.get_key_view(layer_idx);
         auto v_view = kv_cache_.get_value_view(layer_idx);
+        std::cout << "[LFM2Model::build_attention] using cache current_seq_len=" << kv_cache_.current_seq_len << std::endl;
 
         if (k_view.ptr2 == nullptr && v_view.ptr2 == nullptr) {
             size_t cache_k_node = gb->input({1, kv_cache_.current_seq_len, config_.attention_kv_heads, config_.attention_head_dim}, kv_cache_.precision);
@@ -256,6 +306,7 @@ size_t LFM2Model::build_attention(CactusGraph* gb, size_t normalized_input, uint
 
             final_k = gb->concat(cache_k_node, k_proj_4d, 1);
             final_v = gb->concat(cache_v_node, v_proj_4d, 1);
+            std::cout << "[LFM2Model::build_attention] concatenated cache nodes final_k=" << final_k << " final_v=" << final_v << std::endl;
         } else {
             size_t cache_k_node = gb->input({1, kv_cache_.current_seq_len, config_.attention_kv_heads, config_.attention_head_dim}, kv_cache_.precision);
             size_t cache_v_node = gb->input({1, kv_cache_.current_seq_len, config_.attention_kv_heads, config_.attention_head_dim}, kv_cache_.precision);
@@ -265,17 +316,22 @@ size_t LFM2Model::build_attention(CactusGraph* gb, size_t normalized_input, uint
 
             final_k = gb->concat(cache_k_node, k_proj_4d, 1);
             final_v = gb->concat(cache_v_node, v_proj_4d, 1);
+            std::cout << "[LFM2Model::build_attention] concatenated cache full nodes final_k=" << final_k << " final_v=" << final_v << std::endl;
         }
     }
 
     if (use_cache) {
         cache_k_output_nodes_[layer_idx] = final_k;
         cache_v_output_nodes_[layer_idx] = final_v;
+        std::cout << "[LFM2Model::build_attention] stored cache outputs for layer=" << layer_idx << std::endl;
     }
 
     auto attn_output_4d = gb->attention(q_proj_4d, final_k, final_v, attention_scale_, position_offset);
+    std::cout << "[LFM2Model::build_attention] attn_output_4d node=" << attn_output_4d << std::endl;
     auto attn_output = gb->reshape(attn_output_4d, {seq_len, config_.attention_head_dim * config_.attention_heads});
+    std::cout << "[LFM2Model::build_attention] attn_output node=" << attn_output << std::endl;
     auto projected = gb->matmul(attn_output, layer.attn_output_weight, true, backend);
+    std::cout << "[LFM2Model::build_attention] projected node=" << projected << std::endl;
     return projected;
 }
 
@@ -285,9 +341,13 @@ size_t LFM2Model::build_mlp(CactusGraph* gb, size_t normalized_h, uint32_t layer
     const auto& layer = layer_entry.weights;
 
     auto gate = gb->matmul(normalized_h, layer.ffn_gate_weight, true, backend);
+    std::cout << "[LFM2Model::build_mlp] gate node=" << gate << std::endl;
     auto up = gb->matmul(normalized_h, layer.ffn_up_weight, true, backend);
+    std::cout << "[LFM2Model::build_mlp] up node=" << up << std::endl;
     auto activated = gb->multiply(gb->silu(gate), up);
+    std::cout << "[LFM2Model::build_mlp] activated node=" << activated << std::endl;
     auto down = gb->matmul(activated, layer.ffn_down_weight, true, backend);
+    std::cout << "[LFM2Model::build_mlp] down node=" << down << std::endl;
     return down;
 }
 
@@ -298,21 +358,28 @@ size_t LFM2Model::build_transformer_block(CactusGraph* gb, size_t hidden, uint32
     const auto& layer = layer_entry.weights;
     
     auto normalized_input = gb->rms_norm(hidden, layer.input_layernorm_weight, config_.layer_norm_eps);
+    std::cout << "[LFM2Model::build_transformer_block] normalized_input node=" << normalized_input << std::endl;
     
     size_t block_output;
     if (layer_entry.type == WeightNodeIDs::LayerType::CONV) {
         block_output = build_conv1d(gb, normalized_input, layer_idx, backend, use_cache);
+        std::cout << "[LFM2Model::build_transformer_block] block_output from conv layer=" << block_output << std::endl;
     } else {
         if (layer_idx < conv_cache_bx_nodes_.size()) {
             conv_cache_bx_nodes_[layer_idx] = 0;
         }
         block_output = build_attention(gb, normalized_input, layer_idx, backend, use_cache, position_offset);
+        std::cout << "[LFM2Model::build_transformer_block] block_output from attention layer=" << block_output << std::endl;
     }
     
     auto after_block = gb->add(hidden, block_output);
+    std::cout << "[LFM2Model::build_transformer_block] after_block node=" << after_block << std::endl;
     auto normalized_after_block = gb->rms_norm(after_block, layer.post_attention_layernorm_weight, config_.layer_norm_eps);
+    std::cout << "[LFM2Model::build_transformer_block] normalized_after_block node=" << normalized_after_block << std::endl;
     auto mlp_output = build_mlp(gb, normalized_after_block, layer_idx, backend);
+    std::cout << "[LFM2Model::build_transformer_block] mlp_output node=" << mlp_output << std::endl;
     auto block_result = gb->add(after_block, mlp_output);
+    std::cout << "[LFM2Model::build_transformer_block] block_result node=" << block_result << std::endl;
     return block_result;
 }
 
@@ -322,24 +389,33 @@ size_t LFM2Model::forward(CactusGraph* gb, size_t input_embeddings, size_t seq_l
     if (seq_len == 0) {
         throw std::runtime_error("Sequence length must be greater than zero");
     }
+    std::cout << "[LFM2Model::forward embeddings] seq_len=" << seq_len << " use_cache=" << use_cache << std::endl;
 
     if (conv_cache_bx_nodes_.size() != config_.num_layers) {
         conv_cache_bx_nodes_.assign(config_.num_layers, 0);
+        std::cout << "[LFM2Model::forward embeddings] conv_cache_bx_nodes_ resized" << std::endl;
     }
     std::fill(conv_cache_bx_nodes_.begin(), conv_cache_bx_nodes_.end(), 0);
+    std::cout << "[LFM2Model::forward embeddings] conv_cache_bx_nodes_ cleared" << std::endl;
     last_forward_used_cache_ = use_cache;
+    std::cout << "[LFM2Model::forward embeddings] last_forward_used_cache_=" << last_forward_used_cache_ << std::endl;
     if (!use_cache && conv_cache_.window_size > 0) {
         conv_cache_.reset();
+        std::cout << "[LFM2Model::forward embeddings] conv_cache_ reset due to no cache" << std::endl;
     }
 
     size_t position_offset = use_cache ? kv_cache_.get_total_seq_len() : 0;
+    std::cout << "[LFM2Model::forward embeddings] position_offset=" << position_offset << std::endl;
 
     size_t hidden = input_embeddings;
+    std::cout << "[LFM2Model::forward embeddings] starting hidden node=" << hidden << std::endl;
     for (uint32_t layer_idx = 0; layer_idx < config_.num_layers; layer_idx++) {
         hidden = build_transformer_block(gb, hidden, layer_idx, backend, use_cache, position_offset);
+        std::cout << "[LFM2Model::forward embeddings] after layer=" << layer_idx << " hidden node=" << hidden << std::endl;
     }
 
     auto final_hidden = gb->rms_norm(hidden, weight_nodes_.output_norm_weight, config_.layer_norm_eps);
+    std::cout << "[LFM2Model::forward embeddings] final_hidden node=" << final_hidden << std::endl;
     return final_hidden;
 }
 
@@ -352,15 +428,28 @@ size_t LFM2Model::forward(CactusGraph* gb, const std::vector<uint32_t>& tokens,
     auto seq_len = static_cast<size_t>(tokens.size());
 
     auto input_node_id = gb->input({seq_len}, Precision::FP32);
+    const auto& embedding_buffer = gb->get_output_buffer(embedding_node_id_);
+    std::cout << "[LFM2Model] embedding tensor shape: [";
+    for (size_t i = 0; i < embedding_buffer.shape.size(); ++i) {
+        std::cout << embedding_buffer.shape[i];
+        if (i + 1 < embedding_buffer.shape.size()) {
+            std::cout << ", ";
+        }
+    }
+    std::cout << "] seq_len=" << seq_len << std::endl;
+
     auto hidden = gb->embedding(embedding_node_id_, input_node_id);
+    std::cout << "[LFM2Model::forward tokens] hidden node after embedding=" << hidden << std::endl;
 
     auto final_hidden = forward(gb, hidden, seq_len, backend, use_cache);
+    std::cout << "[LFM2Model::forward tokens] final_hidden node=" << final_hidden << std::endl;
 
     std::vector<float> input_data(seq_len);
     for (size_t i = 0; i < seq_len; i++) {
         input_data[i] = static_cast<float>(tokens[i]);
     }
     gb->set_input(input_node_id, input_data.data(), Precision::FP32);
+    std::cout << "[LFM2Model::forward tokens] set_input called on input_node_id=" << input_node_id << std::endl;
 
     return final_hidden;
 }
@@ -369,9 +458,11 @@ size_t LFM2Model::forward(const std::vector<uint32_t>& tokens, bool use_cache) {
     if (!initialized_ || !graph_handle_) {
         throw std::runtime_error("Model not initialized - call init() first");
     }
+    std::cout << "[LFM2Model::forward text-only] tokens size=" << tokens.size() << " use_cache=" << use_cache << std::endl;
 
     auto* gb = static_cast<CactusGraph*>(graph_handle_);
     gb->soft_reset();
+    std::cout << "[LFM2Model::forward text-only] graph soft reset" << std::endl;
 
     auto backend = config_.default_backend == Config::Backend::CPU
         ? ComputeBackend::CPU
@@ -380,13 +471,15 @@ size_t LFM2Model::forward(const std::vector<uint32_t>& tokens, bool use_cache) {
     return forward(gb, tokens, backend, use_cache);
 }
 
-void LFM2Model::post_execute_updates(CactusGraph* gb, size_t) {
+void LFM2Model::post_execute_updates(CactusGraph* gb, size_t seq_len) {
     if (conv_cache_bx_nodes_.empty()) {
         return;
     }
+    std::cout << "[LFM2Model::post_execute_updates] called with seq_len=" << seq_len << std::endl;
 
     if (!last_forward_used_cache_ || conv_cache_.window_size == 0) {
         std::fill(conv_cache_bx_nodes_.begin(), conv_cache_bx_nodes_.end(), 0);
+        std::cout << "[LFM2Model::post_execute_updates] cache not used, cleared conv_cache_bx_nodes_" << std::endl;
         return;
     }
 
@@ -400,11 +493,13 @@ void LFM2Model::post_execute_updates(CactusGraph* gb, size_t) {
         size_t bx_node = conv_cache_bx_nodes_[layer_idx];
         if (bx_node != 0) {
             conv_cache_.update(gb, layer_idx, bx_node);
+            std::cout << "[LFM2Model::post_execute_updates] updated conv_cache_ for layer=" << layer_idx << std::endl;
         }
         conv_cache_bx_nodes_[layer_idx] = 0;
     }
 
     last_forward_used_cache_ = false;
+    std::cout << "[LFM2Model::post_execute_updates] last_forward_used_cache_ reset" << std::endl;
 }
 
 }
