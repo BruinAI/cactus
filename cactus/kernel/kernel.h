@@ -251,4 +251,6 @@ void cactus_fp16_to_int8(const __fp16* src, int8_t* dst, size_t count, float sca
 float cactus_fp16_max_abs(const __fp16* src, size_t count);
 void cactus_int32_to_fp16_scaled(const int32_t* src, __fp16* dst, size_t count, float scale);
 
+void cactus_rfft_f32_1d(const float* input, float* output, const size_t n, const char* norm);
+
 #endif 
