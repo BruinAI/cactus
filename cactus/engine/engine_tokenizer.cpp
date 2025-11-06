@@ -2,6 +2,7 @@
 #include <fstream>
 #include <sstream>
 #include <algorithm>
+#include <dirent.h>
 
 namespace cactus {
 namespace engine {
@@ -175,6 +176,48 @@ std::string Tokenizer::format_lfm2_style(const std::vector<ChatMessage>& message
         sys_content += "{\"function_call\": {\"name\": \"function_name\", \"arguments\": {\"arg1\": \"value1\"}}}";
     }
 
+    if (model_variant_ == ModelVariant::RAG) {
+        const std::string docs_path = "../../tests/assets/rag_corpus";
+        DIR* dir = opendir(docs_path.c_str());
+        if (dir) {
+            struct dirent* entry;
+            std::vector<std::string> files;
+            while ((entry = readdir(dir)) != nullptr) {
+                std::string name = entry->d_name;
+                if (name.size() > 4) {
+                    std::string lower = name;
+                    std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
+                    if (lower.size() >= 4 && lower.substr(lower.size() - 4) == ".txt") {
+                        files.push_back(name);
+                    }
+                }
+            }
+            closedir(dir);
+
+            std::sort(files.begin(), files.end());
+
+            int doc_idx = 1;
+            for (const auto& fname : files) {
+                if (doc_idx > 1000) break;
+                std::string full = docs_path + "/" + fname;
+                std::ifstream infile(full);
+                if (!infile.is_open()) continue;
+                std::stringstream ss; ss << infile.rdbuf();
+                std::string file_text = ss.str();
+                /for (size_t i = 0; i < file_text.size(); ++i) {
+                    if (file_text[i] == '\0') file_text[i] = ' ';
+                }
+                if (!sys_content.empty()) {
+                    sys_content += "\n";
+                }
+                sys_content += "The following documents may provide you additional information to answer questions: ";
+                sys_content += "<document" + std::to_string(doc_idx) + ">";
+                sys_content += file_text;
+                sys_content += "</document" + std::to_string(doc_idx) + ">";
+                doc_idx++;
+            }
+        }
+    }
     if (!sys_content.empty()) {
         result += "<|im_start|>system\n";
         result += sys_content;
