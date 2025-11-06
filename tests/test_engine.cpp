@@ -2,6 +2,7 @@
 #include <chrono>
 #include <cstring>
 #include <cstdlib>
+#include <fstream>
 #include <iostream>
 #include <iomanip>
 #include <cmath>
@@ -235,6 +236,76 @@ bool test_embeddings() {
     return true;
 }
 
+bool test_extract() {
+    std::cout << "\n╔══════════════════════════════════════════╗" << std::endl;
+    std::cout << "║        EXTRACT PREPROCESSING TEST        ║" << std::endl;
+    std::cout << "╚══════════════════════════════════════════╝" << std::endl;
+    std::string model_path_str = std::string(g_model_path);
+    if (model_path_str.find("extract") == std::string::npos) {
+        std::cout << "\n[SKIP] Skipping extract test because model path does not indicate an extract model: " << g_model_path << "\n";
+        return true;
+    }
+
+    std::string config_path = model_path_str + "/config.txt";
+    std::ifstream f(config_path);
+    if (!f.is_open()) {
+        std::cout << "\n[SKIP] Extract model not found at " << g_model_path << "\n";
+        return true;
+    }
+    bool is_extract = false;
+    std::string line;
+    while (std::getline(f, line)) {
+        auto pos = line.find('=');
+        if (pos == std::string::npos) continue;
+        std::string key = line.substr(0, pos);
+        std::string value = line.substr(pos+1);
+        if (key == "model_variant") {
+            for (auto &c : value) c = tolower(c);
+            if (value.find("extract") != std::string::npos) is_extract = true;
+            break;
+        }
+    }
+    f.close();
+    if (!is_extract) {
+        std::cout << "\n[SKIP] Model at " << g_model_path << " is not an extract variant\n";
+        return true;
+    }
+
+    cactus_model_t model = cactus_init(g_model_path, 2048);
+    if (!model) {
+        std::cerr << "[✗] Failed to initialize extract model" << std::endl;
+        return false;
+    }
+    
+    const char* messages = R"([
+        {
+            "role": "system", "content": "From the attached text file, extract the requested business details and return a single JSON object. Omit fields that aren't present. Do not fabricate values. Output JSON only."
+        },
+        {
+            "role": "user",
+            "content": [
+                {
+                    "type": "file",
+                    "path": "../assets/extract_sample.txt"
+                },
+                {
+                    "type": "text",
+                    "text": "Fields and expected types\nproject_name : text\nexecutive_summary : text\nfinancial_projections.startup_costs : text or number\nfinancial_projections.projected_revenue_year_1 : text or number\nfinancial_projections.projected_revenue_year_3 : text or number\nfinancial_projections.return_on_investment : text\nfacility_details : text or list of text"
+                }
+            ]
+        }
+    ])";
+
+
+
+    char response[4096];
+    int result = cactus_complete(model, messages, response, sizeof(response), g_options, nullptr, nullptr, nullptr);
+
+    std::cout << "\nResponse: " << response << std::endl;
+    cactus_destroy(model);
+    return result > 0;
+}
+
 bool test_huge_context() {
     cactus_model_t model = cactus_init(g_model_path, 2048);
 
@@ -327,6 +398,7 @@ int main() {
     runner.run_test("streaming", test_streaming());  
     runner.run_test("tool_calls", test_tool_call());
     runner.run_test("embeddings", test_embeddings());
+    runner.run_test("extract_preprocessing", test_extract());
     // runner.run_test("huge_context", test_huge_context());
     runner.print_summary();
     return runner.all_passed() ? 0 : 1;
