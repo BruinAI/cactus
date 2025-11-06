@@ -39,6 +39,28 @@ void Tokenizer::detect_model_type(const std::string& config_path) {
             } 
         }
     }
+    file.clear();
+    file.seekg(0);
+
+    while (std::getline(file, line)) {
+        size_t pos2 = line.find("model_variant");
+        if (pos2 != std::string::npos) {
+            std::transform(line.begin(), line.end(), line.begin(), ::tolower);
+
+            if (line.find("vlm") != std::string::npos) {
+                model_variant_ = ModelVariant::VLM;
+                break;
+            } else if (line.find("extract") != std::string::npos) {
+                model_variant_ = ModelVariant::EXTRACT;
+                break;
+            } else if (line.find("rag") != std::string::npos) {
+                model_variant_ = ModelVariant::RAG;
+                break;
+            } else {
+                model_variant_ = ModelVariant::DEFAULT;
+            }
+        }
+    }
     file.close();
 }
 

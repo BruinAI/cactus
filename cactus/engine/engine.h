@@ -34,6 +34,9 @@ struct Config {
     enum class ModelType {QWEN = 0, GEMMA = 1, SMOL = 2, NOMIC = 3, LFM2 = 4};
     ModelType model_type = ModelType::QWEN;
 
+    enum class ModelVariant {DEFAULT = 0, VLM = 1, EXTRACT = 2, RAG = 3};
+    ModelVariant model_variant = ModelVariant::DEFAULT;
+
     enum class Activation {GELU = 0, SILU = 1};
     Activation activation = Activation::SILU;
 
@@ -94,6 +97,8 @@ protected:
 
     enum class ModelType { UNKNOWN, QWEN, GEMMA, LFM2 , SMOL, BERT };
     ModelType model_type_ = ModelType::UNKNOWN;
+    enum class ModelVariant { DEFAULT, VLM, EXTRACT, RAG};
+    ModelVariant model_variant_ = ModelVariant::DEFAULT;
     bool has_chat_template_ = false;
     std::string chat_template_;
 
