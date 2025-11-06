@@ -4,7 +4,7 @@ Fine-tuning Gemma models for Cactus using Google Tunix.
 
 ## Notebooks
 
-- `lora_gemma.ipynb` - LoRA fine-tuning
+- `lora_gemma.ipynb` - LoRA and QLoRA fine-tuning
 - `grpo_gemma.ipynb` - GRPO (Group Relative Policy Optimization)
 - `dpo_gemma.ipynb` - DPO (Direct Preference Optimization)
 
@@ -77,20 +77,23 @@ WANDB_API_KEY=
 
 ## Loading Saved Safetensors Models
 
-To load a saved safetensors model back into JAX:
+To load a saved safetensors model back into JAX (with a given local_path):
 
 ```python
+import os
 import jax
-from flax import nnx
-from flax.traverse_util import unflatten_dict
-import safetensors.numpy as safe_np
+import jax.numpy as jnp
+from tunix.models.gemma3 import params_safetensors as params_safetensors_lib
 
-loaded_weights = safe_np.load_file(path + "/model.safetensors")
-nested_weights = unflatten_dict(loaded_weights, sep='.')
-nested_weights['layers'] = {int(k): v for k, v in nested_weights['layers'].items()}  # all integer-string keys must be casted to int
 
-model = gemma_lib.Gemma3(config=model_config, rngs=nnx.Rngs(params=jax.random.PRNGKey(0)))
-nnx.update(model, nested_weights)
+local_path = '[PLACEHOLDER]'
+MESH = [(1, 1), ("fsdp", "tp")]
+
+mesh = jax.make_mesh(*MESH)
+with mesh:
+  model = params_safetensors_lib.create_model_from_safe_tensors(
+      os.path.abspath(local_path), (model_config), mesh, dtype=jnp.bfloat16
+  )
 ```
 
 ## Notes

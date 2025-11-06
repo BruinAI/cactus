@@ -846,6 +846,11 @@ def convert_hf_tokenizer(tokenizer, output_dir):
         if hasattr(tokenizer, 'name_or_path') and hf_hub_download:
             try:
                 config_path = hf_hub_download(repo_id=tokenizer.name_or_path, filename="tokenizer_config.json")
+            except Exception:
+                config_path = output_dir / "tokenizer_config.json"
+                print("Trying local tokenizer_config.json: downloading from HuggingFace Hub failed - this is fine if you are converting a local model")
+
+            try:
                 with open(config_path, 'r') as f:
                     tokenizer_full_config = json.load(f)
                     
@@ -872,7 +877,6 @@ def convert_hf_tokenizer(tokenizer, output_dir):
                                 tool_tokens[token_id] = token_info
                                 print(f"    Found tool token: {content} (ID: {token_id})")
                                 special_tokens[token_id] = content
-                                
             except Exception as e:
                 print(f"  Note: Could not load full tokenizer config: {e}")
                 pass
@@ -1049,7 +1053,7 @@ def convert_hf_to_cactus(model_name, output_dir, precision='INT8', cache_dir=Non
 
     try:
         tokenizer = AutoTokenizer.from_pretrained(
-            model_name, 
+            model_name,
             cache_dir=cache_dir,
             trust_remote_code=True,
         )
