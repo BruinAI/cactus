@@ -33,6 +33,7 @@ from safetensors import numpy as safe_np
 import wandb
 
 # Import tunix libraries
+from tunix.generate import sampler as sampler_lib
 from tunix.generate import tokenizer_adapter as tokenizer_lib
 from tunix.models.gemma3 import model as gemma_lib
 from tunix.models.gemma3 import params_safetensors as params_safetensors_lib
@@ -624,6 +625,130 @@ def save_lora_weights(lora_model, local_model_path, output_dir):
 
 
 # ============================================================================
+# Model Testing Functions
+# ============================================================================
+
+def test_model_generation(model, tokenizer, model_config, eos_tokens, label="Model"):
+    """
+    Test the model with two examples:
+    1. Simple tool calling (model requests weather)
+    2. Tool response usage (model uses weather data to respond)
+    """
+    print(f"\n{'='*60}")
+    print(f"{label} - Generation Examples")
+    print(f"{'='*60}")
+
+    # Create sampler
+    sampler = sampler_lib.Sampler(
+        transformer=model,
+        tokenizer=tokenizer,
+        cache_config=sampler_lib.CacheConfig(
+            cache_size=256,
+            num_layers=model_config.num_layers,
+            num_kv_heads=model_config.num_kv_heads,
+            head_dim=model_config.head_dim,
+        ),
+    )
+
+    # Example 1: Simple tool calling
+    tools = [
+        {
+            "name": "get_weather",
+            "description": "Get the current weather for a location",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "location": {
+                        "type": "string",
+                        "description": "The city and state, e.g. San Francisco, CA"
+                    }
+                },
+                "required": ["location"]
+            }
+        }
+    ]
+
+    prompt1 = f"""<start_of_turn>user
+Here are the available tools that you can use:
+<tools>
+{json.dumps(tools, indent=2)}
+</tools>
+
+What's the weather in Boston?<end_of_turn>
+<start_of_turn>model
+"""
+
+    print("\n--- Example 1: Tool Calling ---")
+    print("Prompt: What's the weather in Boston?")
+    print("\nModel response:")
+
+    out_data1 = sampler(
+        input_strings=[prompt1],
+        max_generation_steps=128,
+        eos_tokens=eos_tokens,
+    )
+
+    response1 = out_data1.text[0]
+    # Extract just the model's response after the prompt
+    if "<start_of_turn>model" in response1:
+        response1 = response1.split("<start_of_turn>model")[-1]
+    if "<end_of_turn>" in response1:
+        response1 = response1.split("<end_of_turn>")[0]
+
+    print(response1.strip())
+
+    # Example 2: Using tool response
+    prompt2 = f"""<start_of_turn>user
+Here are the available tools that you can use:
+<tools>
+{json.dumps(tools, indent=2)}
+</tools>
+
+What's the weather in Boston?<end_of_turn>
+<start_of_turn>model
+<tool_call>
+{{
+  "name": "get_weather",
+  "args": {{
+    "location": "Boston, MA"
+  }}
+}}
+</tool_call><end_of_turn>
+<start_of_turn>user
+<tool_response>
+{{
+  "name": "get_weather",
+  "result": {{
+    "temperature": 72,
+    "condition": "Sunny"
+  }}
+}}
+</tool_response><end_of_turn>
+<start_of_turn>model
+"""
+
+    print("\n--- Example 2: Using Tool Response ---")
+    print("Prompt: [After tool returns weather data]")
+    print("\nModel response:")
+
+    out_data2 = sampler(
+        input_strings=[prompt2],
+        max_generation_steps=64,
+        eos_tokens=eos_tokens,
+    )
+
+    response2 = out_data2.text[0]
+    # Extract just the model's response after the prompt
+    if "<start_of_turn>model" in response2:
+        response2 = response2.split("<start_of_turn>model")[-1]
+    if "<end_of_turn>" in response2:
+        response2 = response2.split("<end_of_turn>")[0]
+
+    print(response2.strip())
+    print()
+
+
+# ============================================================================
 # Main Training Script
 # ============================================================================
 
@@ -685,6 +810,12 @@ def main():
     # Apply LoRA
     lora_model = create_lora_model(base_model, mesh=mesh)
 
+    # Test base model before training
+    print(f"\n{'='*60}")
+    print("Testing base model BEFORE training")
+    print(f"{'='*60}")
+    test_model_generation(base_model, tokenizer, model_config, eos_tokens, label="Base Model (Before Training)")
+
     # Setup training
     print(f"\n{'='*60}")
     print("Setting up training")
@@ -726,6 +857,12 @@ def main():
     print(f"\n{'='*60}")
     print("Training complete!")
     print(f"{'='*60}")
+
+    # Test trained model
+    print(f"\n{'='*60}")
+    print("Testing trained model AFTER training")
+    print(f"{'='*60}")
+    test_model_generation(lora_model, tokenizer, model_config, eos_tokens, label="Trained Model (After Training)")
 
     # Save LoRA weights merged with base model
     saved_path = save_lora_weights(lora_model, local_model_path, LORA_OUTPUT_DIR)
