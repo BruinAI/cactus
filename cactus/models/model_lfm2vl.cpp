@@ -1,6 +1,5 @@
 #include "model.h"
 #include "../graph/graph.h"
-#include "../ffi/stb_image.h"
 #include <cmath>
 #include <stdexcept>
 #include <algorithm>
@@ -48,14 +47,19 @@ Lfm2VlModel::Lfm2VlModel(const Config& config)
 
 bool Lfm2VlModel::init(const std::string& model_folder, size_t context_size, const std::string& system_prompt) {
     // Initialize base model
-    if (!Model::init(model_folder, context_size, system_prompt)) {
+    if (!Model::init(model_folder, context_size, system_prompt, false)) {
         return false;
     }
     std::cout << "[Lfm2VlModel::init] Base model initialized for folder=" << model_folder << std::endl;
+
+    auto* shared_graph = static_cast<CactusGraph*>(graph_handle_);
+    if (!shared_graph) {
+        throw std::runtime_error("Shared graph was not initialized for Lfm2VlModel");
+    }
     
     // Initialize vision tower (loads vision weights from model_folder/vision/)
     std::string vision_folder = model_folder;  // Vision weights should be in same folder with vision_ prefix
-    if (!vision_tower_.init(vision_folder, context_size, "")) {
+    if (!vision_tower_.init(shared_graph, vision_folder, context_size, "", false)) {
         throw std::runtime_error("Failed to initialize vision tower");
     }
     std::cout << "[Lfm2VlModel::init] Vision tower initialized with folder=" << vision_folder << std::endl;
@@ -63,7 +67,7 @@ bool Lfm2VlModel::init(const std::string& model_folder, size_t context_size, con
     std::cout << "[Lfm2VlModel::init] vision_weights_loaded_ set to true" << std::endl;
     
     // Initialize language model (loads text weights from model_folder)
-    if (!language_model_.init(model_folder, context_size, system_prompt)) {
+    if (!language_model_.init(shared_graph, model_folder, context_size, system_prompt, false)) {
         throw std::runtime_error("Failed to initialize language model");
     }
     std::cout << "[Lfm2VlModel::init] Language model initialized" << std::endl;
@@ -71,6 +75,13 @@ bool Lfm2VlModel::init(const std::string& model_folder, size_t context_size, con
     std::cout << "[Lfm2VlModel::init] language_weights_loaded_ set to true" << std::endl;
     
     return true;
+}
+
+void Lfm2VlModel::reset_cache() {
+    Model::reset_cache();
+    language_model_.reset_cache();
+    image_prefill_completed_ = false;
+    last_token_count_ = 0;
 }
 
 void Lfm2VlModel::load_weights_to_graph(CactusGraph* gb) {
@@ -143,8 +154,10 @@ size_t Lfm2VlModel::build_multimodal_projector(CactusGraph* gb, size_t image_fea
     const size_t vision_hidden = config_.vision_embed_dim;
     std::cout << "[Lfm2VlModel::build_multimodal_projector] vision_hidden=" << vision_hidden << " tile_h=" << tile_h << " tile_w=" << tile_w << std::endl;
     
+    // Ensure features are in FP32 since downstream reshape/transpose ops may not support FP16
+    size_t image_features_fp32 = gb->precision_cast(image_features, Precision::FP32);
     // Apply pixel unshuffle
-    size_t unshuffled = pixel_unshuffle(gb, image_features, tile_h, tile_w, vision_hidden);
+    size_t unshuffled = pixel_unshuffle(gb, image_features_fp32, tile_h, tile_w, vision_hidden);
     std::cout << "[Lfm2VlModel::build_multimodal_projector] unshuffled node=" << unshuffled << std::endl;
     
     // Reshape to 2D for layer operations: [1, new_h, new_w, in_channels] -> [new_h * new_w, in_channels]
@@ -257,6 +270,7 @@ Lfm2VlModel::MergedEmbeddingResult Lfm2VlModel::merge_image_text_embeddings(
     auto get_token_id = [tokenizer](const std::string& token_text) -> uint32_t {
         auto encoded = tokenizer->encode(token_text);
         if (encoded.size() != 1) {
+            std::cout << "[Lfm2VlModel::merge_image_text_embeddings] get_token_id for " << token_text << " encoded size=" << encoded.size() << std::endl;
             throw std::runtime_error("Expected single token encoding for " + token_text);
         }
         return encoded[0];
@@ -264,6 +278,8 @@ Lfm2VlModel::MergedEmbeddingResult Lfm2VlModel::merge_image_text_embeddings(
 
     const uint32_t image_start_id = get_token_id("<|image_start|>");
     const uint32_t image_end_id = get_token_id("<|image_end|>");
+
+    std::cout << "[Lfm2VlModel::merge_image_text_embeddings_special_tokens] image_start_id=" << image_start_id << " image_end_id=" << image_end_id << " image_token_id=" << image_token_id << std::endl;
 
     std::vector<size_t> sequence_nodes;
     sequence_nodes.reserve(tokens.size() + image_embedding_nodes.size());
@@ -273,6 +289,7 @@ Lfm2VlModel::MergedEmbeddingResult Lfm2VlModel::merge_image_text_embeddings(
 
     size_t total_seq_len = 0;
     std::cout << "[Lfm2VlModel::merge_image_text_embeddings] starting merge with tokens size=" << tokens.size() << std::endl;
+    std::cout << "[LFM2_DEBUG] merge_start tokens=" << tokens.size() << " image_embeddings=" << image_embedding_nodes.size() << std::endl;
 
     auto flush_segment = [&](void) {
         if (current_segment.empty()) {
@@ -323,6 +340,7 @@ Lfm2VlModel::MergedEmbeddingResult Lfm2VlModel::merge_image_text_embeddings(
             flush_segment();
 
             if (image_index >= image_embedding_nodes.size()) {
+                std::cout << "[LFM2_DEBUG] missing_image_features image_index=" << image_index << " available=" << image_embedding_nodes.size() << std::endl;
                 throw std::runtime_error("Encountered <|image_start|> without corresponding image features");
             }
 
@@ -333,20 +351,26 @@ Lfm2VlModel::MergedEmbeddingResult Lfm2VlModel::merge_image_text_embeddings(
             const auto& tiles = image_embedding_nodes[image_index];
             size_t tile_index = 0;
             std::cout << "[Lfm2VlModel::merge_image_text_embeddings] tiles size=" << tiles.size() << std::endl;
+            std::cout << "[LFM2_DEBUG] image_block_start image_index=" << image_index << " tiles=" << tiles.size() << std::endl;
 
             while (token_index < tokens.size()) {
+                
                 uint32_t inner_token = tokens[token_index];
                 std::cout << "[Lfm2VlModel::merge_image_text_embeddings] inner_token at index=" << token_index << " value=" << inner_token << std::endl;
 
                 if (inner_token == image_token_id) {
+                    
                     flush_segment();
+                    std::cout << "[LFM2_DEBUG] image_placeholder token_index=" << token_index << " tile_index=" << tile_index << " tiles=" << tiles.size() << std::endl;
 
                     if (tile_index >= tiles.size()) {
+                        std::cout << "[LFM2_DEBUG] tile_overrun tile_index=" << tile_index << " tiles_size=" << tiles.size() << std::endl;
                         throw std::runtime_error("More <image> placeholders than projected tile features");
                     }
 
                     const auto& tile = tiles[tile_index++];
                     std::cout << "[Lfm2VlModel::merge_image_text_embeddings] inserting tile node=" << tile.node_id << " token_count=" << tile.token_count << std::endl;
+                    std::cout << "[LFM2_DEBUG] insert_tile image_index=" << image_index << " tile_index=" << (tile_index - 1) << " token_count=" << tile.token_count << std::endl;
                     sequence_nodes.push_back(tile.node_id);
                     std::cout << "[Lfm2VlModel::merge_image_text_embeddings] sequence_nodes size after tile=" << sequence_nodes.size() << std::endl;
                     total_seq_len += tile.token_count;
@@ -378,6 +402,18 @@ Lfm2VlModel::MergedEmbeddingResult Lfm2VlModel::merge_image_text_embeddings(
             }
 
             if (tile_index != tiles.size()) {
+                std::cout << "[LFM2_DEBUG] tile_mismatch image_index=" << image_index
+                          << " consumed_tiles=" << tile_index
+                          << " available_tiles=" << tiles.size() << std::endl;
+                if (tile_index < tiles.size()) {
+                    for (size_t remaining = tile_index; remaining < tiles.size(); ++remaining) {
+                        const auto& remaining_tile = tiles[remaining];
+                        std::cout << "[LFM2_DEBUG] tile_unused image_index=" << image_index
+                                  << " tile_index=" << remaining
+                                  << " node_id=" << remaining_tile.node_id
+                                  << " token_count=" << remaining_tile.token_count << std::endl;
+                    }
+                }
                 throw std::runtime_error("Unused projected tile features remain after processing image block");
             }
 
@@ -520,8 +556,10 @@ uint32_t Lfm2VlModel::generate_with_images(
     std::cout << "[Lfm2VlModel::generate_with_images] called with tokens size=" << tokens.size() << " image_paths size=" << image_paths.size() << std::endl;
 
     if (image_paths.empty()) {
-        // Fallback to text-only generation when no images are supplied
-        return generate(tokens, temperature, top_p, top_k, profile_file);
+        std::cout << "[Lfm2VlModel::generate_with_images] no images provided, delegating to language model" << std::endl;
+        image_prefill_completed_ = false;
+        last_token_count_ = tokens.size();
+        return language_model_.generate(tokens, temperature, top_p, top_k, profile_file);
     }
 
     if (temperature < 0) {
@@ -542,11 +580,46 @@ uint32_t Lfm2VlModel::generate_with_images(
         : ComputeBackend::NPU;
     std::cout << "[Lfm2VlModel::generate_with_images] backend=" << static_cast<int>(backend) << std::endl;
 
-    auto forward_result = forward_images(gb, tokens, image_paths, backend, true);
-    std::cout << "[Lfm2VlModel::generate_with_images] forward_images final_hidden=" << forward_result.final_hidden_node << " seq_len=" << forward_result.seq_len << std::endl;
+    bool cache_empty = language_model_.is_cache_empty();
+    bool need_prefill = cache_empty || !image_prefill_completed_;
+
+    if (!need_prefill && tokens.size() <= last_token_count_) {
+        std::cout << "[Lfm2VlModel::generate_with_images] token sequence rewind detected, resetting caches" << std::endl;
+        reset_cache();
+        need_prefill = true;
+    }
+
+    size_t seq_len_for_updates = 0;
+    size_t final_hidden_node = 0;
+
+    if (need_prefill) {
+        auto forward_result = forward_images(gb, tokens, image_paths, backend, true);
+        std::cout << "[Lfm2VlModel::generate_with_images] performed image prefill final_hidden=" << forward_result.final_hidden_node << " seq_len=" << forward_result.seq_len << std::endl;
+        final_hidden_node = forward_result.final_hidden_node;
+        seq_len_for_updates = forward_result.seq_len;
+        image_prefill_completed_ = true;
+        last_token_count_ = tokens.size();
+    } else {
+        size_t delta = tokens.size() - last_token_count_;
+        if (delta > tokens.size()) {
+            delta = tokens.size();
+        }
+        if (delta == 0) {
+            if (tokens.empty()) {
+                throw std::runtime_error("Token sequence cannot be empty for cached decode step");
+            }
+            delta = 1;
+            std::cout << "[Lfm2VlModel::generate_with_images] delta tokens was zero, reusing last token" << std::endl;
+        }
+        std::vector<uint32_t> incremental_tokens(tokens.end() - delta, tokens.end());
+        std::cout << "[Lfm2VlModel::generate_with_images] incremental decode tokens=" << incremental_tokens.size() << std::endl;
+        final_hidden_node = language_model_.forward(gb, incremental_tokens, backend, true);
+        seq_len_for_updates = incremental_tokens.size();
+        last_token_count_ = tokens.size();
+    }
 
     // Use language model's output head for sampling
-    auto logits_node_id = gb->matmul(forward_result.final_hidden_node, language_model_.output_weight_node_id_, true, backend);
+    auto logits_node_id = gb->matmul(final_hidden_node, language_model_.output_weight_node_id_, true, backend);
     std::cout << "[Lfm2VlModel::generate_with_images] logits_node_id=" << logits_node_id << std::endl;
     auto sampled_token_id = gb->sample(logits_node_id, temperature, top_p, top_k);
     std::cout << "[Lfm2VlModel::generate_with_images] sampled_token_id node=" << sampled_token_id << std::endl;
@@ -559,9 +632,9 @@ uint32_t Lfm2VlModel::generate_with_images(
         std::cout << "[Lfm2VlModel::generate_with_images] graph executed without profile" << std::endl;
     }
 
-    language_model_.post_execute_updates(gb, forward_result.seq_len);
+    language_model_.post_execute_updates(gb, seq_len_for_updates);
     std::cout << "[Lfm2VlModel::generate_with_images] post_execute_updates called" << std::endl;
-    language_model_.update_kv_cache(gb, forward_result.seq_len);
+    language_model_.update_kv_cache(gb, seq_len_for_updates);
     std::cout << "[Lfm2VlModel::generate_with_images] update_kv_cache called" << std::endl;
 
     auto* output_ptr = gb->get_output(sampled_token_id);

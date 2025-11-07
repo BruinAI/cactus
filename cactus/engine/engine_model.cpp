@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <set>
 #include <sstream>
+#include <stdexcept>
 
 namespace cactus {
 namespace engine {
@@ -20,7 +21,8 @@ Model::Model()
       graph_handle_(nullptr),
       initialized_(false),
       attention_scale_(0.0f),
-      output_weight_node_id_(0) {
+      output_weight_node_id_(0),
+      owns_graph_(false) {
 }
 
 Model::Model(const Config& config)
@@ -29,31 +31,56 @@ Model::Model(const Config& config)
       graph_handle_(nullptr),
       initialized_(false),
       attention_scale_(0.0f),
-      output_weight_node_id_(0) {
+      output_weight_node_id_(0),
+      owns_graph_(false) {
 }
 
 Model::~Model() {
-    if (graph_handle_) {
+    if (graph_handle_ && owns_graph_) {
         delete static_cast<CactusGraph*>(graph_handle_);
     }
 }
 
-bool Model::init(const std::string& model_folder, size_t context_size, const std::string& system_prompt) {
+bool Model::init(const std::string& model_folder, size_t context_size, const std::string& system_prompt, bool do_warmup) {
     if (initialized_) {
         return true;
     }
     
+    auto* gb = new CactusGraph();
+    owns_graph_ = true;
+    graph_handle_ = gb;
+    return init_internal(gb, model_folder, context_size, system_prompt, do_warmup);
+}
+
+bool Model::init(CactusGraph* external_graph, const std::string& model_folder, size_t context_size,
+                 const std::string& system_prompt, bool do_warmup) {
+    if (!external_graph) {
+        throw std::invalid_argument("External graph pointer must not be null");
+    }
+    if (initialized_) {
+        graph_handle_ = external_graph;
+        owns_graph_ = false;
+        return true;
+    }
+
+    owns_graph_ = false;
+    graph_handle_ = external_graph;
+    return init_internal(external_graph, model_folder, context_size, system_prompt, do_warmup);
+}
+
+bool Model::init_internal(CactusGraph* gb, const std::string& model_folder, size_t context_size,
+                          const std::string& system_prompt, bool do_warmup) {
     model_folder_path_ = model_folder;
     std::string config_path = model_folder + "/config.txt";
-    
+
     if (!config_.from_json(config_path)) {
         return false;
     }
-    
+
     std::string vocab_file = model_folder + "/vocab.txt";
     std::string merges_file = model_folder + "/merges.txt";
     std::string tokenizer_config_file = model_folder + "/tokenizer_config.txt";
-    
+
     std::ifstream merges_check(merges_file);
     bool has_merges = false;
     if (merges_check.is_open()) {
@@ -68,55 +95,51 @@ bool Model::init(const std::string& model_folder, size_t context_size, const std
         }
         merges_check.close();
     }
-    
+
     if (has_merges) {
         tokenizer_ = std::make_unique<BPETokenizer>();
     } else {
         tokenizer_ = std::make_unique<SPTokenizer>();
     }
-    
+
     if (!tokenizer_->load_vocabulary_with_config(vocab_file, merges_file, tokenizer_config_file)) {
         return false;
     }
-    
+
     std::string added_tokens_file = model_folder + "/added_tokens.json";
     std::ifstream added_tokens_check(added_tokens_file);
     if (added_tokens_check.good()) {
         added_tokens_check.close();
         tokenizer_->load_special_tokens(added_tokens_file);
     }
-    
-    auto* gb = new CactusGraph();
-    graph_handle_ = gb;
-    
+
     embedding_file_path_ = model_folder + "/token_embeddings.weights";
 
+    std::cout << "[Model::init] invoking load_weights_to_graph for folder=" << model_folder
+              << " embedding_file_path=" << embedding_file_path_ << std::endl;
     load_weights_to_graph(gb);
-    
+    std::cout << "[Model::init] load_weights_to_graph completed" << std::endl;
+
     if (config_.model_type == Config::ModelType::GEMMA) {
-        attention_scale_ = 1.0f / std::sqrt(256.0f); 
+        attention_scale_ = 1.0f / std::sqrt(256.0f);
     } else {
         attention_scale_ = 1.0f / std::sqrt(static_cast<float>(config_.attention_head_dim));
     }
-    
+
     Precision cache_precision;
-    std::string precision_name;
     switch (config_.precision) {
         case Config::Precision::INT8:
             cache_precision = Precision::INT8;
-            precision_name = "INT8";
             break;
         case Config::Precision::FP16:
             cache_precision = Precision::FP16;
-            precision_name = "FP16";
             break;
         case Config::Precision::FP32:
             cache_precision = Precision::FP32;
-            precision_name = "FP32";
             break;
     }
     kv_cache_.init(config_.num_layers, context_size, config_.attention_kv_heads, config_.attention_head_dim, cache_precision);
-    
+
     size_t window_size = std::min(context_size, size_t(1024));
     size_t sink_size = 4;
     const char* env_window = std::getenv("CACTUS_KV_WINDOW_SIZE");
@@ -130,15 +153,17 @@ bool Model::init(const std::string& model_folder, size_t context_size, const std
     kv_cache_.set_window_size(window_size, sink_size);
     cache_k_output_nodes_.resize(config_.num_layers);
     cache_v_output_nodes_.resize(config_.num_layers);
-    
+
     post_init();
-    
+
     initialized_ = true;
-    
-    std::string warmup_text = system_prompt.empty() ? "Henry" : system_prompt;
-    auto warmup_tokens = tokenizer_->encode(warmup_text);
-    forward(warmup_tokens);
-    kv_cache_.reset();
+
+    if (do_warmup) {
+        std::string warmup_text = system_prompt.empty() ? "Henry" : system_prompt;
+        auto warmup_tokens = tokenizer_->encode(warmup_text);
+        forward(warmup_tokens);
+        kv_cache_.reset();
+    }
     return true;
 }
 

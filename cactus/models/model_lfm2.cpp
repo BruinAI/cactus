@@ -52,8 +52,12 @@ void LFM2Model::reset_cache() {
     }
 }
 
-bool LFM2Model::init(const std::string& model_folder, size_t context_size, const std::string& system_prompt) {
-    if (!Model::init(model_folder, context_size, system_prompt)) {
+bool LFM2Model::is_cache_empty() const {
+    return kv_cache_.is_empty();
+}
+
+bool LFM2Model::init(const std::string& model_folder, size_t context_size, const std::string& system_prompt, bool do_warmup) {
+    if (!Model::init(model_folder, context_size, system_prompt, do_warmup)) {
         return false;
     }
     std::cout << "[LFM2Model::init] base Model::init succeeded for folder=" << model_folder << std::endl;
@@ -67,7 +71,24 @@ bool LFM2Model::init(const std::string& model_folder, size_t context_size, const
     return true;
 }
 
+bool LFM2Model::init(CactusGraph* external_graph, const std::string& model_folder, size_t context_size,
+                     const std::string& system_prompt, bool do_warmup) {
+    if (!Model::init(external_graph, model_folder, context_size, system_prompt, do_warmup)) {
+        return false;
+    }
+    std::cout << "[LFM2Model::init] base Model::init succeeded using shared graph for folder=" << model_folder << std::endl;
+    if (weight_nodes_.layers.size() != config_.num_layers) {
+        weight_nodes_.layers.resize(config_.num_layers);
+        std::cout << "[LFM2Model::init] resized weight_nodes_.layers to " << weight_nodes_.layers.size() << std::endl;
+    }
+    conv_cache_bx_nodes_.assign(config_.num_layers, 0);
+    std::cout << "[LFM2Model::init] conv_cache_bx_nodes_ assigned zeros size=" << conv_cache_bx_nodes_.size() << std::endl;
+
+    return true;
+}
+
 void LFM2Model::load_weights_to_graph(CactusGraph* gb) {
+    std::cout << "[LFM2Model::load_weights_to_graph] begin" << std::endl;
     if (weight_nodes_.layers.size() != config_.num_layers) {
         weight_nodes_.layers.resize(config_.num_layers);
     }
@@ -76,6 +97,7 @@ void LFM2Model::load_weights_to_graph(CactusGraph* gb) {
     }
 
     embedding_node_id_ = gb->mmap_embeddings(embedding_file_path_);
+    std::cout << "[LFM2Model::load_weights_to_graph] embedding_node_id_ mapped from " << embedding_file_path_ << std::endl;
     std::cout << "[LFM2Model::load_weights_to_graph] embedding_node_id_=" << embedding_node_id_ << std::endl;
     weight_nodes_.output_norm_weight = gb->mmap_weights(model_folder_path_ + "/output_norm.weights");
     std::cout << "[LFM2Model::load_weights_to_graph] output_norm_weight node=" << weight_nodes_.output_norm_weight << std::endl;
@@ -127,6 +149,7 @@ void LFM2Model::load_weights_to_graph(CactusGraph* gb) {
         layer.ffn_down_weight = gb->mmap_weights(layer_prefix + "ffn_down.weights");
         std::cout << "[LFM2Model::load_weights_to_graph] layer norms and ffn weights loaded for layer=" << i << std::endl;
     }
+    std::cout << "[LFM2Model::load_weights_to_graph] finished" << std::endl;
 }
 
 size_t LFM2Model::build_conv1d(CactusGraph* gb, size_t input, uint32_t layer_idx,

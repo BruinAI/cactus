@@ -249,7 +249,11 @@ public:
     explicit LFM2Model(const Config& config);
     ~LFM2Model() override = default;
 
-    bool init(const std::string& model_folder, size_t context_size, const std::string& system_prompt = "");
+    bool is_cache_empty() const;
+
+    bool init(const std::string& model_folder, size_t context_size, const std::string& system_prompt = "", bool do_warmup = true);
+    bool init(CactusGraph* external_graph, const std::string& model_folder, size_t context_size,
+              const std::string& system_prompt = "", bool do_warmup = true);
 
 protected:
     size_t build_attention(CactusGraph* gb, size_t normalized_input, uint32_t layer_idx,
@@ -392,6 +396,8 @@ public:
         size_t top_k = 0,
         const std::string& profile_file = "") override;
 
+    void reset_cache() override;
+
 protected:
     // Stub implementations for Model pure virtual methods
     size_t build_attention(CactusGraph*, size_t, uint32_t, ComputeBackend, bool, size_t) override;
@@ -469,6 +475,9 @@ private:
     
     bool vision_weights_loaded_ = false;
     bool language_weights_loaded_ = false;
+
+    bool image_prefill_completed_ = false;
+    size_t last_token_count_ = 0;
 };
 
 }

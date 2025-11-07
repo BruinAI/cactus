@@ -138,7 +138,7 @@ protected:
     bool has_chat_template_ = false;
     std::string chat_template_;
     
-    uint32_t image_token_id_ = 49190;  // <image>
+    uint32_t image_token_id_ = 396;  // <image>
     uint32_t fake_token_id_ = 49189;   // <fake_token_around_image>
     uint32_t global_img_token_id_ = 49152;  // <global-img>
 
@@ -355,7 +355,9 @@ public:
     Tokenizer* get_tokenizer() const { return tokenizer_.get(); }
     const std::vector<DebugNode>& get_debug_nodes() const { return debug_nodes_; }
 
-    bool init(const std::string& model_folder, size_t context_size, const std::string& system_prompt = "");
+    bool init(const std::string& model_folder, size_t context_size, const std::string& system_prompt = "", bool do_warmup = true);
+    bool init(CactusGraph* external_graph, const std::string& model_folder, size_t context_size,
+              const std::string& system_prompt = "", bool do_warmup = true);
     uint32_t generate(const std::vector<uint32_t>& tokens, float temperature = -1.0f, float top_p = -1.0f,
                       size_t top_k = 0, const std::string& profile_file = "");
 
@@ -404,6 +406,10 @@ protected:
 
     void capture_debug_node(uint32_t layer_idx, const std::string& name, size_t node_id);
     void clear_debug_nodes();
+
+    bool init_internal(CactusGraph* gb, const std::string& model_folder, size_t context_size,
+                       const std::string& system_prompt, bool do_warmup);
+    bool owns_graph_;
 };
 
 std::unique_ptr<Model> create_model(const std::string& model_folder);

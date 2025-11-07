@@ -402,7 +402,6 @@ int cactus_complete(
         
         wrapper->model->reset_cache();
         
-        // Parse messages - image paths are now in ChatMessage.content with type="image"
         std::vector<std::string> image_paths;
         std::vector<size_t> image_placeholder_indices;
         auto messages = parse_messages_json(messages_json, image_paths, image_placeholder_indices);
@@ -463,7 +462,9 @@ int cactus_complete(
         
         std::vector<uint32_t> generated_tokens;
         double time_to_first_token = 0.0;
-        std::string decoded_so_far;  
+        std::string decoded_so_far;
+
+        std::cout << "Starting generation with prompt tokens: " << prompt_tokens << ", max tokens: " << max_tokens << std::endl;
 
         // Generate first token
         uint32_t next_token;
@@ -471,8 +472,10 @@ int cactus_complete(
             next_token = wrapper->model->generate({}, temperature, top_p, top_k);
         } else {
             if (!image_paths.empty()) {
+                std::cout << "Generating with images: " << std::endl;
                 next_token = wrapper->model->generate_with_images(tokens_to_process, image_paths, temperature, top_p, top_k, "profile.txt");
             } else {
+                std::cout << "Generating without images." << std::endl;
                 next_token = wrapper->model->generate(tokens_to_process, temperature, top_p, top_k, "profile.txt");
             }
         }
