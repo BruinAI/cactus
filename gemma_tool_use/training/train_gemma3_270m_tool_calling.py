@@ -215,30 +215,60 @@ def filter_toucan_dataset(dataset, max_tools_used=2, max_tools_available=3):
     filtered_indices = []
     total = len(dataset)
 
+    def has_tool_response(m):
+        # Check if message is a tool response
+        # In Toucan dataset, tool responses can be:
+        # 1. role: "tool"
+        # 2. role: "user" with tool_call_id or tool results
+        if m.get('role') == 'tool':
+            return True
+        # Check for tool_call_id which indicates this is a tool response
+        if 'tool_call_id' in m:
+            return True
+        # As a fallback, check content for tool response markers
+        content = m.get('content', '')
+        if isinstance(content, str) and any(marker in content for marker in ['<tool_response>', '"tool_call_id"', '"result":']):
+            return True
+        return False
+
     for idx in tqdm(range(total), desc="Filtering samples", unit="sample"):
         sample = dataset[idx]
 
-        # Check single-turn
         messages = json.loads(sample['messages'])
-        num_turns = len([m for m in messages if m['role'] == 'user'])
-        if num_turns != 1:
+        import ipdb; ipdb.set_trace()
+
+        # Count user queries (not tool responses)
+        # Single-turn means one initial user query (tool responses don't count as turns)
+        user_messages = [m for m in messages if m['role'] == 'user']
+        if len(user_messages) == 0 or len(user_messages) > 2:
+            continue
+        
+        assert not has_tool_response(messages[0]), "First message cannot be a tool response"
+        assistant_messages = [m for m in messages if m['role'] == 'assistant']
+        if not assistant_messages:
             continue
 
-        # Check that assistant actually makes tool calls
-        assistant_msg = next((m for m in messages if m['role'] == 'assistant'), None)
-        if not assistant_msg or 'tool_calls' not in assistant_msg or not assistant_msg['tool_calls']:
-            continue
+        assert len(assistant_messages) == len(user_messages), "Number of assistant messages must match user messages"
 
-        # Count tool calls in assistant message
-        num_tool_calls = len(assistant_msg['tool_calls'])
-        if num_tool_calls > max_tools_used or num_tool_calls == 0:
-            continue
+        if len(user_messages) == 2:
+            # Positive example: should have tool response and tool calls
+            if not has_tool_response(messages[1]):
+                continue
+
+            num_tool_calls = len(assistant_messages[0].get('tool_calls', []))
+            if num_tool_calls == 0 or num_tool_calls > max_tools_used:
+                continue
+        else:
+            # Negative example: should NOT have tool calls
+            num_tool_calls = len(assistant_messages[0].get('tool_calls', []))
+            if num_tool_calls > 0:
+                continue
 
         # Check tools available
         tools = json.loads(sample['tools'])
         num_available_tools = len(tools)
 
-        if num_available_tools > max_tools_available or num_available_tools == 0:
+        if num_available_tools > max_tools_available:
             continue
 
         filtered_indices.append(idx)
