@@ -198,7 +198,7 @@ def format_gemma3_tool_calling_example(sample: Dict[str, Any]) -> Dict[str, str]
 # Dataset Loading and Filtering
 # ============================================================================
 
-def filter_toucan_dataset(dataset, max_tools_used=2, max_tools_available=3):
+def filter_toucan_dataset(dataset, max_tools_used=2, max_tools_available=3, max_number_of_turns=1):
     """
     Filter Toucan dataset for single-turn examples with limited tools.
 
@@ -215,60 +215,20 @@ def filter_toucan_dataset(dataset, max_tools_used=2, max_tools_available=3):
     filtered_indices = []
     total = len(dataset)
 
-    def has_tool_response(m):
-        # Check if message is a tool response
-        # In Toucan dataset, tool responses can be:
-        # 1. role: "tool"
-        # 2. role: "user" with tool_call_id or tool results
-        if m.get('role') == 'tool':
-            return True
-        # Check for tool_call_id which indicates this is a tool response
-        if 'tool_call_id' in m:
-            return True
-        # As a fallback, check content for tool response markers
-        content = m.get('content', '')
-        if isinstance(content, str) and any(marker in content for marker in ['<tool_response>', '"tool_call_id"', '"result":']):
-            return True
-        return False
-
     for idx in tqdm(range(total), desc="Filtering samples", unit="sample"):
         sample = dataset[idx]
-
         messages = json.loads(sample['messages'])
-        import ipdb; ipdb.set_trace()
 
-        # Count user queries (not tool responses)
-        # Single-turn means one initial user query (tool responses don't count as turns)
         user_messages = [m for m in messages if m['role'] == 'user']
-        if len(user_messages) == 0 or len(user_messages) > 2:
-            continue
-        
-        assert not has_tool_response(messages[0]), "First message cannot be a tool response"
-        assistant_messages = [m for m in messages if m['role'] == 'assistant']
-        if not assistant_messages:
+        if len(user_messages) > max_number_of_turns or len(user_messages) == 0:
             continue
 
-        assert len(assistant_messages) == len(user_messages), "Number of assistant messages must match user messages"
+        num_tool_calls = sum(1 for m in messages if m['role'] == 'tool_call')
+        assert num_tool_calls == sum(1 for m in messages if m['role'] == 'tool_response')
+        if num_tool_calls > max_tools_used:
+            continue
 
-        if len(user_messages) == 2:
-            # Positive example: should have tool response and tool calls
-            if not has_tool_response(messages[1]):
-                continue
-
-            num_tool_calls = len(assistant_messages[0].get('tool_calls', []))
-            if num_tool_calls == 0 or num_tool_calls > max_tools_used:
-                continue
-        else:
-            # Negative example: should NOT have tool calls
-            num_tool_calls = len(assistant_messages[0].get('tool_calls', []))
-            if num_tool_calls > 0:
-                continue
-
-        # Check tools available
-        tools = json.loads(sample['tools'])
-        num_available_tools = len(tools)
-
-        if num_available_tools > max_tools_available:
+        if len(json.loads(sample['tools'])) > max_tools_available:
             continue
 
         filtered_indices.append(idx)
