@@ -306,7 +306,7 @@ class _FilterOverlength(grain.FilterTransform):
 
 def _build_data_loader(
     *,
-    examples: List[Dict[str, str]],
+    data_source: grain.RandomAccessDataSource,
     batch_size: int,
     num_epochs: int,
     max_seq_len: int,
@@ -314,12 +314,9 @@ def _build_data_loader(
     shuffle: bool
 ) -> grain.DataLoader:
     """Build a grain DataLoader."""
-    # Create grain data source from list
-    data_source = grain.ListDataSource(examples)
-
     # Create sampler
     sampler = grain.IndexSampler(
-        num_records=len(examples),
+        num_records=len(data_source),
         num_epochs=num_epochs,
         shard_options=grain.NoSharding(),
         shuffle=shuffle,
@@ -418,13 +415,9 @@ def create_tool_calling_dataset(tokenizer, global_batch_size, max_target_length,
     print(f"Formatted {len(train_dataset):,} training examples")
     print(f"Formatted {len(validation_dataset):,} validation examples")
 
-    # Convert to list for grain DataSource
-    train_examples = list(train_dataset)
-    validation_examples = list(validation_dataset)
-
-    # Build grain DataLoaders
+    # Build grain DataLoaders (HuggingFace Dataset objects work as grain data sources)
     train_loader = _build_data_loader(
-        examples=train_examples,
+        data_source=train_dataset,
         batch_size=global_batch_size,
         num_epochs=num_train_epochs,
         max_seq_len=max_target_length,
@@ -433,7 +426,7 @@ def create_tool_calling_dataset(tokenizer, global_batch_size, max_target_length,
     )
 
     validation_loader = _build_data_loader(
-        examples=validation_examples,
+        data_source=validation_dataset,
         batch_size=global_batch_size,
         num_epochs=1,  # Validation only runs once per eval
         max_seq_len=max_target_length,
@@ -442,7 +435,7 @@ def create_tool_calling_dataset(tokenizer, global_batch_size, max_target_length,
     )
 
     # Calculate steps
-    num_train_examples = len(train_examples)
+    num_train_examples = len(train_dataset)
     steps_per_epoch = num_train_examples // global_batch_size
     total_steps = steps_per_epoch * num_train_epochs
 
