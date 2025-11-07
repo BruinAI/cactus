@@ -10,6 +10,8 @@ using the Toucan-1.5M dataset, filtered for:
 
 The tool calling format follows gemma_tool_use/PLAN.md and is compatible with
 the evaluation format in gemma_fc.py.
+
+Optimized for 4x TPU v5e chips.
 """
 
 import os
@@ -23,6 +25,8 @@ from flax import nnx
 from huggingface_hub import snapshot_download
 import optax
 import qwix
+import grain.python as grain
+import numpy as np
 
 # Import tunix libraries
 from tunix.generate import tokenizer_adapter as tokenizer_lib
@@ -45,25 +49,28 @@ MODEL_ID = "google/gemma-3-270m-it"
 GEMMA_TOKENIZER_PATH = "gs://gemma-data/tokenizers/tokenizer_gemma3.model"
 
 # Training hyperparameters
-BATCH_SIZE = 16  # Adjust based on your TPU/GPU memory
+# Optimized for 4x TPU v5e
+BATCH_SIZE = 64
 NUM_EPOCHS = 3
-LEARNING_RATE = 1e-3
+LEARNING_RATE = 1e-4
 MAX_TARGET_LENGTH = 512
-MAX_STEPS = 1000
-EVAL_EVERY_N_STEPS = 100
+MAX_STEPS = None
+EVAL_EVERY_N_STEPS = 250
 
 # LoRA hyperparameters
-RANK = 16
-ALPHA = 16
+RANK = 32
+ALPHA = 16.0
 
 # TPU/GPU mesh configuration
+# Optimized for 4x TPU v5e
 NUM_DEVICES = len(jax.devices())
 if NUM_DEVICES == 8:
+    # 8 TPUs: use both FSDP and tensor parallelism
     MESH_COUNTS = (1, 4)
 elif NUM_DEVICES == 1:
     MESH_COUNTS = (1, 1)
 else:
-    MESH_COUNTS = (1, NUM_DEVICES)
+    raise ValueError(f"Unsupported number of devices: {NUM_DEVICES}")
 
 MESH = [
     MESH_COUNTS,
@@ -246,6 +253,91 @@ def filter_toucan_dataset(dataset, max_tools_used=2, max_tools_available=3):
     return dataset.select(filtered_indices)
 
 
+# ============================================================================
+# Grain DataLoader Implementation
+# ============================================================================
+
+class _Tokenize(grain.MapTransform):
+    """Tokenize formatted text examples."""
+
+    def __init__(self, tokenizer: tokenizer_lib.Tokenizer):
+        self._tokenizer = tokenizer
+
+    def map(self, element: Dict[str, str]) -> np.ndarray:
+        """Tokenize the text field."""
+        tokens = self._tokenizer.encode(element['text'])
+        return np.array(tokens, dtype=np.int32)
+
+
+class _BuildTrainInput(grain.MapTransform):
+    """Build TrainingInput from tokens."""
+
+    def __init__(self, max_seq_len: int, pad_value: int):
+        self._max_seq_len = max_seq_len
+        self._pad_value = pad_value
+
+    def map(self, tokens: np.ndarray) -> peft_trainer.TrainingInput:
+        """Build training input from tokens."""
+        # Pad or truncate to max_seq_len
+        if len(tokens) > self._max_seq_len:
+            tokens = tokens[:self._max_seq_len]
+        else:
+            pad_len = self._max_seq_len - len(tokens)
+            tokens = np.pad(tokens, [[0, pad_len]], mode='constant', constant_values=self._pad_value)
+
+        # Create mask (1 for real tokens, 0 for padding)
+        mask = (tokens != self._pad_value).astype(np.float32)
+
+        return peft_trainer.TrainingInput(
+            input_tokens=tokens,
+            input_mask=mask
+        )
+
+
+class _FilterOverlength(grain.FilterTransform):
+    """Filter out overlength examples."""
+
+    def __init__(self, max_seq_len: int):
+        self._max_seq_len = max_seq_len
+
+    def filter(self, element: peft_trainer.TrainingInput) -> bool:
+        return element.input_tokens.shape[0] <= self._max_seq_len
+
+
+def _build_data_loader(
+    *,
+    examples: List[Dict[str, str]],
+    batch_size: int,
+    num_epochs: int,
+    max_seq_len: int,
+    tokenizer: tokenizer_lib.Tokenizer,
+    shuffle: bool
+) -> grain.DataLoader:
+    """Build a grain DataLoader."""
+    # Create grain data source from list
+    data_source = grain.ListDataSource(examples)
+
+    # Create sampler
+    sampler = grain.IndexSampler(
+        num_records=len(examples),
+        num_epochs=num_epochs,
+        shard_options=grain.NoSharding(),
+        shuffle=shuffle,
+    )
+
+    # Create data loader with transformations
+    return grain.DataLoader(
+        data_source=data_source,
+        sampler=sampler,
+        operations=[
+            _Tokenize(tokenizer),
+            _BuildTrainInput(max_seq_len, tokenizer.pad_id()),
+            _FilterOverlength(max_seq_len),
+            grain.Batch(batch_size=batch_size, drop_remainder=True),
+        ],
+    )
+
+
 def create_tool_calling_dataset(tokenizer, global_batch_size, max_target_length, num_train_epochs):
     """
     Create and format the tool calling dataset.
@@ -257,7 +349,7 @@ def create_tool_calling_dataset(tokenizer, global_batch_size, max_target_length,
         num_train_epochs: Number of training epochs
 
     Returns:
-        Tuple of (train_ds, validation_ds) as grain DataLoaders
+        Tuple of (train_gen, validation_gen, total_steps)
     """
     print(f"\n{'='*60}")
     print("Loading Toucan-1.5M dataset")
@@ -326,51 +418,28 @@ def create_tool_calling_dataset(tokenizer, global_batch_size, max_target_length,
     print(f"Formatted {len(train_dataset):,} training examples")
     print(f"Formatted {len(validation_dataset):,} validation examples")
 
-    # Convert to grain DataLoaders
-    def tokenize_fn(example):
-        """Tokenize a single example"""
-        tokens = tokenizer.encode(example['text'])
-        # Truncate to max_target_length
-        tokens = tokens[:max_target_length]
-        return tokens
-
-    # Create grain datasets
+    # Convert to list for grain DataSource
     train_examples = list(train_dataset)
     validation_examples = list(validation_dataset)
 
-    # Use grain's DataLoader-like functionality
-    def create_grain_dataloader(examples, is_train=True):
-        """Create a grain dataloader from examples"""
-        # Simple implementation - in production, use grain's full capabilities
-        def data_generator():
-            import numpy as np
-            indices = list(range(len(examples)))
-            if is_train:
-                np.random.shuffle(indices)
+    # Build grain DataLoaders
+    train_loader = _build_data_loader(
+        examples=train_examples,
+        batch_size=global_batch_size,
+        num_epochs=num_train_epochs,
+        max_seq_len=max_target_length,
+        tokenizer=tokenizer,
+        shuffle=True
+    )
 
-            for idx in indices:
-                tokens = tokenize_fn(examples[idx])
-                # Pad to max_target_length
-                if len(tokens) < max_target_length:
-                    tokens = tokens + [tokenizer.pad_id()] * (max_target_length - len(tokens))
-
-                # Create input and target
-                input_tokens = jnp.array(tokens[:-1], dtype=jnp.int32)
-                target_tokens = jnp.array(tokens[1:], dtype=jnp.int32)
-
-                # Create mask (1 for real tokens, 0 for padding)
-                input_mask = (input_tokens != tokenizer.pad_id()).astype(jnp.float32)
-
-                yield peft_trainer.TrainingInput(
-                    input_tokens=input_tokens,
-                    target_tokens=target_tokens,
-                    input_mask=input_mask
-                )
-
-        return data_generator
-
-    train_gen = create_grain_dataloader(train_examples, is_train=True)
-    validation_gen = create_grain_dataloader(validation_examples, is_train=False)
+    validation_loader = _build_data_loader(
+        examples=validation_examples,
+        batch_size=global_batch_size,
+        num_epochs=1,  # Validation only runs once per eval
+        max_seq_len=max_target_length,
+        tokenizer=tokenizer,
+        shuffle=False
+    )
 
     # Calculate steps
     num_train_examples = len(train_examples)
@@ -378,10 +447,13 @@ def create_tool_calling_dataset(tokenizer, global_batch_size, max_target_length,
     total_steps = steps_per_epoch * num_train_epochs
 
     print(f"\nDataset statistics:")
-    print(f"  Steps per epoch: {steps_per_epoch}")
-    print(f"  Total steps: {total_steps}")
+    print(f"  Training examples: {num_train_examples:,}")
+    print(f"  Validation examples: {len(validation_examples):,}")
+    print(f"  Steps per epoch: {steps_per_epoch:,}")
+    print(f"  Total steps ({num_train_epochs} epochs): {total_steps:,}")
+    print(f"  Effective batch size: {global_batch_size}")
 
-    return train_gen, validation_gen
+    return train_loader, validation_loader, total_steps
 
 
 # ============================================================================
@@ -525,12 +597,13 @@ def main():
     print("Gemma 3 270M Tool Calling Training Script")
     print("="*60)
     print(f"Model: {MODEL_ID}")
-    print(f"Batch size: {BATCH_SIZE}")
+    print(f"Global batch size: {BATCH_SIZE}")
     print(f"Epochs: {NUM_EPOCHS}")
-    print(f"Max steps: {MAX_STEPS}")
     print(f"Learning rate: {LEARNING_RATE}")
     print(f"LoRA rank: {RANK}, alpha: {ALPHA}")
-    print(f"Devices: {NUM_DEVICES} ({jax.devices()[0].platform})")
+    print(f"Max sequence length: {MAX_TARGET_LENGTH}")
+    print(f"Devices: {NUM_DEVICES}x {jax.devices()[0].platform}")
+    print(f"Mesh configuration: {MESH_COUNTS} (fsdp={MESH_COUNTS[0]}, tp={MESH_COUNTS[1]})")
 
     # Create checkpoint directories
     os.makedirs(CKPT_DIR, exist_ok=True)
@@ -550,12 +623,15 @@ def main():
         print(f"Updated EOS token IDs: {eos_tokens}")
 
     # Create datasets
-    train_gen, validation_gen = create_tool_calling_dataset(
+    train_loader, validation_loader, total_steps = create_tool_calling_dataset(
         tokenizer,
         global_batch_size=BATCH_SIZE,
         max_target_length=MAX_TARGET_LENGTH,
         num_train_epochs=NUM_EPOCHS
     )
+
+    # Use calculated total steps if MAX_STEPS not specified
+    max_steps = MAX_STEPS if MAX_STEPS is not None else total_steps
 
     # Initialize model
     print(f"\n{'='*60}")
@@ -586,10 +662,12 @@ def main():
 
     training_config = peft_trainer.TrainingConfig(
         eval_every_n_steps=EVAL_EVERY_N_STEPS,
-        max_steps=MAX_STEPS,
+        max_steps=max_steps,
         metrics_logging_options=logging_options,
         checkpoint_root_directory=CKPT_DIR,
     )
+
+    print(f"Training for {max_steps:,} steps total")
 
     trainer = peft_trainer.PeftTrainer(
         lora_model,
@@ -608,7 +686,7 @@ def main():
 
     with jax.profiler.trace(os.path.join(PROFILING_DIR, "tool_calling_lora")):
         with mesh:
-            trainer.train(train_gen, validation_gen)
+            trainer.train(train_loader, validation_loader)
 
     print(f"\n{'='*60}")
     print("Training complete!")

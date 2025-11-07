@@ -62,14 +62,14 @@ Key hyperparameters in `train_gemma3_270m_tool_calling.py`:
 MODEL_ID = "google/gemma-3-270m-it"
 
 # Training
-BATCH_SIZE = 4
+BATCH_SIZE = 64  # Optimized for 4x TPU v5e
 NUM_EPOCHS = 3
-LEARNING_RATE = 1e-4
+LEARNING_RATE = 1e-4  # Standard for LoRA SFT
 MAX_TARGET_LENGTH = 512
 
-# LoRA
-RANK = 16
-ALPHA = 16
+# LoRA (balanced config from dpo_gemma.ipynb)
+RANK = 32
+ALPHA = 16.0
 
 # Dataset filtering
 MAX_TOOLS_USED = 2
