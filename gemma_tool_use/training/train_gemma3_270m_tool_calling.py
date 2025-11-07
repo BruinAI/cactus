@@ -650,13 +650,7 @@ def show_training_examples(dataset, num_examples=5):
         print(f"\n{'─'*60}")
         print(f"Example {i}/{num_examples} (Index: {idx})")
         print(f"{'─'*60}")
-
-        # Truncate if too long for display
-        if len(text) > 1000:
-            print(text[:1000])
-            print(f"\n... [truncated, total length: {len(text)} chars]")
-        else:
-            print(text)
+        print(text)
 
     print(f"\n{'='*60}\n")
 
