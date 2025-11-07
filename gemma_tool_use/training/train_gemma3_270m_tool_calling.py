@@ -344,7 +344,7 @@ def create_tool_calling_dataset(tokenizer, global_batch_size, max_target_length,
         num_train_epochs: Number of training epochs
 
     Returns:
-        Tuple of (train_gen, validation_gen, total_steps)
+        Tuple of (train_loader, validation_loader, total_steps, train_dataset)
     """
     print(f"\n{'='*60}")
     print("Loading Toucan-1.5M dataset")
@@ -444,7 +444,7 @@ def create_tool_calling_dataset(tokenizer, global_batch_size, max_target_length,
     print(f"  Total steps ({num_train_epochs} epochs): {total_steps:,}")
     print(f"  Effective batch size: {global_batch_size}")
 
-    return train_loader, validation_loader, total_steps
+    return train_loader, validation_loader, total_steps, train_dataset
 
 
 # ============================================================================
@@ -628,6 +628,39 @@ def save_lora_weights(lora_model, local_model_path, output_dir):
 # Model Testing Functions
 # ============================================================================
 
+def show_training_examples(dataset, num_examples=5):
+    """
+    Display random training examples from the formatted dataset.
+
+    Args:
+        dataset: HuggingFace dataset with 'text' field
+        num_examples: Number of examples to display (default: 5)
+    """
+    print(f"\n{'='*60}")
+    print(f"Sample Training Examples ({num_examples} random samples)")
+    print(f"{'='*60}")
+
+    import random
+    indices = random.sample(range(len(dataset)), min(num_examples, len(dataset)))
+
+    for i, idx in enumerate(indices, 1):
+        example = dataset[idx]
+        text = example['text']
+
+        print(f"\n{'─'*60}")
+        print(f"Example {i}/{num_examples} (Index: {idx})")
+        print(f"{'─'*60}")
+
+        # Truncate if too long for display
+        if len(text) > 1000:
+            print(text[:1000])
+            print(f"\n... [truncated, total length: {len(text)} chars]")
+        else:
+            print(text)
+
+    print(f"\n{'='*60}\n")
+
+
 def test_model_generation(model, tokenizer, model_config, eos_tokens, label="Model"):
     """
     Test the model with two examples:
@@ -783,12 +816,15 @@ def main():
         print(f"Updated EOS token IDs: {eos_tokens}")
 
     # Create datasets
-    train_loader, validation_loader, total_steps = create_tool_calling_dataset(
+    train_loader, validation_loader, total_steps, train_dataset = create_tool_calling_dataset(
         tokenizer,
         global_batch_size=BATCH_SIZE,
         max_target_length=MAX_TARGET_LENGTH,
         num_train_epochs=NUM_EPOCHS
     )
+
+    # Show sample training examples
+    show_training_examples(train_dataset, num_examples=5)
 
     # Use calculated total steps if MAX_STEPS not specified
     max_steps = MAX_STEPS if MAX_STEPS is not None else total_steps
