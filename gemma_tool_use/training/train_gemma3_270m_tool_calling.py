@@ -30,6 +30,7 @@ import grain.python as grain
 import numpy as np
 from tqdm import tqdm
 from safetensors import numpy as safe_np
+import wandb
 
 # Import tunix libraries
 from tunix.generate import tokenizer_adapter as tokenizer_lib
@@ -720,6 +721,7 @@ def main():
 
     with mesh:
         trainer.train(train_loader, validation_loader)
+    wandb.init()
 
     print(f"\n{'='*60}")
     print("Training complete!")
