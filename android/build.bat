@@ -16,9 +16,9 @@ if "%ANDROID_NDK_HOME%"=="" (
             goto :ndk_found
         )
     )
-    if exist "%USERPROFILE%\AppData\Local\Android\Sdk\ndk" (
-        for /f "delims=" %%d in ('dir /b /ad /o-n "%USERPROFILE%\AppData\Local\Android\Sdk\ndk\*" 2^>nul') do (
-            set "ANDROID_NDK_HOME=%USERPROFILE%\AppData\Local\Android\Sdk\ndk\%%d"
+    if exist "%HOME%\Library\Android\sdk\ndk" (
+        for /f "delims=" %%d in ('dir /b /ad /o-n "%HOME%\Library\Android\sdk\ndk\*" 2^>nul') do (
+            set "ANDROID_NDK_HOME=%HOME%\Library\Android\sdk\ndk\%%d"
             goto :ndk_found
         )
     )
