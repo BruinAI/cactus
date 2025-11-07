@@ -27,6 +27,7 @@ import optax
 import qwix
 import grain.python as grain
 import numpy as np
+from tqdm import tqdm
 
 # Import tunix libraries
 from tunix.generate import tokenizer_adapter as tokenizer_lib
@@ -206,18 +207,12 @@ def filter_toucan_dataset(dataset, max_tools_used=2, max_tools_available=3):
     Returns:
         Filtered dataset
     """
-    print(f"\nFiltering dataset:")
-    print(f"  - Single-turn only")
-    print(f"  - ≤{max_tools_used} tools used")
-    print(f"  - ≤{max_tools_available} tools available")
+    print(f"\nFiltering dataset (single-turn, ≤{max_tools_used} tools used, ≤{max_tools_available} tools available)...")
 
     filtered_indices = []
     total = len(dataset)
 
-    for idx in range(total):
-        if idx % 10000 == 0:
-            print(f"  Processed {idx:,}/{total:,} samples...")
-
+    for idx in tqdm(range(total), desc="Filtering samples", unit="sample"):
         sample = dataset[idx]
 
         # Check single-turn
@@ -246,9 +241,7 @@ def filter_toucan_dataset(dataset, max_tools_used=2, max_tools_available=3):
 
         filtered_indices.append(idx)
 
-    print(f"  Processed {total:,}/{total:,} samples...")
-    print(f"\nFiltered dataset size: {len(filtered_indices):,} samples")
-    print(f"Percentage retained: {100 * len(filtered_indices) / total:.2f}%")
+    print(f"Filtered dataset size: {len(filtered_indices):,} samples ({100 * len(filtered_indices) / total:.2f}% retained)")
 
     return dataset.select(filtered_indices)
 
@@ -311,7 +304,8 @@ def _build_data_loader(
     num_epochs: int,
     max_seq_len: int,
     tokenizer: tokenizer_lib.Tokenizer,
-    shuffle: bool
+    shuffle: bool,
+    seed: int = 42
 ) -> grain.DataLoader:
     """Build a grain DataLoader."""
     # Create sampler
@@ -320,6 +314,7 @@ def _build_data_loader(
         num_epochs=num_epochs,
         shard_options=grain.NoSharding(),
         shuffle=shuffle,
+        seed=seed if shuffle else None,
     )
 
     # Create data loader with transformations
@@ -441,7 +436,7 @@ def create_tool_calling_dataset(tokenizer, global_batch_size, max_target_length,
 
     print(f"\nDataset statistics:")
     print(f"  Training examples: {num_train_examples:,}")
-    print(f"  Validation examples: {len(validation_examples):,}")
+    print(f"  Validation examples: {len(validation_dataset):,}")
     print(f"  Steps per epoch: {steps_per_epoch:,}")
     print(f"  Total steps ({num_train_epochs} epochs): {total_steps:,}")
     print(f"  Effective batch size: {global_batch_size}")
