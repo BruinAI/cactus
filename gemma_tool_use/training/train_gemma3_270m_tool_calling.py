@@ -224,15 +224,14 @@ def filter_toucan_dataset(dataset, max_tools_used=2, max_tools_available=3):
         if num_turns != 1:
             continue
 
-        # Check tools used
-        target_tools_str = sample['target_tools'].strip()
-        if target_tools_str:
-            target_tools_list = [t.strip() for t in target_tools_str.split(',')]
-            num_target_tools = len(target_tools_list)
-        else:
-            num_target_tools = 0
+        # Check that assistant actually makes tool calls
+        assistant_msg = next((m for m in messages if m['role'] == 'assistant'), None)
+        if not assistant_msg or 'tool_calls' not in assistant_msg or not assistant_msg['tool_calls']:
+            continue
 
-        if num_target_tools > max_tools_used or num_target_tools == 0:
+        # Count tool calls in assistant message
+        num_tool_calls = len(assistant_msg['tool_calls'])
+        if num_tool_calls > max_tools_used or num_tool_calls == 0:
             continue
 
         # Check tools available
