@@ -143,11 +143,58 @@ What's the weather in Paris?<end_of_turn>
 
 ### 2\. Setup Eval with BFCL
 
-### 3\. Find data for 1-3 tasks and SFT on that
+**BFCL Simple Test Characteristics**
 
-### 4\. Find data on more tasks and SFT on that
+Analyzed the BFCL simple test suite to understand baseline evaluation requirements:
 
-- Ideally from same dataset as stage 2
+**Test Counts:**
+- Simple Python: 400 tests
+- Simple Java: 100 tests
+- Simple JavaScript: 50 tests
 
-### 5\. Make RL data setup and GRPO gemma (optional)
+**Key Characteristics:**
+- **Exactly 1 function available** per test (no distractors, no tool selection complexity)
+- **Single-turn only** (no multi-step conversations)
+- **Pure function calling** - tests the model's ability to generate correct function calls with proper arguments
+- **Zero tool selection complexity** - the model only needs to decide whether to call the function and format the call correctly
 
+Based on `toucan_analysis_phase1.csv` analysis, the Toucan SFT subset provides excellent training progressions:
+
+### 3\. Initial SFT: Limited Tool Vocabulary, Simple Tasks
+
+**Dataset**: [Toucan-1.5M](https://huggingface.co/datasets/Agent-Ark/Toucan-1.5M)
+
+**Approach**: Start with a reduced tool vocabulary to minimize selection complexity
+- Use the **SFT subset** (119k rows) as the primary source - it's pre-filtered for high quality (≥4-5 on Likert scales)
+- Further filter to **single-turn-original** examples only (simpler, core pipeline output)
+- **Key simplification: Limit to ~50-100 distinct tools** with non-overlapping functionality
+  - Select tools with simple schemas (few parameters, clear types)
+  - Ensure tools have distinct purposes (no overlapping functionality)
+  - Include tasks requiring 1-3 tool calls to teach sequencing
+- Focus on **sequential tool calls** (avoid parallel execution complexity initially)
+- Filter for high quality scores and complete tool utilization
+- Target: ~10-30k examples for this stage
+
+**Rationale**: Research shows "fewer tools equals less confusion" - the main challenge is tool selection from 2,000+ options, not the number of calls per task. Starting with a limited, non-overlapping tool vocabulary builds selection competence while still teaching multi-tool coordination. Tool diversity within the limited set improves zero-shot capability (ToolACE, 2024).
+
+**Alternative approach**: If tool vocabulary limiting proves difficult, fall back to filtering for tasks requiring only 1-2 tools maximum while keeping full tool vocabulary.
+
+### 4\. Extended SFT: Multi-turn, Complex Tool Use
+
+**Dataset**: [Toucan-1.5M](https://huggingface.co/datasets/Agent-Ark/Toucan-1.5M)
+
+**Approach**: Expand to full agentic capabilities using curriculum learning
+- Start with remaining **SFT subset** data (all 119k examples)
+- Progressively add complexity in this order (following paper's ablation study):
+  1. **Single-turn with irrelevance** (40k from Ext.1) - teaches tool selection with distractors
+  2. **Diversified single-turn** (15.8k from Ext.2) - same target tools, varied queries
+  3. **Multi-turn conversations** (35.2k from Ext.3) - complex multi-step interactions
+- Include **parallel tool execution** examples (~20% of dataset)
+- No limit on number of tools per task
+- Target: Full SFT subset (119k) + potentially sample from larger subsets (Kimi-K2: 519k, Qwen3: 552k, OSS: 457k)
+
+**Rationale**: Progressive complexity matches the dataset's design. Multi-turn and parallel execution represent real-world agentic behavior. The ablation study shows sequential addition of extensions improves performance.
+
+**Note**: All 1.5M trajectories span 495 real-world MCPs with 2,000+ tools. Can sample from full subsets if model capacity allows.
+
+### 5\. Make RL data setup and GRPO gemma (optional, future)

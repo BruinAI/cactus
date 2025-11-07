@@ -1,0 +1,28 @@
+filter_type,filter_value,sample_count,percentage,notes
+total,all_single_turn,84044,100.00%,All single-turn samples
+target_tools_exact,1_tools,49101,58.42%,Tasks requiring exactly 1 tool(s)
+target_tools_exact,2_tools,22524,26.80%,Tasks requiring exactly 2 tool(s)
+target_tools_exact,3_tools,12407,14.76%,Tasks requiring exactly 3 tool(s)
+target_tools_exact,4_tools,11,0.01%,Tasks requiring exactly 4 tool(s)
+target_tools_exact,5_tools,1,0.00%,Tasks requiring exactly 5 tool(s)
+target_tools_cumulative,1_or_fewer_tools,49101,58.42%,Tasks requiring ≤1 tool(s)
+target_tools_cumulative,2_or_fewer_tools,71625,85.22%,Tasks requiring ≤2 tool(s)
+target_tools_cumulative,3_or_fewer_tools,84032,99.99%,Tasks requiring ≤3 tool(s)
+target_tools_cumulative,4_or_fewer_tools,84043,100.00%,Tasks requiring ≤4 tool(s)
+target_tools_cumulative,5_or_fewer_tools,84044,100.00%,Tasks requiring ≤5 tool(s)
+available_tools_cumulative,1_or_fewer_available,18633,22.17%,Prompts with ≤1 available tools
+available_tools_cumulative,3_or_fewer_available,40873,48.63%,Prompts with ≤3 available tools
+available_tools_cumulative,5_or_fewer_available,56387,67.09%,Prompts with ≤5 available tools
+available_tools_cumulative,10_or_fewer_available,73540,87.50%,Prompts with ≤10 available tools
+combined,1tools_AND_1available,15443,18.37%,≤1 target tools + ≤1 available tools
+combined,1tools_AND_3available,27189,32.35%,≤1 target tools + ≤3 available tools
+combined,1tools_AND_5available,35371,42.09%,≤1 target tools + ≤5 available tools
+combined,1tools_AND_10available,44087,52.46%,≤1 target tools + ≤10 available tools
+combined,2tools_AND_1available,17099,20.35%,≤2 target tools + ≤1 available tools
+combined,2tools_AND_3available,36578,43.52%,≤2 target tools + ≤3 available tools
+combined,2tools_AND_5available,49278,58.63%,≤2 target tools + ≤5 available tools
+combined,2tools_AND_10available,63305,75.32%,≤2 target tools + ≤10 available tools
+combined,3tools_AND_1available,18633,22.17%,≤3 target tools + ≤1 available tools
+combined,3tools_AND_3available,40872,48.63%,≤3 target tools + ≤3 available tools
+combined,3tools_AND_5available,56381,67.09%,≤3 target tools + ≤5 available tools
+combined,3tools_AND_10available,73530,87.49%,≤3 target tools + ≤10 available tools

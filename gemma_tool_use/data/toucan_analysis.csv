@@ -1,0 +1,55 @@
+subset,filter_type,filter_value,sample_count,percentage,notes
+SFT,available_tools_cumulative,30_or_fewer_available,118611,99.43%,Prompts with ≤30 available tools
+SFT,available_tools_cumulative,20_or_fewer_available,114885,96.31%,Prompts with ≤20 available tools
+SFT,available_tools_cumulative,15_or_fewer_available,110923,92.99%,Prompts with ≤15 available tools
+SFT,available_tools_cumulative,10_or_fewer_available,103859,87.07%,Prompts with ≤10 available tools
+SFT,available_tools_cumulative,5_or_fewer_available,79008,66.23%,Prompts with ≤5 available tools
+SFT,available_tools_cumulative,4_or_fewer_available,71849,60.23%,Prompts with ≤4 available tools
+SFT,available_tools_cumulative,3_or_fewer_available,58146,48.74%,Prompts with ≤3 available tools
+SFT,available_tools_cumulative,2_or_fewer_available,43693,36.63%,Prompts with ≤2 available tools
+SFT,available_tools_cumulative,1_or_fewer_available,26208,21.97%,Prompts with ≤1 available tools
+SFT,combined_simplest,single_turn_AND_1tool,49101,41.16%,"Absolute simplest: single turn, single tool"
+SFT,combined_step3,single_turn_AND_1to3tools,84032,70.45%,Perfect for Step 3: simple single-turn tasks
+SFT,combined_step3_detailed,single_turn_AND_1to3tools_AND_<=20available,81076,67.97%,Step 3 with ≤20 available tools
+SFT,combined_step3_detailed,single_turn_AND_1to3tools_AND_<=15available,78296,65.64%,Step 3 with ≤15 available tools
+SFT,combined_step3_detailed,single_turn_AND_1to3tools_AND_<=10available,73530,61.64%,Step 3 with ≤10 available tools
+SFT,combined_step3_detailed,single_turn_AND_1to3tools_AND_<=5available,56381,47.26%,Step 3 with ≤5 available tools
+SFT,combined_step3_detailed,single_turn_AND_1to3tools_AND_<=3available,40872,34.26%,Step 3 with ≤3 available tools
+SFT,conversation_type,single_turn,84044,70.46%,≤1 user turn
+SFT,conversation_type,multi_turn,35243,29.54%,>1 user turns
+SFT,subset_category,irrelevant,40000,33.53%,Data generation pipeline type
+SFT,subset_category,multi-turn,35243,29.54%,Data generation pipeline type
+SFT,subset_category,single-turn-original,28254,23.69%,Data generation pipeline type
+SFT,subset_category,single-turn-diversify,15790,13.24%,Data generation pipeline type
+SFT,subset_x_toolcount,irrelevant_1tools,22963,19.25%,Subset category × tool count
+SFT,subset_x_toolcount,multi-turn_1tools,16981,14.24%,Subset category × tool count
+SFT,subset_x_toolcount,single-turn-original_1tools,16480,13.82%,Subset category × tool count
+SFT,subset_x_toolcount,multi-turn_2tools,14549,12.20%,Subset category × tool count
+SFT,subset_x_toolcount,single-turn-diversify_1tools,9658,8.10%,Subset category × tool count
+SFT,subset_x_toolcount,single-turn-original_2tools,8881,7.45%,Subset category × tool count
+SFT,subset_x_toolcount,irrelevant_2tools,8847,7.42%,Subset category × tool count
+SFT,subset_x_toolcount,irrelevant_3tools,8190,6.87%,Subset category × tool count
+SFT,subset_x_toolcount,single-turn-diversify_2tools,4796,4.02%,Subset category × tool count
+SFT,subset_x_toolcount,multi-turn_3tools,3697,3.10%,Subset category × tool count
+SFT,subset_x_toolcount,single-turn-original_3tools,2885,2.42%,Subset category × tool count
+SFT,subset_x_toolcount,single-turn-diversify_3tools,1332,1.12%,Subset category × tool count
+SFT,subset_x_toolcount,multi-turn_4tools,14,0.01%,Subset category × tool count
+SFT,subset_x_toolcount,single-turn-original_4tools,7,0.01%,Subset category × tool count
+SFT,subset_x_toolcount,single-turn-diversify_4tools,4,0.00%,Subset category × tool count
+SFT,subset_x_toolcount,single-turn-original_5tools,1,0.00%,Subset category × tool count
+SFT,subset_x_toolcount,multi-turn_6tools,1,0.00%,Subset category × tool count
+SFT,subset_x_toolcount,multi-turn_5tools,1,0.00%,Subset category × tool count
+SFT,target_tools_count,1_tools,66082,55.40%,Tasks requiring exactly 1 tool(s)
+SFT,target_tools_count,2_tools,37073,31.08%,Tasks requiring exactly 2 tool(s)
+SFT,target_tools_count,3_tools,16104,13.50%,Tasks requiring exactly 3 tool(s)
+SFT,target_tools_count,4_tools,25,0.02%,Tasks requiring exactly 4 tool(s)
+SFT,target_tools_count,5_tools,2,0.00%,Tasks requiring exactly 5 tool(s)
+SFT,target_tools_count,6_tools,1,0.00%,Tasks requiring exactly 6 tool(s)
+SFT,target_tools_cumulative,1_to_3_tools,119259,99.98%,Ideal for Step 3 training
+SFT,target_tools_cumulative,1_tool_only,66082,55.40%,Simplest: single tool tasks
+SFT,total,all_samples,119287,100.00%,Unique tools: 2200
+SFT,turn_count_detailed,1_turns,84044,70.46%,Exactly 1 user turn(s)
+SFT,turn_count_detailed,2_turns,15023,12.59%,Exactly 2 user turn(s)
+SFT,turn_count_detailed,5_turns,13068,10.96%,Exactly 5 user turn(s)
+SFT,turn_count_detailed,4_turns,4420,3.71%,Exactly 4 user turn(s)
+SFT,turn_count_detailed,3_turns,2732,2.29%,Exactly 3 user turn(s)

@@ -21,63 +21,56 @@ bfcl --help
 
 ## Running Evaluations
 
-### Step 1: Generate Model Responses
-
-For Gemma models (using prompt mode, not function calling):
+### Basic Usage
 
 ```bash
-# Test with simple_python category on gemma-3-270m-it
+# Step 1: Generate model responses
 bfcl generate \
-  --model google/gemma-3-270m-it \
+  --model MODEL_NAME \
+  --test-category CATEGORIES \
+  --num-gpus 1 \
+  --backend vllm
+
+# Step 2: Evaluate responses
+bfcl evaluate \
+  --model MODEL_NAME \
+  --test-category CATEGORIES
+```
+
+### Model Options
+
+**Base models (prompt mode):**
+- `google/gemma-3-270m-it`
+- `google/gemma-3-1b-it`, `google/gemma-3-4b-it`, `google/gemma-3-12b-it`, `google/gemma-3-27b-it`
+
+**Fine-tuned FC models:**
+- `google/gemma-3-270m-it-FC` (requires `--local-model-path` or model in HF cache)
+
+**Using local models:**
+```bash
+bfcl generate \
+  --model google/gemma-3-270m-it-FC \
+  --local-model-path /path/to/your/fine-tuned-model \
   --test-category simple_python,simple_java,simple_javascript \
   --num-gpus 1 \
   --backend vllm
-
-# Test with gemma-3-1b-it
-bfcl generate \
-  --model google/gemma-3-1b-it \
-  --test-category simple_python \
-  --num-gpus 1 \
-  --backend vllm
-
-# For multiple categories
-bfcl generate \
-  --model google/gemma-3-270m-it \
-  --test-category simple_python,parallel,multiple \
-  --num-gpus 1 \
-  --backend vllm
 ```
 
-Results will be saved to: `result/google/gemma-3-270m-it/` or `result/google/gemma-3-1b-it/`
-
-### Step 2: Evaluate Generated Responses
+### Example: Quick Test
 
 ```bash
-# Evaluate the generated responses for 270m model
-bfcl evaluate \
-  --model google/gemma-3-270m-it \
-  --test-category simple_python,simple_java,simple_javascript
+# Base model (prompt mode)
+bfcl generate --model google/gemma-3-270m-it --test-category simple_python,simple_java,simple_javascript --num-gpus 1 --backend vllm
+bfcl evaluate --model google/gemma-3-270m-it --test-category simple_python,simple_java,simple_javascript
 
-# Evaluate for 1b model
-bfcl evaluate \
-  --model google/gemma-3-1b-it \
-  --test-category simple_python
-
-# For multiple categories
-bfcl evaluate \
-  --model google/gemma-3-270m-it \
-  --test-category simple_python,parallel,multiple
+# Fine-tuned FC model
+bfcl generate --model google/gemma-3-270m-it-FC --local-model-path /path/to/model --test-category simple_python --num-gpus 1 --backend vllm
+bfcl evaluate --model google/gemma-3-270m-it-FC --test-category simple_python
 ```
 
-Results will be saved to: `score/google/gemma-3-270m-it/` or `score/google/gemma-3-1b-it/`
-
-### Step 3: View Results
-
-Results are saved in CSV files in the `score/` directory:
-- `data_overall.csv` - Overall scores
-- `data_live.csv` - Live category breakdown
-- `data_non_live.csv` - Non-live category breakdown
-- `data_multi_turn.csv` - Multi-turn category breakdown
+**Results:**
+- Generation: `result/{model-name}/{test-category}.json`
+- Evaluation: `score/{model-name}/data_overall.csv` (and category-specific CSVs)
 
 ## Test Categories
 
@@ -111,24 +104,11 @@ Category groups:
 - `non_live` - All non-live categories
 - `agentic` - Memory and web search categories
 
-## Quick Test Command
-
-For a quick baseline test:
-
-```bash
-# Run simple_python category on gemma-3-270m-it (smallest/fastest)
-bfcl generate --model google/gemma-3-270m-it --test-category simple_python --num-gpus 1 --backend vllm
-bfcl evaluate --model google/gemma-3-270m-it --test-category simple_python
-
-# Or test on gemma-3-1b-it
-bfcl generate --model google/gemma-3-1b-it --test-category simple_python --num-gpus 1 --backend vllm
-bfcl evaluate --model google/gemma-3-1b-it --test-category simple_python
-```
-
 ## Notes
 
-- Gemma models are supported in **Prompt mode** only (not FC mode)
-- Supported models: `google/gemma-3-270m-it`, `google/gemma-3-1b-it`, `google/gemma-3-4b-it`, `google/gemma-3-12b-it`, `google/gemma-3-27b-it`
+- Gemma models are supported in both **Prompt mode** and **Function Calling (FC) mode**
+- Supported base models: `google/gemma-3-270m-it`, `google/gemma-3-1b-it`, `google/gemma-3-4b-it`, `google/gemma-3-12b-it`, `google/gemma-3-27b-it`
+- Supported FC models: `google/gemma-3-270m-it-FC` (custom fine-tuned models)
 - Generation requires GPU or TPU (will use vllm or sglang backend)
 - **For TPU VMs**: Use `--backend vllm` and `--num-gpus 1`
   - **Gemma-3-270m-it**: Must use `--num-gpus 1` (has 1 KV head, incompatible with tensor parallelism)
