@@ -17,6 +17,7 @@ Optimized for 4x TPU v5e chips.
 import os
 import json
 import logging
+import shutil
 import jax
 import jax.numpy as jnp
 from typing import Dict, List, Any
@@ -28,6 +29,7 @@ import qwix
 import grain.python as grain
 import numpy as np
 from tqdm import tqdm
+from safetensors import numpy as safe_np
 
 # Import tunix libraries
 from tunix.generate import tokenizer_adapter as tokenizer_lib
@@ -50,9 +52,9 @@ MODEL_ID = "google/gemma-3-270m-it"
 GEMMA_TOKENIZER_PATH = "gs://gemma-data/tokenizers/tokenizer_gemma3.model"
 
 # Training hyperparameters
-# Optimized for 4x TPU v5e
-BATCH_SIZE = 64
-NUM_EPOCHS = 3
+# Optimized for TPU v5e-4 (even with 8, only 4 will be used)
+BATCH_SIZE = 32
+NUM_EPOCHS = 1
 LEARNING_RATE = 1e-4
 MAX_TARGET_LENGTH = 512
 MAX_STEPS = None
@@ -84,7 +86,6 @@ MAX_TOOLS_AVAILABLE = 3
 
 # Checkpoint and output directories
 CKPT_DIR = "/tmp/gemma_tool_calling_ckpts/"
-PROFILING_DIR = "/tmp/gemma_tool_calling_profiling/"
 LORA_OUTPUT_DIR = "./gemma3_270m_tool_calling_lora"
 
 
@@ -524,20 +525,29 @@ def gen_model_input_fn(x: peft_trainer.TrainingInput, tokenizer):
     }
 
 
-def save_lora_weights(lora_model, output_dir):
+def save_lora_weights(lora_model, local_model_path, output_dir):
     """
-    Save LoRA adapter weights to disk.
+    Save LoRA weights merged with base model as safetensors.
 
     Args:
         lora_model: Trained LoRA model
-        output_dir: Directory to save weights
+        local_model_path: Path to base model (for loading base weights)
+        output_dir: Directory to save merged weights
 
     Returns:
         Path to saved weights directory
     """
     print(f"\n{'='*60}")
-    print("Saving LoRA weights")
+    print("Saving model with merged LoRA weights")
     print(f"{'='*60}")
+
+    # Remove and recreate output directory
+    if os.path.exists(output_dir):
+        shutil.rmtree(output_dir)
+    os.makedirs(output_dir)
+    print(f"Saving to: {output_dir}")
+
+    print("\nStep 1: Extracting LoRA weights from lora_model...")
 
     def path_to_str(qwix_path):
         """Convert qwix path to string."""
@@ -557,21 +567,58 @@ def save_lora_weights(lora_model, output_dir):
             layer.mlp.up_proj.kernel_lora_b
         )
 
-    print(f"Found {len(lora_layers)} LoRA layer pairs")
+    print(f"Found {len(lora_layers)} LoRA layers")
+    print(f"LoRA layer names: {list(lora_layers.keys())[:3]}...")
 
-    # Create output directory
-    os.makedirs(output_dir, exist_ok=True)
-    print(f"Saving to: {output_dir}")
+    # Load base model state
+    print("\nStep 2: Loading base model weights...")
+    base_state = safe_np.load_file(local_model_path + "/model.safetensors")
+    print(f"Loaded {len(base_state)} base model parameters")
 
-    # Save each LoRA layer
-    for name, (lora_a, lora_b) in lora_layers.items():
-        a_filename = os.path.join(output_dir, f"model.{name}.lora_a.npy")
-        b_filename = os.path.join(output_dir, f"model.{name}.lora_b.npy")
+    # Step 3: Apply LoRA deltas to base weights
+    print("\nStep 3: Merging LoRA deltas with base weights...")
+    for lora_name, (lora_a, lora_b) in lora_layers.items():
+        state_key = f'model.{lora_name}.weight'
+        assert state_key in base_state, \
+               f"LoRA layer {lora_name} not found in base model state dict"
 
-        jnp.save(a_filename, lora_a.value.astype(jnp.float32))
-        jnp.save(b_filename, lora_b.value.astype(jnp.float32))
+        lora_a_val = jnp.asarray(lora_a.value).astype(np.float32)
+        lora_b_val = jnp.asarray(lora_b.value).astype(np.float32)
 
-    print(f"Successfully saved {len(lora_layers) * 2} weight files")
+        combined_lora = lora_a_val @ lora_b_val
+        base_state[state_key] = base_state[state_key] + combined_lora.T
+
+    print(f"Merged {len(lora_layers)} LoRA layers into base weights")
+
+    # Step 4: Save merged weights as safetensors
+    print("\nStep 4: Saving as safetensors...")
+    safetensors_path = os.path.join(output_dir, "model.safetensors")
+    safe_np.save_file(base_state, safetensors_path)
+    print("Model weights saved")
+
+    # Step 5: Copy other model files
+    print("\nStep 5: Copying other model files...")
+    for filename in os.listdir(local_model_path):
+        # Check if the file is NOT a safetensors file
+        if not filename.endswith(".safetensors"):
+            src = os.path.join(local_model_path, filename)
+            dst = os.path.join(output_dir, filename)
+
+            # Check if it's a file (and not a directory) before copying
+            if os.path.isfile(src):
+                shutil.copy(src, dst)
+                print(f"  Copied {filename} from base model")
+
+    print("\n" + "="*60)
+    print("Model saved successfully!")
+    print(f"Output directory: {output_dir}")
+    print("="*60)
+
+    print("\nSaved files:")
+    for f in os.listdir(output_dir):
+        size = os.path.getsize(os.path.join(output_dir, f)) / (1024 * 1024)
+        print(f"  {f:<30} {size:>10.2f} MB")
+
     return output_dir
 
 
@@ -595,7 +642,6 @@ def main():
 
     # Create checkpoint directories
     os.makedirs(CKPT_DIR, exist_ok=True)
-    os.makedirs(PROFILING_DIR, exist_ok=True)
     print(f"Checkpoint directory: {CKPT_DIR}")
 
     # Download model
@@ -672,24 +718,23 @@ def main():
     print(f"\nTo view training metrics, run:")
     print(f"  tensorboard --logdir {os.path.join(CKPT_DIR, 'tensorboard')}")
 
-    with jax.profiler.trace(os.path.join(PROFILING_DIR, "tool_calling_lora")):
-        with mesh:
-            trainer.train(train_loader, validation_loader)
+    with mesh:
+        trainer.train(train_loader, validation_loader)
 
     print(f"\n{'='*60}")
     print("Training complete!")
     print(f"{'='*60}")
 
-    # Save LoRA weights
-    saved_path = save_lora_weights(lora_model, LORA_OUTPUT_DIR)
+    # Save LoRA weights merged with base model
+    saved_path = save_lora_weights(lora_model, local_model_path, LORA_OUTPUT_DIR)
 
     print(f"\n{'='*60}")
     print("Summary")
     print(f"{'='*60}")
-    print(f"LoRA weights saved to: {saved_path}")
+    print(f"Model saved to: {saved_path}")
     print(f"Training checkpoints: {CKPT_DIR}")
-    print(f"\nTo use the trained model, load the base Gemma 3 270M model")
-    print(f"and apply these LoRA weights from: {saved_path}")
+    print(f"\nThe model is ready to use for inference!")
+    print(f"Load it from: {saved_path}")
 
 
 if __name__ == '__main__':
