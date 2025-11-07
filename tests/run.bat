@@ -15,17 +15,17 @@ if not exist "%WEIGHTS_DIR%\config.txt" (
     cd /d "%PROJECT_ROOT%"
     where python3 >nul 2>&1
     if !errorlevel!==0 (
-        echo Running: LiquidAI/LFM2-350M weights/lfm2-350m/
-        python3 LiquidAI/LFM2-350M weights/lfm2-350m/
+        echo Running: python3 tools/convert_hf.py LiquidAI/LFM2-350M weights/lfm2-350m/ --precision INT8
+        python3 tools/convert_hf.py LiquidAI/LFM2-350M weights/lfm2-350m/ --precision INT8
         if !errorlevel!==0 (
             echo Successfully generated Weights
         ) else (
             echo Warning: Failed to generate Weights. Tests may fail.
-            echo Please run manually: LiquidAI/LFM2-350M weights/lfm2-350m/
+            echo Please run manually: python3 tools/convert_hf.py LiquidAI/LFM2-350M weights/lfm2-350m/ --precision INT8
         )
     ) else (
         echo Warning: Python3 not found. Cannot generate weights automatically.
-        echo Please run manually: LiquidAI/LFM2-350M weights/lfm2-350m/
+        echo Please run manually: python3 tools/convert_hf.py LiquidAI/LFM2-350M weights/lfm2-350m/ --precision INT8
     )
 ) else (
     echo.
