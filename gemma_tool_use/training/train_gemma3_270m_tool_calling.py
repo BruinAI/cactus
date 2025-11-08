@@ -53,7 +53,7 @@ logger.setLevel(logging.INFO)
 # ============================================================================
 
 # Model configuration
-MODEL_ID = "google/gemma-3-270m-it"
+MODEL_ID = "google/gemma-3-1b-it"  # Choose either "google/gemma-3-270m-it" or "google/gemma-3-1b-it"
 GEMMA_TOKENIZER_PATH = "gs://gemma-data/tokenizers/tokenizer_gemma3.model"
 
 # Training hyperparameters
@@ -752,7 +752,7 @@ def test_model_generation(model, tokenizer, model_config, eos_tokens, label="Mod
         transformer=model,
         tokenizer=tokenizer,
         cache_config=sampler_lib.CacheConfig(
-            cache_size=512,  # Large enough for prompt + generation
+            cache_size=1024,
             num_layers=model_config.num_layers,
             num_kv_heads=model_config.num_kv_heads,
             head_dim=model_config.head_dim,
