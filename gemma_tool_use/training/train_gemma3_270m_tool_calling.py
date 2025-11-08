@@ -18,6 +18,9 @@ import os
 import json
 import logging
 import shutil
+import nest_asyncio
+nest_asyncio.apply()
+
 import jax
 import jax.numpy as jnp
 from typing import Dict, List, Any
