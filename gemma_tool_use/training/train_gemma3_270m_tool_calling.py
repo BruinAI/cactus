@@ -71,7 +71,7 @@ ALPHA = 16.0
 NUM_DEVICES = len(jax.devices())
 if NUM_DEVICES == 8:
     # 8 TPUs: use both FSDP and tensor parallelism
-    MESH_COUNTS = (1, 4)
+    MESH_COUNTS = (2, 4)
 elif NUM_DEVICES == 1:
     MESH_COUNTS = (1, 1)
 else:
@@ -88,8 +88,7 @@ MAX_TOOLS_AVAILABLE = 3
 
 # Checkpoint and output directories
 CKPT_DIR = "/tmp/gemma_tool_calling_ckpts/"
-LORA_OUTPUT_DIR = "./gemma3_270m_tool_calling_lora"
-
+LORA_OUTPUT_DIR = f"./{MODEL_ID.split('/')[-1]}_tool_calling_lora"
 
 # ============================================================================
 # Tool Calling Format Functions
@@ -881,7 +880,10 @@ def main():
     print("Loading base model")
     print(f"{'='*60}")
 
-    model_config = gemma_lib.ModelConfig.gemma3_270m()
+    if "gemma-3-270m" in MODEL_ID:
+        model_config = gemma_lib.ModelConfig.gemma3_270m()
+    elif "gemma-3-1b" in MODEL_ID:
+        model_config = gemma_lib.ModelConfig.gemma3_1b()
     mesh = jax.make_mesh(*MESH)
 
     with mesh:
