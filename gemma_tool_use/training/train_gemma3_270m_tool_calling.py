@@ -237,15 +237,16 @@ def format_gemma3_tool_calling_example(sample: Dict[str, Any]) -> Dict[str, str]
 
                 elif msg_role == 'tool_call':
                     # Format tool call
-                    tool_name = msg.get('name', 'unknown')
-                    tool_args = msg.get('arguments', {})
+                    # Toucan stores tool calls in 'content' as a string representation of a dict
+                    tool_call_content = msg['content']
 
-                    # Parse arguments if they're a string
-                    if isinstance(tool_args, str):
-                        try:
-                            tool_args = json.loads(tool_args)
-                        except:
-                            pass
+                    # Parse the content string (it's a Python dict as string)
+                    tool_call_data = eval(tool_call_content)
+                    tool_name = tool_call_data['name']
+                    tool_args_str = tool_call_data['arguments']
+
+                    # Parse arguments (stored as JSON string)
+                    tool_args = json.loads(tool_args_str)
 
                     # Format as Gemma 3 tool call
                     call_data = {
@@ -310,7 +311,8 @@ def filter_toucan_dataset(dataset, max_tools_used=2, max_tools_available=3, max_
         num_tool_responses = sum(1 for m in messages if m['role'] == 'tool_response')
         assert num_tool_calls == num_tool_responses
 
-        if num_tool_calls > max_tools_used:
+        # Filter to only 0 or 1 tool calls (avoids samples with >4 groups)
+        if num_tool_calls > 1:
             return False
 
         # Check number of available tools
