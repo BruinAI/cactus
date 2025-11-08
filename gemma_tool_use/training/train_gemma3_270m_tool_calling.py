@@ -88,7 +88,7 @@ MAX_TOOLS_AVAILABLE = 3
 
 # Checkpoint and output directories
 CKPT_DIR = "/tmp/gemma_tool_calling_ckpts/"
-LORA_OUTPUT_DIR = f"./{MODEL_ID.split('/')[-1]}_tool_calling_lora"
+LORA_OUTPUT_DIR = f"/dev/shm/{MODEL_ID.split('/')[-1]}_tool_calling_lora"
 
 # ============================================================================
 # Tool Calling Format Functions
@@ -291,30 +291,41 @@ def filter_toucan_dataset(dataset, max_tools_used=2, max_tools_available=3, max_
     """
     print(f"\nFiltering dataset (single-turn, ≤{max_tools_used} tools used, ≤{max_tools_available} tools available)...")
 
-    filtered_indices = []
     total = len(dataset)
 
-    for idx in tqdm(range(total), desc="Filtering samples", unit="sample"):
-        sample = dataset[idx]
+    def filter_fn(sample):
+        """Filter function for a single sample."""
         messages = json.loads(sample['messages'])
 
+        # Check number of user messages
         user_messages = [m for m in messages if m['role'] == 'user']
         if len(user_messages) > max_number_of_turns or len(user_messages) == 0:
-            continue
+            return False
 
+        # Check number of tool calls matches tool responses
         num_tool_calls = sum(1 for m in messages if m['role'] == 'tool_call')
-        assert num_tool_calls == sum(1 for m in messages if m['role'] == 'tool_response')
+        num_tool_responses = sum(1 for m in messages if m['role'] == 'tool_response')
+        assert num_tool_calls == num_tool_responses
+
         if num_tool_calls > max_tools_used:
-            continue
+            return False
 
+        # Check number of available tools
         if len(json.loads(sample['tools'])) > max_tools_available:
-            continue
+            return False
 
-        filtered_indices.append(idx)
+        return True
 
-    print(f"Filtered dataset size: {len(filtered_indices):,} samples ({100 * len(filtered_indices) / total:.2f}% retained)")
+    # Use HuggingFace's native filter with batching and multiprocessing
+    filtered_dataset = dataset.filter(
+        filter_fn,
+        num_proc=4,  # Use 4 processes for parallel filtering
+        desc="Filtering samples"
+    )
 
-    return dataset.select(filtered_indices)
+    print(f"Filtered dataset size: {len(filtered_dataset):,} samples ({100 * len(filtered_dataset) / total:.2f}% retained)")
+
+    return filtered_dataset
 
 
 # ============================================================================
@@ -884,8 +895,10 @@ def main():
         model_config = gemma_lib.ModelConfig.gemma3_270m()
     elif "gemma-3-1b" in MODEL_ID:
         model_config = gemma_lib.ModelConfig.gemma3_1b()
+    else:
+        raise ValueError(f"Unsupported model ID: {MODEL_ID}")
+    
     mesh = jax.make_mesh(*MESH)
-
     with mesh:
         base_model = params_safetensors_lib.create_model_from_safe_tensors(
             local_model_path, (model_config), mesh
