@@ -108,6 +108,56 @@ def format_tools_for_prompt(tools: List[Dict[str, Any]]) -> str:
     return f"<tools>\n{json.dumps(tools, indent=2)}\n</tools>"
 
 
+def group_messages_by_turn(messages: List[Dict[str, Any]]) -> List[List[Dict[str, Any]]]:
+    """
+    Groups messages into turns based on their roles.
+    Each user message is its own turn.
+    - Each user message must follow assistant message and be first message
+    Each assistant message + following consecutive tool calls are grouped together.
+    - Assistant messages must follow user or tool call messages.
+    - tool calls must follow assistant messages.
+    Each set of consecutive tool responses are grouped together.
+    - Tool responses must follow tool calls.
+
+    Args:
+        messages: List of message dictionaries with 'role' and 'content'
+
+    Returns:
+        List of message groups, where each group represents a turn
+    """
+    grouped_messages = []
+    last_type = 'assistant'  # Initialize to assistant to allow first user message
+    for msg in messages:
+        role = msg['role']
+        if role == 'user':
+            assert last_type == 'assistant', \
+                f"User message must follow assistant message, found this previous type instead: {last_type}"
+            grouped_messages.append([msg])
+            last_type = 'user'
+        elif role == 'assistant':
+            assert last_type in ['user', 'tool_response'], \
+                f"Assistant message must follow user or tool response message, found this previous type instead: {last_type}"
+            grouped_messages.append([msg])
+            last_type = 'assistant'
+        elif role == 'tool_call':
+            if last_type in ('user', 'tool_response'):
+                grouped_messages.append([msg])
+            else:
+                grouped_messages[-1].append(msg)
+            last_type = 'tool_call'
+        elif role == 'tool_response':
+            assert last_type in ('tool_call', 'tool_response'), \
+                f"Tool response message must follow tool call or tool response message, found this previous type instead: {last_type}"
+            if last_type == 'tool_call':
+                grouped_messages.append([msg])
+            else:
+                grouped_messages[-1].append(msg)
+            last_type = 'tool_response'
+        else:
+            raise ValueError(f"Unknown message role: {role}")
+    return grouped_messages
+
+
 def format_gemma3_tool_calling_example(sample: Dict[str, Any]) -> Dict[str, str]:
     """
     Format a Toucan dataset sample into Gemma 3 tool calling format.
@@ -118,6 +168,13 @@ def format_gemma3_tool_calling_example(sample: Dict[str, Any]) -> Dict[str, str]
     - Format: {"name": "<function-name>", "args": {...}}
     - System instructions and tools are prepended to first user message
 
+    Toucan dataset structure:
+    - Separate messages with role="tool_call" and role="tool_response"
+    - Multi-turn format with grouped messages:
+      - Each user message is a separate turn
+      - Each assistant + tool_calls group is a separate turn
+      - Each tool_responses group is a separate turn
+
     Args:
         sample: A Toucan dataset sample with 'messages', 'tools', 'target_tools'
 
@@ -127,71 +184,94 @@ def format_gemma3_tool_calling_example(sample: Dict[str, Any]) -> Dict[str, str]
     messages = json.loads(sample['messages'])
     tools = json.loads(sample['tools'])
 
-    # Build the prompt following Gemma 3 chat template
-    full_text = "<start_of_turn>user\n"
-
-    # Extract system message if present (prepend to first user message)
+    # Extract system message if present
     system_content = ""
     if len(messages) > 0 and messages[0]['role'] == 'system':
         system_content = messages[0]['content']
         messages = messages[1:]
 
-    # Find the first user message and assistant response
-    user_message = None
-    assistant_message = None
+    # Group messages by turn
+    grouped_messages = group_messages_by_turn(messages)
 
-    for msg in messages:
-        if msg['role'] == 'user' and user_message is None:
-            user_message = msg['content']
-        elif msg['role'] == 'assistant' and assistant_message is None:
-            assistant_message = msg
-            break
+    full_text = ""
 
-    if user_message is None:
-        raise ValueError("No user message found in sample")
+    # Process each turn
+    for turn_idx, turn_group in enumerate(grouped_messages):
+        if not turn_group:
+            continue
 
-    # Add system instructions if present
-    if system_content:
-        full_text += system_content + "\n\n"
+        first_msg = turn_group[0]
+        role = first_msg['role']
 
-    # Add tools definition
-    full_text += "Here are the available tools that you can use:\n"
-    full_text += format_tools_for_prompt(tools)
-    full_text += "\n\n"
+        if role == 'user':
+            # User turn
+            full_text += "<start_of_turn>user\n"
 
-    # Add user query
-    full_text += user_message
-    full_text += "<end_of_turn>\n"
+            # Add system instructions to first user message
+            if turn_idx == 0 and system_content:
+                full_text += system_content + "\n\n"
 
-    # Build the completion (assistant response with tool calls)
-    full_text += "<start_of_turn>model\n"
+            # Add tools definition to first user message
+            if turn_idx == 0:
+                full_text += "Here are the available tools that you can use:\n"
+                full_text += format_tools_for_prompt(tools)
+                full_text += "\n\n"
 
-    if assistant_message:
-        # Add any text content before tool calls
-        if 'content' in assistant_message and assistant_message['content']:
-            full_text += assistant_message['content'] + "\n"
+            # Add user content
+            full_text += first_msg['content']
+            full_text += "<end_of_turn>\n"
 
-        # Add tool calls
-        if 'tool_calls' in assistant_message and assistant_message['tool_calls']:
-            for tool_call in assistant_message['tool_calls']:
-                full_text += '<tool_call>\n'
-                # Handle both formats: with 'function' wrapper or direct
-                if 'function' in tool_call:
+        elif role == 'assistant':
+            # Assistant turn (may include tool calls)
+            full_text += "<start_of_turn>model\n"
+
+            for msg in turn_group:
+                msg_role = msg['role']
+
+                if msg_role == 'assistant':
+                    # Add assistant text content
+                    if 'content' in msg and msg['content']:
+                        full_text += msg['content'] + "\n"
+
+                elif msg_role == 'tool_call':
+                    # Format tool call
+                    tool_name = msg.get('name', 'unknown')
+                    tool_args = msg.get('arguments', {})
+
+                    # Parse arguments if they're a string
+                    if isinstance(tool_args, str):
+                        try:
+                            tool_args = json.loads(tool_args)
+                        except:
+                            pass
+
+                    # Format as Gemma 3 tool call
                     call_data = {
-                        "name": tool_call['function']['name'],
-                        "args": tool_call['function'].get('arguments', {})
+                        "name": tool_name,
+                        "args": tool_args
                     }
-                else:
-                    call_data = {
-                        "name": tool_call['name'],
-                        "args": tool_call.get('arguments', tool_call.get('args', {}))
-                    }
-                full_text += json.dumps(call_data)
-                full_text += '\n</tool_call>\n'
+                    full_text += '<tool_call>\n'
+                    full_text += json.dumps(call_data)
+                    full_text += '\n</tool_call>\n'
 
-    full_text += "<end_of_turn>"
+            full_text += "<end_of_turn>\n"
 
-    return {'text': full_text}
+        elif role == 'tool_response':
+            # Tool response turn (wrapped as user message)
+            full_text += "<start_of_turn>user\n"
+
+            for msg in turn_group:
+                tool_content = msg.get('content', '')
+                if isinstance(tool_content, dict):
+                    tool_content = json.dumps(tool_content, indent=2)
+
+                full_text += '<tool_response>\n'
+                full_text += str(tool_content)
+                full_text += '\n</tool_response>\n'
+
+            full_text += "<end_of_turn>\n"
+
+    return {'text': full_text.rstrip()}
 
 
 # ============================================================================
