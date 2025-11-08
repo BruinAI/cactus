@@ -775,7 +775,7 @@ What's the weather in Boston?<end_of_turn>
 """
 
     print("\n--- Example 1: Tool Calling ---")
-    print("Prompt: What's the weather in Boston?")
+    print("Prompt:", prompt1)
     print("\nModel response:")
 
     out_data1 = sampler(
@@ -783,15 +783,7 @@ What's the weather in Boston?<end_of_turn>
         max_generation_steps=128,
         eos_tokens=eos_tokens,
     )
-
-    response1 = out_data1.text[0]
-    # Extract just the model's response after the prompt
-    if "<start_of_turn>model" in response1:
-        response1 = response1.split("<start_of_turn>model")[-1]
-    if "<end_of_turn>" in response1:
-        response1 = response1.split("<end_of_turn>")[0]
-
-    print(response1.strip())
+    print(out_data1.text[0].strip())
 
     # Example 2: Using tool response
     prompt2 = f"""<start_of_turn>user
@@ -824,7 +816,7 @@ What's the weather in Boston?<end_of_turn>
 """
 
     print("\n--- Example 2: Using Tool Response ---")
-    print("Prompt: [After tool returns weather data]")
+    print("Prompt:", prompt2)
     print("\nModel response:")
 
     out_data2 = sampler(
@@ -832,15 +824,7 @@ What's the weather in Boston?<end_of_turn>
         max_generation_steps=64,
         eos_tokens=eos_tokens,
     )
-
-    response2 = out_data2.text[0]
-    # Extract just the model's response after the prompt
-    if "<start_of_turn>model" in response2:
-        response2 = response2.split("<start_of_turn>model")[-1]
-    if "<end_of_turn>" in response2:
-        response2 = response2.split("<end_of_turn>")[0]
-
-    print(response2.strip())
+    print(out_data2.text[0].strip())
     print()
 
 
