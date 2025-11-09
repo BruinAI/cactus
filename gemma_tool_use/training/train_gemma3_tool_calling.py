@@ -59,7 +59,7 @@ GEMMA_TOKENIZER_PATH = "gs://gemma-data/tokenizers/tokenizer_gemma3.model"
 
 # Training hyperparameters
 # Optimized for TPU v5e-4 (even with 8, only 4 will be used)
-NUM_EPOCHS = 3
+NUM_EPOCHS = 1
 LEARNING_RATE = 3e-4
 MAX_TARGET_LENGTH = 4096  # 95th percentile = 3,845 tokens
 MAX_STEPS = None
@@ -85,12 +85,13 @@ MAX_TOOLS_AVAILABLE = 3
 CKPT_DIR = "/tmp/gemma_tool_calling_ckpts/"
 LORA_OUTPUT_DIR = f"/dev/shm/{MODEL_ID.split('/')[-1]}_tool_calling_lora"
 
-# SYSTEM_PROMPT = """To get data you don't have access to, you may use the appropriate tools:
-# 1. Call the tool with <tool_call>{"name": "...", "args": {...}}</tool_call>
-# 2. You will receive tool results as: <tool_response>{"name": "...", "result": ...}</tool_response>
-# 3. Use the result to answer the user's question.
-# You can make multiple tool calls, but only use tools when necessary.
-# """
+USE_SYSTEM_PROMPT = True
+SYSTEM_PROMPT = """To get data you don't have access to, you may use the appropriate tools:
+1. Call the tool with <tool_call>{"name": "...", "args": {...}}</tool_call>
+2. You will receive tool results as: <tool_response>{"name": "...", "result": ...}</tool_response>
+3. Use the result to answer the user's question.
+You can make multiple tool calls, but only use tools when necessary.
+"""
 
 # Calculating derived hyperparameters
 assert DESIRED_EFFECTIVE_BATCH_SIZE % BATCH_SIZE == 0
@@ -226,6 +227,8 @@ def format_gemma3_tool_calling_example(sample: Dict[str, Any]) -> Optional[Dict[
 
             # Add tools definition to first user message
             if turn_idx == 0:
+                if USE_SYSTEM_PROMPT:
+                    full_text += SYSTEM_PROMPT
                 full_text += "Here are the available tools that you can use:\n"
                 full_text += format_tools_for_prompt(tools)
                 full_text += "\n\n"
@@ -830,7 +833,7 @@ def test_model_generation(model, tokenizer, model_config, eos_tokens, label="Mod
     ]
 
     prompt1 = f"""<start_of_turn>user
-Here are the available tools that you can use:
+{SYSTEM_PROMPT + '\n' if USE_SYSTEM_PROMPT else ''}Here are the available tools that you can use:
 {format_tools_for_prompt(tools)}
 
 What's the weather in Boston?<end_of_turn>
@@ -841,7 +844,7 @@ What's the weather in Boston?<end_of_turn>
     tool_response_json = json_dump({"name": "get_weather", "result": {"temperature": 72, "condition": "Sunny"}})
 
     prompt2 = f"""<start_of_turn>user
-Here are the available tools that you can use:
+{SYSTEM_PROMPT + '\n' if USE_SYSTEM_PROMPT else ''}Here are the available tools that you can use:
 {format_tools_for_prompt(tools)}
 
 What's the weather in Boston?<end_of_turn>
