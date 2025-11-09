@@ -505,9 +505,7 @@ def create_tool_calling_dataset(tokenizer, global_batch_size, max_target_length,
             }
             
             formatted = format_gemma3_tool_calling_example(sample)
-            if formatted is None:
-                return None
-            texts.append(formatted['text'])
+            texts.append(formatted['text'] if formatted else None)
 
         return {'text': texts}
 
@@ -525,10 +523,8 @@ def create_tool_calling_dataset(tokenizer, global_batch_size, max_target_length,
     )
 
     # Remove any empty examples that failed formatting
-    train_dataset = train_dataset.filter(lambda x: x is not None)
-    train_dataset = train_dataset.filter(lambda x: len(x['text']) > 0)
-    validation_dataset = validation_dataset.filter(lambda x: x is not None)
-    validation_dataset = validation_dataset.filter(lambda x: len(x['text']) > 0)
+    train_dataset = train_dataset.filter(lambda x: x is not None and len(x['text']) > 0)
+    validation_dataset = validation_dataset.filter(lambda x: x is not None and len(x['text']) > 0)
 
     print(f"Formatted {len(train_dataset):,} training examples")
     print(f"Formatted {len(validation_dataset):,} validation examples")
