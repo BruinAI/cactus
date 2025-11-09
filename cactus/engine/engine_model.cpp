@@ -447,7 +447,7 @@ std::unique_ptr<Model> create_model(const std::string& model_folder) {
     }
 }
 
-void Model::capture_debug_node(uint32_t layer_idx, const std::string& name, size_t node_id) {
+void Model::capture_debug_node(uint32_t layer_idx, const std::string& name, size_t node_id) const {
     debug_nodes_.push_back({layer_idx, name, node_id});
 }
 

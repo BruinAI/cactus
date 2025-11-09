@@ -1,0 +1,513 @@
+[input.pixel_values] shape=(1, 1024, 768) min=-1 max=1 mean=0.183386 std=0.504903 sum1e6=144221
+  final_token: 0.254902, 0.0509804, -0.615686, 0.301961, 0.0980392, -0.568627, 0.364706, 0.145098
+[input.pixel_attention_mask] shape=(1, 1024) min=1 max=1 mean=1 std=0 sum1e6=1024
+  final_token: 1, 1, 1, 1, 1, 1, 1, 1
+[input.spatial_shapes] shape=(1, 2) min=32 max=32 mean=32 std=0 sum1e6=64
+  final_token: 32, 32
+[input.input_ids] shape=(1, 272) min=1 max=64015 mean=745.592 std=3973.47 sum1e6=202801
+  final_token: 1, 6, 6423, 708, 498, 396, 396, 396
+[input.attention_mask] shape=(1, 272) min=1 max=1 mean=1 std=0 sum1e6=272
+  final_token: 1, 1, 1, 1, 1, 1, 1, 1
+[model.language_model.embed_tokens#0] shape=(1, 272, 1024) min=-0.205078 max=0.179688 mean=-0.000384638 std=0.0150018 sum1e6=-107.132
+  final_token: -0.0324707, -0.00497437, -0.00750732, 0.0159912, 0.0307617, -0.026001, 0.017334, 0.0163574
+[model.vision_tower.vision_model.embeddings.patch_embedding#0] shape=(1, 1024, 768) min=-3.01579 max=4.53943 mean=0.0872745 std=0.509767 sum1e6=68635.4
+  final_token: -0.104806, 0.375656, -0.368603, 0.0829869, 0.156119, 0.0619896, -0.331987, -0.432496
+[model.vision_tower.vision_model.encoder.layers.0.layer_norm1#0] shape=(1, 1024, 768) min=-12.9804 max=20.859 mean=-0.000944548 std=0.39092 sum1e6=-742.823
+  final_token: 0.0517165, 0.0986377, -0.207603, 0.0297387, -0.0176513, 0.00028203, 0.00406313, -0.119828
+[model.vision_tower.vision_model.encoder.layers.0.self_attn.q_proj#0] shape=(1, 1024, 768) min=-5.85094 max=6.45642 mean=-0.0565531 std=1.02265 sum1e6=-44475.2
+  final_token: -0.395819, -0.739399, 0.48299, -0.0616283, 0.180082, 0.326892, 0.779327, -0.265591
+[model.vision_tower.vision_model.encoder.layers.0.self_attn.k_proj#0] shape=(1, 1024, 768) min=-7.86631 max=6.66016 mean=-0.0479944 std=0.911301 sum1e6=-37744.4
+  final_token: 0.736828, -0.0680445, 0.275332, -0.774927, -0.0378181, -0.293437, 0.125617, 0.205954
+[model.vision_tower.vision_model.encoder.layers.0.self_attn.v_proj#0] shape=(1, 1024, 768) min=-3.68235 max=3.65747 mean=-0.00310346 std=0.241085 sum1e6=-2440.66
+  final_token: -0.0515162, -0.0830342, -0.0131541, -0.18892, -0.017199, 0.0398306, -0.337813, -0.0301359
+[model.vision_tower.vision_model.encoder.layers.0.self_attn.out_proj#0] shape=(1, 1024, 768) min=-5.70573 max=4.72463 mean=-0.00526352 std=0.363845 sum1e6=-4139.4
+  final_token: -0.653561, -0.530774, 0.132926, 0.0302889, 0.202803, -0.825558, 0.118186, 0.276434
+[model.vision_tower.vision_model.encoder.layers.0.layer_norm2#0] shape=(1, 1024, 768) min=-24.8187 max=29.7973 mean=-0.00368575 std=0.792111 sum1e6=-2898.6
+  final_token: 0.000263986, 0.000308183, -0.292343, 0.245359, 0.000368675, -0.0013182, -0.0488754, -0.25105
+[model.vision_tower.vision_model.encoder.layers.0.mlp.fc1#0] shape=(1, 1024, 3072) min=-18.9999 max=9.1924 mean=-1.23411 std=1.39714 sum1e6=-1.23609e+06
+  final_token: -2.17966, -2.7325, -1.78081, -0.369482, 0.0457584, -3.6638, -2.10259, -0.129174
+[model.vision_tower.vision_model.encoder.layers.0.mlp.fc2#0] shape=(1, 1024, 768) min=-5.40043 max=3.24873 mean=0.0319739 std=0.267343 sum1e6=25145.3
+  final_token: -0.0251002, 0.9774, -0.183076, -0.0526801, -0.23727, 0.634478, 0.212163, 0.0211369
+[model.vision_tower.vision_model.encoder.layers.1.layer_norm1#0] shape=(1, 1024, 768) min=-20.0553 max=19.2534 mean=0.00806754 std=0.912195 sum1e6=6344.57
+  final_token: 0.733127, 0.667266, -0.603552, -0.0583229, 0.408526, -1.1816, 0.628889, -0.168667
+[model.vision_tower.vision_model.encoder.layers.1.self_attn.q_proj#0] shape=(1, 1024, 768) min=-9.21578 max=10.2904 mean=0.0199046 std=1.81836 sum1e6=15653.6
+  final_token: 0.507736, 0.575585, -0.775346, -0.655342, -0.346486, -0.632511, -2.11217, 0.789437
+[model.vision_tower.vision_model.encoder.layers.1.self_attn.k_proj#0] shape=(1, 1024, 768) min=-7.92626 max=9.09876 mean=0.0172491 std=1.55833 sum1e6=13565.2
+  final_token: 0.501188, -0.272145, -1.22527, -0.9832, 0.0402512, 1.51183, -3.25576, 0.768157
+[model.vision_tower.vision_model.encoder.layers.1.self_attn.v_proj#0] shape=(1, 1024, 768) min=-4.65385 max=6.83983 mean=0.00981655 std=0.412198 sum1e6=7720.05
+  final_token: 0.419414, 0.873067, -0.414882, -1.03844, -0.246192, 0.728715, 0.105694, -0.983515
+[model.vision_tower.vision_model.encoder.layers.1.self_attn.out_proj#0] shape=(1, 1024, 768) min=-3.88203 max=5.76503 mean=-0.00574338 std=0.270735 sum1e6=-4516.78
+  final_token: -0.251021, -0.461258, 0.215793, 0.160081, -0.149847, 0.0171743, 0.0155245, -0.0310136
+[model.vision_tower.vision_model.encoder.layers.1.layer_norm2#0] shape=(1, 1024, 768) min=-13.0661 max=31.2808 mean=0.013073 std=0.883652 sum1e6=10281
+  final_token: 0.345735, 0.18211, -0.582789, 0.607232, 0.12705, -0.000938613, 1.28393, -0.0908405
+[model.vision_tower.vision_model.encoder.layers.1.mlp.fc1#0] shape=(1, 1024, 3072) min=-11.5002 max=3.62401 mean=-0.789495 std=0.871711 sum1e6=-763225
+  final_token: -0.951704, -3.97377, -2.52646, -0.85619, 0.104237, -0.72039, 0.546444, 0.037217
+[model.vision_tower.vision_model.encoder.layers.1.mlp.fc2#0] shape=(1, 1024, 768) min=-2.15842 max=1.77116 mean=0.015713 std=0.161234 sum1e6=12357.2
+  final_token: 0.0408292, 0.0481717, 0.0291152, -0.0776477, 0.0339275, 0.0213518, -0.144114, 0.0165415
+[model.vision_tower.vision_model.encoder.layers.2.layer_norm1#0] shape=(1, 1024, 768) min=-18.717 max=24.0436 mean=0.00852579 std=1.14629 sum1e6=6704.96
+  final_token: 0.364114, -0.302347, -0.175882, -0.181123, 0.0289207, -1.37366, 0.418312, -0.0637587
+[model.vision_tower.vision_model.encoder.layers.2.self_attn.q_proj#0] shape=(1, 1024, 768) min=-10.2016 max=10.7954 mean=0.0309072 std=1.59411 sum1e6=24306.4
+  final_token: 0.145948, -0.976129, 1.0556, -0.433136, 0.0788156, 0.46452, -0.62488, -0.66966
+[model.vision_tower.vision_model.encoder.layers.2.self_attn.k_proj#0] shape=(1, 1024, 768) min=-6.66566 max=6.84761 mean=0.016957 std=1.45223 sum1e6=13335.5
+  final_token: 0.175244, -0.715705, 0.0417979, -0.922172, -2.14867, 3.4524, -0.180278, -1.6738
+[model.vision_tower.vision_model.encoder.layers.2.self_attn.v_proj#0] shape=(1, 1024, 768) min=-3.71457 max=3.28838 mean=0.00498815 std=0.456591 sum1e6=3922.84
+  final_token: -0.00302303, 0.360177, -0.748716, 0.0691644, -0.106621, -0.468099, -0.097296, -0.384912
+[model.vision_tower.vision_model.encoder.layers.2.self_attn.out_proj#0] shape=(1, 1024, 768) min=-1.95353 max=1.71104 mean=0.0016503 std=0.153762 sum1e6=1297.85
+  final_token: -0.145571, 0.065483, 0.0312126, 0.0458942, 0.253048, 0.197943, 0.0977397, 0.0147823
+[model.vision_tower.vision_model.encoder.layers.2.layer_norm2#0] shape=(1, 1024, 768) min=-8.52965 max=30.1041 mean=-0.00971618 std=1.02053 sum1e6=-7641.11
+  final_token: -0.669579, 0.0124958, 0.0562607, 0.230841, 1.01187, -0.320674, 0.898373, 0.10267
+[model.vision_tower.vision_model.encoder.layers.2.mlp.fc1#0] shape=(1, 1024, 3072) min=-6.90405 max=4.8208 mean=-0.76966 std=0.88201 sum1e6=-781037
+  final_token: -2.0653, -0.431285, 0.133539, -0.882351, -1.77476, -0.303959, -0.186222, -0.704651
+[model.vision_tower.vision_model.encoder.layers.2.mlp.fc2#0] shape=(1, 1024, 768) min=-1.45767 max=1.78981 mean=0.00292201 std=0.143527 sum1e6=2297.96
+  final_token: 0.125321, -0.0100521, -0.133611, -0.0458607, -0.168421, -0.147444, -0.12318, -0.0516967
+[model.vision_tower.vision_model.encoder.layers.3.layer_norm1#0] shape=(1, 1024, 768) min=-21.3278 max=27.5406 mean=0.00687583 std=1.20737 sum1e6=5407.37
+  final_token: 0.0933176, -0.425138, -0.643603, -0.111147, 0.183324, -1.2064, 0.254142, -0.222431
+[model.vision_tower.vision_model.encoder.layers.3.self_attn.q_proj#0] shape=(1, 1024, 768) min=-9.2457 max=12.5219 mean=0.0602689 std=1.31299 sum1e6=47397.4
+  final_token: 2.48605, -0.00618369, -1.77943, 0.17529, -0.997297, 1.88758, 0.416233, -1.28565
+[model.vision_tower.vision_model.encoder.layers.3.self_attn.k_proj#0] shape=(1, 1024, 768) min=-5.86825 max=6.63219 mean=0.0219617 std=1.25494 sum1e6=17271.4
+  final_token: 2.11901, -0.0582396, -1.03045, 0.00275876, 0.0392178, -1.87988, 0.489617, -2.02437
+[model.vision_tower.vision_model.encoder.layers.3.self_attn.v_proj#0] shape=(1, 1024, 768) min=-5.0317 max=4.75189 mean=0.00325933 std=0.593587 sum1e6=2563.24
+  final_token: -0.905727, 0.399627, 0.193002, 0.603223, 0.137234, 0.718108, 0.760336, 0.487069
+[model.vision_tower.vision_model.encoder.layers.3.self_attn.out_proj#0] shape=(1, 1024, 768) min=-1.4517 max=1.16487 mean=0.00256712 std=0.12638 sum1e6=2018.86
+  final_token: -0.133482, 0.159608, 0.0106513, 0.152148, 0.153583, 0.18605, -0.11713, 0.0367472
+[model.vision_tower.vision_model.encoder.layers.3.layer_norm2#0] shape=(1, 1024, 768) min=-9.95119 max=35.774 mean=-0.00102537 std=1.10669 sum1e6=-806.387
+  final_token: -0.665442, 0.434928, -0.258152, 0.0737784, 0.859823, -0.439285, -0.259445, -0.222595
+[model.vision_tower.vision_model.encoder.layers.3.mlp.fc1#0] shape=(1, 1024, 3072) min=-6.7131 max=5.12673 mean=-0.954928 std=0.919573 sum1e6=-968392
+  final_token: -0.0372121, -0.666058, -1.79715, -0.440147, -1.29413, -1.63993, -2.23064, -0.806423
+[model.vision_tower.vision_model.encoder.layers.3.mlp.fc2#0] shape=(1, 1024, 768) min=-2.32171 max=2.1955 mean=0.00170139 std=0.137103 sum1e6=1338.03
+  final_token: -0.150372, -0.0669065, 0.12848, 0.0305363, -0.11045, -0.132748, 0.0948829, 0.0994002
+[model.vision_tower.vision_model.encoder.layers.4.layer_norm1#0] shape=(1, 1024, 768) min=-17.3308 max=28.0559 mean=0.00762975 std=1.23138 sum1e6=6000.28
+  final_token: -1.92069, 0.157879, 0.219942, 0.605529, 0.303866, -1.39444, 0.134932, 0.719137
+[model.vision_tower.vision_model.encoder.layers.4.self_attn.q_proj#0] shape=(1, 1024, 768) min=-11.0791 max=9.40286 mean=-0.0463439 std=1.30087 sum1e6=-36446.3
+  final_token: -1.11248, 1.33699, 1.05057, 1.83779, -1.16921, -0.341745, -1.00329, -0.0869648
+[model.vision_tower.vision_model.encoder.layers.4.self_attn.k_proj#0] shape=(1, 1024, 768) min=-6.76838 max=6.90717 mean=0.0246349 std=1.23752 sum1e6=19373.7
+  final_token: -0.24474, 1.71787, -0.644022, 1.65361, -1.11627, 1.08093, -0.837228, 1.10522
+[model.vision_tower.vision_model.encoder.layers.4.self_attn.v_proj#0] shape=(1, 1024, 768) min=-4.45165 max=5.87161 mean=-0.00273979 std=0.572844 sum1e6=-2154.66
+  final_token: 0.0788089, 0.599154, -0.0921821, 0.587833, 0.443413, -0.837885, 0.625648, -0.0652197
+[model.vision_tower.vision_model.encoder.layers.4.self_attn.out_proj#0] shape=(1, 1024, 768) min=-2.35512 max=1.13041 mean=0.000654049 std=0.124999 sum1e6=514.365
+  final_token: 0.00794843, 0.00299954, 0.114846, -0.018283, -0.0208738, 0.108429, 0.148305, -0.029689
+[model.vision_tower.vision_model.encoder.layers.4.layer_norm2#0] shape=(1, 1024, 768) min=-18.4823 max=26.0039 mean=-0.0100779 std=1.12578 sum1e6=-7925.59
+  final_token: -2.09983, 0.356062, 0.852407, 0.898197, 0.11894, -0.454796, 1.34487, 0.441188
+[model.vision_tower.vision_model.encoder.layers.4.mlp.fc1#0] shape=(1, 1024, 3072) min=-8.28454 max=4.89294 mean=-1.1268 std=1.02954 sum1e6=-1.15279e+06
+  final_token: 0.0721505, -1.15561, -0.0366024, -0.54403, -0.778804, -1.43431, -1.94813, -0.0397158
+[model.vision_tower.vision_model.encoder.layers.4.mlp.fc2#0] shape=(1, 1024, 768) min=-4.91958 max=4.65773 mean=0.000559398 std=0.145911 sum1e6=439.928
+  final_token: 0.0769435, 0.192395, -0.207762, -0.0685944, 0.100924, -0.248936, -0.23852, -0.198271
+[model.vision_tower.vision_model.encoder.layers.5.layer_norm1#0] shape=(1, 1024, 768) min=-15.326 max=22.9699 mean=0.00700434 std=1.21646 sum1e6=5508.44
+  final_token: -1.56956, 1.39185, -0.534731, 0.422418, 0.900838, -3.02625, -0.416744, -1.04093
+[model.vision_tower.vision_model.encoder.layers.5.self_attn.q_proj#0] shape=(1, 1024, 768) min=-12.6842 max=9.1353 mean=-0.00615756 std=1.28451 sum1e6=-4842.5
+  final_token: -0.406215, -0.115389, 0.317831, 0.47145, 1.58401, 0.565755, -0.77707, 0.734697
+[model.vision_tower.vision_model.encoder.layers.5.self_attn.k_proj#0] shape=(1, 1024, 768) min=-6.70736 max=7.76621 mean=-0.0301555 std=1.19089 sum1e6=-23715.2
+  final_token: -0.286346, -1.28662, -0.204247, 1.11147, 0.151748, -0.400892, -0.0954146, 1.55086
+[model.vision_tower.vision_model.encoder.layers.5.self_attn.v_proj#0] shape=(1, 1024, 768) min=-6.15613 max=4.28729 mean=-0.00957725 std=0.555056 sum1e6=-7531.86
+  final_token: 0.385931, 0.158795, 0.179821, -0.22517, -0.209706, -0.209875, 0.0592472, -0.321867
+[model.vision_tower.vision_model.encoder.layers.5.self_attn.out_proj#0] shape=(1, 1024, 768) min=-4.14163 max=2.94284 mean=-0.0011354 std=0.131164 sum1e6=-892.913
+  final_token: 0.104024, 0.0734546, 0.0442267, -0.0133097, 0.0308315, 0.161022, 0.0392968, 0.130545
+[model.vision_tower.vision_model.encoder.layers.5.layer_norm2#0] shape=(1, 1024, 768) min=-17.4655 max=24.19 mean=-0.000875766 std=1.18974 sum1e6=-688.73
+  final_token: -0.665556, 2.22268, -0.356985, 0.639926, 0.773017, -0.786021, 0.34709, 0.0721182
+[model.vision_tower.vision_model.encoder.layers.5.mlp.fc1#0] shape=(1, 1024, 3072) min=-45.1234 max=137.611 mean=-1.30341 std=1.26533 sum1e6=-1.34066e+06
+  final_token: -1.07007, 0.410841, -0.767483, -1.332, -2.29471, -1.87348, 0.886922, -1.60758
+[model.vision_tower.vision_model.encoder.layers.5.mlp.fc2#0] shape=(1, 1024, 768) min=-168.981 max=140.992 mean=1.51457e-05 std=0.482554 sum1e6=11.911
+  final_token: 0.0641461, -0.0841581, 0.138323, -0.286772, -0.118237, -0.120784, 0.0218645, -0.0194542
+[model.vision_tower.vision_model.encoder.layers.6.layer_norm1#0] shape=(1, 1024, 768) min=-15.5815 max=22.5899 mean=-0.00585105 std=1.36936 sum1e6=-4601.45
+  final_token: -0.384557, 2.19855, 0.765597, -2.01217, -0.442379, -3.67831, 0.149199, -0.0709767
+[model.vision_tower.vision_model.encoder.layers.6.self_attn.q_proj#0] shape=(1, 1024, 768) min=-10.9297 max=10.9396 mean=0.0168932 std=1.37409 sum1e6=13285.4
+  final_token: 0.0144703, -0.026764, 0.520478, -1.29921, -0.561548, 0.00230378, 0.247272, 0.831419
+[model.vision_tower.vision_model.encoder.layers.6.self_attn.k_proj#0] shape=(1, 1024, 768) min=-7.84877 max=6.82236 mean=0.00282585 std=1.17363 sum1e6=2222.34
+  final_token: 0.433377, -0.336869, 0.359754, -0.434504, 1.11323, 0.397468, 0.060778, -0.22952
+[model.vision_tower.vision_model.encoder.layers.6.self_attn.v_proj#0] shape=(1, 1024, 768) min=-3.85759 max=4.01202 mean=0.000907452 std=0.617596 sum1e6=713.649
+  final_token: 0.270488, 0.515945, 0.677877, 0.113768, -0.164425, 0.248168, -0.374602, 0.0994053
+[model.vision_tower.vision_model.encoder.layers.6.self_attn.out_proj#0] shape=(1, 1024, 768) min=-2.86862 max=0.999334 mean=-0.000462679 std=0.136175 sum1e6=-363.866
+  final_token: -0.0415039, 0.121536, 0.100163, 0.170691, 0.0241049, 0.18289, -0.0275561, 0.070993
+[model.vision_tower.vision_model.encoder.layers.6.layer_norm2#0] shape=(1, 1024, 768) min=-28.8833 max=28.8247 mean=0.00145893 std=1.25245 sum1e6=1147.35
+  final_token: -0.607729, 2.77432, 1.49514, -0.431141, -0.0488996, -0.409864, 0.613178, 0.201654
+[model.vision_tower.vision_model.encoder.layers.6.mlp.fc1#0] shape=(1, 1024, 3072) min=-11.9586 max=12.3318 mean=-1.31007 std=0.944535 sum1e6=-1.32895e+06
+  final_token: -2.50937, -1.45624, -1.55884, -1.20344, -2.03914, -2.45, -3.73827, -1.77335
+[model.vision_tower.vision_model.encoder.layers.6.mlp.fc2#0] shape=(1, 1024, 768) min=-10.7425 max=8.95573 mean=0.000187849 std=0.153759 sum1e6=147.731
+  final_token: -0.0825883, -0.0937063, -0.0848023, -0.234652, -0.240452, 0.0459557, 0.0582458, -0.00645377
+[model.vision_tower.vision_model.encoder.layers.7.layer_norm1#0] shape=(1, 1024, 768) min=-16.4774 max=19.4418 mean=-0.00756802 std=1.41064 sum1e6=-5951.73
+  final_token: -1.29549, 1.74996, 0.762019, -2.18116, -2.16966, -0.762514, 0.296243, 0.518866
+[model.vision_tower.vision_model.encoder.layers.7.self_attn.q_proj#0] shape=(1, 1024, 768) min=-10.7833 max=10.5656 mean=-0.0605309 std=1.40587 sum1e6=-47603.4
+  final_token: -0.168972, -0.00427671, 0.786709, -0.341271, -0.617089, 0.393316, 0.455748, 1.06407
+[model.vision_tower.vision_model.encoder.layers.7.self_attn.k_proj#0] shape=(1, 1024, 768) min=-6.45411 max=7.96052 mean=0.0651625 std=1.16489 sum1e6=51245.9
+  final_token: -1.10322, -0.846435, 1.84692, 0.34474, -0.723476, 0.523579, 0.179427, -0.524709
+[model.vision_tower.vision_model.encoder.layers.7.self_attn.v_proj#0] shape=(1, 1024, 768) min=-3.95068 max=3.47689 mean=0.00331509 std=0.6206 sum1e6=2607.09
+  final_token: 0.691515, 0.117803, -0.479689, 0.904733, 0.601604, -0.242888, 1.08585, 0.431498
+[model.vision_tower.vision_model.encoder.layers.7.self_attn.out_proj#0] shape=(1, 1024, 768) min=-1.36617 max=0.852467 mean=0.00400626 std=0.136572 sum1e6=3150.65
+  final_token: -0.0436595, 0.0734968, 0.0737987, 0.147242, -0.0435242, 0.0928783, -0.107123, 0.0929567
+[model.vision_tower.vision_model.encoder.layers.7.layer_norm2#0] shape=(1, 1024, 768) min=-31.9695 max=30.7025 mean=-0.0105254 std=1.61058 sum1e6=-8277.52
+  final_token: -2.02287, 3.09161, 1.47025, -1.63317, -3.15018, 0.204738, 0.35537, 1.34211
+[model.vision_tower.vision_model.encoder.layers.7.mlp.fc1#0] shape=(1, 1024, 3072) min=-11.0909 max=5.431 mean=-1.61024 std=0.973655 sum1e6=-1.58478e+06
+  final_token: -0.63623, -2.298, -2.40067, -1.2612, -0.964505, -1.66315, -1.08499, -1.48007
+[model.vision_tower.vision_model.encoder.layers.7.mlp.fc2#0] shape=(1, 1024, 768) min=-1.35736 max=2.53593 mean=-0.00172346 std=0.166675 sum1e6=-1355.38
+  final_token: 0.114888, -0.0936376, -0.0114054, -0.113423, 0.00483216, 0.0166308, 0.277704, -0.0843783
+[model.vision_tower.vision_model.encoder.layers.8.layer_norm1#0] shape=(1, 1024, 768) min=-15.1582 max=21.6443 mean=-0.0136097 std=1.52058 sum1e6=-10703.1
+  final_token: -0.881459, 1.52656, 0.954156, -1.67785, -2.72483, 0.0878483, 1.63317, 0.552236
+[model.vision_tower.vision_model.encoder.layers.8.self_attn.q_proj#0] shape=(1, 1024, 768) min=-12.1027 max=10.3713 mean=-0.0606782 std=1.45004 sum1e6=-47719.3
+  final_token: 0.601891, -0.794923, -0.49523, 0.319367, 0.0843902, 0.843922, -1.73475, 0.63118
+[model.vision_tower.vision_model.encoder.layers.8.self_attn.k_proj#0] shape=(1, 1024, 768) min=-8.08959 max=8.02831 mean=0.0553741 std=1.18481 sum1e6=43547.9
+  final_token: -1.6089, 0.796808, 1.66913, 0.435811, 0.52571, -0.488653, -0.0725079, 1.00119
+[model.vision_tower.vision_model.encoder.layers.8.self_attn.v_proj#0] shape=(1, 1024, 768) min=-3.60549 max=3.778 mean=-0.00547885 std=0.656417 sum1e6=-4308.75
+  final_token: -0.543858, 0.768621, 0.433744, 0.114743, -0.212577, 0.954738, -1.14617, 1.50292
+[model.vision_tower.vision_model.encoder.layers.8.self_attn.out_proj#0] shape=(1, 1024, 768) min=-0.950992 max=1.98117 mean=0.00240443 std=0.183919 sum1e6=1890.92
+  final_token: -0.127296, 0.0917445, -0.364335, 0.306611, -0.344093, -0.128058, -0.057903, 0.196883
+[model.vision_tower.vision_model.encoder.layers.8.layer_norm2#0] shape=(1, 1024, 768) min=-96.8461 max=80.3675 mean=0.298192 std=6.05543 sum1e6=234508
+  final_token: -3.83943, 5.1284, -3.51826, 0.00480086, -10.7955, 1.38735, 8.4558, 5.98214
+[model.vision_tower.vision_model.encoder.layers.8.mlp.fc1#0] shape=(1, 1024, 3072) min=-22.7974 max=23.0595 mean=-5.99416 std=2.60907 sum1e6=-5.87996e+06
+  final_token: -8.8088, -6.64908, -5.57269, -5.69037, -5.00748, -6.73127, -3.9231, -4.99744
+[model.vision_tower.vision_model.encoder.layers.8.mlp.fc2#0] shape=(1, 1024, 768) min=-3.79772 max=2.77878 mean=0.0051442 std=0.334826 sum1e6=4045.56
+  final_token: 0.0276901, -0.356186, 0.528518, -0.312396, 0.734095, 0.487872, -0.142197, -0.265539
+[model.vision_tower.vision_model.encoder.layers.9.layer_norm1#0] shape=(1, 1024, 768) min=-12.8712 max=26.4196 mean=0.000989986 std=1.58694 sum1e6=778.557
+  final_token: -1.27756, -0.279132, 1.04368, -0.923689, -0.431623, 1.40609, 0.292807, -0.082092
+[model.vision_tower.vision_model.encoder.layers.9.self_attn.q_proj#0] shape=(1, 1024, 768) min=-10.846 max=11.7978 mean=0.00257649 std=1.41588 sum1e6=2026.24
+  final_token: -0.618213, 2.72862, -2.63192, 1.38259, 1.08318, 0.37384, -1.13667, -0.244925
+[model.vision_tower.vision_model.encoder.layers.9.self_attn.k_proj#0] shape=(1, 1024, 768) min=-7.55375 max=7.1848 mean=-0.00716865 std=1.15996 sum1e6=-5637.65
+  final_token: 0.627496, 1.41463, -1.56946, -0.607438, 0.0645403, -1.29167, -1.14722, -0.28299
+[model.vision_tower.vision_model.encoder.layers.9.self_attn.v_proj#0] shape=(1, 1024, 768) min=-4.68267 max=4.01203 mean=0.00033013 std=0.732624 sum1e6=259.625
+  final_token: 0.0466993, 0.288805, -0.617288, 0.127763, 0.343173, 0.352159, 0.149141, -0.595277
+[model.vision_tower.vision_model.encoder.layers.9.self_attn.out_proj#0] shape=(1, 1024, 768) min=-2.04877 max=3.26464 mean=0.00440795 std=0.307517 sum1e6=3466.55
+  final_token: -0.0862598, 0.0103593, -0.312454, 0.337524, -0.70714, -0.446401, 0.289713, 0.141269
+[model.vision_tower.vision_model.encoder.layers.9.layer_norm2#0] shape=(1, 1024, 768) min=-183.941 max=114.383 mean=0.399016 std=9.86948 sum1e6=313799
+  final_token: -4.67213, -5.88717, 2.96547, -0.406063, -11.7773, 2.12451, 15.2927, 4.34357
+[model.vision_tower.vision_model.encoder.layers.9.mlp.fc1#0] shape=(1, 1024, 3072) min=-239.539 max=974.426 mean=-10.7214 std=4.94583 sum1e6=-1.05029e+07
+  final_token: -14.098, -5.00209, -9.29028, -6.68469, -8.9998, -11.2041, -10.7513, -9.06961
+[model.vision_tower.vision_model.encoder.layers.9.mlp.fc2#0] shape=(1, 1024, 768) min=-102.492 max=254.746 mean=0.0177889 std=0.591637 sum1e6=13989.8
+  final_token: 0.259888, 0.0554643, 0.475466, -0.100734, 0.771494, 0.250741, -0.279341, -0.104503
+[model.vision_tower.vision_model.encoder.layers.10.layer_norm1#0] shape=(1, 1024, 768) min=-15.2406 max=30.8764 mean=0.00802069 std=1.74955 sum1e6=6307.72
+  final_token: -0.555993, 0.173773, 1.35982, 0.175328, -0.792518, 0.577802, 0.256255, -0.0493187
+[model.vision_tower.vision_model.encoder.layers.10.self_attn.q_proj#0] shape=(1, 1024, 768) min=-10.7126 max=10.3409 mean=0.023733 std=1.52317 sum1e6=18664.4
+  final_token: 7.89341, -1.08945, 0.454502, -0.85117, -0.413324, 0.81506, -1.11222, 0.863666
+[model.vision_tower.vision_model.encoder.layers.10.self_attn.k_proj#0] shape=(1, 1024, 768) min=-7.86141 max=8.52965 mean=-0.0290725 std=1.1978 sum1e6=-22863.5
+  final_token: -1.82196, -0.707419, 0.950645, -1.8377, -0.561059, 0.900008, -1.93996, 1.73597
+[model.vision_tower.vision_model.encoder.layers.10.self_attn.v_proj#0] shape=(1, 1024, 768) min=-6.13305 max=4.82355 mean=-0.0267418 std=0.89262 sum1e6=-21030.6
+  final_token: -0.0284273, 0.130645, -0.454467, -0.777478, -0.505618, 0.575078, -0.634156, -0.767414
+[model.vision_tower.vision_model.encoder.layers.10.self_attn.out_proj#0] shape=(1, 1024, 768) min=-2.26937 max=2.9384 mean=0.00971272 std=0.325787 sum1e6=7638.39
+  final_token: -0.243839, -0.259418, -0.267617, 0.0520041, -0.754871, 0.279858, 0.360547, 0.139691
+[model.vision_tower.vision_model.encoder.layers.10.layer_norm2#0] shape=(1, 1024, 768) min=-259.653 max=356.412 mean=0.876878 std=14.7628 sum1e6=689605
+  final_token: -6.12123, -16.5791, 9.8393, -3.51842, -15.5623, 6.99265, 18.9954, 5.18359
+[model.vision_tower.vision_model.encoder.layers.10.mlp.fc1#0] shape=(1, 1024, 3072) min=-312.839 max=408.047 mean=-17.266 std=7.53008 sum1e6=-1.69935e+07
+  final_token: -12.7693, -3.34587, -18.5118, -12.3542, -13.283, -24.7244, -17.4998, -19.2493
+[model.vision_tower.vision_model.encoder.layers.10.mlp.fc2#0] shape=(1, 1024, 768) min=-34.2899 max=92.0771 mean=0.00556361 std=0.489914 sum1e6=4375.4
+  final_token: 0.073134, 0.141178, 0.291075, -0.0809398, 0.762763, 0.174535, -0.275849, -0.247519
+[model.vision_tower.vision_model.encoder.layers.11.layer_norm1#0] shape=(1, 1024, 768) min=-17.0762 max=37.5321 mean=0.0235889 std=1.6482 sum1e6=18551
+  final_token: -1.07127, -0.330359, 1.05647, 0.160158, -1.57545, 2.44548, 0.360535, -0.217931
+[model.vision_tower.vision_model.encoder.layers.11.self_attn.q_proj#0] shape=(1, 1024, 768) min=-8.56681 max=10.0953 mean=-0.00165107 std=1.25616 sum1e6=-1298.45
+  final_token: -0.838403, 0.127883, 4.81542, 0.698057, -0.317056, -0.57915, 0.00935235, -0.108491
+[model.vision_tower.vision_model.encoder.layers.11.self_attn.k_proj#0] shape=(1, 1024, 768) min=-7.05562 max=7.83934 mean=0.0324748 std=1.13711 sum1e6=25539.2
+  final_token: -0.695584, 1.28602, -1.78242, 1.27942, -0.197516, -0.108, 0.220222, 1.14623
+[model.vision_tower.vision_model.encoder.layers.11.self_attn.v_proj#0] shape=(1, 1024, 768) min=-6.87806 max=6.28646 mean=-0.0488785 std=1.0518 sum1e6=-38439.6
+  final_token: -0.771475, -0.489415, 0.271639, 0.390832, 1.05184, -0.91924, 0.270066, -0.129561
+[model.vision_tower.vision_model.encoder.layers.11.self_attn.out_proj#0] shape=(1, 1024, 768) min=-10.3511 max=8.10612 mean=-0.023878 std=0.827116 sum1e6=-18778.4
+  final_token: 0.451596, 0.542669, -0.222912, 0.139691, -1.08081, 0.189524, 0.152622, 0.356819
+[model.vision_tower.vision_model.encoder.layers.11.layer_norm2#0] shape=(1, 1024, 768) min=-243.823 max=300.461 mean=0.419246 std=11.7307 sum1e6=329709
+  final_token: 4.05998, 4.78037, 2.97544, -0.179096, -13.7666, 6.67068, 7.63621, 4.45844
+[model.vision_tower.vision_model.encoder.layers.11.mlp.fc1#0] shape=(1, 1024, 3072) min=-180.294 max=231.151 mean=-7.28011 std=7.49689 sum1e6=-7.42319e+06
+  final_token: -6.72512, -4.35364, -3.03669, -11.186, 3.30119, -8.68402, -11.936, -5.94855
+[model.vision_tower.vision_model.encoder.layers.11.mlp.fc2#0] shape=(1, 1024, 768) min=-171.054 max=87.301 mean=-0.703007 std=6.63643 sum1e6=-552867
+  final_token: -1.16807, -5.45184, -0.76623, -0.338155, 1.3578, -0.621842, -0.759623, 0.0928166
+[model.vision_tower.vision_model.post_layernorm#0] shape=(1, 1024, 768) min=-13.7279 max=46.466 mean=0.0897066 std=2.18674 sum1e6=70548.1
+  final_token: -0.578548, -1.53243, -0.58403, 0.0971647, -0.942069, -0.5181, 0.121734, 0.500705
+[model.multi_modal_projector.layer_norm#0] shape=(1, 16, 16, 3072) min=-6.72397 max=22.9222 mean=0.000824995 std=0.977636 sum1e6=648.802
+  final_token: -0.265671, -0.583979, -0.423206, -0.127933, 0.0773377, -0.120793, 0.012762, 0.0408056
+[model.multi_modal_projector.linear_1#0] shape=(1, 16, 16, 2560) min=-3.73975 max=3.15223 mean=-0.245841 std=0.461558 sum1e6=-161114
+  final_token: -0.13028, 0.342406, 0.102077, -0.303922, -0.0563701, -0.0605546, 0.00937495, -0.290591
+[model.multi_modal_projector.linear_2#0] shape=(1, 16, 16, 1024) min=-13.2908 max=6.80401 mean=-0.00267447 std=0.119234 sum1e6=-701.098
+  final_token: 0.0924915, -0.0578137, 0.0420194, 0.0412033, 0.0389783, -0.0625979, -0.0420268, 0.062923
+[model.language_model.layers.0.operator_norm#0] shape=(1, 272, 1024) min=-9.92548 max=5.1012 mean=-0.0123474 std=0.342361 sum1e6=-3439.11
+  final_token: -0.510891, -0.0806524, -0.122441, 0.277685, 0.513514, -0.401614, 0.264416, 0.291891
+[model.language_model.layers.0.conv.in_proj#0] shape=(1, 272, 3072) min=-3.38362 max=5.41215 mean=0.00796052 std=0.288319 sum1e6=6651.68
+  final_token: -0.0507398, -0.0560546, -0.0262577, -0.0044106, 0.231772, -0.0494951, 0.116481, -0.150362
+[model.language_model.layers.0.conv.conv#0] shape=(1, 1024, 274) min=-0.434867 max=0.535024 mean=-0.000308573 std=0.017069 sum1e6=-86.5781
+  final_token: -3.65222e-06, -0.000468173, -0.000439759, 0.000276836, -0.000835298, -0.00128037, 0.000203374, -0.00288793
+[model.language_model.layers.0.conv.out_proj#0] shape=(1, 272, 1024) min=-0.651302 max=0.235536 mean=-2.52961e-05 std=0.00607942 sum1e6=-7.04567
+  final_token: 0.0266097, 0.0057633, 0.00393224, -0.0169956, -0.0194425, 0.0222108, -0.00730175, -0.0164997
+[model.language_model.layers.0.ffn_norm#0] shape=(1, 272, 1024) min=-2.06227 max=1.3566 mean=-0.00527057 std=0.154402 sum1e6=-1468
+  final_token: -0.0509558, 0.00694267, -0.031461, -0.00899875, 0.0870084, -0.030742, 0.0829659, -0.0012826
+[model.language_model.layers.0.feed_forward.w1#0] shape=(1, 272, 4608) min=-1.18947 max=0.722705 mean=-0.00311573 std=0.126036 sum1e6=-3262.09
+  final_token: 0.0775247, -0.0423393, -0.0246905, 0.0685807, 0.0766539, -0.0654069, -0.0880237, 0.0482522
+[model.language_model.layers.0.feed_forward.w3#0] shape=(1, 272, 4608) min=-0.794474 max=0.754168 mean=0.00161686 std=0.114289 sum1e6=1666.4
+  final_token: -0.0021227, -0.0590069, -0.00555915, -0.0119399, 0.11334, 0.0252113, -0.027172, -0.0517276
+[model.language_model.layers.0.feed_forward.w2#0] shape=(1, 272, 1024) min=-0.200695 max=0.215336 mean=5.40449e-05 std=0.0135521 sum1e6=15.053
+  final_token: 0.00535182, 0.000835596, 0.00222594, -0.000554355, -0.00340326, 0.00584269, -0.00473299, -0.000291929
+[model.language_model.layers.1.operator_norm#0] shape=(1, 272, 1024) min=-3.8251 max=3.75997 mean=-0.0128197 std=0.327912 sum1e6=-3570.63
+  final_token: -0.011623, 0.0381477, -0.0297341, -0.0361948, 0.0939806, 0.046043, 0.119572, -0.00692152
+[model.language_model.layers.1.conv.in_proj#0] shape=(1, 272, 3072) min=-3.02046 max=2.50268 mean=0.00352096 std=0.334378 sum1e6=2942.06
+  final_token: 0.638881, 0.127241, -0.255374, 0.0297114, 0.045709, 0.0049374, 0.431844, -0.0417915
+[model.language_model.layers.1.conv.conv#0] shape=(1, 1024, 274) min=-0.433045 max=0.291962 mean=0.00062012 std=0.0191467 sum1e6=173.991
+  final_token: 0.000220128, 0.00377893, -0.00765047, -0.0023765, -0.00101644, 0.00258783, 0.00246734, -0.00268565
+[model.language_model.layers.1.conv.out_proj#0] shape=(1, 272, 1024) min=-0.441342 max=0.13329 mean=6.85088e-05 std=0.00519773 sum1e6=19.0816
+  final_token: -0.00120781, 0.00108604, -0.000460481, 0.0015964, 0.000661268, 5.78683e-05, -0.00242151, 0.000481554
+[model.language_model.layers.1.ffn_norm#0] shape=(1, 272, 1024) min=-1.83209 max=1.56924 mean=-0.00609381 std=0.170219 sum1e6=-1697.3
+  final_token: -0.0203451, 0.0230849, -0.0205491, 0.000461956, 0.0329513, 0.0231826, 0.0328556, 0.00025545
+[model.language_model.layers.1.feed_forward.w1#0] shape=(1, 272, 4608) min=-1.0843 max=0.984628 mean=-0.0547357 std=0.146508 sum1e6=-55149.6
+  final_token: -0.0453205, 0.0346988, -0.0438364, -0.0243642, -0.111688, -0.152602, -0.205866, -0.0149307
+[model.language_model.layers.1.feed_forward.w3#0] shape=(1, 272, 4608) min=-0.933002 max=1.0385 mean=-0.000261869 std=0.12097 sum1e6=-242.859
+  final_token: 0.0214752, -0.00511772, -0.0397057, 0.0175476, 0.00207965, -0.0176181, 0.0223195, -0.116248
+[model.language_model.layers.1.feed_forward.w2#0] shape=(1, 272, 1024) min=-0.574028 max=0.235185 mean=0.000140266 std=0.0150208 sum1e6=39.0679
+  final_token: 0.000386928, -0.00406732, 0.000663396, 0.00350812, -2.03924e-05, 0.00230528, -0.00116071, -0.00284803
+[model.language_model.layers.2.operator_norm#0] shape=(1, 272, 1024) min=-0.615936 max=0.722339 mean=-0.00147446 std=0.0412901 sum1e6=-410.678
+  final_token: -0.00300254, -0.00276826, -0.00227238, 0.0089791, 0.00749127, 0.010543, 0.00417423, -0.00281671
+[model.language_model.layers.2.self_attn.q_proj#0] shape=(1, 272, 1024) min=-0.211525 max=0.206826 mean=0.00109026 std=0.0387654 sum1e6=303.669
+  final_token: 0.00163842, 0.00283947, -0.000562574, 0.00286419, -0.000740252, -0.000495981, 0.00522355, -8.81188e-05
+[model.language_model.layers.2.self_attn.q_layernorm#0] shape=(1, 272, 16, 64) min=-11.3679 max=10.4708 mean=0.0295838 std=1.52628 sum1e6=8239.92
+  final_token: 0.0934108, 0.149767, -0.0241841, 0.141464, -0.0291139, -0.0323601, 0.289846, -0.00558808
+[model.language_model.layers.2.self_attn.k_proj#0] shape=(1, 272, 512) min=-0.272758 max=0.345052 mean=-0.000942019 std=0.0418156 sum1e6=-131.189
+  final_token: 0.00264818, 0.000883928, -0.000223098, -0.000204433, -1.72861e-05, -0.000219202, -0.00485998, 0.00332288
+[model.language_model.layers.2.self_attn.k_layernorm#0] shape=(1, 272, 8, 64) min=-17.8389 max=15.6503 mean=-0.0328026 std=1.42328 sum1e6=-4568.22
+  final_token: 0.118322, 0.0281218, -0.00918532, -0.0093255, -0.000723829, -0.00897366, -0.151207, 0.131368
+[model.language_model.layers.2.self_attn.v_proj#0] shape=(1, 272, 512) min=-0.313647 max=0.237961 mean=-0.00099114 std=0.0295074 sum1e6=-138.03
+  final_token: 0.0441684, 0.0302854, -0.00213802, -0.00176911, 0.0138676, -0.00578558, 0.00521091, -0.0049996
+[model.language_model.layers.2.self_attn.out_proj#0] shape=(1, 272, 1024) min=-0.118193 max=0.239392 mean=0.00061949 std=0.0131978 sum1e6=172.545
+  final_token: -0.00466087, -0.000707442, 0.00652871, 0.00795447, -0.00557441, -0.00657659, 0.00651021, -0.00283556
+[model.language_model.layers.2.ffn_norm#0] shape=(1, 272, 1024) min=-2.0737 max=1.44074 mean=-0.0036034 std=0.148802 sum1e6=-1003.65
+  final_token: -0.0878437, -0.0179919, 0.0745373, 0.172372, 0.0134227, -0.0271087, 0.113932, -0.03168
+[model.language_model.layers.2.feed_forward.w1#0] shape=(1, 272, 4608) min=-0.80363 max=0.589628 mean=-0.0612072 std=0.111858 sum1e6=-61127.1
+  final_token: -0.0726108, -0.0266195, -0.0308371, -0.0123564, -0.250818, -0.0893356, -0.00185755, 0.0364367
+[model.language_model.layers.2.feed_forward.w3#0] shape=(1, 272, 4608) min=-0.779336 max=0.533295 mean=-0.000540825 std=0.100596 sum1e6=-476.142
+  final_token: 0.0159085, -0.0119285, -0.0289039, -0.0878388, 0.0364374, 0.101057, -0.0689828, 0.0440329
+[model.language_model.layers.2.feed_forward.w2#0] shape=(1, 272, 1024) min=-0.162807 max=0.459514 mean=0.000236283 std=0.0104072 sum1e6=65.8114
+  final_token: 0.00111497, 0.00112323, -0.00178384, -0.00869019, 0.00229228, 0.00524819, -0.007462, -6.48933e-05
+[model.language_model.layers.3.operator_norm#0] shape=(1, 272, 1024) min=-3.31484 max=3.49167 mean=-0.00654875 std=0.298959 sum1e6=-1824.01
+  final_token: -0.174321, -0.0218469, 0.12274, 0.0998833, 0.0606907, 0.0995882, 0.0261003, -0.0694051
+[model.language_model.layers.3.conv.in_proj#0] shape=(1, 272, 3072) min=-1.86146 max=2.12695 mean=-0.0101179 std=0.3122 sum1e6=-8454.38
+  final_token: -0.720841, 0.321141, 0.124902, 0.446723, 0.0877683, -0.137319, -0.122315, 0.103942
+[model.language_model.layers.3.conv.conv#0] shape=(1, 1024, 274) min=-0.198046 max=0.223314 mean=9.74891e-05 std=0.0176683 sum1e6=27.3531
+  final_token: 0.00870605, 0.0243101, 0.0215117, 0.0145826, 0.0214114, 0.0382442, 0.0397362, 0.0398565
+[model.language_model.layers.3.conv.out_proj#0] shape=(1, 272, 1024) min=-0.0451864 max=0.137696 mean=9.62522e-05 std=0.00390971 sum1e6=26.8089
+  final_token: -0.000459981, 0.00420806, 0.00443746, -0.00458964, 0.00127124, 0.00543859, 0.00216014, 0.000526605
+[model.language_model.layers.3.ffn_norm#0] shape=(1, 272, 1024) min=-2.87854 max=1.36904 mean=-0.00275965 std=0.151573 sum1e6=-768.641
+  final_token: -0.107788, 0.0321434, 0.154762, -0.0361355, 0.0320298, 0.142777, 0.0532762, -0.0299233
+[model.language_model.layers.3.feed_forward.w1#0] shape=(1, 272, 4608) min=-0.870065 max=0.539968 mean=-0.0599053 std=0.115229 sum1e6=-60163.6
+  final_token: 0.0298728, -0.0792134, 0.0315366, -0.0510956, -0.0812771, -0.0291972, -0.0545681, -0.0663252
+[model.language_model.layers.3.feed_forward.w3#0] shape=(1, 272, 4608) min=-0.574599 max=1.07034 mean=0.00123692 std=0.102763 sum1e6=1269.99
+  final_token: -0.0101404, -0.162544, -0.0968666, 0.0490762, 0.0260726, -0.0723675, -0.0411785, 0.0369984
+[model.language_model.layers.3.feed_forward.w2#0] shape=(1, 272, 1024) min=-0.0810266 max=0.110384 mean=-2.19728e-05 std=0.0099553 sum1e6=-6.12005
+  final_token: -0.00485444, -0.00264186, -0.00279967, 0.000125772, 0.00212363, 0.00297174, -0.0118151, 0.00473943
+[model.language_model.layers.4.operator_norm#0] shape=(1, 272, 1024) min=-4.16573 max=4.9888 mean=-0.00613537 std=0.297266 sum1e6=-1708.87
+  final_token: -0.348916, 0.0115083, 0.175148, -0.0563003, 0.0720659, 0.368642, -0.297342, -0.00389705
+[model.language_model.layers.4.conv.in_proj#0] shape=(1, 272, 3072) min=-2.49247 max=2.45437 mean=0.0028592 std=0.375429 sum1e6=2389.1
+  final_token: -0.284047, -0.366377, 0.0358947, 0.282263, -0.229987, -0.502947, -0.0164164, 0.291672
+[model.language_model.layers.4.conv.conv#0] shape=(1, 1024, 274) min=-0.288037 max=0.281802 mean=-2.92274e-05 std=0.020491 sum1e6=-8.2005
+  final_token: 0.00169513, -0.000732153, 0.00106179, 0.000214829, -0.0093313, 0.0115714, 0.00988091, -0.024728
+[model.language_model.layers.4.conv.out_proj#0] shape=(1, 272, 1024) min=-0.200709 max=0.0636315 mean=-1.25259e-05 std=0.00495223 sum1e6=-3.48882
+  final_token: 0.00120945, 0.00251956, -0.000482711, -0.00230962, 0.00148705, 0.000778966, 0.00137692, 0.000849706
+[model.language_model.layers.4.ffn_norm#0] shape=(1, 272, 1024) min=-3.73032 max=1.77029 mean=-0.00296671 std=0.148436 sum1e6=-826.312
+  final_token: -0.150636, 0.0240014, 0.0767803, -0.06472, 0.0439408, 0.176496, -0.116676, 0.00194989
+[model.language_model.layers.4.feed_forward.w1#0] shape=(1, 272, 4608) min=-1.19849 max=0.993376 mean=-0.058642 std=0.124879 sum1e6=-58672.4
+  final_token: 0.0662371, -0.0357404, -0.0165732, 0.00117039, -0.103719, -0.0860426, -0.110554, 0.0109374
+[model.language_model.layers.4.feed_forward.w3#0] shape=(1, 272, 4608) min=-0.874637 max=0.994301 mean=0.000477293 std=0.107287 sum1e6=523.447
+  final_token: 0.16263, -0.0821729, -0.0117896, -0.0793345, 0.00105883, 0.0201137, 0.0495565, 0.10863
+[model.language_model.layers.4.feed_forward.w2#0] shape=(1, 272, 1024) min=-1.08821 max=0.261289 mean=-5.21909e-05 std=0.0120983 sum1e6=-14.5366
+  final_token: 0.00708599, -0.00123625, -0.00233452, -6.71438e-06, -0.00117538, 0.00357278, 0.00581836, -0.000859539
+[model.language_model.layers.5.operator_norm#0] shape=(1, 272, 1024) min=-0.715169 max=1.13675 mean=-0.000499687 std=0.0479319 sum1e6=-139.177
+  final_token: -0.00818721, 0.00294245, 0.0101395, -0.0157605, 0.00559666, 0.0570644, -0.00641343, -0.000255721
+[model.language_model.layers.5.self_attn.q_proj#0] shape=(1, 272, 1024) min=-0.287782 max=0.327751 mean=-0.00093499 std=0.0420859 sum1e6=-260.421
+  final_token: 0.035179, -0.00212573, -0.00247301, 0.00432139, 0.131492, -0.00106648, 0.00301693, 0.00547599
+[model.language_model.layers.5.self_attn.q_layernorm#0] shape=(1, 272, 16, 64) min=-8.64366 max=7.49457 mean=-0.0502403 std=1.58106 sum1e6=-13993.3
+  final_token: 1.15752, -0.0694811, -0.0959211, 0.193039, 0.111029, -0.0481052, 0.101898, 0.238649
+[model.language_model.layers.5.self_attn.k_proj#0] shape=(1, 272, 512) min=-0.323537 max=0.310034 mean=-0.00226073 std=0.0413836 sum1e6=-314.838
+  final_token: 0.0159848, 0.014242, 0.0057419, -0.00119227, -0.00376899, -0.00871066, -0.0148223, 0.00716592
+[model.language_model.layers.5.self_attn.k_layernorm#0] shape=(1, 272, 8, 64) min=-9.51491 max=9.30567 mean=-0.0927802 std=1.50909 sum1e6=-12920.9
+  final_token: 0.00106117, 0.125343, 0.194169, -0.0405248, -0.105884, -0.250755, -0.472959, 0.150987
+[model.language_model.layers.5.self_attn.v_proj#0] shape=(1, 272, 512) min=-0.216295 max=0.209726 mean=0.000620695 std=0.0316733 sum1e6=86.4404
+  final_token: -0.0367241, 0.00569777, -0.00222263, 0.0183444, 0.0263927, -0.0265357, -0.0269376, -0.00310685
+[model.language_model.layers.5.self_attn.out_proj#0] shape=(1, 272, 1024) min=-0.0728036 max=0.237567 mean=0.00016573 std=0.01016 sum1e6=46.1605
+  final_token: -0.00874723, -0.00307059, 0.00532831, -0.00304681, -0.00128171, -0.00241275, 0.00168652, 0.00105573
+[model.language_model.layers.5.ffn_norm#0] shape=(1, 272, 1024) min=-2.88044 max=1.72781 mean=-0.00269063 std=0.142377 sum1e6=-749.414
+  final_token: -0.166186, -0.0072131, 0.119773, -0.109028, 0.0223935, 0.157367, -0.000105896, 0.00211013
+[model.language_model.layers.5.feed_forward.w1#0] shape=(1, 272, 4608) min=-2.13878 max=0.631383 mean=-0.0562016 std=0.119968 sum1e6=-55729.5
+  final_token: -0.0593803, -0.052538, -0.0239013, -0.0372843, -0.123296, -0.0080673, -0.00681103, -0.0495235
+[model.language_model.layers.5.feed_forward.w3#0] shape=(1, 272, 4608) min=-0.582859 max=0.503175 mean=-0.000487895 std=0.0980516 sum1e6=-484.617
+  final_token: 0.0549605, -0.0767575, -0.130883, 0.034294, 0.122178, -0.0912708, 0.0506516, -0.0777279
+[model.language_model.layers.5.feed_forward.w2#0] shape=(1, 272, 1024) min=-0.100201 max=0.577764 mean=0.000116108 std=0.00969315 sum1e6=32.3392
+  final_token: 0.00603142, 0.00280695, -0.00677587, 0.00430486, 0.00379448, 0.00602406, 0.00765665, -0.00221793
+[model.language_model.layers.6.operator_norm#0] shape=(1, 272, 1024) min=-5.48607 max=2.96706 mean=-0.00707597 std=0.294496 sum1e6=-1970.85
+  final_token: -0.140793, 0.0235111, 0.0307741, -0.0854599, 0.0793431, 0.493095, 0.222379, -0.0131827
+[model.language_model.layers.6.conv.in_proj#0] shape=(1, 272, 3072) min=-2.03561 max=1.95421 mean=-0.000296633 std=0.331685 sum1e6=-247.862
+  final_token: -0.0314314, -0.133522, -0.45893, 0.187733, -0.028066, 0.489613, -0.658786, -0.519104
+[model.language_model.layers.6.conv.conv#0] shape=(1, 1024, 274) min=-0.329752 max=0.269921 mean=1.92052e-05 std=0.0171156 sum1e6=5.38852
+  final_token: -0.0124896, -0.0229569, -0.023463, -0.0463369, -0.0534166, -0.048178, -0.050247, -0.05393
+[model.language_model.layers.6.conv.out_proj#0] shape=(1, 272, 1024) min=-0.0913178 max=0.518548 mean=-1.7521e-05 std=0.00428931 sum1e6=-4.88009
+  final_token: -0.0039709, -0.001609, -0.000812475, 0.00126903, -0.00179641, 0.00180255, -0.00416439, 0.00128652
+[model.language_model.layers.6.ffn_norm#0] shape=(1, 272, 1024) min=-3.69204 max=1.75988 mean=-0.0034199 std=0.146486 sum1e6=-952.539
+  final_token: -0.131692, 0.000215562, 0.00248758, -0.0232731, 0.0266973, 0.229617, 0.0455485, -0.00114476
+[model.language_model.layers.6.feed_forward.w1#0] shape=(1, 272, 4608) min=-1.6007 max=1.15303 mean=-0.0352635 std=0.113851 sum1e6=-34526.8
+  final_token: -0.260038, -0.215791, -0.0221475, 0.0309168, 0.0247126, -0.263248, -0.0383369, -0.340162
+[model.language_model.layers.6.feed_forward.w3#0] shape=(1, 272, 4608) min=-0.66088 max=0.696357 mean=0.00169271 std=0.101111 sum1e6=1880.84
+  final_token: 0.0266458, 0.041041, 0.0324387, 0.22915, 0.0859906, 0.0500339, -0.0514466, -0.0852407
+[model.language_model.layers.6.feed_forward.w2#0] shape=(1, 272, 1024) min=-0.0785878 max=0.267449 mean=-0.000141215 std=0.0085474 sum1e6=-39.3322
+  final_token: -0.00613332, -0.010256, -0.00466447, -0.0025039, 0.00266943, -0.00393143, 0.0132966, -0.00515462
+[model.language_model.layers.7.operator_norm#0] shape=(1, 272, 1024) min=-5.66105 max=3.24883 mean=-0.00811452 std=0.293609 sum1e6=-2260.12
+  final_token: -0.374635, -0.113419, -0.114703, -0.0984268, 0.0690263, 0.34169, 0.376842, -0.0316324
+[model.language_model.layers.7.conv.in_proj#0] shape=(1, 272, 3072) min=-2.94512 max=2.23542 mean=0.00562638 std=0.365126 sum1e6=4701.32
+  final_token: -0.0655973, 0.0586801, -0.254608, -0.248834, 0.111108, -0.107765, -0.34077, -0.0783697
+[model.language_model.layers.7.conv.conv#0] shape=(1, 1024, 274) min=-0.253954 max=0.183982 mean=6.03674e-05 std=0.0167696 sum1e6=16.9376
+  final_token: -0.000237762, -0.00272821, -0.00638282, 0.00468516, -0.00402813, -0.000243588, 0.000769571, 0.00307135
+[model.language_model.layers.7.conv.out_proj#0] shape=(1, 272, 1024) min=-0.0800802 max=0.0498127 mean=3.51393e-05 std=0.0045058 sum1e6=9.78729
+  final_token: -0.00836758, -0.00650775, -0.0138898, -0.00580113, 0.00127655, 0.000102531, -0.000147528, 0.00215972
+[model.language_model.layers.7.ffn_norm#0] shape=(1, 272, 1024) min=-2.76339 max=2.19938 mean=-0.00366379 std=0.147635 sum1e6=-1020.47
+  final_token: -0.315606, -0.0867179, -0.250323, -0.135812, 0.040227, 0.162684, 0.189703, -0.0105276
+[model.language_model.layers.7.feed_forward.w1#0] shape=(1, 272, 4608) min=-1.30133 max=6.51261 mean=-0.0375951 std=0.128652 sum1e6=-37410.1
+  final_token: -0.198248, 0.116401, -0.0357339, -0.27654, -0.196638, -0.160705, 0.0388076, -0.0793488
+[model.language_model.layers.7.feed_forward.w3#0] shape=(1, 272, 4608) min=-2.24817 max=2.5217 mean=0.00127675 std=0.103866 sum1e6=1414.17
+  final_token: 0.142661, -0.208541, -0.0139801, 0.15059, -0.134683, -0.14944, -0.0698134, 0.131605
+[model.language_model.layers.7.feed_forward.w2#0] shape=(1, 272, 1024) min=-22.4096 max=0.957334 mean=-0.000439671 std=0.0817003 sum1e6=-122.461
+  final_token: 0.0167835, 0.00664743, 0.0139541, -0.00806726, -0.001042, -0.0191076, 0.00400955, 0.00210697
+[model.language_model.layers.8.operator_norm#0] shape=(1, 272, 1024) min=-0.68274 max=1.20431 mean=-0.000476446 std=0.0553985 sum1e6=-132.703
+  final_token: -0.0271288, -0.0108536, -0.0212056, -0.0889593, 0.00577629, -0.00423006, 0.0756985, -0.000516269
+[model.language_model.layers.8.self_attn.q_proj#0] shape=(1, 272, 1024) min=-0.375618 max=0.308694 mean=0.000156473 std=0.0504939 sum1e6=43.5821
+  final_token: 0.0431275, 0.0602619, -0.0682248, 0.0282208, -0.00603628, 0.00208068, -0.0159742, 0.0725435
+[model.language_model.layers.8.self_attn.q_layernorm#0] shape=(1, 272, 16, 64) min=-8.73852 max=8.70501 mean=0.00498759 std=1.52294 sum1e6=1389.18
+  final_token: 0.911659, 1.32481, -1.56717, 0.664161, -0.178639, 0.0483813, -0.445731, 2.13664
+[model.language_model.layers.8.self_attn.k_proj#0] shape=(1, 272, 512) min=-0.593609 max=0.687622 mean=-0.00217832 std=0.0546583 sum1e6=-303.361
+  final_token: 0.0762849, 0.00338792, 0.00554616, 0.026723, -0.0105376, 0.0335206, -0.0739621, 0.0868971
+[model.language_model.layers.8.self_attn.k_layernorm#0] shape=(1, 272, 8, 64) min=-13.5021 max=11.5505 mean=-0.0691683 std=1.63615 sum1e6=-9632.65
+  final_token: 0.042053, 0.0248274, 0.00760544, 0.457333, -0.184962, 0.608968, -1.23332, 1.388
+[model.language_model.layers.8.self_attn.v_proj#0] shape=(1, 272, 512) min=-0.378626 max=0.384189 mean=-0.000725265 std=0.0379968 sum1e6=-101.003
+  final_token: 0.0363545, 0.0581384, 0.0619032, 0.0369098, -0.00690515, -0.0329366, 0.000469943, 0.048205
+[model.language_model.layers.8.self_attn.out_proj#0] shape=(1, 272, 1024) min=-0.0744451 max=0.197933 mean=0.000224881 std=0.00940667 sum1e6=62.6357
+  final_token: 0.0252739, 0.000386641, 0.0021063, 0.00486494, 0.000226366, -0.00030689, -0.0114224, 0.000570659
+[model.language_model.layers.8.ffn_norm#0] shape=(1, 272, 1024) min=-3.82961 max=1.47876 mean=-0.00328455 std=0.141112 sum1e6=-914.838
+  final_token: 0.225966, -0.0459625, -0.0270314, -0.147797, 0.0295274, -0.0158306, 0.0884551, -0.00168819
+[model.language_model.layers.8.feed_forward.w1#0] shape=(1, 272, 4608) min=-1.86819 max=0.690009 mean=-0.0406632 std=0.114997 sum1e6=-40514
+  final_token: -0.0302009, -0.00878831, -0.00927744, 0.0150851, 0.0993713, -0.00498966, 0.0144388, -0.115708
+[model.language_model.layers.8.feed_forward.w3#0] shape=(1, 272, 4608) min=-0.719148 max=0.574954 mean=-0.000826411 std=0.0943213 sum1e6=-809.03
+  final_token: 0.0543358, -0.0703553, -0.132224, 0.0233436, 0.0670827, -0.0299425, 0.132045, 0.054555
+[model.language_model.layers.8.feed_forward.w2#0] shape=(1, 272, 1024) min=-0.13938 max=0.149362 mean=0.000297237 std=0.00811826 sum1e6=82.7887
+  final_token: -0.0446841, 0.0105582, -0.00381137, -0.00128771, -0.000793268, 0.0038526, 0.0136716, -0.00298068
+[model.language_model.layers.9.operator_norm#0] shape=(1, 272, 1024) min=-8.59355 max=4.38982 mean=-0.00383934 std=0.286158 sum1e6=-1069.36
+  final_token: -0.50034, 0.00749586, -0.109696, -0.274224, 0.0530922, 0.0251108, 0.360107, -0.0164199
+[model.language_model.layers.9.conv.in_proj#0] shape=(1, 272, 3072) min=-2.61838 max=2.80728 mean=-0.00965805 std=0.397305 sum1e6=-8070.11
+  final_token: 0.439367, -0.628444, -1.35752, 0.0288071, 0.112742, -0.349961, -0.185691, 0.0283242
+[model.language_model.layers.9.conv.conv#0] shape=(1, 1024, 274) min=-0.27085 max=0.293648 mean=0.000135961 std=0.0167829 sum1e6=38.1473
+  final_token: 0.00832775, 0.0104386, 0.0152448, 0.00593193, -0.00304515, -0.00774389, 0.000103954, 0.000780411
+[model.language_model.layers.9.conv.out_proj#0] shape=(1, 272, 1024) min=-0.238315 max=0.0643899 mean=-9.39569e-05 std=0.00432118 sum1e6=-26.1696
+  final_token: 0.00728842, -0.00135531, 0.00607635, 0.0132248, 0.00193918, 0.00668041, -0.0151954, -0.0019956
+[model.language_model.layers.9.ffn_norm#0] shape=(1, 272, 1024) min=-4.39012 max=2.18615 mean=-0.00220803 std=0.153899 sum1e6=-614.997
+  final_token: -0.213286, -0.00313529, -0.000789553, -0.0110487, 0.0444397, 0.0723841, 0.0731327, -0.0230284
+[model.language_model.layers.9.feed_forward.w1#0] shape=(1, 272, 4608) min=-1.02399 max=3.19049 mean=-0.0266994 std=0.1218 sum1e6=-26724.7
+  final_token: 0.0933186, 0.200055, -0.0697805, -0.0392973, -0.0671996, -0.12663, -0.196725, -0.0477626
+[model.language_model.layers.9.feed_forward.w3#0] shape=(1, 272, 4608) min=-1.55863 max=2.14426 mean=0.00166776 std=0.109111 sum1e6=1811.64
+  final_token: -0.0750242, 0.146889, 0.0993409, 0.285292, 0.0126883, 0.0270542, -0.194045, -0.0583461
+[model.language_model.layers.9.feed_forward.w2#0] shape=(1, 272, 1024) min=-5.72581 max=0.410813 mean=-0.000813236 std=0.0364708 sum1e6=-226.509
+  final_token: 0.018453, -0.00980877, -0.00621562, -0.0243534, 0.00086023, 0.0191128, -0.00508561, -0.00345644
+[model.language_model.layers.10.operator_norm#0] shape=(1, 272, 1024) min=-0.774538 max=1.49155 mean=3.2339e-05 std=0.0713401 sum1e6=9.0073
+  final_token: 0.000111438, -0.020467, -0.0244023, -0.0961525, 0.0214691, 0.0985108, 0.0100178, -0.00744948
+[model.language_model.layers.10.self_attn.q_proj#0] shape=(1, 272, 1024) min=-0.475454 max=0.569573 mean=0.000739948 std=0.0640519 sum1e6=206.096
+  final_token: 0.0661789, 0.0517059, -0.00391444, -0.0159577, -0.0212666, -0.0330378, 0.0590876, 0.0777978
+[model.language_model.layers.10.self_attn.q_layernorm#0] shape=(1, 272, 16, 64) min=-10.1924 max=8.55825 mean=0.0214362 std=1.48169 sum1e6=5970.58
+  final_token: 0.211116, 0.499013, -0.0486849, -0.237132, -0.309154, -0.55765, 0.873275, 1.33829
+[model.language_model.layers.10.self_attn.k_proj#0] shape=(1, 272, 512) min=-0.397584 max=0.508298 mean=0.000759793 std=0.0636536 sum1e6=105.812
+  final_token: -0.202637, -0.0371696, -0.00335954, 0.0132952, 0.00408235, 0.0182034, 0.0286928, 0.0363954
+[model.language_model.layers.10.self_attn.k_layernorm#0] shape=(1, 272, 8, 64) min=-11.9413 max=9.5981 mean=0.00207181 std=1.48286 sum1e6=288.529
+  final_token: -0.713223, -0.523306, -0.0350071, 0.173635, 0.0380014, 0.246166, 0.528871, 0.492179
+[model.language_model.layers.10.self_attn.v_proj#0] shape=(1, 272, 512) min=-0.287828 max=0.315432 mean=-0.000434745 std=0.0478109 sum1e6=-60.5443
+  final_token: 0.0147453, 0.00881062, 0.0156623, -0.0568118, -0.0272457, 0.0597157, 0.00275273, 0.0383296
+[model.language_model.layers.10.self_attn.out_proj#0] shape=(1, 272, 1024) min=-0.0752881 max=0.0549365 mean=0.000188485 std=0.00604775 sum1e6=52.4984
+  final_token: 0.0198064, 0.00186868, 0.00716637, 0.00593886, -0.00200082, 0.00982323, -0.0124662, -0.000998887
+[model.language_model.layers.10.ffn_norm#0] shape=(1, 272, 1024) min=-4.0164 max=2.08683 mean=-0.00292476 std=0.151079 sum1e6=-814.628
+  final_token: 0.192193, -0.058342, 0.00811699, -0.175923, 0.0715515, 0.280173, -0.0783276, -0.0613186
+[model.language_model.layers.10.feed_forward.w1#0] shape=(1, 272, 4608) min=-1.86432 max=0.902329 mean=-0.0417198 std=0.1364 sum1e6=-40554.6
+  final_token: -0.133268, -0.00579314, 0.0257713, -0.161957, -0.0727875, 0.0803687, -0.00707538, -0.772065
+[model.language_model.layers.10.feed_forward.w3#0] shape=(1, 272, 4608) min=-0.739439 max=0.804644 mean=0.000586649 std=0.093083 sum1e6=489.764
+  final_token: 0.195341, 0.1964, 0.0143208, -0.00779181, 0.291855, 0.0255633, 0.266236, -0.151229
+[model.language_model.layers.10.feed_forward.w2#0] shape=(1, 272, 1024) min=-0.115356 max=0.123508 mean=0.000138169 std=0.00972012 sum1e6=38.484
+  final_token: -0.0182152, -0.00290062, -0.00468849, 0.0221682, 0.0139844, 0.0154722, -0.029299, -0.00185175
+[model.language_model.layers.11.operator_norm#0] shape=(1, 272, 1024) min=-9.27865 max=4.13668 mean=-0.00592819 std=0.290208 sum1e6=-1651.17
+  final_token: 0.0216719, -0.110695, -0.05108, 0.0351579, 0.187748, 0.575994, -0.446231, -0.0815187
+[model.language_model.layers.11.conv.in_proj#0] shape=(1, 272, 3072) min=-1.93367 max=3.35001 mean=-0.00165459 std=0.306521 sum1e6=-1382.55
+  final_token: -0.423494, 0.343974, 0.110203, -1.10119, 0.297659, -0.246152, -0.347962, -0.0910802
+[model.language_model.layers.11.conv.conv#0] shape=(1, 1024, 274) min=-0.344753 max=0.312725 mean=-0.000193229 std=0.0151673 sum1e6=-54.2155
+  final_token: -0.00267294, -0.0024411, -0.00202244, -0.000439698, 0.00149302, 0.013665, 0.0140072, 0.0174291
+[model.language_model.layers.11.conv.out_proj#0] shape=(1, 272, 1024) min=-0.0617996 max=0.0633613 mean=-3.56781e-05 std=0.00343381 sum1e6=-9.93734
+  final_token: 0.00737303, -0.00485615, -0.000629526, -0.0139395, -0.000250933, -0.0169303, 0.0290268, -0.000675077
+[model.language_model.layers.11.ffn_norm#0] shape=(1, 272, 1024) min=-4.91952 max=2.03049 mean=-0.00318883 std=0.167507 sum1e6=-888.179
+  final_token: 0.0789732, -0.117209, -0.0398027, -0.0968748, 0.130225, 0.247031, -0.0726781, -0.073448
+[model.language_model.layers.11.feed_forward.w1#0] shape=(1, 272, 4608) min=-1.31433 max=1.16868 mean=-0.00664715 std=0.129461 sum1e6=-6318.77
+  final_token: 0.176775, -0.126164, -0.0384133, -0.115461, 0.0129359, -0.209127, -0.0833763, -0.118895
+[model.language_model.layers.11.feed_forward.w3#0] shape=(1, 272, 4608) min=-0.782323 max=3.06516 mean=-9.20558e-05 std=0.109631 sum1e6=-132.053
+  final_token: -0.0311408, 0.183946, -0.145826, -0.192941, 0.112682, -0.0493951, 0.214319, 0.120135
+[model.language_model.layers.11.feed_forward.w2#0] shape=(1, 272, 1024) min=-0.552268 max=0.0844344 mean=-0.000291091 std=0.015045 sum1e6=-81.077
+  final_token: -0.0200307, -0.00482184, -0.00304086, 0.0320437, 0.00360835, 0.00774316, 0.00986169, -0.0181545
+[model.language_model.layers.12.operator_norm#0] shape=(1, 272, 1024) min=-1.03297 max=1.66569 mean=0.000166013 std=0.0839046 sum1e6=46.2393
+  final_token: -0.0237175, -0.0559384, -0.0162805, 0.0474054, 0.107122, 0.0934818, -0.00059292, -0.0895502
+[model.language_model.layers.12.self_attn.q_proj#0] shape=(1, 272, 1024) min=-0.482867 max=0.52438 mean=0.00029498 std=0.0707591 sum1e6=82.1602
+  final_token: -0.0209158, -0.0198032, -0.0168754, 0.0143606, -0.00612161, -0.0281611, -0.0688231, -0.0284604
+[model.language_model.layers.12.self_attn.q_layernorm#0] shape=(1, 272, 16, 64) min=-8.56593 max=8.81039 mean=0.000304109 std=1.39391 sum1e6=84.703
+  final_token: 0.0229771, -0.0082185, -0.250476, 0.22577, -0.105805, -0.503233, -1.32394, -0.591955
+[model.language_model.layers.12.self_attn.k_proj#0] shape=(1, 272, 512) min=-0.486755 max=0.448916 mean=-0.0058729 std=0.066719 sum1e6=-817.883
+  final_token: 0.049185, 0.0219746, -0.0347046, -0.0176511, 0.0102602, 0.00910135, -0.0197527, -0.00488097
+[model.language_model.layers.12.self_attn.k_layernorm#0] shape=(1, 272, 8, 64) min=-10.6445 max=9.95174 mean=-0.110045 std=1.42947 sum1e6=-15325.4
+  final_token: 0.0705461, -0.00683526, -0.906777, -0.366029, 0.27092, 0.260452, -0.425994, -0.0738878
+[model.language_model.layers.12.self_attn.v_proj#0] shape=(1, 272, 512) min=-0.351572 max=0.372689 mean=0.000438881 std=0.0474756 sum1e6=61.1204
+  final_token: -0.00698769, -0.00894136, 0.00453598, -0.0171134, 0.0215924, -0.117958, -0.0317939, 0.0301227
+[model.language_model.layers.12.self_attn.out_proj#0] shape=(1, 272, 1024) min=-0.0722008 max=0.053021 mean=0.000249813 std=0.00716236 sum1e6=69.58
+  final_token: -0.0353355, -0.000745242, 0.0118542, -0.0153031, -0.00317168, -0.00791471, -0.00288964, 0.00298238
+[model.language_model.layers.12.ffn_norm#0] shape=(1, 272, 1024) min=-4.54534 max=2.36473 mean=-0.00250615 std=0.173346 sum1e6=-698.034
+  final_token: -0.323342, -0.134195, 0.0320102, 0.0381009, 0.129043, 0.217701, -0.0193091, -0.148271
+[model.language_model.layers.12.feed_forward.w1#0] shape=(1, 272, 4608) min=-2.12046 max=1.45776 mean=-0.0130393 std=0.132157 sum1e6=-12819.8
+  final_token: 0.0352802, 0.111312, 0.333109, -0.112205, -0.0919355, -0.47569, -0.381442, -0.302414
+[model.language_model.layers.12.feed_forward.w3#0] shape=(1, 272, 4608) min=-1.15084 max=0.792744 mean=-0.000440945 std=0.115481 sum1e6=-465.989
+  final_token: 0.19898, -0.0609404, 0.101802, -0.146559, -0.0745005, 0.25021, 0.0467532, 0.148626
+[model.language_model.layers.12.feed_forward.w2#0] shape=(1, 272, 1024) min=-0.0906224 max=0.164153 mean=-5.49519e-05 std=0.0119409 sum1e6=-15.3056
+  final_token: -0.0389193, -0.00352399, 0.00228614, 0.0182953, 0.0178669, -0.0466029, 0.0179198, 0.00834672
+[model.language_model.layers.13.operator_norm#0] shape=(1, 272, 1024) min=-9.8386 max=4.12804 mean=-0.00626865 std=0.316624 sum1e6=-1745.99
+  final_token: -0.783339, -0.213901, 0.0628909, 0.220957, 0.337703, -0.0918225, 0.123677, -0.14452
+[model.language_model.layers.13.conv.in_proj#0] shape=(1, 272, 3072) min=-2.69619 max=2.23141 mean=0.00374489 std=0.302851 sum1e6=3129.17
+  final_token: -0.412169, -0.528734, -0.0514187, 0.0775002, 0.222793, 0.0875782, 0.217667, -0.235956
+[model.language_model.layers.13.conv.conv#0] shape=(1, 1024, 274) min=-0.347302 max=0.984423 mean=-1.47758e-05 std=0.0164432 sum1e6=-4.14573
+  final_token: -0.000667552, -0.000749115, -0.000918389, 0.00213794, 0.00169846, 0.0136152, 0.00711988, 0.00998097
+[model.language_model.layers.13.conv.out_proj#0] shape=(1, 272, 1024) min=-0.0849914 max=0.0605798 mean=-5.17355e-05 std=0.00423307 sum1e6=-14.4098
+  final_token: -0.00157378, 0.00396628, -0.0153232, -0.0184236, 0.00362573, -0.0159597, 0.00239992, -0.00567179
+[model.language_model.layers.13.ffn_norm#0] shape=(1, 272, 1024) min=-5.82222 max=2.69162 mean=-0.00357992 std=0.213206 sum1e6=-997.107
+  final_token: -0.563314, -0.13567, -0.059267, 0.0355357, 0.293277, -0.15405, 0.0997041, -0.167725
+[model.language_model.layers.13.feed_forward.w1#0] shape=(1, 272, 4608) min=-1.99733 max=1.92228 mean=-0.00697266 std=0.172336 sum1e6=-6395.73
+  final_token: 0.121693, -0.23547, -0.241925, -0.0940031, -0.0357293, 0.296737, -0.210926, -0.0855564
+[model.language_model.layers.13.feed_forward.w3#0] shape=(1, 272, 4608) min=-1.35882 max=1.16378 mean=-0.000697155 std=0.139343 sum1e6=-738.442
+  final_token: -0.0575808, 0.152726, -0.0646824, 0.188311, -0.0241254, 0.112344, 0.278261, 0.168545
+[model.language_model.layers.13.feed_forward.w2#0] shape=(1, 272, 1024) min=-1.65908 max=0.157672 mean=-0.000737123 std=0.0309343 sum1e6=-205.31
+  final_token: -0.00387648, -0.0182921, 0.0100152, -0.0828249, -0.00089827, -0.00981744, -0.0717341, -0.00838896
+[model.language_model.layers.14.operator_norm#0] shape=(1, 272, 1024) min=-1.39095 max=1.89312 mean=4.88861e-05 std=0.122835 sum1e6=13.6162
+  final_token: -0.133093, -0.151883, 0.00223492, -0.13306, 0.225443, -0.0842569, -0.114225, -0.193374
+[model.language_model.layers.14.self_attn.q_proj#0] shape=(1, 272, 1024) min=-0.659595 max=0.903676 mean=0.00164231 std=0.0971756 sum1e6=457.428
+  final_token: 0.277065, -0.0766227, -0.0545502, -0.0165452, 0.053595, -0.00924353, 0.0358809, 0.000268571
+[model.language_model.layers.14.self_attn.q_layernorm#0] shape=(1, 272, 16, 64) min=-6.71638 max=7.54448 mean=0.0337345 std=1.41328 sum1e6=9396
+  final_token: 0.0394398, -0.669945, -0.493633, -0.201313, 0.511204, -0.103427, 0.383926, 0.00305434
+[model.language_model.layers.14.self_attn.k_proj#0] shape=(1, 272, 512) min=-0.736307 max=0.630717 mean=-0.00376795 std=0.109787 sum1e6=-524.739
+  final_token: -0.203483, 0.00615395, 0.00233487, 0.00805476, 0.053163, -0.000192538, 0.0214286, -0.0406228
+[model.language_model.layers.14.self_attn.k_layernorm#0] shape=(1, 272, 8, 64) min=-8.72232 max=9.56579 mean=-0.00771371 std=1.42167 sum1e6=-1074.24
+  final_token: -0.027787, 0.0691497, 0.0196108, 0.000266054, 0.552118, -0.00146417, 0.162956, -0.472602
+[model.language_model.layers.14.self_attn.v_proj#0] shape=(1, 272, 512) min=-0.677066 max=0.92307 mean=0.00232088 std=0.107778 sum1e6=323.215
+  final_token: -0.390045, 0.170177, -0.0530069, -0.0826541, -0.0582053, -0.0891455, 0.129045, -0.0780327
+[model.language_model.layers.14.self_attn.out_proj#0] shape=(1, 272, 1024) min=-0.417998 max=0.269983 mean=0.000764848 std=0.018056 sum1e6=213.032
+  final_token: 0.00825124, 0.0230175, 0.00183867, 0.0249861, 0.0272285, -0.0382629, -0.0326049, -0.0120759
+[model.language_model.layers.14.ffn_norm#0] shape=(1, 272, 1024) min=-12.0711 max=3.42195 mean=-0.00150594 std=0.245536 sum1e6=-419.445
+  final_token: -0.376761, -0.0659858, 0.0145058, -0.239452, 0.352791, -0.314025, -0.370337, -0.172286
+[model.language_model.layers.14.feed_forward.w1#0] shape=(1, 272, 4608) min=-4.17552 max=6.28238 mean=-0.105651 std=0.267548 sum1e6=-103390
+  final_token: -0.215079, 0.328, -0.456863, 0.23724, -1.11753, -0.471361, -0.182378, -0.948187
+[model.language_model.layers.14.feed_forward.w3#0] shape=(1, 272, 4608) min=-3.03268 max=1.82402 mean=0.000614799 std=0.158578 sum1e6=575.543
+  final_token: -0.0366447, 0.166774, -0.243643, -0.0177445, -0.113219, -0.133449, -0.0468564, -0.0355144
+[model.language_model.layers.14.feed_forward.w2#0] shape=(1, 272, 1024) min=-0.584047 max=11.8498 mean=0.00108022 std=0.0600254 sum1e6=300.873
+  final_token: 0.0316141, 0.0334235, -0.0187195, 0.000692701, -0.00970352, 0.0136731, -0.0176042, -0.0700437
+[model.language_model.layers.15.operator_norm#0] shape=(1, 272, 1024) min=-12.6399 max=2.12641 mean=0.00144815 std=0.311581 sum1e6=403.352
+  final_token: -0.207416, 0.0653012, -0.0616214, -0.21745, 0.284305, -0.223794, -0.389383, -0.417092
+[model.language_model.layers.15.conv.in_proj#0] shape=(1, 272, 3072) min=-4.02765 max=4.06114 mean=-0.00156437 std=0.532881 sum1e6=-1307.17
+  final_token: -0.461099, 0.678965, 0.0922574, 1.10329, 0.130431, -0.092571, -0.790431, 0.44895
+[model.language_model.layers.15.conv.conv#0] shape=(1, 1024, 274) min=-0.44719 max=4.28362 mean=0.000918404 std=0.0425572 sum1e6=257.682
+  final_token: 0.0478367, 0.0507796, 0.041869, 0.0164729, 0.00501937, 0.0220643, 0.0370528, -0.000269893
+[model.language_model.layers.15.conv.out_proj#0] shape=(1, 272, 1024) min=-0.825742 max=11.7384 mean=4.94536e-05 std=0.0514111 sum1e6=13.7742
+  final_token: -0.0147974, -0.0189499, -0.0121987, 0.0172282, 0.0212944, 0.0270206, -0.00355892, 0.0118411
+[model.language_model.layers.15.ffn_norm#0] shape=(1, 272, 1024) min=-3.3377 max=1.85935 mean=0.000966268 std=0.249256 sum1e6=269.133
+  final_token: -0.207898, -0.00609552, -0.0859322, -0.11152, 0.280735, -0.0971837, -0.319624, -0.302682
+[model.language_model.layers.15.feed_forward.w1#0] shape=(1, 272, 4608) min=-4.13705 max=2.57042 mean=0.000685193 std=0.251167 sum1e6=2126.86
+  final_token: -0.069646, -0.230378, -0.0521477, 0.0267459, 0.115052, -0.285735, 0.0220232, -0.206645
+[model.language_model.layers.15.feed_forward.w3#0] shape=(1, 272, 4608) min=-2.30268 max=2.28809 mean=0.00279615 std=0.199277 sum1e6=2953.15
+  final_token: -0.392318, 0.163349, -0.314374, -0.177506, 0.113054, 0.423904, -0.103288, -0.00752456
+[model.language_model.layers.15.feed_forward.w2#0] shape=(1, 272, 1024) min=-1.3784 max=1.70516 mean=0.00110739 std=0.0565852 sum1e6=308.438
+  final_token: 0.0140986, -0.111097, 0.0113289, -0.05272, 0.117575, -0.0476457, 0.0514359, -0.0200816
+[model.language_model.embedding_norm#0] shape=(1, 272, 1024) min=-25.1757 max=49.7512 mean=0.0586782 std=2.60452 sum1e6=16343.5
+  final_token: -1.24838, -2.65385, -0.41778, -2.18916, 4.72996, -1.91602, -1.34837, -3.10819
+[lm_head#0] shape=(1, 272, 65536) min=-20.3497 max=19.2942 mean=-4.70373 std=2.22095 sum1e6=-4.98131e+06
+  final_token: -4.03906, 0.392401, 0.789558, -4.05022, -4.05255, -4.0509, 0.923572, 2.46574
+
+[warn] Modules without activations:
+  model.vision_tower.vision_model.embeddings.position_embedding

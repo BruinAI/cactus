@@ -272,7 +272,7 @@ def convert_hf_model_weights(model, output_dir, precision='INT8', args=None):
             'pixel_shuffle_factor': int(pixel_shuffle_factor),
             'use_image_tokens': bool(_cfg_get(config, 'image_token_id', None) is not None),
             'use_layout_tags': False,
-            'downsample_factor': int(downsample_factor)
+            'downsample_factor': int(downsample_factor),
         })
 
     if detected_model_type == 'lfm2':
@@ -309,7 +309,7 @@ def convert_hf_model_weights(model, output_dir, precision='INT8', args=None):
                 save_tensor_with_header(state_dict[name], output_dir / file_name, precision, stats_tracker=quantization_stats, args=args, model_type=detected_model_type)
                 saved_tensor_full_names.add(name)
     
-    if not tie_word_embeddings:
+    if not tie_word_embeddings or is_vlm:
         output_names = ['lm_head.weight', 'output.weight', 'transformer.lm_head.weight', 'model.text_model.lm_head.weight']
         for name in output_names:
             if name in state_dict:

@@ -402,9 +402,9 @@ protected:
     size_t output_weight_node_id_;
 
     // Debug node tracking
-    std::vector<DebugNode> debug_nodes_;
+    mutable std::vector<DebugNode> debug_nodes_;
 
-    void capture_debug_node(uint32_t layer_idx, const std::string& name, size_t node_id);
+    void capture_debug_node(uint32_t layer_idx, const std::string& name, size_t node_id) const;
     void clear_debug_nodes();
 
     bool init_internal(CactusGraph* gb, const std::string& model_folder, size_t context_size,
