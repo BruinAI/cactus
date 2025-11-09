@@ -523,8 +523,8 @@ def create_tool_calling_dataset(tokenizer, global_batch_size, max_target_length,
     )
 
     # Remove any empty examples that failed formatting
-    train_dataset = train_dataset.filter(lambda x: x is not None and len(x.get('text', '')) > 0)
-    validation_dataset = validation_dataset.filter(lambda x: x is not None and len(x.get('text', '')) > 0)
+    train_dataset = train_dataset.filter(lambda x: x is not None and x.get('text'))
+    validation_dataset = validation_dataset.filter(lambda x: x is not None and x.get('text'))
 
     print(f"Formatted {len(train_dataset):,} training examples")
     print(f"Formatted {len(validation_dataset):,} validation examples")
