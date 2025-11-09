@@ -60,15 +60,15 @@ GEMMA_TOKENIZER_PATH = "gs://gemma-data/tokenizers/tokenizer_gemma3.model"
 # Training hyperparameters
 # Optimized for TPU v5e-4 (even with 8, only 4 will be used)
 BATCH_SIZE = 32
-NUM_EPOCHS = 1
-LEARNING_RATE = 1e-4
-MAX_TARGET_LENGTH = 512
+NUM_EPOCHS = 3
+LEARNING_RATE = 3e-4
+MAX_TARGET_LENGTH = 4096  # 95th percentile = 3,845 tokens
 MAX_STEPS = None
 EVAL_EVERY_N_STEPS = 250
 
 # LoRA hyperparameters
-RANK = 32
-ALPHA = 16.0
+RANK = 64
+ALPHA = 64.0
 
 # TPU/GPU mesh configuration
 # Optimized for 4x TPU v5e
@@ -528,6 +528,15 @@ def create_tool_calling_dataset(tokenizer, global_batch_size, max_target_length,
     # Remove any empty examples that failed formatting
     train_dataset = train_dataset.filter(lambda x: x is not None and x.get('text'))
     validation_dataset = validation_dataset.filter(lambda x: x is not None and x.get('text'))
+
+    # train_dataset = train_dataset.filter(
+    #     lambda x: len(tokenizer.encode(x['text'])) <= MAX_TARGET_LENGTH,
+    #     desc="Filtering overlength samples"
+    # )
+    # validation_dataset = validation_dataset.filter(
+    #     lambda x: len(tokenizer.encode(x['text'])) <= MAX_TARGET_LENGTH,
+    #     desc="Filtering overlength samples"
+    # )
 
     print(f"Formatted {len(train_dataset):,} training examples")
     print(f"Formatted {len(validation_dataset):,} validation examples")
