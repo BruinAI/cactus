@@ -202,6 +202,7 @@ def convert_hf_model_weights(model, output_dir, precision='INT8', args: Optional
     }
 
     state_dict = model.state_dict()
+    print(model.state_dict)
     config = model.config
     saved_tensor_full_names = set()
     
@@ -312,6 +313,7 @@ def convert_hf_model_weights(model, output_dir, precision='INT8', args: Optional
             break
 
     num_layers = model_config['num_layers']
+    print(num_layers)
     missing_tensors = []
     for i in range(num_layers):
         
