@@ -451,12 +451,10 @@ void cactus_conv1d_f16_k3(
                 float sum0 = vget_lane_f32(s0, 0) + vget_lane_f32(s0, 1);
 
                 __fp16* Yoc = Yb + oc * out_len;
-                Yoc[out_t0] = (__fp16)sum0;
 
                 if (have_t1) {
                     float32x2_t s1 = vadd_f32(vget_low_f32(acc1), vget_high_f32(acc1));
                     float sum1 = vget_lane_f32(s1, 0) + vget_lane_f32(s1, 1);
-                    Yoc[out_t1] = (__fp16)sum1;
                 }
             }
         }
