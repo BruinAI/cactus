@@ -21,9 +21,23 @@ Reference: [Gemma 3 Formatting Guide](https://ai.google.dev/gemma/docs/formattin
 #### Tool Calling
 
 - Model provides JSON dict describing each tool wrapped by `<tool_call>`, `</tool_call>`
-- Format: `{"name": "<function-name>", "args": {...}}`
+- Format: `{"name":"<function-name>","args":{...}}` (compact JSON, no spaces after `:` or `,`)
+- No newlines inside the `<tool_call>` tags - only newline after `</tool_call>`
 - Can generate multiple tool calls in sequence
 - May include reasoning text before/after tool calls
+
+**Important Formatting Rules:**
+- Use compact JSON with `separators=(',', ':')` - no extra whitespace
+- Opening tag format: `<tool_call>` (no newline after)
+- Closing tag format: `</tool_call>\n` (newline after closing tag only)
+- This reduces token usage and eliminates ambiguity for the model
+
+**Implementation Note:**
+In Python, use `json.dumps(call_data, separators=(',', ':'))` to generate compact JSON.
+Do NOT use default `json.dumps()` as it adds spaces after `:` and `,` which:
+1. Increases token count unnecessarily
+2. Creates ambiguity for the model (should it add spaces or not?)
+3. Makes the format harder to learn consistently
 
 #### Tool Responding
 
@@ -72,22 +86,9 @@ Here are the available tools that you can use:
 What's the weather in Boston and what's the top news headline there?<end_of_turn>
 <start_of_turn>model
 Searching up Boston's Weather and News
-<tool_call>
-{
-  "name": "get_current_weather",
-  "args": {
-    "location": "Boston, MA"
-  }
-}
-</tool_call>
-<tool_call>
-{
-  "name": "get_top_news",
-  "args": {
-    "location": "Boston, MA"
-  }
-}
-</tool_call><end_of_turn>
+<tool_call>{"name":"get_current_weather","args":{"location":"Boston, MA"}}</tool_call>
+<tool_call>{"name":"get_top_news","args":{"location":"Boston, MA"}}</tool_call>
+<end_of_turn>
 <start_of_turn>user
 <tool_response>
 {
@@ -126,12 +127,8 @@ Available tools:
 
 What's the weather in Paris?<end_of_turn>
 <start_of_turn>model
-<tool_call>
-{
-  "name": "get_current_weather",
-  "args": {"location": "Paris, France"}
-}
-</tool_call><end_of_turn>
+<tool_call>{"name":"get_current_weather","args":{"location":"Paris, France"}}</tool_call>
+<end_of_turn>
 ```
 
 **Key Points:**

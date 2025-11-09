@@ -16,8 +16,10 @@ Optimized for 4x TPU v5e chips.
 
 import os
 import json
+import ast
 import logging
 import shutil
+import re
 import nest_asyncio
 nest_asyncio.apply()
 
@@ -236,26 +238,21 @@ def format_gemma3_tool_calling_example(sample: Dict[str, Any]) -> Dict[str, str]
                         full_text += msg['content'] + "\n"
 
                 elif msg_role == 'tool_call':
-                    # Format tool call
-                    # Toucan stores tool calls in 'content' as a string representation of a dict
+                    # Toucan stores tool calls as Python dict strings
+                    # Format: "{'name': '...', 'arguments': '{...}'}"
                     tool_call_content = msg['content']
 
-                    # Parse the content string (it's a Python dict as string)
-                    tool_call_data = eval(tool_call_content)
-                    tool_name = tool_call_data['name']
-                    tool_args_str = tool_call_data['arguments']
+                    # Parse the Python dict string safely
+                    tool_call_data = ast.literal_eval(tool_call_content)
+                    tool_args = json.loads(tool_call_data['arguments'])
 
-                    # Parse arguments (stored as JSON string)
-                    tool_args = json.loads(tool_args_str)
-
-                    # Format as Gemma 3 tool call
                     call_data = {
-                        "name": tool_name,
+                        "name": tool_call_data['name'],
                         "args": tool_args
                     }
-                    full_text += '<tool_call>\n'
-                    full_text += json.dumps(call_data)
-                    full_text += '\n</tool_call>\n'
+                    full_text += '<tool_call>'
+                    full_text += json.dumps(call_data, separators=(',', ':'))
+                    full_text += '</tool_call>\n'
 
             full_text += "<end_of_turn>\n"
 
@@ -264,13 +261,14 @@ def format_gemma3_tool_calling_example(sample: Dict[str, Any]) -> Dict[str, str]
             full_text += "<start_of_turn>user\n"
 
             for msg in turn_group:
-                tool_content = msg.get('content', '')
-                if isinstance(tool_content, dict):
-                    tool_content = json.dumps(tool_content, indent=2)
-
-                full_text += '<tool_response>\n'
-                full_text += str(tool_content)
-                full_text += '\n</tool_response>\n'
+                # Use compact format like tool calls
+                tool_response = {
+                    "name": msg.get('name', ''),
+                    "result": msg['content']
+                }
+                full_text += '<tool_response>'
+                full_text += json.dumps(tool_response, separators=(',', ':'))
+                full_text += '</tool_response>\n'
 
             full_text += "<end_of_turn>\n"
 
@@ -281,7 +279,39 @@ def format_gemma3_tool_calling_example(sample: Dict[str, Any]) -> Dict[str, str]
 # Dataset Loading and Filtering
 # ============================================================================
 
-def filter_toucan_dataset(dataset, max_tools_used=2, max_tools_available=3, max_number_of_turns=1):
+def is_english_only(text: str) -> bool:
+    """
+    Fast heuristic to check if text is primarily English.
+    Returns False if text contains significant non-English characters.
+    Only removes ~3% of the dataset.
+
+    Args:
+        text: Text to check
+
+    Returns:
+        True if English-only, False if contains non-English scripts
+    """
+    if not text or len(text) < 10:
+        return True
+
+    # Count non-English script characters
+    cjk_count = sum(1 for c in text if 0x4E00 <= ord(c) <= 0x9FFF)  # Chinese
+    arabic_count = sum(1 for c in text if 0x0600 <= ord(c) <= 0x06FF)  # Arabic
+    hangul_count = sum(1 for c in text if 0xAC00 <= ord(c) <= 0xD7AF)  # Korean
+
+    # Latin Extended (accented characters used in Portuguese, Spanish, French, etc.)
+    # This includes: á, é, í, ó, ú, ã, õ, ç, ñ, ü, etc.
+    latin_extended_count = sum(1 for c in text if 0x00C0 <= ord(c) <= 0x00FF or 0x0100 <= ord(c) <= 0x017F)
+
+    # If more than threshold non-English characters, consider it non-English
+    # Allow up to 2 accented characters for place names like "São Paulo"
+    return (cjk_count < 5 and
+            arabic_count < 5 and
+            hangul_count < 5 and
+            latin_extended_count < 3)
+
+
+def filter_toucan_dataset(dataset, max_tools_used=2, max_tools_available=3, max_number_of_turns=1, english_only=True):
     """
     Filter Toucan dataset for single-turn examples with limited tools.
 
@@ -289,11 +319,12 @@ def filter_toucan_dataset(dataset, max_tools_used=2, max_tools_available=3, max_
         dataset: Toucan dataset (SFT split)
         max_tools_used: Maximum number of tools used in target (default: 2)
         max_tools_available: Maximum number of tools available in prompt (default: 3)
+        english_only: Filter to English-only samples (default: True)
 
     Returns:
         Filtered dataset
     """
-    print(f"\nFiltering dataset (single-turn, ≤{max_tools_used} tools used, ≤{max_tools_available} tools available)...")
+    print(f"\nFiltering dataset (single-turn, ≤{max_tools_used} tools used, ≤{max_tools_available} tools available, english_only={english_only})...")
 
     total = len(dataset)
 
@@ -301,23 +332,25 @@ def filter_toucan_dataset(dataset, max_tools_used=2, max_tools_available=3, max_
         """Filter function for a single sample."""
         messages = json.loads(sample['messages'])
 
-        # Check number of user messages
         user_messages = [m for m in messages if m['role'] == 'user']
         if len(user_messages) > max_number_of_turns or len(user_messages) == 0:
             return False
 
-        # Check number of tool calls matches tool responses
         num_tool_calls = sum(1 for m in messages if m['role'] == 'tool_call')
         num_tool_responses = sum(1 for m in messages if m['role'] == 'tool_response')
         assert num_tool_calls == num_tool_responses
 
-        # Filter to only 0 or 1 tool calls (avoids samples with >4 groups)
-        if num_tool_calls > 1:
+        if num_tool_calls > max_tools_used:
             return False
 
-        # Check number of available tools
         if len(json.loads(sample['tools'])) > max_tools_available:
             return False
+
+        if english_only:
+            assert all('content' in m and isinstance(m['content'], str) for m in messages)
+            all_text = [msg['content'] for msg in messages]
+            if not is_english_only(' '.join(all_text)):
+                return False
 
         return True
 
@@ -467,13 +500,9 @@ def create_tool_calling_dataset(tokenizer, global_batch_size, max_target_length,
                 'tools': examples['tools'][i],
                 'target_tools': examples['target_tools'][i]
             }
-
-            try:
-                formatted = format_gemma3_tool_calling_example(sample)
-                texts.append(formatted['text'])
-            except Exception as e:
-                logger.warning(f"Failed to format example {i}: {e}")
-                texts.append("")
+            
+            formatted = format_gemma3_tool_calling_example(sample)
+            texts.append(formatted['text'])
 
         return {'text': texts}
 
