@@ -97,6 +97,10 @@ LORA_OUTPUT_DIR = f"/dev/shm/{MODEL_ID.split('/')[-1]}_tool_calling_lora"
 # ============================================================================
 # Tool Calling Format Functions
 # ============================================================================
+def json_dump(obj) -> str:
+    """Helper function to dump JSON with compact separators."""
+    return json.dumps(obj, separators=(',', ':'))
+
 
 def format_tools_for_prompt(tools: List[Dict[str, Any]]) -> str:
     """
@@ -109,7 +113,7 @@ def format_tools_for_prompt(tools: List[Dict[str, Any]]) -> str:
         Formatted tools string with XML tags
     """
     return f"""<tools>[
-{'\n'.join(json.dumps(tool, separators=(',', ':')) for tool in tools)}
+{'\n'.join(json_dump(tool) for tool in tools)}
 ]</tools>"""
 
 
@@ -254,7 +258,7 @@ def format_gemma3_tool_calling_example(sample: Dict[str, Any]) -> Optional[Dict[
                         "name": tool_call_data['name'],
                         "args": tool_args
                     }
-                    full_text += f'<tool_call>{json.dumps(call_data, separators=(',', ':'))}</tool_call>\n'
+                    full_text += f'<tool_call>{json_dump(call_data)}</tool_call>\n'
 
             full_text += "<end_of_turn>\n"
 
@@ -268,7 +272,7 @@ def format_gemma3_tool_calling_example(sample: Dict[str, Any]) -> Optional[Dict[
                     "name": msg.get('name', ''),
                     "result": msg['content']
                 }
-                full_text += f'<tool_response>{json.dumps(tool_response, separators=(',', ':'))}</tool_response>\n'
+                full_text += f'<tool_response>{json_dump(tool_response)}</tool_response>\n'
 
             full_text += "<end_of_turn>\n"
 
@@ -831,8 +835,8 @@ What's the weather in Boston?<end_of_turn>
     print(out_data1.text[0].strip())
 
     # Example 2: Using tool response
-    tool_call_json = json.dumps({"name": "get_weather", "args": {"location": "Boston, MA"}}, separators=(',', ':'))
-    tool_response_json = json.dumps({"name": "get_weather", "result": {"temperature": 72, "condition": "Sunny"}}, separators=(',', ':'))
+    tool_call_json = json_dump({"name": "get_weather", "args": {"location": "Boston, MA"}})
+    tool_response_json = json_dump({"name": "get_weather", "result": {"temperature": 72, "condition": "Sunny"}})
 
     prompt2 = f"""<start_of_turn>user
 Here are the available tools that you can use:
