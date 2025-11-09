@@ -5,10 +5,12 @@ import sys
 import json
 import argparse
 from pathlib import Path
+from typing import Optional
 
 try:
-    from transformers import AutoTokenizer, AutoModelForCausalLM, AutoModel
+    from transformers import AutoTokenizer, AutoModelForCausalLM, AutoProcessor, AutoModelForImageTextToText, AutoModel
     import torch
+    # Note: for SmolVLM, we also need Pillow + num2words + torchvision
 except ImportError:
     print("Please install required packages: pip install torch transformers")
     sys.exit(1)
@@ -17,6 +19,33 @@ try:
     from huggingface_hub import hf_hub_download  # type: ignore
 except ImportError:
     hf_hub_download = None  # type: ignore
+
+
+def add_lora_weights(name, tensor, lora_dir_path: Path) -> np.ndarray:
+    if isinstance(tensor, torch.Tensor):
+        data = tensor.detach().cpu().numpy()
+    else:
+        data = np.array(tensor)
+
+    if not name.endswith('.weight'):
+        return data
+
+    root_name = name.rstrip('.weight')
+    lora_path_a = lora_dir_path / f"{root_name}.lora_a.npy"
+    lora_path_b = lora_dir_path / f"{root_name}.lora_b.npy"
+    path_exist_count = int(lora_path_a.exists()) + int(lora_path_b.exists())
+    if path_exist_count == 0:
+        return data
+    if path_exist_count == 1:
+        raise ValueError(f"LoRA weights found for only one of the low rank matrices for {name}")
+
+    lora_a = np.load(lora_path_a, allow_pickle=False)
+    lora_b = np.load(lora_path_b, allow_pickle=False)
+
+    combined_lora = (lora_a @ lora_b).T
+    if combined_lora.shape != data.shape:
+        raise ValueError(f"LoRA shape mismatch for {name}: combined_lora {combined_lora.shape} vs data {data.shape}")
+    return data + combined_lora
 
 def save_tensor_with_header(tensor, output_path, precision='FP32', transpose=False, stats_tracker=None, args=None, model_type=None):
     if isinstance(tensor, torch.Tensor):
@@ -116,7 +145,7 @@ def save_tensor_with_header(tensor, output_path, precision='FP32', transpose=Fal
     
     data = data.flatten()
     
-    print(f"Saving {output_path.name}: {precision} {shape}")
+    #print(f"Saving {output_path.name}: {precision} {shape}")
     
     with open(output_path, 'wb') as f:
         ndim = len(shape)
@@ -152,7 +181,6 @@ def save_tensor_with_header(tensor, output_path, precision='FP32', transpose=Fal
         with open(scale_path, 'w') as f:
             f.write(f"{scale:.10f}\n")
 
-
 def format_config_value(value):
     if isinstance(value, bool):
         return 'true' if value else 'false'
@@ -160,7 +188,7 @@ def format_config_value(value):
         return ','.join(str(v) for v in value)
     return str(value)
 
-def convert_hf_model_weights(model, output_dir, precision='INT8', args=None):
+def convert_hf_model_weights(model, output_dir, precision='INT8', args: Optional[argparse.Namespace] = None) -> dict:
     
     quantization_stats = {
         'total_tensors': 0,
@@ -172,11 +200,17 @@ def convert_hf_model_weights(model, output_dir, precision='INT8', args=None):
         'cos_sim_values': [],
         'saturation_warnings': 0
     }
-    
+
     state_dict = model.state_dict()
+    print(model.state_dict)
     config = model.config
     saved_tensor_full_names = set()
     
+    if args and getattr(args, 'lora_dir_path', None):
+        lora_dir_path = Path(args.lora_dir_path)
+        print(f"Adding LoRA weights from {lora_dir_path}")
+        for name, tensor in state_dict.items():
+            state_dict[name] = add_lora_weights(name, tensor, lora_dir_path)
     
     tie_word_embeddings = getattr(config, 'tie_word_embeddings', False)
     model_type_str = getattr(config, 'model_type', '').lower()
@@ -194,6 +228,8 @@ def convert_hf_model_weights(model, output_dir, precision='INT8', args=None):
             detected_model_type = 'llama'
     elif 'bert' in model_type_str:
         detected_model_type = 'bert'
+    elif 'whisper' in model_type_str:
+        detected_model_type = 'whisper'
     else:
         detected_model_type = 'qwen'
         if model_type_str:
@@ -241,6 +277,16 @@ def convert_hf_model_weights(model, output_dir, precision='INT8', args=None):
             if 'embeddings.token_type_embeddings.weight' in state_dict:
                 saved_tensor_full_names.add('embeddings.token_type_embeddings.weight')
             embedding_found = True
+
+
+    elif model_type_str == 'whisper':
+        weights = ['decoder.embed_tokens.weight', 'decoder.embed_positions.weight', 'decoder.layer_norm.weight', 'decoder.layer_norm.bias', 'proj_out.weight', 'encoder.embed_positions.weight', 'encoder.conv1.bias', 'encoder.conv1.weight', 'encoder.conv2.bias', 'encoder.conv2.weight', 'encoder.layer_norm.bias', 'encoder.layer_norm.weight']
+        save_names = ['decoder_token_embeddings.weights', 'decoder_position_embeddings.weights', 'decoder_output_norm.weights', 'decoder_output_norm.bias', 'output_layer.weights', 'encoder_position_embeddings', 'encoder_conv1_bias', 'encoder_conv1_weight', 'encoder_conv2_bias', 'encoder_conv2_weight', 'encoder_output_norm_bias', 'encoder_output_norm_weight']
+        for name, save_name in zip(weights, save_names):
+            if name in state_dict:
+                save_tensor_with_header(state_dict[name], output_dir / save_name, precision, transpose=False, stats_tracker=quantization_stats, args=args, model_type=detected_model_type)
+                saved_tensor_full_names.add(name)
+        embedding_found = True
     
     if embedding_found:
         embedding_norm_names = {'emb_ln.weight': 'embedding_layernorm.weight', 'emb_ln.bias': 'embedding_layernorm.bias'}
@@ -265,20 +311,30 @@ def convert_hf_model_weights(model, output_dir, precision='INT8', args=None):
             save_tensor_with_header(tensor, output_dir / "output_norm.weights", precision, stats_tracker=quantization_stats, args=args, model_type=detected_model_type)
             saved_tensor_full_names.add(name)
             break
-    
+
     num_layers = model_config['num_layers']
+    print(num_layers)
     missing_tensors = []
     for i in range(num_layers):
         
-        layer_prefixes = [f'model.layers.{i}.', f'layers.{i}.', f'transformer.h.{i}.', f'encoder.layers.{i}.']
+        layer_prefixes = [f'model.layers.{i}.', f'layers.{i}.', f'transformer.h.{i}.', f'encoder.layers.{i}.', f'decoder.layers.{i}.', f'model.encoder.layers.{i}.', f'model.decoder.layers.{i}.']
         
-        layer_prefix = None
+        existing_prefixes = set() #Culprit
         for prefix in layer_prefixes:
-            if any(key.startswith(prefix) for key in state_dict.keys()):
-                layer_prefix = prefix
-                break
-        
-        if not layer_prefix:
+            print(prefix)
+            for key in state_dict.keys():
+                if(key.startswith(prefix)):
+                    existing_prefixes.add(prefix)
+
+        # for thing in existing_prefixes:
+        #     print(thing)
+
+            # if any(key.startswith(prefix) for key in state_dict.keys()):
+            #     layer_prefix = prefix
+            #     break
+
+        if not existing_prefixes:
+            missing_tensors.append((i, "<no-layer-prefix>", ["<no-matching-prefix>"]))
             continue
 
         weight_patterns = [
@@ -316,62 +372,88 @@ def convert_hf_model_weights(model, output_dir, precision='INT8', args=None):
             (['mlp.experts.mlp.w1'], precision, f'layer_{i}_mlp_expert_{{channel}}.mlp1.weights', False),
             (['mlp.experts.mlp.w2'], precision, f'layer_{i}_mlp_expert_{{channel}}.mlp2.weights', True),
             (['mlp.router.layer.weight'], precision, f'layer_{i}_mlp_router.layer.weights', False),
+            # Whisper specific parameters
+            (['self_attn.out_proj.weight'], precision, f'layer_{i}_attn_output.weights', False),
+            (['self_attn.q_proj.bias'], precision, f'layer_{i}_attn_q.bias', False),
+            (['self_attn.k_proj.bias'], precision, f'layer_{i}_attn_k.bias', False),
+            (['self_attn.v_proj.bias'], precision, f'layer_{i}_attn_v.bias', False),
+            (['self_attn.out_proj.bias'], precision, f'layer_{i}_attn_output.bias', False),
+            (['encoder_attn.q_proj.weight'], precision, f'layer_{i}_attn_q.weights', False),
+            (['encoder_attn.k_proj.weight'], precision, f'layer_{i}_encoder_attn_k.weights', False),
+            (['encoder_attn.v_proj.weight'], precision, f'layer_{i}_encoder_attn_v.weights', False),
+            (['encoder_attn.q_proj.bias'], precision, f'layer_{i}_encoder_attn_q.bias', False),
+            (['encoder_attn.k_proj.bias'], precision, f'layer_{i}_encoder_attn_k.bias', False),
+            (['encoder_attn.v_proj.bias'], precision, f'layer_{i}_encoder_attn_v.bias', False),
+            (['encoder_attn.out_proj.weight'], precision, f'layer_{i}_encoder_attn_output.weights', False),
+            (['encoder_attn.out_proj.bias'], precision, f'layer_{i}_encoder_attn_output.bias', False),
+            (['fc1.weight'], precision, f'layer_{i}_mlp_fc1.weights', False),
+            (['fc1.bias'], precision, f'layer_{i}_mlp_fc1.bias', False),
+            (['fc2.weight'], precision, f'layer_{i}_mlp_fc2.weights', False),
+            (['fc2.bias'], precision, f'layer_{i}_mlp_fc2.bias', False),
+            (['self_attn.q_proj.weight'], precision, f'layer_{i}_self_attn_q_proj', False),
+            (['self_attn_layer_norm.weight'], precision, f'layer_{i}_self_attn_norm.weights', False),
+            (['self_attn_layer_norm.bias'], precision, f'layer_{i}_self_attn_norm.bias', False),
+            (['encoder_attn_layer_norm.weight'], precision, f'layer_{i}_encoder_attn_norm.weights', False),
+            (['encoder_attn_layer_norm.bias'], precision, f'layer_{i}_encoder_attn_norm.bias', False),
+            (['final_layer_norm.weight'], precision, f'layer_{i}_final_norm.weights', False),
+            (['final_layer_norm.bias'], precision, f'layer_{i}_final_norm.bias', False),
         ]
-        
-        for name_patterns, tensor_precision, output_name, should_transpose in weight_patterns:
-            found = False
-            for pattern in name_patterns:
-                full_name = layer_prefix + pattern
-                if full_name in state_dict:
-                    tensor = state_dict[full_name]
-                    if pattern.startswith('attn.Wqkv.') and model_type_str == 'nomic_bert':
-                        if tensor.ndim == 1:
-                            tensor = tensor.reshape(3, -1)
-                        elif tensor.ndim == 2:
-                            tensor = tensor.reshape(3, -1, tensor.size(-1))
-                        else:
-                            raise ValueError(f"Invalid tensor shape: {tensor.shape}")
-                        for j, ch in enumerate(['q', 'k', 'v']):
-                            channel_output_name = output_name.replace('{channel}', ch)
-                            save_tensor_with_header(tensor[j], output_dir / channel_output_name, tensor_precision, transpose=should_transpose, stats_tracker=quantization_stats, args=args, model_type=detected_model_type)
-                            saved_tensor_full_names.add(full_name)
+        for layer_prefix in existing_prefixes:
+            #Going to add a line here which will differentiate between encoder and decoder fc
+            for name_patterns, tensor_precision, output_name, should_transpose in weight_patterns:
+                found = False
+                for pattern in name_patterns:
+                    full_name = layer_prefix + pattern
+                    if full_name in state_dict:
+                        tensor = state_dict[full_name]
+                        if pattern.startswith('attn.Wqkv.') and model_type_str == 'nomic_bert':
+                            if tensor.ndim == 1:
+                                tensor = tensor.reshape(3, -1)
+                            elif tensor.ndim == 2:
+                                tensor = tensor.reshape(3, -1, tensor.size(-1))
+                            else:
+                                raise ValueError(f"Invalid tensor shape: {tensor.shape}")
+                            for j, ch in enumerate(['q', 'k', 'v']):
+                                channel_output_name = output_name.replace('{channel}', ch)
+                                save_tensor_with_header(tensor[j], output_dir / channel_output_name, tensor_precision, transpose=should_transpose, stats_tracker=quantization_stats, args=args, model_type=detected_model_type)
+                                saved_tensor_full_names.add(full_name)
+                            found = True
+                            break
+                        elif model_type_str == 'nomic_bert' and pattern.startswith('mlp.experts.') and 'bias' not in pattern:
+                            num_experts = model_config['num_experts']
+                            if tensor.ndim != 2:
+                                raise ValueError(f"Invalid tensor shape: {tensor.shape}")
+                            tensor = tensor.reshape(num_experts, -1, tensor.size(-1))
+                            for expert_idx in range(num_experts):
+                                expert_tensor = tensor[expert_idx]
+                                expert_output_name = output_name.replace('{channel}', str(expert_idx))
+                                save_tensor_with_header(expert_tensor, output_dir / expert_output_name, tensor_precision, transpose=should_transpose, stats_tracker=quantization_stats, args=args, model_type=detected_model_type)
+                                saved_tensor_full_names.add(full_name)
+                            found = True
+                            break
+                        save_tensor_with_header(tensor, output_dir / output_name, tensor_precision, transpose=should_transpose, stats_tracker=quantization_stats, args=args, model_type=detected_model_type)
+                        saved_tensor_full_names.add(full_name)
                         found = True
                         break
-                    elif model_type_str == 'nomic_bert' and pattern.startswith('mlp.experts.') and 'bias' not in pattern:
-                        num_experts = model_config['num_experts']
-                        if tensor.ndim != 2:
-                            raise ValueError(f"Invalid tensor shape: {tensor.shape}")
-                        tensor = tensor.reshape(num_experts, -1, tensor.size(-1))
-                        for expert_idx in range(num_experts):
-                            expert_tensor = tensor[expert_idx]
-                            expert_output_name = output_name.replace('{channel}', str(expert_idx))
-                            save_tensor_with_header(expert_tensor, output_dir / expert_output_name, tensor_precision, transpose=should_transpose, stats_tracker=quantization_stats, args=args, model_type=detected_model_type)
-                            saved_tensor_full_names.add(full_name)
+
+                if not found and 'c_attn.weight' in name_patterns[0]:
+                    attn_name = layer_prefix + 'attn.c_attn.weight'
+                    if attn_name in state_dict:
+                        combined_weight = state_dict[attn_name]
+                        hidden_size = combined_weight.shape[0]
+                        q_weight = combined_weight[:, :hidden_size]
+                        k_weight = combined_weight[:, hidden_size:2*hidden_size]
+                        v_weight = combined_weight[:, 2*hidden_size:]
+
+                        save_tensor_with_header(q_weight, output_dir / f'layer_{i}_attn_q.weights', precision, transpose=False, stats_tracker=quantization_stats, args=args, model_type=detected_model_type)
+                        save_tensor_with_header(k_weight, output_dir / f'layer_{i}_attn_k.weights', precision, transpose=False, stats_tracker=quantization_stats, args=args, model_type=detected_model_type)
+                        save_tensor_with_header(v_weight, output_dir / f'layer_{i}_attn_v.weights', precision, transpose=False, stats_tracker=quantization_stats, args=args, model_type=detected_model_type)
+                        saved_tensor_full_names.add(attn_name)
                         found = True
-                        break
-                    save_tensor_with_header(tensor, output_dir / output_name, tensor_precision, transpose=should_transpose, stats_tracker=quantization_stats, args=args, model_type=detected_model_type)
-                    saved_tensor_full_names.add(full_name)
-                    found = True
-                    break
-            
-            if not found and 'c_attn.weight' in name_patterns[0]:
-                attn_name = layer_prefix + 'attn.c_attn.weight'
-                if attn_name in state_dict:
-                    combined_weight = state_dict[attn_name]
-                    hidden_size = combined_weight.shape[0]
-                    q_weight = combined_weight[:, :hidden_size]
-                    k_weight = combined_weight[:, hidden_size:2*hidden_size]
-                    v_weight = combined_weight[:, 2*hidden_size:]
-                    
-                    save_tensor_with_header(q_weight, output_dir / f'layer_{i}_attn_q.weights', precision, transpose=False, stats_tracker=quantization_stats, args=args, model_type=detected_model_type)
-                    save_tensor_with_header(k_weight, output_dir / f'layer_{i}_attn_k.weights', precision, transpose=False, stats_tracker=quantization_stats, args=args, model_type=detected_model_type)
-                    save_tensor_with_header(v_weight, output_dir / f'layer_{i}_attn_v.weights', precision, transpose=False, stats_tracker=quantization_stats, args=args, model_type=detected_model_type)
-                    saved_tensor_full_names.add(attn_name)
-                    found = True
     
     if saved_tensor_full_names != set(state_dict.keys()):
         print(f"Warning: Unsaved tensors: {set(state_dict.keys()) - saved_tensor_full_names}")
-            
+        
         if not found:
             missing_tensors.append((i, output_name, name_patterns))
     
@@ -388,7 +470,7 @@ def convert_hf_model_weights(model, output_dir, precision='INT8', args=None):
         mse_values = np.array(quantization_stats['mse_values'])
         snr_values = np.array(quantization_stats['snr_values'])
         cos_sim_values = np.array(quantization_stats['cos_sim_values'])
-        
+
         print("\nQuantization Summary:")
         print(f"MSE - Mean: {np.mean(mse_values):.2e}, Max: {np.max(mse_values):.2e}, Median: {np.median(mse_values):.2e}, Min: {np.min(mse_values):.2e}")
         print(f"SNR - Mean: {np.mean(snr_values):.1f}dB, Max: {np.max(snr_values):.1f}dB, Median: {np.median(snr_values):.1f}dB, Min: {np.min(snr_values):.1f}dB")
@@ -397,7 +479,264 @@ def convert_hf_model_weights(model, output_dir, precision='INT8', args=None):
         low_snr_fallbacks = quantization_stats.get('low_snr_fallbacks', 0)
         snr_threshold = args.snr_threshold if args else 30.0
         print(f"Processed {quantization_stats['quantized_tensors']} INT8 tensors, {fp16_tensors} FP16 tensors ({low_snr_fallbacks} SNR<{snr_threshold}dB fallbacks)")
-    
+
+    return model_config
+
+
+def convert_hf_model_weights_vlm(model, output_dir, precision='INT8', args=None):
+    quantization_stats = {
+        'total_tensors': 0,
+        'quantized_tensors': 0,
+        'total_parameters': 0,
+        'quantized_parameters': 0,
+        'mse_values': [],
+        'snr_values': [],
+        'cos_sim_values': [],
+        'saturation_warnings': 0
+    }
+
+    state_dict = model.state_dict()
+    config = model.config
+
+    tie_word_embeddings = getattr(config, 'tie_word_embeddings', False)
+
+    def _cfg_get(c, key, default=None):
+        if c is None:
+            return default
+        try:
+            if isinstance(c, dict):
+                return c.get(key, default)
+        except Exception:
+            pass
+        try:
+            return getattr(c, key, default)
+        except Exception:
+            return default
+
+    text_cfg = _cfg_get(config, 'text_config', None)
+    vision_cfg = _cfg_get(config, 'vision_config', None)
+
+    text_vocab = _cfg_get(text_cfg, 'vocab_size', _cfg_get(config, 'vocab_size', 0))
+    text_hidden = _cfg_get(text_cfg, 'hidden_size', _cfg_get(text_cfg, 'hidden_dim', 0))
+    text_num_layers = int(_cfg_get(text_cfg, 'num_hidden_layers', _cfg_get(text_cfg, 'num_layers', 0) or 0))
+    text_attention_heads = int(_cfg_get(text_cfg, 'num_attention_heads', 0))
+    text_attention_kv_heads = int(_cfg_get(text_cfg, 'num_key_value_heads', _cfg_get(text_cfg, 'num_attention_heads', 0)))
+    text_ffn = int(_cfg_get(text_cfg, 'intermediate_size', 0))
+    text_context = int(_cfg_get(text_cfg, 'max_position_embeddings', _cfg_get(text_cfg, 'max_sequence_length', 0)))
+    text_rope = _cfg_get(text_cfg, 'rope_theta', _cfg_get(config, 'rope_theta', 10000.0))
+    text_head_dim = int(_cfg_get(text_cfg, 'head_dim', int(text_hidden // max(1, text_attention_heads))))
+
+    vision_hidden = int(_cfg_get(vision_cfg, 'hidden_size', 0))
+    vision_image_size = _cfg_get(vision_cfg, 'image_size', _cfg_get(vision_cfg, 'size', {}).get('longest_edge', 0) if isinstance(_cfg_get(vision_cfg, 'size', {}), dict) else _cfg_get(vision_cfg, 'image_size', 0))
+    vision_patch = int(_cfg_get(vision_cfg, 'patch_size', 0))
+    vision_heads = int(_cfg_get(vision_cfg, 'num_attention_heads', 0))
+    vision_num_layers = int(_cfg_get(vision_cfg, 'num_hidden_layers', _cfg_get(vision_cfg, 'num_layers', 0) or 0))
+    num_channels = int(_cfg_get(vision_cfg, 'num_channels', _cfg_get(vision_cfg, 'num_channels', 3)))
+    vision_embed_dim = int(vision_hidden)
+    visual_tokens_per_img = 0
+    try:
+        if vision_patch > 0 and vision_image_size > 0:
+            per_side = vision_image_size // vision_patch
+            visual_tokens_per_img = per_side * per_side
+    except Exception:
+        visual_tokens_per_img = 0
+
+    pixel_shuffle_factor = int(_cfg_get(config, 'scale_factor', _cfg_get(vision_cfg, 'scale_factor', 1) or 1))
+    use_pixel_shuffle = bool(pixel_shuffle_factor > 1)
+    use_image_tokens = bool(_cfg_get(config, 'image_token_id', None) is not None)
+    use_layout_tags = False
+
+    model_type_str = _cfg_get(text_cfg, 'model_type', None) or _cfg_get(config, 'model_type', '')
+    if 'smolvlm' in model_type_str:
+        detected_model_type = 'smolvlm'
+    else:
+        detected_model_type = 'smolvlm'
+        print(f"  Warning: Unknown VLM model type '{model_type_str}', defaulting to 'smolvlm'")
+
+
+    model_config = {
+        'vocab_size': int(text_vocab),
+        'model_type': detected_model_type,
+        'hidden_dim': int(text_hidden),
+        'num_layers': int(text_num_layers),
+        'attention_heads': int(text_attention_heads),
+        'attention_kv_heads': int(text_attention_kv_heads),
+        'ffn_intermediate_dim': int(text_ffn),
+        'context_length': int(text_context),
+        'rope_theta': float(text_rope),
+        'attention_head_dim': int(text_head_dim),
+        'vision_hidden_size': int(vision_hidden),
+        'vision_num_layers': int(vision_num_layers),
+        'vision_image_size': int(vision_image_size),
+        'vision_patch_size': int(vision_patch),
+        'vision_attention_heads': int(vision_heads),
+        'vision_embed_dim': int(vision_embed_dim),
+        'num_channels': int(num_channels),
+        'visual_tokens_per_img': int(visual_tokens_per_img),
+        'use_pixel_shuffle': bool(use_pixel_shuffle),
+        'pixel_shuffle_factor': int(pixel_shuffle_factor),
+        'use_image_tokens': bool(use_image_tokens),
+        'use_layout_tags': bool(use_layout_tags),
+        'tie_word_embeddings': tie_word_embeddings
+    }
+
+    embed_names = ['model.embed_tokens.weight', 'embed_tokens.weight', 'embeddings.weight', 'transformer.wte.weight', 'model.text_model.embed_tokens.weight']
+    for name in embed_names:
+        if name in state_dict:
+            save_tensor_with_header(state_dict[name], output_dir / "token_embeddings.weights", precision, transpose=False, stats_tracker=quantization_stats, args=args, model_type=detected_model_type)
+            break
+
+    if not tie_word_embeddings:
+        output_names = ['lm_head.weight', 'output.weight', 'transformer.lm_head.weight', 'model.text_model.lm_head.weight']
+        for name in output_names:
+            if name in state_dict:
+                tensor = state_dict[name]
+                save_tensor_with_header(tensor, output_dir / "output_weight.weights", precision, transpose=False, stats_tracker=quantization_stats, args=args, model_type=detected_model_type)
+                break
+
+    output_norm_names = ['model.norm.weight', 'norm.weight', 'final_layernorm.weight', 'transformer.ln_f.weight', 'model.text_model.norm.weight']
+    for name in output_norm_names:
+        if name in state_dict:
+            tensor = state_dict[name]
+            save_tensor_with_header(tensor, output_dir / "output_norm.weights", precision, stats_tracker=quantization_stats, args=args, model_type=detected_model_type)
+            break
+
+    vision_items = [
+        ('model.vision_model.embeddings.patch_embedding.weight', 'vision_patch_embedding.weights'),
+        ('model.vision_model.embeddings.patch_embedding.bias', 'vision_patch_embedding.bias.weights'),
+        ('model.vision_model.embeddings.position_embedding.weight', 'vision_position_embedding.weights'),
+        ('model.vision_model.post_layernorm.weight', 'vision_post_layernorm.weights'),
+        ('model.vision_model.post_layernorm.bias', 'vision_post_layernorm.bias.weights')
+    ]
+    for key, outname in vision_items:
+        if key in state_dict:
+            save_tensor_with_header(state_dict[key], output_dir / outname, precision, stats_tracker=quantization_stats, args=args, model_type=detected_model_type)
+
+    # detect number of vision encoder layers
+    import re
+    max_v_idx = -1
+    for k in state_dict.keys():
+        m = re.search(r'model\.vision_model\.encoder\.layers\.(\d+)\.', k)
+        if m:
+            try:
+                idx = int(m.group(1))
+                if idx > max_v_idx:
+                    max_v_idx = idx
+            except Exception:
+                pass
+    vision_layers = max_v_idx + 1 if max_v_idx >= 0 else 0
+
+    for i_v in range(vision_layers):
+        vpref = f'model.vision_model.encoder.layers.{i_v}.'
+        for fname, out in [
+            (vpref + 'layer_norm1.weight', f'vision_layer_{i_v}_layer_norm1.weights'),
+            (vpref + 'layer_norm1.bias', f'vision_layer_{i_v}_layer_norm1.bias.weights'),
+            (vpref + 'layer_norm2.weight', f'vision_layer_{i_v}_layer_norm2.weights'),
+            (vpref + 'layer_norm2.bias', f'vision_layer_{i_v}_layer_norm2.bias.weights')
+        ]:
+            if fname in state_dict:
+                save_tensor_with_header(state_dict[fname], output_dir / out, precision, stats_tracker=quantization_stats, args=args, model_type=detected_model_type)
+
+        for fname, out in [
+            (vpref + 'mlp.fc1.weight', f'vision_layer_{i_v}_ffn_fc1.weights'),
+            (vpref + 'mlp.fc1.bias', f'vision_layer_{i_v}_ffn_fc1.bias.weights'),
+            (vpref + 'mlp.fc2.weight', f'vision_layer_{i_v}_ffn_fc2.weights'),
+            (vpref + 'mlp.fc2.bias', f'vision_layer_{i_v}_ffn_fc2.bias.weights')
+        ]:
+            if fname in state_dict:
+                save_tensor_with_header(state_dict[fname], output_dir / out, precision, stats_tracker=quantization_stats, args=args, model_type=detected_model_type)
+
+        for fname, out in [
+            (vpref + 'self_attn.q_proj.weight', f'vision_layer_{i_v}_self_attn_q.weights'),
+            (vpref + 'self_attn.k_proj.weight', f'vision_layer_{i_v}_self_attn_k.weights'),
+            (vpref + 'self_attn.v_proj.weight', f'vision_layer_{i_v}_self_attn_v.weights'),
+            (vpref + 'self_attn.out_proj.weight', f'vision_layer_{i_v}_self_attn_out.weights'),
+            (vpref + 'self_attn.q_proj.bias', f'vision_layer_{i_v}_self_attn_q.bias.weights'),
+            (vpref + 'self_attn.k_proj.bias', f'vision_layer_{i_v}_self_attn_k.bias.weights'),
+            (vpref + 'self_attn.v_proj.bias', f'vision_layer_{i_v}_self_attn_v.bias.weights'),
+            (vpref + 'self_attn.out_proj.bias', f'vision_layer_{i_v}_self_attn_out.bias.weights')
+        ]:
+            if fname in state_dict:
+                save_tensor_with_header(state_dict[fname], output_dir / out, precision, stats_tracker=quantization_stats, args=args, model_type=detected_model_type)
+
+    connector_keys = [
+        'model.connector.modality_projection.proj.weight',
+        'connector.modality_projection.proj.weight',
+        'model.connector.proj.weight',
+        'connector.proj.weight'
+    ]
+    for ck in connector_keys:
+        if ck in state_dict:
+            save_tensor_with_header(state_dict[ck], output_dir / 'connector_proj.weights', precision, stats_tracker=quantization_stats, args=args, model_type=detected_model_type)
+            break
+
+    num_layers = int(model_config.get('num_layers', 0))
+    for i in range(num_layers):
+        layer_prefixes = [f'model.text_model.layers.{i}.', f'model.layers.{i}.', f'layers.{i}.', f'transformer.h.{i}.']
+
+        layer_prefix = None
+        for prefix in layer_prefixes:
+            if any(key.startswith(prefix) for key in state_dict.keys()):
+                layer_prefix = prefix
+                break
+
+        if not layer_prefix:
+            continue
+
+        weight_patterns = [
+            (['self_attn.q_proj.weight', 'attn.q_proj.weight', 'attn.c_attn.weight'], precision, f'layer_{i}_attn_q.weights', False),
+            (['self_attn.k_proj.weight', 'attn.k_proj.weight'], precision, f'layer_{i}_attn_k.weights', False),
+            (['self_attn.v_proj.weight', 'attn.v_proj.weight'], precision, f'layer_{i}_attn_v.weights', False),
+            (['self_attn.o_proj.weight', 'attn.o_proj.weight', 'attn.c_proj.weight'], precision, f'layer_{i}_attn_output.weights', False),
+            (['input_layernorm.weight', 'ln_1.weight'], precision, f'layer_{i}_input_norm.weights', False),
+            (['self_attn.q_norm.weight', 'self_attn.q_layernorm.weight'], precision, f'layer_{i}_attn_q_norm.weights', False),
+            (['self_attn.k_norm.weight', 'self_attn.k_layernorm.weight'], precision, f'layer_{i}_attn_k_norm.weights', False),
+            (['mlp.gate_proj.weight', 'mlp.c_fc.weight'], precision, f'layer_{i}_ffn_gate.weights', False),
+            (['mlp.up_proj.weight'], precision, f'layer_{i}_ffn_up.weights', False),
+            (['mlp.down_proj.weight', 'mlp.c_proj.weight'], precision, f'layer_{i}_ffn_down.weights', False),
+            (['post_attention_layernorm.weight', 'ln_2.weight'], precision, f'layer_{i}_post_attn_norm.weights', False),
+            (['pre_feedforward_layernorm.weight'], precision, f'layer_{i}_pre_ffn_norm.weights', False),
+            (['post_feedforward_layernorm.weight'], precision, f'layer_{i}_post_ffn_norm.weights', False),
+        ]
+
+        for name_patterns, tensor_precision, output_name, should_transpose in weight_patterns:
+            found = False
+            for pattern in name_patterns:
+                full_name = layer_prefix + pattern
+                if full_name in state_dict:
+                    tensor = state_dict[full_name]
+                    save_tensor_with_header(tensor, output_dir / output_name, tensor_precision, transpose=should_transpose, stats_tracker=quantization_stats, args=args, model_type=detected_model_type)
+                    found = True
+                    break
+
+            if not found and 'c_attn.weight' in name_patterns[0]:
+                attn_name = layer_prefix + 'attn.c_attn.weight'
+                if attn_name in state_dict:
+                    combined_weight = state_dict[attn_name]
+                    hidden_size = combined_weight.shape[0]
+                    q_weight = combined_weight[:, :hidden_size]
+                    k_weight = combined_weight[:, hidden_size:2*hidden_size]
+                    v_weight = combined_weight[:, 2*hidden_size:]
+
+                    save_tensor_with_header(q_weight, output_dir / f'layer_{i}_attn_q.weights', precision, transpose=False, stats_tracker=quantization_stats, args=args, model_type=detected_model_type)
+                    save_tensor_with_header(k_weight, output_dir / f'layer_{i}_attn_k.weights', precision, transpose=False, stats_tracker=quantization_stats, args=args, model_type=detected_model_type)
+                    save_tensor_with_header(v_weight, output_dir / f'layer_{i}_attn_v.weights', precision, transpose=False, stats_tracker=quantization_stats, args=args, model_type=detected_model_type)
+                    found = True
+
+    if quantization_stats['quantized_tensors'] > 0:
+        mse_values = np.array(quantization_stats['mse_values'])
+        snr_values = np.array(quantization_stats['snr_values'])
+        cos_sim_values = np.array(quantization_stats['cos_sim_values'])
+
+        print("\nQuantization Summary:")
+        print(f"MSE - Mean: {np.mean(mse_values):.2e}, Max: {np.max(mse_values):.2e}, Median: {np.median(mse_values):.2e}, Min: {np.min(mse_values):.2e}")
+        print(f"SNR - Mean: {np.mean(snr_values):.1f}dB, Max: {np.max(snr_values):.1f}dB, Median: {np.median(snr_values):.1f}dB, Min: {np.min(snr_values):.1f}dB")
+        print(f"CosSim - Mean: {np.mean(cos_sim_values):.6f}, Max: {np.mean(cos_sim_values):.6f}, Median: {np.median(cos_sim_values):.6f}, Min: {np.min(cos_sim_values):.6f}")
+        fp16_tensors = quantization_stats['total_tensors'] - quantization_stats['quantized_tensors']
+        low_snr_fallbacks = quantization_stats.get('low_snr_fallbacks', 0)
+        snr_threshold = args.snr_threshold if args else 30.0
+        print(f"Processed {quantization_stats['quantized_tensors']} INT8 tensors, {fp16_tensors} FP16 tensors ({low_snr_fallbacks} SNR<{snr_threshold}dB fallbacks)")
+
     return model_config
 
 def convert_hf_tokenizer(tokenizer, output_dir):
@@ -653,38 +992,168 @@ def convert_hf_tokenizer(tokenizer, output_dir):
         if len(tool_tokens) > 0:
             f.write(f"has_tool_support=true\n")
             f.write(f"tool_token_count={len(tool_tokens)}\n")
+
+def convert_processors(processor, model_name, output_dir):
+    if processor is None:
+        return
+
+    try:
+        if hasattr(processor, 'save_pretrained'):
+            processor.save_pretrained(str(output_dir))
+            print("  Saved processor with save_pretrained()")
+            return
+    except Exception as e:
+        print(f"  Warning: processor.save_pretrained failed: {e}")
+
+    try:
+        from huggingface_hub import hf_hub_download
+    except Exception:
+        print("  Note: huggingface_hub not available, skipping processor file download")
+        return
+
+    candidate_files = [
+        'preprocessor_config.json',
+        'processor_config.json'
+    ]
+
+    for fname in candidate_files:
+        try:
+            path = hf_hub_download(repo_id=model_name, filename=fname)
+            import shutil
+            shutil.copy2(path, output_dir / fname)
+            print(f"  Downloaded and saved {fname}")
+        except Exception:
+            pass
     
+def convert_hf_to_cactus_vlm(model_name, output_dir, precision='INT8', cache_dir=None, args=None):
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    print(f"Converting VLM {model_name} to {precision}...")
+
+    try:
+        missing_deps = []
+        try:
+            from PIL import Image  # Pillow
+        except Exception:
+            missing_deps.append('Pillow')
+        try:
+            import num2words
+        except Exception:
+            missing_deps.append('num2words')
+        try:
+            import torchvision
+        except Exception:
+            missing_deps.append('torchvision')
+
+        if missing_deps:
+            print(f"Error: Missing packages required for VLM models: {', '.join(missing_deps)}")
+            print(f"Install with: pip install {' '.join(missing_deps)}")
+            sys.exit(1)
+
+        processor = AutoProcessor.from_pretrained(
+            model_name,
+            cache_dir=cache_dir,
+            trust_remote_code=True
+        )
+        model = AutoModelForImageTextToText.from_pretrained(
+            model_name,
+            cache_dir=cache_dir,
+            trust_remote_code=True,
+            torch_dtype=torch.float32
+        )
+
+        tokenizer = None
+        try:
+            tokenizer = processor.tokenizer
+        except Exception:
+            tokenizer = None
+
+        if tokenizer is None:
+            tokenizer = AutoTokenizer.from_pretrained(
+                model_name,
+                cache_dir=cache_dir,
+                trust_remote_code=True
+            )
+        try:
+            convert_processors(processor, model_name, output_dir)
+        except Exception as e:
+            print(f"  Warning: convert_processors failed: {e}")
+    except Exception as e:
+        print(f"Error: {e}")
+        sys.exit(1)
+
+    config = convert_hf_model_weights_vlm(model, output_dir, precision, args)
+
+    if precision == 'INT8':
+        config['precision'] = "FP16"
+    else:
+        config['precision'] = precision
+
+    config_path = output_dir / "config.txt"
+    with open(config_path, 'w') as f:
+        for key, value in config.items():
+            if isinstance(value, bool):
+                value_str = str(value).lower()
+            else:
+                value_str = str(value)
+            f.write(f"{key}={value_str}\n")
+
+    convert_hf_tokenizer(tokenizer, output_dir)
+    print(f"\nConversion complete: {output_dir}")
+
+    del model
+    del tokenizer
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
 
 def convert_hf_to_cactus(model_name, output_dir, precision='INT8', cache_dir=None, args=None):
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
-    
+
+    if 'vlm' in str(model_name).lower():
+        return convert_hf_to_cactus_vlm(model_name, output_dir, precision, cache_dir, args)
+
     print(f"Converting {model_name} to {precision}...")
-    
-    try:
-        tokenizer = AutoTokenizer.from_pretrained(
+
+    if 'whisper' in str(model_name).lower():
+        tokenizer = tokenizer = AutoTokenizer.from_pretrained(
             model_name, 
             cache_dir=cache_dir,
             trust_remote_code=True,
         )
+
+        model = AutoModel.from_pretrained(
+            model_name,
+            cache_dir=cache_dir,
+            trust_remote_code=True,
+        )
+    
+    else:
         try:
-            model = AutoModelForCausalLM.from_pretrained(
-                model_name,
+            tokenizer = AutoTokenizer.from_pretrained(
+                model_name, 
                 cache_dir=cache_dir,
                 trust_remote_code=True,
             )
-        except ValueError:
-            model = AutoModel.from_pretrained(
-                model_name,
-                cache_dir=cache_dir,
-                trust_remote_code=True,
-            )
-    except Exception as e:
-        print(f"Error: {e}")
-        sys.exit(1)
+            try:
+                model = AutoModelForCausalLM.from_pretrained(
+                    model_name,
+                    cache_dir=cache_dir,
+                    trust_remote_code=True,
+                )
+            except ValueError:
+                model = AutoModel.from_pretrained(
+                    model_name,
+                    cache_dir=cache_dir,
+                    trust_remote_code=True,
+                )
+        except Exception as e:
+            print(f"Error: {e}")
+            sys.exit(1)
     
     config = convert_hf_model_weights(model, output_dir, precision, args)
-    
+
     if precision == 'INT8':
         config['precision'] = "FP16"
     else:
@@ -697,7 +1166,7 @@ def convert_hf_to_cactus(model_name, output_dir, precision='INT8', cache_dir=Non
     
     convert_hf_tokenizer(tokenizer, output_dir)
     print(f"\nConversion complete: {output_dir}")
-    
+
     del model
     del tokenizer
     if torch.cuda.is_available():
@@ -714,7 +1183,8 @@ def create_parser():
     parser.add_argument('--precision', choices=['INT8', 'FP16', 'FP32'], default='INT8',
                        help='Quantization precision')
     parser.add_argument('--cache-dir', help='Cache directory for HuggingFace models')
-    
+    parser.add_argument('--lora-dir-path', type=str, help='Directory containing LoRA weights (.npy files)')
+
     quant_group = parser.add_argument_group('Quantization Parameters')
     quant_group.add_argument('--snr-threshold', type=float, default=20.0,
                             help='Minimum SNR (dB) for INT8 quantization, fallback to FP32 below this')
