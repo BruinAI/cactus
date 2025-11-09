@@ -112,9 +112,9 @@ def format_tools_for_prompt(tools: List[Dict[str, Any]]) -> str:
     Returns:
         Formatted tools string with XML tags
     """
-    return f"""<tools>[
+    return f"""<tools>
 {'\n'.join(json_dump(tool) for tool in tools)}
-]</tools>"""
+</tools>"""
 
 
 def group_messages_by_turn(messages: List[Dict[str, Any]]) -> List[List[Dict[str, Any]]]:
@@ -149,6 +149,7 @@ def group_messages_by_turn(messages: List[Dict[str, Any]]) -> List[List[Dict[str
             grouped_messages.append([msg])
             last_type = 'assistant'
         elif role == 'tool_call':
+            # no assertion because it may follow any other type
             if last_type in ('user', 'tool_response'):
                 grouped_messages.append([msg])
             else:
@@ -227,10 +228,9 @@ def format_gemma3_tool_calling_example(sample: Dict[str, Any]) -> Optional[Dict[
                 full_text += "\n\n"
 
             # Add user content
-            full_text += first_msg['content']
-            full_text += "<end_of_turn>\n"
+            full_text += first_msg['content'] + "<end_of_turn>\n"
 
-        elif role == 'assistant':
+        elif role == 'assistant' or role == 'tool_call':
             # Assistant turn (may include tool calls)
             full_text += "<start_of_turn>model\n"
 
@@ -258,9 +258,10 @@ def format_gemma3_tool_calling_example(sample: Dict[str, Any]) -> Optional[Dict[
                         "name": tool_call_data['name'],
                         "args": tool_args
                     }
-                    full_text += f'<tool_call>{json_dump(call_data)}</tool_call>\n'
+                    full_text += f'<tool_call>\n{json_dump(call_data)}\n</tool_call>\n'
 
-            full_text += "<end_of_turn>\n"
+            assert full_text.endswith('\n')
+            full_text = full_text[:-1] + "<end_of_turn>\n"  # Remove last newline before end_of_turn
 
         elif role == 'tool_response':
             # Tool response turn (wrapped as user message)
@@ -272,9 +273,10 @@ def format_gemma3_tool_calling_example(sample: Dict[str, Any]) -> Optional[Dict[
                     "name": msg.get('name', ''),
                     "result": msg['content']
                 }
-                full_text += f'<tool_response>{json_dump(tool_response)}</tool_response>\n'
+                full_text += f'<tool_response>\n{json_dump(tool_response)}\n</tool_response>\n'
 
-            full_text += "<end_of_turn>\n"
+            assert full_text.endswith('\n')
+            full_text = full_text[:-1] + "<end_of_turn>\n"  # Remove last newline before end_of_turn
 
     return {'text': full_text.rstrip()}
 
@@ -844,10 +846,13 @@ Here are the available tools that you can use:
 
 What's the weather in Boston?<end_of_turn>
 <start_of_turn>model
-<tool_call>{tool_call_json}</tool_call>
-<end_of_turn>
+<tool_call>
+{tool_call_json}
+</tool_call><end_of_turn>
 <start_of_turn>user
-<tool_response>{tool_response_json}</tool_response><end_of_turn>
+<tool_response>
+{tool_response_json}
+</tool_response><end_of_turn>
 <start_of_turn>model
 """
 
