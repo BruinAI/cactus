@@ -59,7 +59,8 @@ GEMMA_TOKENIZER_PATH = "gs://gemma-data/tokenizers/tokenizer_gemma3.model"
 
 # Training hyperparameters
 # Optimized for TPU v5e-4 (even with 8, only 4 will be used)
-BATCH_SIZE = 32
+BATCH_SIZE = 8
+GRADIENT_ACCUMULATION_STEPS = 8
 NUM_EPOCHS = 3
 LEARNING_RATE = 3e-4
 MAX_TARGET_LENGTH = 4096  # 95th percentile = 3,845 tokens
@@ -73,13 +74,14 @@ ALPHA = 64.0
 # TPU/GPU mesh configuration
 # Optimized for 4x TPU v5e
 NUM_DEVICES = len(jax.devices())
-if NUM_DEVICES == 8:
-    # 8 TPUs: use both FSDP and tensor parallelism
-    MESH_COUNTS = (2, 4)
-elif NUM_DEVICES == 1:
-    MESH_COUNTS = (1, 1)
-else:
-    raise ValueError(f"Unsupported number of devices: {NUM_DEVICES}")
+MESH_COUNTS = (NUM_DEVICES, 1)  # Default to all devices in FSDP, no tensor parallelism
+# if NUM_DEVICES == 8:
+#     # 8 TPUs: use both FSDP and tensor parallelism
+#     MESH_COUNTS = (2, 4)
+# elif NUM_DEVICES == 1:
+#     MESH_COUNTS = (1, 1)
+# else:
+#     raise ValueError(f"Unsupported number of devices: {NUM_DEVICES}")
 
 MESH = [
     MESH_COUNTS,
@@ -93,6 +95,14 @@ MAX_TOOLS_AVAILABLE = 3
 # Checkpoint and output directories
 CKPT_DIR = "/tmp/gemma_tool_calling_ckpts/"
 LORA_OUTPUT_DIR = f"/dev/shm/{MODEL_ID.split('/')[-1]}_tool_calling_lora"
+
+SYSTEM_PROMPT = """To get data you don't have access to, you may use the appropriate tools:
+1. Call the tool with <tool_call>{"name": "...", "args": {...}}</tool_call>
+2. You will receive tool results as: <tool_response>{"name": "...", "result": ...}</tool_response>
+3. Use the result to answer the user's question.
+
+You can make multiple tool calls, but only use tools when necessary.
+"""
 
 # ============================================================================
 # Tool Calling Format Functions
@@ -973,9 +983,13 @@ def main():
 
     print(f"Training for {max_steps:,} steps total")
 
+    optimizer = optax.MultiSteps(
+        optax.adamw(LEARNING_RATE),
+        every_k_schedule=GRADIENT_ACCUMULATION_STEPS
+    )
     trainer = peft_trainer.PeftTrainer(
         lora_model,
-        optax.adamw(LEARNING_RATE),
+        optimizer,
         training_config
     ).with_gen_model_input_fn(lambda x: gen_model_input_fn(x, tokenizer))
 
