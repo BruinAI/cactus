@@ -32,6 +32,10 @@ void WhisperModel::load_weights_to_graph(CactusGraph* gb) {
         layer.encoder_attn_v_weight = gb->mmap_weights(layer_prefix + "v_proj.weights");
         layer.encoder_attn_q_bias = gb->mmap_weights(layer_prefix + "q_proj.bias");
         layer.encoder_attn_v_bias = gb->mmap_weights(layer_prefix + "q_proj.bias");
+<<<<<<< HEAD
+=======
+        layer.encoder_attn_output_weight = gb->mmap_weights(layer_prefix + "")
+>>>>>>> main
         
         // layer.encoder_attn_k_weight = gb->mmap_weights(layer_prefix + "attn_k.weights");
         // layer.attn_v_weight = gb->mmap_weights(layer_prefix + "attn_v.weights");

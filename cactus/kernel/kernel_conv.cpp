@@ -328,6 +328,7 @@ void cactus_conv1d_f32_k3(
             }
         }
     }
+<<<<<<< HEAD
 }
 
 void cactus_conv1d_f16_k3(
@@ -462,3 +463,6 @@ void cactus_conv1d_f16_k3(
 }
 
 
+=======
+}
+>>>>>>> main
