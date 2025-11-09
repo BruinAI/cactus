@@ -85,7 +85,7 @@ MAX_TOOLS_AVAILABLE = 3
 CKPT_DIR = "/tmp/gemma_tool_calling_ckpts/"
 LORA_OUTPUT_DIR = f"/dev/shm/{MODEL_ID.split('/')[-1]}_tool_calling_lora"
 
-USE_SYSTEM_PROMPT = True
+USE_SYSTEM_PROMPT = False
 SYSTEM_PROMPT = """To get data you don't have access to, you may use the appropriate tools:
 1. Call the tool with <tool_call>{"name": "...", "parameters": {...}}</tool_call>
 2. You will receive tool results as: <tool_response>{"name": "...", "result": ...}</tool_response>
