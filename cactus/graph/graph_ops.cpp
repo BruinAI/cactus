@@ -679,6 +679,14 @@ void compute_fused_node(GraphNode& node, const std::vector<std::unique_ptr<Graph
                 cactus_conv1d_f32_k3(X.data_as<float>(), W.data_as<float>(), Y.data_as<float>(), N, L, C_in, C_out, stride);
             }
 
+            else if(X.precision == Precision::FP16){
+                cactus_conv1d_f16_k3(X.data_as<__fp16>(), W.data_as<__fp16>(), Y.data_as<__fp16>(), N, L, C_in, C_out, stride);
+            }
+
+            else{
+                throw std::runtime_error("Conv1d_k3 only supports FP32 and FP16");
+            }
+
             break;
             
         }
