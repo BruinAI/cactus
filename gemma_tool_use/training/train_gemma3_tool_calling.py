@@ -870,6 +870,9 @@ def test_model_generation(model, tokenizer, model_config, eos_tokens, label="Mod
         input_strings=[prompt1, prompt2],
         max_generation_steps=128,
         eos_tokens=eos_tokens,
+        top_k=1,
+        top_p=None,
+        temperature=None,
     )
 
     print("\n--- Example 1: Tool Calling ---")
