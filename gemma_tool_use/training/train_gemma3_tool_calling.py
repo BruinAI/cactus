@@ -59,13 +59,14 @@ GEMMA_TOKENIZER_PATH = "gs://gemma-data/tokenizers/tokenizer_gemma3.model"
 
 # Training hyperparameters
 # Optimized for TPU v5e-4 (even with 8, only 4 will be used)
-BATCH_SIZE = 8
-GRADIENT_ACCUMULATION_STEPS = 8
 NUM_EPOCHS = 3
 LEARNING_RATE = 3e-4
 MAX_TARGET_LENGTH = 4096  # 95th percentile = 3,845 tokens
 MAX_STEPS = None
-EVAL_EVERY_N_STEPS = 250
+
+BATCH_SIZE = 8
+DESIRED_EFFECTIVE_BATCH_SIZE = 64
+EVAL_EVERY_N_EFFECTIVE_BATCHES = 250
 
 # LoRA hyperparameters
 RANK = 64
@@ -73,20 +74,8 @@ ALPHA = 64.0
 
 # TPU/GPU mesh configuration
 # Optimized for 4x TPU v5e
-NUM_DEVICES = len(jax.devices())
-MESH_COUNTS = (NUM_DEVICES, 1)  # Default to all devices in FSDP, no tensor parallelism
-# if NUM_DEVICES == 8:
-#     # 8 TPUs: use both FSDP and tensor parallelism
-#     MESH_COUNTS = (2, 4)
-# elif NUM_DEVICES == 1:
-#     MESH_COUNTS = (1, 1)
-# else:
-#     raise ValueError(f"Unsupported number of devices: {NUM_DEVICES}")
-
-MESH = [
-    MESH_COUNTS,
-    ("fsdp", "tp"),
-]
+MESH_SHAPE = len(jax.devices()), 1  # Default to all devices in FSDP, no tensor parallelism
+MESH_AXIS_NAMES = "fsdp", "tp"
 
 # Dataset filtering criteria (as per PLAN.md Phase 3)
 MAX_TOOLS_USED = 2
@@ -96,13 +85,17 @@ MAX_TOOLS_AVAILABLE = 3
 CKPT_DIR = "/tmp/gemma_tool_calling_ckpts/"
 LORA_OUTPUT_DIR = f"/dev/shm/{MODEL_ID.split('/')[-1]}_tool_calling_lora"
 
-SYSTEM_PROMPT = """To get data you don't have access to, you may use the appropriate tools:
-1. Call the tool with <tool_call>{"name": "...", "args": {...}}</tool_call>
-2. You will receive tool results as: <tool_response>{"name": "...", "result": ...}</tool_response>
-3. Use the result to answer the user's question.
+# SYSTEM_PROMPT = """To get data you don't have access to, you may use the appropriate tools:
+# 1. Call the tool with <tool_call>{"name": "...", "args": {...}}</tool_call>
+# 2. You will receive tool results as: <tool_response>{"name": "...", "result": ...}</tool_response>
+# 3. Use the result to answer the user's question.
+# You can make multiple tool calls, but only use tools when necessary.
+# """
 
-You can make multiple tool calls, but only use tools when necessary.
-"""
+# Calculating derived hyperparameters
+assert DESIRED_EFFECTIVE_BATCH_SIZE % BATCH_SIZE == 0
+GRADIENT_ACCUMULATION_STEPS = DESIRED_EFFECTIVE_BATCH_SIZE // BATCH_SIZE
+EVAL_EVERY_N_STEPS = GRADIENT_ACCUMULATION_STEPS * EVAL_EVERY_N_EFFECTIVE_BATCHES
 
 # ============================================================================
 # Tool Calling Format Functions
@@ -844,18 +837,6 @@ What's the weather in Boston?<end_of_turn>
 <start_of_turn>model
 """
 
-    print("\n--- Example 1: Tool Calling ---")
-    print("Prompt:", prompt1)
-    print("\nModel response:")
-
-    out_data1 = sampler(
-        input_strings=[prompt1],
-        max_generation_steps=128,
-        eos_tokens=eos_tokens,
-    )
-    print(out_data1.text[0].strip())
-
-    # Example 2: Using tool response
     tool_call_json = json_dump({"name": "get_weather", "args": {"location": "Boston, MA"}})
     tool_response_json = json_dump({"name": "get_weather", "result": {"temperature": 72, "condition": "Sunny"}})
 
@@ -875,17 +856,21 @@ What's the weather in Boston?<end_of_turn>
 <start_of_turn>model
 """
 
+    out_data = sampler(
+        input_strings=[prompt1, prompt2],
+        max_generation_steps=128,
+        eos_tokens=eos_tokens,
+    )
+
+    print("\n--- Example 1: Tool Calling ---")
+    print("Prompt:", prompt1)
+    print("\nModel response:")
+    print(out_data.text[0].strip())
+
     print("\n--- Example 2: Using Tool Response ---")
     print("Prompt:", prompt2)
     print("\nModel response:")
-
-    out_data2 = sampler(
-        input_strings=[prompt2],
-        max_generation_steps=64,
-        eos_tokens=eos_tokens,
-    )
-    print(out_data2.text[0].strip())
-    print()
+    print(out_data.text[1].strip())
 
 
 # ============================================================================
@@ -903,8 +888,8 @@ def main():
     print(f"Learning rate: {LEARNING_RATE}")
     print(f"LoRA rank: {RANK}, alpha: {ALPHA}")
     print(f"Max sequence length: {MAX_TARGET_LENGTH}")
-    print(f"Devices: {NUM_DEVICES}x {jax.devices()[0].platform}")
-    print(f"Mesh configuration: {MESH_COUNTS} (fsdp={MESH_COUNTS[0]}, tp={MESH_COUNTS[1]})")
+    print(f"Devices: {len(jax.devices())} x {jax.devices()[0].platform}")
+    print(f"Mesh configuration: {MESH_SHAPE} x {MESH_AXIS_NAMES}")
 
     # Create checkpoint directories
     os.makedirs(CKPT_DIR, exist_ok=True)
@@ -948,7 +933,7 @@ def main():
     else:
         raise ValueError(f"Unsupported model ID: {MODEL_ID}")
     
-    mesh = jax.make_mesh(*MESH)
+    mesh = jax.make_mesh(MESH_SHAPE, MESH_AXIS_NAMES)
     with mesh:
         base_model = params_safetensors_lib.create_model_from_safe_tensors(
             local_model_path, (model_config), mesh
