@@ -87,7 +87,7 @@ LORA_OUTPUT_DIR = f"/dev/shm/{MODEL_ID.split('/')[-1]}_tool_calling_lora"
 
 USE_SYSTEM_PROMPT = True
 SYSTEM_PROMPT = """To get data you don't have access to, you may use the appropriate tools:
-1. Call the tool with <tool_call>{"name": "...", "args": {...}}</tool_call>
+1. Call the tool with <tool_call>{"name": "...", "parameters": {...}}</tool_call>
 2. You will receive tool results as: <tool_response>{"name": "...", "result": ...}</tool_response>
 3. Use the result to answer the user's question.
 You can make multiple tool calls, but only use tools when necessary.
@@ -179,7 +179,7 @@ def format_gemma3_tool_calling_example(sample: Dict[str, Any]) -> Optional[Dict[
     Following the format from gemma_tool_use/PLAN.md:
     - Tools are wrapped in <tools></tools> tags
     - Tool calls are wrapped in <tool_call></tool_call> tags
-    - Format: {"name": "<function-name>", "args": {...}}
+    - Format: {"name": "<function-name>", "parameters": {...}}
     - System instructions and tools are prepended to first user message
 
     Toucan dataset structure:
@@ -262,7 +262,7 @@ def format_gemma3_tool_calling_example(sample: Dict[str, Any]) -> Optional[Dict[
 
                     call_data = {
                         "name": tool_call_data['name'],
-                        "args": tool_args
+                        "parameters": tool_args
                     }
                     full_text += f'<tool_call>\n{json_dump(call_data)}\n</tool_call>\n'
 
@@ -794,6 +794,8 @@ def test_model_generation(model, tokenizer, model_config, eos_tokens, label="Mod
     Test the model with two examples:
     1. Simple tool calling (model requests weather)
     2. Tool response usage (model uses weather data to respond)
+
+    Uses format_gemma3_tool_calling_example to ensure consistency with training format.
     """
     print(f"\n{'='*60}")
     print(f"{label} - Generation Examples")
@@ -811,7 +813,7 @@ def test_model_generation(model, tokenizer, model_config, eos_tokens, label="Mod
         ),
     )
 
-    # Example 1: Simple tool calling
+    # Define tools in the format expected by format_gemma3_tool_calling_example
     tools = [
         {
             "type": "function",
@@ -832,32 +834,37 @@ def test_model_generation(model, tokenizer, model_config, eos_tokens, label="Mod
         }
     ]
 
-    prompt1 = f"""<start_of_turn>user
-{SYSTEM_PROMPT + '\n' if USE_SYSTEM_PROMPT else ''}Here are the available tools that you can use:
-{format_tools_for_prompt(tools)}
+    # Example 1: Simple tool calling - user asks, model should call tool
+    sample1 = {
+        'messages': json.dumps([
+            {"role": "user", "content": "What's the weather in Boston?"}
+        ]),
+        'tools': json.dumps(tools),
+        'target_tools': json.dumps([])
+    }
 
-What's the weather in Boston?<end_of_turn>
-<start_of_turn>model
-"""
+    # Example 2: Tool response usage - user asks, model calls tool, gets response
+    sample2 = {
+        'messages': json.dumps([
+            {"role": "user", "content": "What's the weather in Boston?"},
+            {"role": "tool_call", "content": "{'name': 'get_weather', 'arguments': '{\"location\": \"Boston, MA\"}'}"},
+            {"role": "tool_response", "name": "get_weather", "content": {"temperature": 72, "condition": "Sunny"}}
+        ]),
+        'tools': json.dumps(tools),
+        'target_tools': json.dumps([])
+    }
 
-    tool_call_json = json_dump({"name": "get_weather", "args": {"location": "Boston, MA"}})
-    tool_response_json = json_dump({"name": "get_weather", "result": {"temperature": 72, "condition": "Sunny"}})
+    # Format both examples using the same function as training
+    formatted1 = format_gemma3_tool_calling_example(sample1)
+    formatted2 = format_gemma3_tool_calling_example(sample2)
+    assert formatted1 and formatted2, "Failed to format test examples"
 
-    prompt2 = f"""<start_of_turn>user
-{SYSTEM_PROMPT + '\n' if USE_SYSTEM_PROMPT else ''}Here are the available tools that you can use:
-{format_tools_for_prompt(tools)}
+    # Extract the prompt up to where model should generate
+    # For example 1: everything up to the model turn
+    prompt1 = formatted1['text'] + "\n<start_of_turn>model\n"
 
-What's the weather in Boston?<end_of_turn>
-<start_of_turn>model
-<tool_call>
-{tool_call_json}
-</tool_call><end_of_turn>
-<start_of_turn>user
-<tool_response>
-{tool_response_json}
-</tool_response><end_of_turn>
-<start_of_turn>model
-"""
+    # For example 2: everything up to the final model turn
+    prompt2 = formatted2['text'] + "\n<start_of_turn>model\n"
 
     out_data = sampler(
         input_strings=[prompt1, prompt2],
