@@ -10,7 +10,7 @@ argcomplete==3.6.3
 astor==0.8.1
 attrs==25.4.0
 beautifulsoup4==4.14.2
--e git+https://github.com/ShishirPatil/gorilla.git@f226d62ef8d46f97e474da3179dc32c16d5a9257#egg=bfcl_eval&subdirectory=../../../../gemma_tool_use/evaluation/bfcl/berkeley-function-call-leaderboard
+-e git+https://github.com/ShishirPatil/gorilla.git@f619503734967ccc5b1853d5a96dccdffa1499ab#egg=bfcl_eval&subdirectory=../../../../gemma_tool_use/evaluation/bfcl/berkeley-function-call-leaderboard
 black==25.9.0
 blake3==1.0.8
 boto3==1.40.69
@@ -77,7 +77,7 @@ jsonlines==4.0.0
 jsonschema==4.25.1
 jsonschema-specifications==2025.9.1
 lark==1.2.2
-libtpu==0.0.17
+libtpu==0.0.29
 llguidance==0.7.30
 llvmlite==0.44.0
 lm-format-enforcer==0.11.3
