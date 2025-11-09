@@ -330,7 +330,7 @@ void cactus_conv1d_f32_k3(
     }
 }
 
-void cactus_conv1d_f16_k3_packed2_tile16(
+void cactus_conv1d_f16_k3(
     const __fp16* input,
     const __fp16* weight,
     __fp16* output,
@@ -345,7 +345,7 @@ void cactus_conv1d_f16_k3_packed2_tile16(
 
     for (size_t n = 0; n < N; ++n) {
         const __fp16* Xb = input  + n * in_bs;
-        __fp16*       Yb = output + n * out_bs;
+        __fp16* Yb = output + n * out_bs;
 
         for (size_t out_idx = 0; out_idx < out_len; out_idx += 2) {
             const size_t out_t0  = out_idx;
