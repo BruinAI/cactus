@@ -19,7 +19,6 @@ import json
 import ast
 import logging
 import shutil
-import re
 import nest_asyncio
 nest_asyncio.apply()
 
@@ -109,7 +108,9 @@ def format_tools_for_prompt(tools: List[Dict[str, Any]]) -> str:
     Returns:
         Formatted tools string with XML tags
     """
-    return f"<tools>\n{json.dumps(tools, indent=2)}\n</tools>"
+    return f"""<tools>[
+{'\n'.join(json.dumps(tool, separators=(',', ':')) for tool in tools)}
+]</tools>"""
 
 
 def group_messages_by_turn(messages: List[Dict[str, Any]]) -> List[List[Dict[str, Any]]]:
@@ -253,9 +254,7 @@ def format_gemma3_tool_calling_example(sample: Dict[str, Any]) -> Optional[Dict[
                         "name": tool_call_data['name'],
                         "args": tool_args
                     }
-                    full_text += '<tool_call>'
-                    full_text += json.dumps(call_data, separators=(',', ':'))
-                    full_text += '</tool_call>\n'
+                    full_text += f'<tool_call>{json.dumps(call_data, separators=(',', ':'))}</tool_call>\n'
 
             full_text += "<end_of_turn>\n"
 
@@ -269,9 +268,7 @@ def format_gemma3_tool_calling_example(sample: Dict[str, Any]) -> Optional[Dict[
                     "name": msg.get('name', ''),
                     "result": msg['content']
                 }
-                full_text += '<tool_response>'
-                full_text += json.dumps(tool_response, separators=(',', ':'))
-                full_text += '</tool_response>\n'
+                full_text += f'<tool_response>{json.dumps(tool_response, separators=(',', ':'))}</tool_response>\n'
 
             full_text += "<end_of_turn>\n"
 
@@ -816,9 +813,7 @@ def test_model_generation(model, tokenizer, model_config, eos_tokens, label="Mod
 
     prompt1 = f"""<start_of_turn>user
 Here are the available tools that you can use:
-<tools>
-{json.dumps(tools, indent=2)}
-</tools>
+{format_tools_for_prompt(tools)}
 
 What's the weather in Boston?<end_of_turn>
 <start_of_turn>model
@@ -836,32 +831,19 @@ What's the weather in Boston?<end_of_turn>
     print(out_data1.text[0].strip())
 
     # Example 2: Using tool response
+    tool_call_json = json.dumps({"name": "get_weather", "args": {"location": "Boston, MA"}}, separators=(',', ':'))
+    tool_response_json = json.dumps({"name": "get_weather", "result": {"temperature": 72, "condition": "Sunny"}}, separators=(',', ':'))
+
     prompt2 = f"""<start_of_turn>user
 Here are the available tools that you can use:
-<tools>
-{json.dumps(tools, indent=2)}
-</tools>
+{format_tools_for_prompt(tools)}
 
 What's the weather in Boston?<end_of_turn>
 <start_of_turn>model
-<tool_call>
-{{
-  "name": "get_weather",
-  "args": {{
-    "location": "Boston, MA"
-  }}
-}}
-</tool_call><end_of_turn>
+<tool_call>{tool_call_json}</tool_call>
+<end_of_turn>
 <start_of_turn>user
-<tool_response>
-{{
-  "name": "get_weather",
-  "result": {{
-    "temperature": 72,
-    "condition": "Sunny"
-  }}
-}}
-</tool_response><end_of_turn>
+<tool_response>{tool_response_json}</tool_response><end_of_turn>
 <start_of_turn>model
 """
 
