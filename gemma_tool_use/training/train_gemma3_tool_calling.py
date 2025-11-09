@@ -25,7 +25,7 @@ nest_asyncio.apply()
 
 import jax
 import jax.numpy as jnp
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Optional
 from datasets import load_dataset
 from flax import nnx
 from huggingface_hub import snapshot_download
@@ -162,7 +162,7 @@ def group_messages_by_turn(messages: List[Dict[str, Any]]) -> List[List[Dict[str
     return grouped_messages
 
 
-def format_gemma3_tool_calling_example(sample: Dict[str, Any]) -> Dict[str, str]:
+def format_gemma3_tool_calling_example(sample: Dict[str, Any]) -> Optional[Dict[str, str]]:
     """
     Format a Toucan dataset sample into Gemma 3 tool calling format.
 
@@ -244,7 +244,10 @@ def format_gemma3_tool_calling_example(sample: Dict[str, Any]) -> Dict[str, str]
 
                     # Parse the Python dict string safely
                     tool_call_data = ast.literal_eval(tool_call_content)
-                    tool_args = json.loads(tool_call_data['arguments'])
+                    try:
+                        tool_args = json.loads(tool_call_data['arguments'])
+                    except json.JSONDecodeError:
+                        return None
 
                     call_data = {
                         "name": tool_call_data['name'],
@@ -502,6 +505,8 @@ def create_tool_calling_dataset(tokenizer, global_batch_size, max_target_length,
             }
             
             formatted = format_gemma3_tool_calling_example(sample)
+            if formatted is None:
+                return None
             texts.append(formatted['text'])
 
         return {'text': texts}
@@ -520,7 +525,9 @@ def create_tool_calling_dataset(tokenizer, global_batch_size, max_target_length,
     )
 
     # Remove any empty examples that failed formatting
+    train_dataset = train_dataset.filter(lambda x: x is not None)
     train_dataset = train_dataset.filter(lambda x: len(x['text']) > 0)
+    validation_dataset = validation_dataset.filter(lambda x: x is not None)
     validation_dataset = validation_dataset.filter(lambda x: len(x['text']) > 0)
 
     print(f"Formatted {len(train_dataset):,} training examples")
