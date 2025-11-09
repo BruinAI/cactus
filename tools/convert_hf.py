@@ -1117,6 +1117,7 @@ def convert_hf_to_cactus(model_name, output_dir, precision='INT8', cache_dir=Non
     print(f"Converting {model_name} to {precision}...")
 
     if 'whisper' in str(model_name).lower():
+        print("Entered!")
         tokenizer = tokenizer = AutoTokenizer.from_pretrained(
             model_name, 
             cache_dir=cache_dir,
