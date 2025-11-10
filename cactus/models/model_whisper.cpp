@@ -16,7 +16,7 @@ WhisperModel::WhisperModel(const Config& config) : Model(config) {
 void WhisperModel::load_weights_to_graph(CactusGraph* gb) {
 
     embedding_node_id_ = gb->mmap_embeddings(embedding_file_path_); //Updated engine_model to use decoder embeddings for whisper
-    weight_nodes_.output_norm_weight = gb->mmap_weights(model_folder_path_ + "/output_norm.weights"); //UPDATE THIS TO BE NORM FROM LAST DECODER LAYER
+    // weight_nodes_.output_norm_weight = gb->mmap_weights(model_folder_path_ + "/output_norm.weights"); UPDATE THIS TO BE NORM FROM LAST DECODER LAYER
     
     weight_nodes_.decoder_norm_weight = gb->mmap_weights(model_folder_path_ + "/decoder_norm.weights");
     weight_nodes_.decoder_norm_bias = gb->mmap_weights(model_folder_path_ + "/decoder_norm.bias");
@@ -222,7 +222,7 @@ size_t WhisperModel::build_encoder_self_attention(CactusGraph* gb, size_t input,
     k = gb->reshape(k, {1, seq_len, num_heads, head_dim});
     v = gb->reshape(v, {1, seq_len, num_heads, head_dim});
 
-    auto attn = gb->attention(q, k, v, attention_scale_, position_offset=0);
+    auto attn = gb->attention(q, k, v, attention_scale_, position_offset);
 
     attn = gb->reshape(attn, {seq_len, num_heads * head_dim});
 
