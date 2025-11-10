@@ -273,14 +273,25 @@ public:
     ~WhisperModel() override = default;
 
 protected:
-    size_t build_attention(CactusGraph* gb, size_t normalized_input, uint32_t layer_idx,
-                          ComputeBackend backend, bool use_cache = false, size_t position_offset = 0)=0;
+    size_t build_attention(CactusGraph*, size_t, uint32_t,ComputeBackend, bool, size_t) override {
+        throw std::runtime_error("Whisper: build_attention unused");
+    }
 
-    size_t build_mlp(CactusGraph* gb, size_t normalized_h, uint32_t layer_idx,
-                    ComputeBackend backend) const = 0;
+    size_t build_mlp(CactusGraph*, size_t, uint32_t, ComputeBackend) const override {
+        throw std::runtime_error("Whisper: build_mlp unused");
+    }
 
-    size_t build_transformer_block(CactusGraph* gb, size_t hidden, uint32_t layer_idx,
-                                  ComputeBackend backend, bool use_cache = false, size_t position_offset = 0)=0;
+    size_t build_transformer_block(CactusGraph*, size_t, uint32_t, ComputeBackend, bool, size_t) override {
+        throw std::runtime_error("Whisper: build_transformer_block unused");
+    }
+
+    size_t forward(const std::vector<uint32_t>& tokens, bool use_cache = false) override {
+        throw std::runtime_error("Whisper requires mel+token forward().");
+    }
+
+    size_t forward(const std::vector<uint32_t>& mel_bins,const std::vector<uint32_t>& tokens, bool use_cache = false);
+
+    void load_weights_to_graph(CactusGraph* gb) override;
 
     size_t build_encoder_attention(CactusGraph* gb, size_t normalized_input, uint32_t layer_idx,
                           ComputeBackend backend, bool use_cache = false, size_t position_offset = 0);
@@ -304,11 +315,6 @@ protected:
                                   ComputeBackend backend, bool use_cache = false, size_t position_offset = 0);
     
     size_t build_conv1d(CactusGraph* gb, size_t input, ComputeBackend backend);
-
-    size_t forward(const std::vector<uint32_t>& tokens, bool use_cache = false) = 0;
-
-    size_t forward(const std::vector<uint32_t>& mel_bins, const std::vector<uint32_t>& tokens, bool use_cache = false);
-    void load_weights_to_graph(CactusGraph* gb) override;
 
 private:
     struct WeightNodeIDs {

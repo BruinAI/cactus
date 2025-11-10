@@ -298,7 +298,7 @@ bool Config::from_json(const std::string& config_path) {
             else if (value == "lfm2" || value == "LFM2") model_type = ModelType::LFM2;
             else if (value == "smol" || value == "SMOL" || value == "Smol") model_type = ModelType::SMOL;
             else if (value == "bert" || value == "BERT") model_type = ModelType::NOMIC;
-            else if (value == "whisper" || value == "WHISPER") model_type == ModelType::WHISPER;
+            else if (value == "whisper" || value == "WHISPER") model_type = ModelType::WHISPER;
             else model_type = ModelType::QWEN;
         }
         else if (key == "conv_L_cache") conv_L_cache = static_cast<size_t>(std::stoul(value));
@@ -332,9 +332,11 @@ bool Config::from_json(const std::string& config_path) {
         default_temperature = 0.7f;
         default_top_p = 0.8f;
         default_top_k = 20;
+    } else if (model_type == ModelType::WHISPER) {
+        default_temperature = 0.7f;
+        default_top_p = 0.8f;
+        default_top_k = 20;
     }
-
-    //Yet to add for whisper;
 
     return true;
 }

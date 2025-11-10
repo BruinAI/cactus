@@ -6,7 +6,7 @@ echo "============================"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 
-WEIGHTS_DIR="$PROJECT_ROOT/weights/lfm2-350m"
+WEIGHTS_DIR="$PROJECT_ROOT/weights/whisper-medium"
 if [ ! -d "$WEIGHTS_DIR" ] || [ ! -f "$WEIGHTS_DIR/config.txt" ]; then
     echo ""
     echo "Weights not found. Generating weights..."
