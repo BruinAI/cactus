@@ -436,9 +436,7 @@ def format_gemma3_tool_calling_example(sample: Dict[str, Any]) -> Optional[Dict[
 
             # Add tools definition to first user message
             if turn_idx == 0:
-                if USE_SYSTEM_PROMPT:
-                    full_text += SYSTEM_PROMPT + "\n\n"
-                full_text += "The following Python methods are available:\n"
+                full_text += SYSTEM_PROMPT
                 full_text += format_tools_for_prompt(tools)
                 full_text += "\n\n"
 
