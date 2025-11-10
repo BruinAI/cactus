@@ -86,11 +86,14 @@ CKPT_DIR = "/tmp/gemma_tool_calling_ckpts/"
 LORA_OUTPUT_DIR = f"/dev/shm/{MODEL_ID.split('/')[-1]}_tool_calling_lora"
 
 USE_SYSTEM_PROMPT = False
-SYSTEM_PROMPT = """To get data you don't have access to, you may use the appropriate tools:
-1. Call the tool with <tool_call>{"name": "...", "parameters": {...}}</tool_call>
-2. You will receive tool results as: <tool_response>{"name": "...", "result": ...}</tool_response>
+SYSTEM_PROMPT = """You have access to functions/tools. If you decide to invoke any of the function(s)/tools, use them as follows:
+1. Call the tool: <tool_call>
+{"name": "...", "parameters": {...}}
+</tool_call>
+2. You will receive tool results from the user as: <tool_response>
+{"name": "...", "result": ...}
+</tool_response>
 3. Use the result to answer the user's question.
-You can make multiple tool calls, but only use tools when necessary.
 """
 
 # Calculating derived hyperparameters
@@ -105,19 +108,23 @@ def json_dump(obj) -> str:
     """Helper function to dump JSON with compact separators."""
     return json.dumps(obj, separators=(',', ':'))
 
+def correct_dict_type(tool: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Ensure that the 'type' field in tool function parameters is 'dict'.
+    """
+    assert 'function' in tool
+    function = tool['function']
+    if 'parameters' in function:
+        function['parameters']['type'] = 'dict'
+    tool['function'] = function
+    return tool
 
 def format_tools_for_prompt(tools: List[Dict[str, Any]]) -> str:
     """
     Format tools list for Gemma 3 prompt following PLAN.md format.
-
-    Args:
-        tools: List of tool dictionaries with 'name', 'description', 'parameters'
-
-    Returns:
-        Formatted tools string with XML tags
     """
     return f"""<tools>
-{'\n'.join(json_dump(tool) for tool in tools)}
+{'\n'.join(json_dump(correct_dict_type(tool)) for tool in tools)}
 </tools>"""
 
 
