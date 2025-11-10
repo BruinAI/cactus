@@ -323,7 +323,7 @@ def is_english_only(text: str) -> bool:
             latin_extended_count < 3)
 
 
-def filter_toucan_dataset(dataset, max_tools_used=2, max_tools_available=3, max_number_of_turns=1, english_only=True):
+def filter_toucan_dataset(dataset, max_tools_used=2, max_tools_available=3, max_number_of_turns=1, english_only=True) -> :
     """
     Filter Toucan dataset for single-turn examples with limited tools.
 
@@ -489,16 +489,6 @@ def create_tool_calling_dataset(tokenizer, global_batch_size, max_target_length,
         max_tools_available=MAX_TOOLS_AVAILABLE
     )
 
-    # Split into train/validation (90/10 split)
-    total_size = len(filtered_dataset)
-    train_size = int(0.9 * total_size)
-
-    train_dataset = filtered_dataset.select(range(train_size))
-    validation_dataset = filtered_dataset.select(range(train_size, total_size))
-
-    print(f"\nTrain dataset size: {len(train_dataset):,} samples")
-    print(f"Validation dataset size: {len(validation_dataset):,} samples")
-
     # Format examples
     print("Formatting examples for Gemma 3 tool calling...")
 
@@ -517,35 +507,30 @@ def create_tool_calling_dataset(tokenizer, global_batch_size, max_target_length,
             texts.append(formatted['text'] if formatted else None)
 
         return {'text': texts}
-
-    train_dataset = train_dataset.map(
+    
+    filtered_dataset = filtered_dataset.map(
         format_function,
         batched=True,
         batch_size=1000,
-        remove_columns=train_dataset.column_names
-    )
-    validation_dataset = validation_dataset.map(
-        format_function,
-        batched=True,
-        batch_size=1000,
-        remove_columns=validation_dataset.column_names
-    )
-
-    # Remove any empty examples that failed formatting
-    train_dataset = train_dataset.filter(lambda x: x is not None and x.get('text'))
-    validation_dataset = validation_dataset.filter(lambda x: x is not None and x.get('text'))
-
-    # train_dataset = train_dataset.filter(
+        remove_columns=filtered_dataset.column_names
+    ).filter(lambda x: x is not None and x.get('text'))
+    # filtered_dataset = filtered_dataset.filter(
     #     lambda x: len(tokenizer.encode(x['text'])) <= MAX_TARGET_LENGTH,
     #     desc="Filtering overlength samples"
     # )
-    # validation_dataset = validation_dataset.filter(
-    #     lambda x: len(tokenizer.encode(x['text'])) <= MAX_TARGET_LENGTH,
-    #     desc="Filtering overlength samples"
-    # )
+
+    # Split into train and validation sets: 95% train, 5% validation -> 34k, 2k data points
+    split = filtered_dataset.train_test_split(test_size=0.05, seed=42)
+    train_dataset = split['train']
+    validation_dataset = split['test']
 
     print(f"Formatted {len(train_dataset):,} training examples")
     print(f"Formatted {len(validation_dataset):,} validation examples")
+
+    count_no_tool_call = len(train_dataset.filter(lambda x: '<tool_call>' not in x['text']))
+    print(f"  Training examples without tool calls: {count_no_tool_call} ({100 * count_no_tool_call / len(train_dataset):.2f}%)")
+    count_no_tool_call_val = len(validation_dataset.filter(lambda x: '<tool_call>' not in x['text']))
+    print(f"  Validation examples without tool calls: {count_no_tool_call_val} ({100 * count_no_tool_call_val / len(validation_dataset):.2f}%)")
 
     # Build grain DataLoaders (HuggingFace Dataset objects work as grain data sources)
     train_loader = _build_data_loader(
@@ -560,7 +545,7 @@ def create_tool_calling_dataset(tokenizer, global_batch_size, max_target_length,
     validation_loader = _build_data_loader(
         data_source=validation_dataset,
         batch_size=global_batch_size,
-        num_epochs=1,  # Validation only runs once per eval
+        num_epochs=1,  # validation only runs once per eval
         max_seq_len=max_target_length,
         tokenizer=tokenizer,
         shuffle=False
