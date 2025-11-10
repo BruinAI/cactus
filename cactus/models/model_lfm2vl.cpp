@@ -47,8 +47,6 @@ Lfm2VlModel::Lfm2VlModel(const Config& config)
 
 bool Lfm2VlModel::init(const std::string& model_folder, size_t context_size, const std::string& system_prompt) {
 
-    
-    // Initialize base model
     if (!Model::init(model_folder, context_size, system_prompt, false)) {
         return false;
     }
@@ -58,40 +56,16 @@ bool Lfm2VlModel::init(const std::string& model_folder, size_t context_size, con
     if (!shared_graph) {
         throw std::runtime_error("Shared graph was not initialized for Lfm2VlModel");
     }
-    
-    // Initialize vision tower (loads vision weights from model_folder/vision/)
-    std::string vision_folder = model_folder;  // Vision weights should be in same folder with vision_ prefix
+    std::string vision_folder = model_folder; 
     if (!vision_tower_.init(shared_graph, vision_folder, context_size, "", false)) {
         throw std::runtime_error("Failed to initialize vision tower");
     }
     
     vision_weights_loaded_ = true;
     
-    
-    // Initialize language model (loads text weights from model_folder)
     if (!language_model_.init(shared_graph, model_folder, context_size, system_prompt, false)) {
         throw std::runtime_error("Failed to initialize language model");
     }
-
-    namespace fs = std::filesystem;
-    fs::path base(model_folder_path_);
-
-    auto resolve_weight = [&](const std::string& primary, const std::string& fallback = "") -> std::string {
-        fs::path primary_path = base / primary;
-        if (fs::exists(primary_path)) {
-            return primary_path.string();
-        }
-        if (!fallback.empty()) {
-            fs::path fallback_path = base / fallback;
-            if (fs::exists(fallback_path)) {
-                return fallback_path.string();
-            }
-        }
-        return primary_path.string();
-    };
-
-
-    output_weight_node_id_ = shared_graph->mmap_weights(resolve_weight("output_weight.weights"));
 
     language_model_.output_weight_node_id_ = output_weight_node_id_;
     
@@ -109,7 +83,6 @@ void Lfm2VlModel::reset_cache() {
 }
 
 void Lfm2VlModel::load_weights_to_graph(CactusGraph* gb) {
-    // Load multimodal projector weights (handle both underscore and condensed filenames)
     namespace fs = std::filesystem;
     fs::path base(model_folder_path_);
 
@@ -143,39 +116,27 @@ void Lfm2VlModel::load_weights_to_graph(CactusGraph* gb) {
     projector_weights_.linear_2_bias = gb->mmap_weights(resolve_weight("projector_linear_2.bias.weights", "projector_linear2.bias.weights"));
     capture_debug_node(0, "projector_linear2_bias_weight", projector_weights_.linear_2_bias);
 
-    
-    
-    // Note: Vision and language model weights are loaded through their own init() calls
+
+    output_weight_node_id_ = gb->mmap_weights(resolve_weight("output_weight.weights"));
 }
 
 size_t Lfm2VlModel::pixel_unshuffle(CactusGraph* gb, size_t hidden_states, 
                                      size_t height, size_t width, size_t channels) {
-    // Input shape: [batch=1, height, width, channels]
-    // Output shape: [batch=1, height/factor, width/factor, channels*factor^2]
     
     const size_t factor = config_.downsample_factor;
     const size_t new_height = height / factor;
     const size_t new_width = width / factor;
     
     
-    // Step 1: Reshape [1, height, width, channels] -> [1, height, width/factor, channels*factor]
     size_t step1 = gb->reshape(hidden_states, {1, height, new_width, channels * factor});
     capture_debug_node(0, "pixel_unshuffle_step1", step1);
     
-    
-    // Step 2: Transpose [1, height, width/factor, channels*factor] -> [1, width/factor, height, channels*factor]
-    // transposeN with perm [0, 2, 1, 3]
     step1 = gb->transposeN(step1, {0, 2, 1, 3});
     capture_debug_node(0, "pixel_unshuffle_step1_transpose", step1);
     
-    
-    // Step 3: Reshape [1, width/factor, height, channels*factor] -> [1, width/factor, height/factor, channels*factor^2]
     size_t step2 = gb->reshape(step1, {1, new_width, new_height, channels * factor * factor});
     capture_debug_node(0, "pixel_unshuffle_step2", step2);
-    
-    
-    // Step 4: Transpose [1, width/factor, height/factor, channels*factor^2] -> [1, height/factor, width/factor, channels*factor^2]
-    // transpose_n with perm [0, 2, 1, 3]
+
     size_t result = gb->transposeN(step2, {0, 2, 1, 3});
     capture_debug_node(0, "pixel_unshuffle_result", result);
     
@@ -185,19 +146,14 @@ size_t Lfm2VlModel::pixel_unshuffle(CactusGraph* gb, size_t hidden_states,
 
 size_t Lfm2VlModel::build_multimodal_projector(CactusGraph* gb, size_t image_features,
                                                size_t tile_h, size_t tile_w, ComputeBackend backend) {
-    // image_features shape: [1, tile_h, tile_w, vision_hidden_size]
     const size_t vision_hidden = config_.vision_embed_dim;
     
-    
-    // Ensure features are in FP32 since downstream reshape/transpose ops may not support FP16
     size_t image_features_fp32 = gb->precision_cast(image_features, Precision::FP32);
     capture_debug_node(0, "projector_image_features_fp32", image_features_fp32);
-    // Apply pixel unshuffle
+
     size_t unshuffled = pixel_unshuffle(gb, image_features_fp32, tile_h, tile_w, vision_hidden);
     capture_debug_node(0, "projector_unshuffled", unshuffled);
     
-    
-    // Reshape to 2D for layer operations: [1, new_h, new_w, in_channels] -> [new_h * new_w, in_channels]
     const size_t factor = config_.downsample_factor;
     const size_t new_h = tile_h / factor;
     const size_t new_w = tile_w / factor;
@@ -211,32 +167,24 @@ size_t Lfm2VlModel::build_multimodal_projector(CactusGraph* gb, size_t image_fea
     size_t flattened_fp16 = gb->precision_cast(flattened, Precision::FP16);
     capture_debug_node(0, "projector_flattened_fp16", flattened_fp16);
 
-    // Layer norm
     size_t normalized = gb->layer_norm(flattened_fp16, projector_weights_.layer_norm_weight,
                                       projector_weights_.layer_norm_bias, config_.layer_norm_eps);
     capture_debug_node(0, "projector_normalized", normalized);
     
-    
-    // Linear 1
     size_t hidden = gb->matmul(normalized, projector_weights_.linear_1_weight, true, backend);
     capture_debug_node(0, "projector_linear1", hidden);
     
     hidden = gb->add(hidden, projector_weights_.linear_1_bias);
     capture_debug_node(0, "projector_linear1_bias_applied", hidden);
     
-    
-    // GELU activation
     hidden = gb->gelu(hidden);
     capture_debug_node(0, "projector_gelu", hidden);
     
-    
-    // Linear 2
     size_t output = gb->matmul(hidden, projector_weights_.linear_2_weight, true, backend);
     capture_debug_node(0, "projector_linear2", output);
     
     output = gb->add(output, projector_weights_.linear_2_bias);
     capture_debug_node(0, "projector_linear2_bias_applied", output);
-    
     
     return output;
 }
@@ -246,12 +194,9 @@ std::vector<Lfm2VlModel::ProjectedTileFeature> Lfm2VlModel::get_image_features(
     const Lfm2VlPreprocessor::PreprocessedImage& preprocessed_image,
     ComputeBackend backend) {
     
-    // Use vision tower's forward_vision with our graph - this builds all vision ops into our graph
     size_t vision_output = vision_tower_.forward_vision(gb, preprocessed_image, backend);
     capture_debug_node(0, "vision_output_combined", vision_output);
     
-    
-    // The vision output is concatenated tiles, we need to split them and process each
     std::vector<ProjectedTileFeature> projected_features;
     projected_features.reserve(preprocessed_image.spatial_shapes.size());
     
@@ -274,23 +219,16 @@ std::vector<Lfm2VlModel::ProjectedTileFeature> Lfm2VlModel::get_image_features(
         const size_t new_w = tile_w / factor;
         const size_t projected_tokens = new_h * new_w;
         
-        
-        // Slice out this tile's features from the concatenated output
         size_t tile_features = gb->slice(vision_output, 0, offset, tile_tokens);
         capture_debug_node(static_cast<uint32_t>(tile_idx), "vision_tile_slice_" + std::to_string(tile_idx), tile_features);
         
         offset += tile_tokens;
         
-        
-        // Reshape to [1, tile_h, tile_w, vision_hidden]
         size_t reshaped = gb->reshape(tile_features, {1, tile_h, tile_w, config_.vision_embed_dim});
         capture_debug_node(static_cast<uint32_t>(tile_idx), "vision_tile_reshaped_" + std::to_string(tile_idx), reshaped);
         
-        
-        // Apply multimodal projector
         size_t projected = build_multimodal_projector(gb, reshaped, tile_h, tile_w, backend);
         capture_debug_node(static_cast<uint32_t>(tile_idx), "vision_tile_projected_" + std::to_string(tile_idx), projected);
-        
         
         ProjectedTileFeature feature{};
         feature.node_id = projected;
@@ -329,8 +267,6 @@ Lfm2VlModel::MergedEmbeddingResult Lfm2VlModel::merge_image_text_embeddings(
     const uint32_t image_start_id = get_token_id("<|image_start|>");
     const uint32_t image_end_id = get_token_id("<|image_end|>");
 
-    
-
     std::vector<size_t> sequence_nodes;
     sequence_nodes.reserve(tokens.size() + image_embedding_nodes.size());
 
@@ -339,8 +275,6 @@ Lfm2VlModel::MergedEmbeddingResult Lfm2VlModel::merge_image_text_embeddings(
 
     size_t total_seq_len = 0;
     
-    
-
     auto flush_segment = [&](void) {
         if (current_segment.empty()) {
             
@@ -360,7 +294,7 @@ Lfm2VlModel::MergedEmbeddingResult Lfm2VlModel::merge_image_text_embeddings(
         const auto& embedding_buffer = gb->get_output_buffer(language_model_.embedding_node_id_);
 
         for (size_t i = 0; i < embedding_buffer.shape.size(); ++i) {
-            (void)i;  // Preserves structure for optional shape debugging instrumentation.
+            (void)i; 
         }
 
         size_t embedding_node = gb->embedding(language_model_.embedding_node_id_, segment.input_node);
@@ -384,7 +318,6 @@ Lfm2VlModel::MergedEmbeddingResult Lfm2VlModel::merge_image_text_embeddings(
     while (token_index < tokens.size()) {
         uint32_t token_id = tokens[token_index];
         
-
         if (token_id == image_start_id) {
             flush_segment();
 
@@ -396,30 +329,19 @@ Lfm2VlModel::MergedEmbeddingResult Lfm2VlModel::merge_image_text_embeddings(
             current_segment.push_back(token_id);
             ++token_index;
             
-
             const auto& tiles = image_embedding_nodes[image_index];
             size_t tile_index = 0;
-            
-            
-
             while (token_index < tokens.size()) {
-                
                 uint32_t inner_token = tokens[token_index];
-                
-
                 if (inner_token == image_token_id) {
-                    
                     flush_segment();
                     
-
                     if (tile_index >= tiles.size()) {
                         
                         throw std::runtime_error("More <image> placeholders than projected tile features");
                     }
 
                     const auto& tile = tiles[tile_index++];
-                    
-                    
                     sequence_nodes.push_back(tile.node_id);
                     capture_debug_node(static_cast<uint32_t>(image_index),
                                        "merge_image_tile_" + std::to_string(image_index) + "_" + std::to_string(tile_index - 1),
@@ -427,7 +349,6 @@ Lfm2VlModel::MergedEmbeddingResult Lfm2VlModel::merge_image_text_embeddings(
                     
                     total_seq_len += tile.token_count;
                     
-
                     for (size_t count = 0; count < tile.token_count; ++count) {
                         if (token_index >= tokens.size()) {
                             throw std::runtime_error("Insufficient <image> tokens for projected features");
@@ -438,14 +359,12 @@ Lfm2VlModel::MergedEmbeddingResult Lfm2VlModel::merge_image_text_embeddings(
                         ++token_index;
                         
                     }
-
                     continue;
                 }
 
                 current_segment.push_back(inner_token);
                 
                 ++token_index;
-                
 
                 if (inner_token == image_end_id) {
                     flush_segment();
@@ -454,16 +373,9 @@ Lfm2VlModel::MergedEmbeddingResult Lfm2VlModel::merge_image_text_embeddings(
             }
 
             if (tile_index != tiles.size()) {
-                std::cout << "[LFM2_DEBUG] tile_mismatch image_index=" << image_index
-                          << " consumed_tiles=" << tile_index
-                          << " available_tiles=" << tiles.size() << std::endl;
                 if (tile_index < tiles.size()) {
                     for (size_t remaining = tile_index; remaining < tiles.size(); ++remaining) {
                         const auto& remaining_tile = tiles[remaining];
-                        std::cout << "[LFM2_DEBUG] tile_unused image_index=" << image_index
-                                  << " tile_index=" << remaining
-                                  << " node_id=" << remaining_tile.node_id
-                                  << " token_count=" << remaining_tile.token_count << std::endl;
                     }
                 }
                 throw std::runtime_error("Unused projected tile features remain after processing image block");
@@ -501,7 +413,6 @@ Lfm2VlModel::MergedEmbeddingResult Lfm2VlModel::merge_image_text_embeddings(
     return MergedEmbeddingResult{merged, total_seq_len};
 }
 
-// Stub implementations for pure virtual methods
 size_t Lfm2VlModel::build_attention(CactusGraph*, size_t, uint32_t, ComputeBackend, bool, size_t) {
     throw std::runtime_error("build_attention should not be called directly on Lfm2VlModel");
 }
@@ -515,22 +426,17 @@ size_t Lfm2VlModel::build_transformer_block(CactusGraph*, size_t, uint32_t, Comp
 }
 
 size_t Lfm2VlModel::forward(const std::vector<uint32_t>& tokens, bool use_cache) {
-    // Text-only forward (no images)
     if (!initialized_ || !graph_handle_) {
         throw std::runtime_error("Model not initialized - call init() first");
     }
     
-
     auto* gb = static_cast<CactusGraph*>(graph_handle_);
     gb->soft_reset();
     
-
     auto backend = config_.default_backend == Config::Backend::CPU
         ? ComputeBackend::CPU
         : ComputeBackend::NPU;
     
-
-    // Use language model's forward with our graph
     size_t final_hidden = language_model_.forward(gb, tokens, backend, use_cache);
     capture_debug_node(0, "text_only_final_hidden", final_hidden);
     return final_hidden;
@@ -549,24 +455,19 @@ Lfm2VlModel::ForwardImageResult Lfm2VlModel::forward_images(
         throw std::runtime_error("Token sequence cannot be empty");
     }
 
-    // Process images through vision tower and projector (all in our single graph)
     std::vector<std::vector<ProjectedTileFeature>> all_image_embeddings;
     all_image_embeddings.reserve(image_paths.size());
     for (const auto& image_path : image_paths) {
-        // Preprocess image
         auto preprocessed = preprocessor_.preprocess_from_file(image_path);
         
-        // Get image features (vision tower + projector) - builds into our graph
         auto image_features = get_image_features(gb, preprocessed, backend);
         
         all_image_embeddings.push_back(std::move(image_features));
     }
 
     std::vector<TextEmbeddingInput> text_embedding_inputs;
-    text_embedding_inputs.reserve(tokens.size() / 4 + 1); // heuristic to avoid frequent realloc
+    text_embedding_inputs.reserve(tokens.size() / 4 + 1);
     
-
-    // Merge image and text embeddings
     auto merged_embeddings = merge_image_text_embeddings(gb, tokens, all_image_embeddings, text_embedding_inputs);
     capture_debug_node(0, "merged_image_text_embeddings", merged_embeddings.node_id);
     
@@ -586,11 +487,6 @@ Lfm2VlModel::ForwardImageResult Lfm2VlModel::forward_images(
         }
         gb->set_input(embedding_input.input_node, segment_data.data(), Precision::FP32);
     }
-    
-    // TODO: Pass inputs_embeds through language model instead of tokens
-    // For now, we'll use the language model's forward with tokens
-    // This needs to be updated to accept embeddings directly or we need to build
-    // the language model layers manually with inputs_embeds as the starting point
 
     size_t final_hidden = language_model_.forward(gb, merged_embeddings.node_id, merged_embeddings.seq_len, backend, use_cache);
     capture_debug_node(0, "language_model_final_hidden", final_hidden);
@@ -676,7 +572,6 @@ uint32_t Lfm2VlModel::generate_with_images(
         last_token_count_ = tokens.size();
     }
 
-    // Use language model's output head for sampling
     auto logits_node_id = gb->matmul(final_hidden_node, language_model_.output_weight_node_id_, true, backend);
     capture_debug_node(0, "generate_logits", logits_node_id);
 

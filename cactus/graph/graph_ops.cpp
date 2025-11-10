@@ -432,9 +432,6 @@ void compute_fused_node(GraphNode& node, const std::vector<std::unique_ptr<Graph
             float scale_w = (src_width > 1 && dst_width > 1)
                             ? static_cast<float>(src_width - 1) / static_cast<float>(dst_width - 1)
                             : 0.0f;
-            std::cout << "Bilinear Interpolation from (" << src_height << ", " << src_width << ") to ("
-                      << dst_height << ", " << dst_width << "), scale_h: " << scale_h 
-                      << ", scale_w: " << scale_w << std::endl;
             std::vector<float> pos_embed_fp32(total_pos_embeds * embed_dim);
             
             if (pos_embeds_buffer.precision == Precision::INT8) {

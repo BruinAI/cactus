@@ -114,11 +114,8 @@ bool Model::init_internal(CactusGraph* gb, const std::string& model_folder, size
     }
 
     embedding_file_path_ = model_folder + "/token_embeddings.weights";
-
-    std::cout << "[Model::init] invoking load_weights_to_graph for folder=" << model_folder
-              << " embedding_file_path=" << embedding_file_path_ << std::endl;
     load_weights_to_graph(gb);
-    std::cout << "[Model::init] load_weights_to_graph completed" << std::endl;
+    
 
     if (config_.model_type == Config::ModelType::GEMMA) {
         attention_scale_ = 1.0f / std::sqrt(256.0f);
