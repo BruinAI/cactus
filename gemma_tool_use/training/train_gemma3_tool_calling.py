@@ -60,7 +60,7 @@ GEMMA_TOKENIZER_PATH = "gs://gemma-data/tokenizers/tokenizer_gemma3.model"
 # Training hyperparameters
 # Optimized for TPU v5e-4 (even with 8, only 4 will be used)
 NUM_EPOCHS = 1
-LEARNING_RATE = 3e-4
+LEARNING_RATE = 5e-5
 MAX_TARGET_LENGTH = 4096  # 95th percentile = 3,845 tokens
 MAX_STEPS = None
 
@@ -69,8 +69,8 @@ DESIRED_EFFECTIVE_BATCH_SIZE = 64
 EVAL_EVERY_N_EFFECTIVE_BATCHES = 125
 
 # LoRA hyperparameters
-RANK = 64
-ALPHA = 64.0
+RANK = 32
+ALPHA = 32.0
 
 # TPU/GPU mesh configuration
 # Optimized for 4x TPU v5e
@@ -516,10 +516,12 @@ def create_tool_calling_dataset(tokenizer, global_batch_size, max_target_length,
         batch_size=1000,
         remove_columns=filtered_dataset.column_names
     )
-    filtered_dataset = filtered_dataset.filter(
-        lambda x: len(tokenizer.encode(x['text'])) <= MAX_TARGET_LENGTH,
-        desc="Filtering overlength samples"
-    )
+    # filtered_dataset = filtered_dataset.filter(
+    #     lambda x: len(tokenizer.encode(x['text'])) <= MAX_TARGET_LENGTH,
+    #     desc="Filtering overlength samples",
+    #     num_proc=16,
+    # )
+    
 
     # Split into train and validation sets: 95% train, 5% validation -> 34k, 1.8k data points
     split = filtered_dataset.train_test_split(test_size=0.05, seed=42)
@@ -968,8 +970,19 @@ def main():
 
     print(f"Training for {max_steps:,} steps total")
 
+    warmup_steps = int(0.05 * max_steps)
+    lr_schedule = optax.warmup_cosine_decay_schedule(
+        init_value=0.0,
+        peak_value=LEARNING_RATE,
+        warmup_steps=warmup_steps,
+        decay_steps=max_steps - warmup_steps,
+        end_value=LEARNING_RATE * 0.1,
+    )
+
+    print(f"Learning rate schedule: warmup for {warmup_steps} steps, then cosine decay")
+
     optimizer = optax.MultiSteps(
-        optax.adamw(LEARNING_RATE),
+        optax.adamw(learning_rate=lr_schedule),
         every_k_schedule=GRADIENT_ACCUMULATION_STEPS
     )
     trainer = peft_trainer.PeftTrainer(
