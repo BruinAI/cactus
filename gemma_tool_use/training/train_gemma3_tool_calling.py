@@ -78,8 +78,8 @@ MESH_SHAPE = len(jax.devices()), 1  # Default to all devices in FSDP, no tensor 
 MESH_AXIS_NAMES = "fsdp", "tp"
 
 # Dataset filtering criteria (as per PLAN.md Phase 3)
-MAX_TOOLS_USED = 2
-MAX_TOOLS_AVAILABLE = 3
+MAX_TOOLS_USED = 3
+MAX_TOOLS_AVAILABLE = 5
 
 # Checkpoint and output directories
 CKPT_DIR = "/tmp/gemma_tool_calling_ckpts/"
@@ -324,7 +324,7 @@ def is_english_only(text: str) -> bool:
             latin_extended_count < 3)
 
 
-def filter_toucan_dataset(dataset, max_tools_used=2, max_tools_available=5, max_number_of_turns=1, english_only=True) -> Dataset:
+def filter_toucan_dataset(dataset, max_tools_used, max_tools_available, max_number_of_turns=1, english_only=True) -> Dataset:
     """
     Filter Toucan dataset for single-turn examples with limited tools.
 
@@ -499,11 +499,7 @@ def create_tool_calling_dataset(tokenizer, global_batch_size, max_target_length,
     dataset = load_dataset('Agent-Ark/Toucan-1.5M', 'SFT', split='train')
 
     # Filter dataset
-    filtered_dataset = filter_toucan_dataset(
-        dataset,
-        max_tools_used=MAX_TOOLS_USED,
-        max_tools_available=MAX_TOOLS_AVAILABLE
-    )
+    filtered_dataset = filter_toucan_dataset(dataset, MAX_TOOLS_USED, MAX_TOOLS_AVAILABLE)
 
     # Format examples
     print("Formatting examples for Gemma 3 tool calling...")
