@@ -436,9 +436,22 @@ void compute_fused_node(GraphNode& node, const std::vector<std::unique_ptr<Graph
                       << dst_height << ", " << dst_width << "), scale_h: " << scale_h 
                       << ", scale_w: " << scale_w << std::endl;
             std::vector<float> pos_embed_fp32(total_pos_embeds * embed_dim);
-            const __fp16* pos_embed_fp16 = pos_embeds_buffer.data_as<__fp16>();
-            for (int i = 0; i < total_pos_embeds * embed_dim; ++i) {
-                pos_embed_fp32[i] = static_cast<float>(pos_embed_fp16[i]);
+            
+            if (pos_embeds_buffer.precision == Precision::INT8) {
+                const int8_t* pos_embeds_data = pos_embeds_buffer.data_as<int8_t>();
+                for (int i = 0; i < total_pos_embeds * embed_dim; ++i) {
+                    pos_embed_fp32[i] = static_cast<float>(pos_embeds_data[i]) * pos_embeds_buffer.quantization_scale;
+                }
+            }
+            else if (pos_embeds_buffer.precision == Precision::FP16) {
+                const __fp16* pos_embed_fp16 = pos_embeds_buffer.data_as<__fp16>();
+                for (int i = 0; i < total_pos_embeds * embed_dim; ++i) {
+                    pos_embed_fp32[i] = static_cast<float>(pos_embed_fp16[i]);
+                }
+            }
+            else {
+                const float* pos_embed_data = pos_embeds_buffer.data_as<float>();
+                std::memcpy(pos_embed_fp32.data(), pos_embed_data, total_pos_embeds * embed_dim * sizeof(float));
             }
             
             float* output = node.output_buffer.data_as<float>();

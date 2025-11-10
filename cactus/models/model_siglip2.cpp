@@ -45,28 +45,6 @@ Siglip2VisionModel::Siglip2VisionModel(const Config& cfg) : Model(cfg) {
 }
 
 void Siglip2VisionModel::load_weights_to_graph(CactusGraph* gb) {
-    auto precision_to_string = [](Precision p) -> const char* {
-        switch (p) {
-            case Precision::FP32: return "FP32";
-            case Precision::FP16: return "FP16";
-            case Precision::INT8: return "INT8";
-        }
-        return "UNKNOWN";
-    };
-    auto log_buffer = [&](const std::string& label, size_t node_id) {
-        const auto& buf = gb->get_output_buffer(node_id);
-        std::cout << "[Siglip2VisionModel::build_vision_embeddings] " << label
-                  << " node=" << node_id
-                  << " precision=" << precision_to_string(buf.precision)
-                  << " shape=[";
-        for (size_t dim_idx = 0; dim_idx < buf.shape.size(); ++dim_idx) {
-            
-            if (dim_idx + 1 < buf.shape.size()) {
-                
-            }
-        }
-        
-    };
     vision_weight_nodes_.vision_layers.resize(config_.vision_num_layers);
     
 
@@ -75,13 +53,7 @@ void Siglip2VisionModel::load_weights_to_graph(CactusGraph* gb) {
     // Patch embedding weights (using short names from convert_hf.py)
     vision_weight_nodes_.patch_embedding_weight = gb->mmap_weights(base + "vision_patch_embedding.weights");
     vision_weight_nodes_.patch_embedding_bias = gb->mmap_weights(base + "vision_patch_embedding.bias.weights");
-    
-    // get shapes of loaded weights for verification
-    
-    log_buffer("patch embedding weight", vision_weight_nodes_.patch_embedding_weight);
-    
-    log_buffer("patch embedding bias", vision_weight_nodes_.patch_embedding_bias);
-    
+
     // Position embedding
     vision_weight_nodes_.position_embedding = gb->mmap_weights(base + "vision_position_embedding.weights");
     
@@ -156,44 +128,19 @@ Siglip2VisionModel::VisionEmbeddingResult Siglip2VisionModel::build_vision_embed
         }
     }
 
+    const BufferDesc& weight_buffer = gb->get_output_buffer(vision_weight_nodes_.patch_embedding_weight);
+    float original_weight_buffer_quantization_scale = weight_buffer.quantization_scale;
+    
     size_t reshaped_weight = gb->reshape(
         vision_weight_nodes_.patch_embedding_weight,
         {static_cast<size_t>(config_.vision_embed_dim), static_cast<size_t>(patch_dim)});
     capture_debug_node(0, "vision_reshaped_weight", reshaped_weight);
-    
 
-    auto precision_to_string = [](Precision p) -> const char* {
-        switch (p) {
-            case Precision::FP32: return "FP32";
-            case Precision::FP16: return "FP16";
-            case Precision::INT8: return "INT8";
-        }
-        return "UNKNOWN";
-    };
-
-    auto log_buffer = [&](const std::string& label, size_t node_id) {
-        const auto& buf = gb->get_output_buffer(node_id);
-        std::cout << "[Siglip2VisionModel::build_vision_embeddings] " << label
-                  << " node=" << node_id
-                  << " precision=" << precision_to_string(buf.precision)
-                  << " shape=[";
-        for (size_t dim_idx = 0; dim_idx < buf.shape.size(); ++dim_idx) {
-            
-            if (dim_idx + 1 < buf.shape.size()) {
-                
-            }
-        }
-        
-    };
-
-    log_buffer("patch_embedding_weight buffer (raw)", vision_weight_nodes_.patch_embedding_weight);
-    log_buffer("patch_embedding_bias buffer (raw)", vision_weight_nodes_.patch_embedding_bias);
-    log_buffer("position_embedding buffer (raw)", vision_weight_nodes_.position_embedding);
-
-    log_buffer("reshaped_weight buffer", reshaped_weight);
+    gb->set_quantization_scale(reshaped_weight, original_weight_buffer_quantization_scale);
 
     size_t patch_bias = vision_weight_nodes_.patch_embedding_bias;
-    log_buffer("patch_embedding_bias buffer", patch_bias);
+    capture_debug_node(0, "vision_patch_bias", patch_bias);
+    
 
     std::vector<size_t> tile_embeddings;
     tile_embeddings.reserve(static_cast<size_t>(num_tiles));
@@ -219,38 +166,32 @@ Siglip2VisionModel::VisionEmbeddingResult Siglip2VisionModel::build_vision_embed
         gb->set_input(tile_input_fp32, tile_data, Precision::FP32);
         capture_debug_node(tile_idx, "vision_tile_" + std::to_string(tile_idx) + "_patches_fp32", tile_input_fp32);
         
-        log_buffer("tile_input_fp32 buffer", tile_input_fp32);
+        
 
         size_t tile_input = gb->precision_cast(tile_input_fp32, Precision::FP16);
         capture_debug_node(tile_idx, "vision_tile_" + std::to_string(tile_idx) + "_patches", tile_input);
-        
-        log_buffer("tile_input_fp16 buffer", tile_input);
-
-        log_buffer("reshaped_weight buffer", reshaped_weight);
 
         size_t tile_patch = gb->matmul(tile_input, reshaped_weight, true, backend);
-    log_buffer("tile_patch buffer", tile_patch);
-    log_buffer("patch_embedding_bias_reshaped buffer", patch_bias);
-    size_t tile_bias = gb->add(tile_patch, patch_bias);
-        log_buffer("tile_bias buffer", tile_bias);
-        capture_debug_node(tile_idx, "vision_tile_" + std::to_string(tile_idx) + "_patch_embeds", tile_bias);
+        capture_debug_node(tile_idx, "vision_tile_" + std::to_string(tile_idx) + "_patch_proj", tile_patch);
         
-
+        size_t tile_bias = gb->add(tile_patch, patch_bias);
+        
+        capture_debug_node(tile_idx, "vision_tile_" + std::to_string(tile_idx) + "_patch_embeds", tile_bias);
         
 
         size_t tile_pos = gb->bilinear_interpolation(
             vision_weight_nodes_.position_embedding,
             static_cast<size_t>(tile_h),
             static_cast<size_t>(tile_w));
-        log_buffer("tile_pos buffer", tile_pos);
+        
         capture_debug_node(tile_idx, "vision_tile_pos_" + std::to_string(tile_idx), tile_pos);
         
 
         size_t tile_pos_cast = gb->precision_cast(tile_pos, Precision::FP16);
-        log_buffer("tile_pos_cast buffer", tile_pos_cast);
-        log_buffer("tile_bias buffer before add_pos", tile_bias);
+        
+        
         size_t tile_embed = gb->add(tile_bias, tile_pos_cast);
-        log_buffer("tile_embed buffer", tile_embed);
+        
         capture_debug_node(tile_idx, "vision_tile_" + std::to_string(tile_idx) + "_embeddings", tile_embed);
         
 
