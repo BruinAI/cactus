@@ -231,19 +231,21 @@ std::string Tokenizer::format_gemma_style(const std::vector<ChatMessage>& messag
         }
 
         // Add BFCL system prompt for Gemma 3 tool use
-        first_user_prefix += "You are a helpful assistant with access to functions. When the user's request requires a function call, respond with:\n";
-        first_user_prefix += "[function_name(param1='value1', param2='value2')]\n\n";
+        first_user_prefix += "You are a helpful assistant with access to functions. Use them when needed.\n\n";
         first_user_prefix += "Available functions:\n";
         first_user_prefix += "[\n";
         first_user_prefix += bfcl_tools;
         first_user_prefix += "\n]\n\n";
-        first_user_prefix += "Function call format rules:\n";
-        first_user_prefix += "- Start with [ and end with ]\n";
-        first_user_prefix += "- ALWAYS use parameter names: param='value' (NOT just 'value')\n";
-        first_user_prefix += "- Use single quotes for strings: 'value' not \"value\"\n";
-        first_user_prefix += "- Use numbers without quotes: 42 not '42'\n";
-        first_user_prefix += "- Multiple functions: [func1(x='a'), func2(y='b')]\n\n";
-        first_user_prefix += "If the request doesn't need a function, respond normally. If none of the functions match, explain what you can help with.\n\n";
+        first_user_prefix += "To call a function, respond with this exact format:\n";
+        first_user_prefix += "[function_name(param='value')]\n\n";
+        first_user_prefix += "Rules:\n";
+        first_user_prefix += "1. Function name must match exactly from list above\n";
+        first_user_prefix += "2. Functions must be called within [] brackets\n";
+        first_user_prefix += "3. Include () with parameters inside\n";
+        first_user_prefix += "4. Use param='value' format (single quotes for strings)\n";
+        first_user_prefix += "5. For numbers use param=123 (no quotes)\n";
+        first_user_prefix += "6. To call multiple functions, list them within: [func1(x='a'), func2(y='b')]\n\n";
+        first_user_prefix += "If no function is needed, respond normally.\n\n";
     } else if (!messages.empty() && messages[0].role == "system") {
         // No tools, but there is a system message
         first_user_prefix = messages[0].content + "\n\n";
