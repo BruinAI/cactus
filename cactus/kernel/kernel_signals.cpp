@@ -83,14 +83,24 @@ void cactus_spectrogram_f32(
 
     if (frame_length > actual_fft_length) {
         throw std::invalid_argument(
-            "frame_length (" + std::to_string(frame_length) + 
-            ") may not be larger than fft_length (" + 
+            "frame_length (" + std::to_string(frame_length) +
+            ") may not be larger than fft_length (" +
             std::to_string(actual_fft_length) + ")");
     }
 
-    if (window_length != frame_length) {
+    std::vector<float> hann_window;
+    const float* actual_window = window;
+
+    if (window == nullptr) {
+        size_t length = frame_length + 1;
+        hann_window.resize(frame_length);
+        for (size_t i = 0; i < frame_length; i++) {
+            hann_window[i] = 0.5f * (1.0f - std::cos(2.0f * std::numbers::pi * i / (length - 1)));
+        }
+        actual_window = hann_window.data();
+    } else if (window_length != frame_length) {
         throw std::invalid_argument(
-            "Length of the window (" + std::to_string(window_length) + 
+            "Length of the window (" + std::to_string(window_length) +
             ") must equal frame_length (" + std::to_string(frame_length) + ")");
     }
 
@@ -182,7 +192,7 @@ void cactus_spectrogram_f32(
         }
 
         for (size_t i = 0; i < frame_length; i++) {
-            buffer[i] *= window[i];
+            buffer[i] *= actual_window[i];
         }
         
         cactus_rfft_f32_1d(buffer.data(), raw_complex_frequencies.data(), actual_fft_length, "backward");
@@ -244,7 +254,7 @@ void cactus_spectrogram_f32(
 void cactus_rfft_f32_1d(const float* input, float* output, const size_t n, const char* norm) {
     const size_t out_len = n / 2 + 1;
     const float two_pi_over_n = 2.0f * std::numbers::pi / static_cast<float>(n);
-    
+
     float norm_factor = 1.0f;
     if (norm) {
         if (std::strcmp(norm, "backward") == 0) {
@@ -268,8 +278,127 @@ void cactus_rfft_f32_1d(const float* input, float* output, const size_t n, const
             re += input_val * std::cos(angle);
             im += input_val * std::sin(angle);
         }
-        
+
         output[i * 2] = re * norm_factor;
         output[i * 2 + 1] = im * norm_factor;
     }
+}
+
+static float hertz_to_mel(float freq, const char* mel_scale) {
+    if (std::strcmp(mel_scale, "htk") == 0) {
+        return 2595.0f * std::log10(1.0f + (freq / 700.0f));
+    } else if (std::strcmp(mel_scale, "kaldi") == 0) {
+        return 1127.0f * std::log(1.0f + (freq / 700.0f));
+    }
+
+    const float min_log_hertz = 1000.0f;
+    const float min_log_mel = 15.0f;
+    const float logstep = 27.0f / std::log(6.4f);
+    float mels = 3.0f * freq / 200.0f;
+
+    if (freq >= min_log_hertz) {
+        mels = min_log_mel + std::log(freq / min_log_hertz) * logstep;
+    }
+
+    return mels;
+}
+
+static float mel_to_hertz(float mels, const char* mel_scale) {
+    if (std::strcmp(mel_scale, "htk") == 0) {
+        return 700.0f * (std::pow(10.0f, mels / 2595.0f) - 1.0f);
+    } else if (std::strcmp(mel_scale, "kaldi") == 0) {
+        return 700.0f * (std::exp(mels / 1127.0f) - 1.0f);
+    }
+
+    const float min_log_hertz = 1000.0f;
+    const float min_log_mel = 15.0f;
+    const float logstep = std::log(6.4f) / 27.0f;
+    float freq = 200.0f * mels / 3.0f;
+
+    if (mels >= min_log_mel) {
+        freq = min_log_hertz * std::exp(logstep * (mels - min_log_mel));
+    }
+
+    return freq;
+}
+
+void mel_filter_bank(
+    float* mel_filters,
+    const int num_frequency_bins,
+    const int num_mel_filters,
+    const float min_frequency,
+    const float max_frequency,
+    const int sampling_rate,
+    const char* norm,
+    const char* mel_scale,
+    const bool triangularize_in_mel_space)
+{
+    if (norm != nullptr && std::strcmp(norm, "slaney") != 0) {
+        throw std::invalid_argument("norm must be one of None or \"slaney\"");
+    }
+
+    if (std::strcmp(mel_scale, "htk") != 0 && std::strcmp(mel_scale, "kaldi") != 0 && std::strcmp(mel_scale, "slaney") != 0) {
+        throw std::invalid_argument("mel_scale should be one of \"htk\", \"slaney\" or \"kaldi\".");
+    }
+
+    if (num_frequency_bins < 2) {
+        throw std::invalid_argument(
+            "Require num_frequency_bins: " + std::to_string(num_frequency_bins) + " >= 2");
+    }
+
+    if (min_frequency > max_frequency) {
+        throw std::invalid_argument(
+            "Require min_frequency: " + std::to_string(min_frequency) +
+            " <= max_frequency: " + std::to_string(max_frequency));
+    }
+
+    const float mel_min = hertz_to_mel(min_frequency, mel_scale);
+    const float mel_max = hertz_to_mel(max_frequency, mel_scale);
+
+    std::vector<float> mel_freqs(num_mel_filters + 2);
+    for (int i = 0; i < num_mel_filters + 2; i++) {
+        mel_freqs[i] = mel_min + (mel_max - mel_min) * i / (num_mel_filters + 1);
+    }
+
+    std::vector<float> filter_freqs(num_mel_filters + 2);
+    for (int i = 0; i < num_mel_filters + 2; i++) {
+        filter_freqs[i] = mel_to_hertz(mel_freqs[i], mel_scale);
+    }
+
+    std::vector<float> fft_freqs(num_frequency_bins);
+    if (triangularize_in_mel_space) {
+        float fft_bin_width = static_cast<float>(sampling_rate) / ((num_frequency_bins - 1) * 2);
+        for (int i = 0; i < num_frequency_bins; i++) {
+            fft_freqs[i] = hertz_to_mel(fft_bin_width * i, mel_scale);
+        }
+        filter_freqs = mel_freqs;
+    } else {
+        for (int i = 0; i < num_frequency_bins; i++) {
+            fft_freqs[i] = (static_cast<float>(sampling_rate) / 2.0f) * i / (num_frequency_bins - 1);
+        }
+    }
+
+    for (int i = 0; i < num_mel_filters; i++) {
+        float left_edge = filter_freqs[i];
+        float center = filter_freqs[i + 1];
+        float right_edge = filter_freqs[i + 2];
+
+        for (int j = 0; j < num_frequency_bins; j++) {
+            float freq = fft_freqs[j];
+            float down_slope = (freq - left_edge) / (center - left_edge);
+            float up_slope = (right_edge - freq) / (right_edge - center);
+            
+            mel_filters[i * num_frequency_bins + j] = std::max(0.0f, std::min(down_slope, up_slope));
+        }
+    }
+
+    if (norm != nullptr && std::strcmp(norm, "slaney") == 0) {
+        for (int i = 0; i < num_mel_filters; i++) {
+            float enorm = 2.0f / (filter_freqs[i + 2] - filter_freqs[i]);
+            for (int j = 0; j < num_frequency_bins; j++) {
+                mel_filters[i * num_frequency_bins + j] *= enorm;
+            }
+        }
+    }
+
 }

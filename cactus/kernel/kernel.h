@@ -253,6 +253,18 @@ void cactus_int32_to_fp16_scaled(const int32_t* src, __fp16* dst, size_t count, 
 
 void cactus_rfft_f32_1d(const float* input, float* output, const size_t n, const char* norm = "backward");
 
+void mel_filter_bank(
+    float* mel_filters,
+    const int num_frequency_bins, 
+    const int num_mel_filters, 
+    const float min_frequency, 
+    const float max_frequency, 
+    const int sampling_rate, 
+    const char* norm = nullptr, 
+    const char* mel_scale = "htk", 
+    const bool triangularize_in_mel_space = false
+);
+
 void cactus_spectrogram_f32(
     const float* waveform,
     size_t waveform_length,
