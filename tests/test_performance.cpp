@@ -347,7 +347,7 @@ void benchmark_attention(TestUtils::TestRunner& runner, const BenchmarkConfig& c
     
     for (size_t dim : config.dimensions) {
         size_t batch_size = 1;
-        size_t seq_len = std::min(dim / 8, 64UL); 
+        size_t seq_len = std::min(dim / 8, static_cast<size_t>(64)); 
         size_t num_heads = 8;
         size_t head_dim = dim / 8;
         size_t total_elements = batch_size * seq_len * num_heads * head_dim;
