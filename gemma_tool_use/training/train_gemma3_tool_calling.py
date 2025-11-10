@@ -520,7 +520,7 @@ def create_tool_calling_dataset(tokenizer, global_batch_size, max_target_length,
     #     desc="Filtering overlength samples"
     # )
 
-    # Split into train and validation sets: 95% train, 5% validation -> 34k, 2k data points
+    # Split into train and validation sets: 95% train, 5% validation -> 34k, 1.8k data points
     split = filtered_dataset.train_test_split(test_size=0.05, seed=42)
     train_dataset = split['train']
     validation_dataset = split['test']
