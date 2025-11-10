@@ -25,7 +25,7 @@ nest_asyncio.apply()
 import jax
 import jax.numpy as jnp
 from typing import Dict, List, Any, Optional
-from datasets import load_dataset
+from datasets import load_dataset, Dataset
 from flax import nnx
 from huggingface_hub import snapshot_download
 import optax
@@ -323,7 +323,7 @@ def is_english_only(text: str) -> bool:
             latin_extended_count < 3)
 
 
-def filter_toucan_dataset(dataset, max_tools_used=2, max_tools_available=3, max_number_of_turns=1, english_only=True) -> :
+def filter_toucan_dataset(dataset, max_tools_used=2, max_tools_available=3, max_number_of_turns=1, english_only=True) -> Dataset:
     """
     Filter Toucan dataset for single-turn examples with limited tools.
 
@@ -493,7 +493,7 @@ def create_tool_calling_dataset(tokenizer, global_batch_size, max_target_length,
     print("Formatting examples for Gemma 3 tool calling...")
 
     def format_function(examples):
-        """Format a batch of examples"""
+        """Format a batch of examples, marking failed ones as None"""
         texts = []
 
         for i in range(len(examples['messages'])):
@@ -502,9 +502,10 @@ def create_tool_calling_dataset(tokenizer, global_batch_size, max_target_length,
                 'tools': examples['tools'][i],
                 'target_tools': examples['target_tools'][i]
             }
-            
+
             formatted = format_gemma3_tool_calling_example(sample)
-            texts.append(formatted['text'] if formatted else None)
+            if formatted and formatted['text'].strip():  # skipping empty/invalid texts
+                texts.append(formatted['text'])
 
         return {'text': texts}
     
@@ -513,7 +514,7 @@ def create_tool_calling_dataset(tokenizer, global_batch_size, max_target_length,
         batched=True,
         batch_size=1000,
         remove_columns=filtered_dataset.column_names
-    ).filter(lambda x: x is not None and x.get('text'))
+    )
     # filtered_dataset = filtered_dataset.filter(
     #     lambda x: len(tokenizer.encode(x['text'])) <= MAX_TARGET_LENGTH,
     #     desc="Filtering overlength samples"
