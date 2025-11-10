@@ -14,6 +14,7 @@ WhisperModel::WhisperModel(const Config& config) : Model(config) {
 }
 
 void WhisperModel::load_weights_to_graph(CactusGraph* gb) {
+
     embedding_node_id_ = gb->mmap_embeddings(embedding_file_path_);
     weight_nodes_.output_norm_weight = gb->mmap_weights(model_folder_path_ + "/output_norm.weights");
 
@@ -27,7 +28,7 @@ void WhisperModel::load_weights_to_graph(CactusGraph* gb) {
 
     for (uint32_t i = 0; i < config_.num_layers; i++) {
         auto& layer = weight_nodes_.layers[i];
-        std::string layer_prefix = model_folder_path_ + "/layer_" + std::to_string(i) + "_";
+        std::string layer_prefix = model_folder_path_ + "/decoder.layer_" + std::to_string(i) + "_";
         layer.encoder_attn_q_weight = gb->mmap_weights(layer_prefix + "q_proj.weights");
         layer.encoder_attn_v_weight = gb->mmap_weights(layer_prefix + "v_proj.weights");
         layer.encoder_attn_q_bias = gb->mmap_weights(layer_prefix + "q_proj.bias");
@@ -67,39 +68,7 @@ size_t WhisperModel::build_transformer_block(CactusGraph* gb, size_t hidden, uin
 }
 
 
-size_t WhisperModel::forward(const std::vector<uint32_t>& tokens, bool use_cache) {
-    if (!initialized_ || !graph_handle_) {
-        throw std::runtime_error("Model not initialized - call init() first");
-    }
-
-    if (tokens.empty()) {
-        throw std::runtime_error("Token sequence cannot be empty");
-    }
-
-    auto* gb = static_cast<CactusGraph*>(graph_handle_);
-    gb->soft_reset();
-
-    auto seq_len = static_cast<size_t>(tokens.size());
-
-    size_t position_offset = use_cache ? kv_cache_.get_total_seq_len() : 0;
-
-    auto backend = config_.default_backend == Config::Backend::CPU
-        ? ComputeBackend::CPU
-        : ComputeBackend::NPU;
-
-    auto input_node_id = gb->input({seq_len}, Precision::FP32);
-    auto hidden = gb->embedding(embedding_node_id_, input_node_id);
-
-    float embed_scale = std::sqrt(static_cast<float>(config_.hidden_dim));
-    hidden = gb->scalar_multiply(hidden, embed_scale);
-
-    static std::set<uint32_t> skip_layers = {};
-    for (uint32_t layer_idx = 0; layer_idx < config_.num_layers; layer_idx++) {
-        if (skip_layers.count(layer_idx)) {
-            continue;
-        }
-    
-    // TODO
+size_t WhisperModel::forward(const std::vector<uint32_t>& mel_bins, bool use_cache) {
 }
 
 }
