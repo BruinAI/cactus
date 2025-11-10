@@ -60,7 +60,7 @@ GEMMA_TOKENIZER_PATH = "gs://gemma-data/tokenizers/tokenizer_gemma3.model"
 # Training hyperparameters
 # Optimized for TPU v5e-4 (even with 8, only 4 will be used)
 NUM_EPOCHS = 1
-LEARNING_RATE = 5e-5
+LEARNING_RATE = 1e-4  # Proven optimal - converges cleanly, best BFCL score
 MAX_TARGET_LENGTH = 4096  # 95th percentile = 3,845 tokens
 MAX_STEPS = None
 
@@ -68,9 +68,9 @@ BATCH_SIZE = 8
 DESIRED_EFFECTIVE_BATCH_SIZE = 64
 EVAL_EVERY_N_EFFECTIVE_BATCHES = 125
 
-# LoRA hyperparameters
-RANK = 32
-ALPHA = 32.0
+# LoRA hyperparameters, Choose either 64 or 32 for both
+RANK = 64
+ALPHA = 64.0
 
 # TPU/GPU mesh configuration
 # Optimized for 4x TPU v5e
@@ -324,7 +324,7 @@ def is_english_only(text: str) -> bool:
             latin_extended_count < 3)
 
 
-def filter_toucan_dataset(dataset, max_tools_used=2, max_tools_available=3, max_number_of_turns=1, english_only=True) -> Dataset:
+def filter_toucan_dataset(dataset, max_tools_used=2, max_tools_available=5, max_number_of_turns=1, english_only=True) -> Dataset:
     """
     Filter Toucan dataset for single-turn examples with limited tools.
 
@@ -341,12 +341,28 @@ def filter_toucan_dataset(dataset, max_tools_used=2, max_tools_available=3, max_
 
     total = len(dataset)
 
+    def reduce_user_messages(sample):
+        """Remove all messages after max_number_of_turns user messages."""
+        messages = json.loads(sample['messages'])
+        user_message_idxs = [idx for idx, m in enumerate(messages) if m['role'] == 'user']
+        if len(user_message_idxs) <= max_number_of_turns:
+            return sample
+        cutoff_idx = user_message_idxs[max_number_of_turns]
+        sample['messages'] = json.dumps(messages[:cutoff_idx])
+        return sample
+
+    filtered_dataset = dataset.map(
+        reduce_user_messages,
+        num_proc=16,
+        desc=f"Reducing messages to {max_number_of_turns} user turns"
+    )
+
     def filter_fn(sample):
         """Filter function for a single sample."""
         messages = json.loads(sample['messages'])
 
         user_messages = [m for m in messages if m['role'] == 'user']
-        if len(user_messages) > max_number_of_turns or len(user_messages) == 0:
+        if len(user_messages) == 0:
             return False
 
         num_tool_calls = sum(1 for m in messages if m['role'] == 'tool_call')
@@ -367,10 +383,9 @@ def filter_toucan_dataset(dataset, max_tools_used=2, max_tools_available=3, max_
 
         return True
 
-    # Use HuggingFace's native filter with batching and multiprocessing
-    filtered_dataset = dataset.filter(
+    filtered_dataset = filtered_dataset.filter(
         filter_fn,
-        num_proc=4,  # Use 4 processes for parallel filtering
+        num_proc=16,
         desc="Filtering samples"
     )
 
@@ -976,7 +991,7 @@ def main():
         peak_value=LEARNING_RATE,
         warmup_steps=warmup_steps,
         decay_steps=max_steps - warmup_steps,
-        end_value=LEARNING_RATE * 0.1,
+        end_value=LEARNING_RATE * 0.2,
     )
 
     print(f"Learning rate schedule: warmup for {warmup_steps} steps, then cosine decay")
