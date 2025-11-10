@@ -10,6 +10,46 @@
 #include <numbers>
 #include <limits>
 
+static void to_db(
+    float* spectrogram,
+    size_t size,
+    float reference,
+    float min_value,
+    const float* db_range,
+    float multiplier)
+{
+    if (reference <= 0.0f) {
+        throw std::invalid_argument("reference must be greater than zero");
+    }
+    if (min_value <= 0.0f) {
+        throw std::invalid_argument("min_value must be greater than zero");
+    }
+
+    reference = std::max(min_value, reference);
+    const float log_ref = std::log10(reference);
+
+    for (size_t i = 0; i < size; i++) {
+        float value = std::max(min_value, spectrogram[i]);
+        spectrogram[i] = multiplier * (std::log10(value) - log_ref);
+    }
+
+    if (db_range != nullptr) {
+        if (*db_range <= 0.0f) {
+            throw std::invalid_argument("db_range must be greater than zero");
+        }
+
+        float max_db = -std::numeric_limits<float>::infinity();
+        for (size_t i = 0; i < size; i++) {
+            max_db = std::max(max_db, spectrogram[i]);
+        }
+
+        float min_db = max_db - *db_range;
+        for (size_t i = 0; i < size; i++) {
+            spectrogram[i] = std::max(min_db, spectrogram[i]);
+        }
+    }
+}
+
 void cactus_spectrogram_f32(
     const float* waveform,
     size_t waveform_length,
@@ -19,20 +59,20 @@ void cactus_spectrogram_f32(
     size_t hop_length,
     const size_t* fft_length,
     float* spectrogram,
-    float power = 1.0f,
-    bool center = true,
-    const char* pad_mode = "reflect",
-    bool onesided = true,
-    float dither = 0.0f,
-    const float* preemphasis = nullptr,
-    const float* mel_filters = nullptr,
-    size_t mel_filters_size = 0,
-    float mel_floor = 1e-10f,
-    const char* log_mel = nullptr,
-    float reference = 1.0f,
-    float min_value = 1e-10f,
-    const float* db_range = nullptr,
-    bool remove_dc_offset = false)
+    float power,
+    bool center,
+    const char* pad_mode,
+    bool onesided,
+    float dither,
+    const float* preemphasis,
+    const float* mel_filters,
+    size_t mel_filters_size,
+    float mel_floor,
+    const char* log_mel,
+    float reference,
+    float min_value,
+    const float* db_range,
+    bool remove_dc_offset)
 {
     size_t actual_fft_length;
     if (fft_length == nullptr) {
@@ -67,9 +107,34 @@ void cactus_spectrogram_f32(
             "Specify `power` to fix this issue.");
     }
 
-    //TODO: implement padding
+    std::vector<float> padded_waveform;
+    const float* input_waveform = waveform;
+    size_t input_length = waveform_length;
 
-    const size_t num_frames = 1 + (waveform_length - frame_length) / hop_length;
+    if (center) {
+        size_t pad_length = frame_length / 2;
+        size_t padded_length = waveform_length + 2 * pad_length;
+        padded_waveform.resize(padded_length);
+
+        if (std::strcmp(pad_mode, "reflect") == 0) {
+            for (size_t i = 0; i < pad_length; i++) {
+                padded_waveform[i] = waveform[pad_length - i];
+            }
+
+            std::copy(waveform, waveform + waveform_length, padded_waveform.data() + pad_length);
+
+            for (size_t i = 0; i < pad_length; i++) {
+                padded_waveform[pad_length + waveform_length + i] = waveform[waveform_length - 2 - i];
+            }
+        } else {
+            throw std::invalid_argument("Unsupported pad_mode: " + std::string(pad_mode));
+        }
+
+        input_waveform = padded_waveform.data();
+        input_length = padded_length;
+    }
+
+    const size_t num_frames = 1 + (input_length - frame_length) / hop_length;
     const size_t num_frequency_bins = (actual_fft_length / 2) + 1;
 
     std::vector<float> buffer(actual_fft_length);
@@ -84,10 +149,37 @@ void cactus_spectrogram_f32(
     for (size_t frame_idx = 0; frame_idx < num_frames; frame_idx++) {
         std::fill(buffer.begin(), buffer.end(), 0.0f);
 
-        size_t available_length = std::min(frame_length, waveform_length - timestep);
-        std::copy(waveform + timestep, waveform + timestep + available_length, buffer.data());
+        size_t available_length = std::min(frame_length, input_length - timestep);
+        std::copy(input_waveform + timestep, input_waveform + timestep + available_length, buffer.data());
 
-        // need to add if conditions
+        if (dither != 0.0f) {
+            for (size_t i = 0; i < frame_length; i++) {
+                float u1 = static_cast<float>(rand()) / static_cast<float>(RAND_MAX);
+                float u2 = static_cast<float>(rand()) / static_cast<float>(RAND_MAX);
+                float randn = std::sqrt(-2.0f * std::log(u1)) * std::cos(2.0f * std::numbers::pi * u2);
+                buffer[i] += dither * randn;
+            }
+        }
+
+        if (remove_dc_offset) {
+            float mean = 0.0f;
+            for (size_t i = 0; i < frame_length; i++) {
+                mean += buffer[i];
+            }
+            mean /= static_cast<float>(frame_length);
+
+            for (size_t i = 0; i < frame_length; i++) {
+                buffer[i] -= mean;
+            }
+        }
+
+        if (preemphasis != nullptr) {
+            float preemph_coef = *preemphasis;
+            for (size_t i = frame_length - 1; i > 0; i--) {
+                buffer[i] -= preemph_coef * buffer[i - 1];
+            }
+            buffer[0] *= (1.0f - preemph_coef);
+        }
 
         for (size_t i = 0; i < frame_length; i++) {
             buffer[i] *= window[i];
@@ -149,7 +241,7 @@ void cactus_spectrogram_f32(
     }
 }
 
-void cactus_rfft_f32_1d(const float* input, float* output, const size_t n, const char* norm = "backward") {
+void cactus_rfft_f32_1d(const float* input, float* output, const size_t n, const char* norm) {
     const size_t out_len = n / 2 + 1;
     const float two_pi_over_n = 2.0f * std::numbers::pi / static_cast<float>(n);
     
@@ -179,45 +271,5 @@ void cactus_rfft_f32_1d(const float* input, float* output, const size_t n, const
         
         output[i * 2] = re * norm_factor;
         output[i * 2 + 1] = im * norm_factor;
-    }
-}
-
-static void to_db(
-    float* spectrogram,
-    size_t size,
-    float reference,
-    float min_value,
-    const float* db_range,
-    float multiplier)
-{
-    if (reference <= 0.0f) {
-        throw std::invalid_argument("reference must be greater than zero");
-    }
-    if (min_value <= 0.0f) {
-        throw std::invalid_argument("min_value must be greater than zero");
-    }
-
-    reference = std::max(min_value, reference);
-    const float log_ref = std::log10(reference);
-
-    for (size_t i = 0; i < size; i++) {
-        float value = std::max(min_value, spectrogram[i]);
-        spectrogram[i] = multiplier * (std::log10(value) - log_ref);
-    }
-
-    if (db_range != nullptr) {
-        if (*db_range <= 0.0f) {
-            throw std::invalid_argument("db_range must be greater than zero");
-        }
-
-        float max_db = -std::numeric_limits<float>::infinity();
-        for (size_t i = 0; i < size; i++) {
-            max_db = std::max(max_db, spectrogram[i]);
-        }
-
-        float min_db = max_db - *db_range;
-        for (size_t i = 0; i < size; i++) {
-            spectrogram[i] = std::max(min_db, spectrogram[i]);
-        }
     }
 }
