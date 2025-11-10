@@ -35,7 +35,7 @@ struct Config {
     uint32_t moe_every_n_layers = 0;
     bool tie_word_embeddings = true;
 
-    enum class ModelType {QWEN = 0, GEMMA = 1, SMOL = 2, NOMIC = 3, LFM2 = 4};
+    enum class ModelType {QWEN = 0, GEMMA = 1, SMOL = 2, NOMIC = 3, LFM2 = 4, WHISPER = 5};
     ModelType model_type = ModelType::QWEN;
 
     enum class Activation {GELU = 0, SILU = 1};
@@ -96,7 +96,7 @@ public:
 
 protected:
 
-    enum class ModelType { UNKNOWN, QWEN, GEMMA, LFM2 , SMOL, BERT };
+    enum class ModelType { UNKNOWN, QWEN, GEMMA, LFM2 , SMOL, BERT, WHISPER };
     ModelType model_type_ = ModelType::UNKNOWN;
     bool has_chat_template_ = false;
     std::string chat_template_;

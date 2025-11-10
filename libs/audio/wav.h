@@ -8,23 +8,12 @@
 #include <stdexcept>
 #include <algorithm>
 #include <cmath>
-
-// We assume ARM / a compiler that supports __fp16
 // (Apple Clang, GCC on ARM, Clang on ARM, etc.)
 
-enum class Precision {
-    FP32,
-    FP16
-};
 
 struct AudioFP32 {
     int sample_rate;
     std::vector<float> samples;
-};
-
-struct AudioFP16 {
-    int sample_rate;
-    std::vector<__fp16> samples;
 };
 
 // =========================================================
@@ -114,26 +103,8 @@ inline AudioFP32 load_wav_fp32(const std::string& path) {
     return AudioFP32{ (int)sample_rate, std::move(mono) };
 }
 
-// =========================================================
-// 2. Convert FP32 → __fp16
-// =========================================================
-inline std::vector<__fp16> fp32_to_fp16(const std::vector<float>& v) {
-    std::vector<__fp16> out(v.size());
-    for (size_t i = 0; i < v.size(); i++)
-        out[i] = (__fp16)v[i];
-    return out;
-}
 
-// =========================================================
-// 3. WAV loader → FP16 output
-// =========================================================
-inline AudioFP16 load_wav_fp16(const std::string& path) {
-    AudioFP32 a = load_wav_fp32(path);
-    return AudioFP16{
-        a.sample_rate,
-        fp32_to_fp16(a.samples)
-    };
-}
+
 
 // =========================================================
 // 4. Unified API
@@ -141,11 +112,6 @@ inline AudioFP16 load_wav_fp16(const std::string& path) {
 inline AudioFP32 load_wav(const std::string& path) {
     return load_wav_fp32(path);
 }
-
-inline AudioFP16 load_wav16(const std::string& path) {
-    return load_wav_fp16(path);
-}
-
 // =========================================================
 // 5. Resampling (same algorithm, different output type)
 // =========================================================
@@ -170,17 +136,6 @@ inline std::vector<float> resample_to_16k_fp32(
             ? float((1.0 - frac) * in[i0] + frac * in[i0 + 1])
             : in.back();
     }
-    return out;
-}
-
-inline std::vector<__fp16> resample_to_16k_fp16(
-    const std::vector<float>& in, int sr_in)
-{
-    auto fp32 = resample_to_16k_fp32(in, sr_in);
-
-    std::vector<__fp16> out(fp32.size());
-    for (size_t i = 0; i < fp32.size(); i++)
-        out[i] = (__fp16)fp32[i];
     return out;
 }
 

@@ -202,7 +202,6 @@ def convert_hf_model_weights(model, output_dir, precision='INT8', args: Optional
     }
 
     state_dict = model.state_dict()
-    print(model.state_dict)
     config = model.config
     saved_tensor_full_names = set()
     
@@ -281,7 +280,7 @@ def convert_hf_model_weights(model, output_dir, precision='INT8', args: Optional
 
     elif model_type_str == 'whisper':
         weights = ['decoder.embed_tokens.weight', 'decoder.embed_positions.weight', 'decoder.layer_norm.weight', 'decoder.layer_norm.bias', 'proj_out.weight', 'encoder.embed_positions.weight', 'encoder.conv1.bias', 'encoder.conv1.weight', 'encoder.conv2.bias', 'encoder.conv2.weight', 'encoder.layer_norm.bias', 'encoder.layer_norm.weight']
-        save_names = ['decoder_token_embeddings.weights', 'decoder_position_embeddings.weights', 'decoder_output_norm.weights', 'decoder_output_norm.bias', 'output_layer.weights', 'encoder_position_embeddings.weights', 'encoder_conv1_bias.bias', 'encoder_conv1_weight.weights', 'encoder_conv2_bias.bias', 'encoder_conv2_weight.weights', 'encoder_output_norm_bias.bias', 'encoder_output_norm_weight.weights']
+        save_names = ['decoder_token_embeddings.weights', 'decoder_position_embeddings.weights', 'decoder_norm.weights', 'decoder_norm.bias', 'output_layer.weights', 'encoder_position_embeddings.weights', 'encoder_conv1_bias.bias', 'encoder_conv1_weight.weights', 'encoder_conv2_bias.bias', 'encoder_conv2_weight.weights', 'encoder_norm_bias.bias', 'encoder_norm_weight.weights']
         for name, save_name in zip(weights, save_names):
             if name in state_dict:
                 save_tensor_with_header(state_dict[name], output_dir / save_name, precision, transpose=False, stats_tracker=quantization_stats, args=args, model_type=detected_model_type)
@@ -313,7 +312,6 @@ def convert_hf_model_weights(model, output_dir, precision='INT8', args: Optional
             break
 
     num_layers = model_config['num_layers']
-    print(num_layers)
     missing_tensors = []
     for i in range(num_layers):
         
@@ -372,7 +370,7 @@ def convert_hf_model_weights(model, output_dir, precision='INT8', args: Optional
             (['mlp.experts.mlp.w2'], precision, f'layer_{i}_mlp_expert_{{channel}}.mlp2.weights', True),
             (['mlp.router.layer.weight'], precision, f'layer_{i}_mlp_router.layer.weights', False),
             # Whisper specific parameters
-            (['encoder_attn.q_proj.weight'], precision, f'layer_{i}_attn_q.weights', False),
+            (['encoder_attn.q_proj.weight'], precision, f'layer_{i}_encoder_attn_q.weights', False),
             (['encoder_attn.k_proj.weight'], precision, f'layer_{i}_encoder_attn_k.weights', False),
             (['encoder_attn.v_proj.weight'], precision, f'layer_{i}_encoder_attn_v.weights', False),
             (['encoder_attn.out_proj.weight'], precision, f'layer_{i}_encoder_attn_output.weights', False),
@@ -387,11 +385,11 @@ def convert_hf_model_weights(model, output_dir, precision='INT8', args: Optional
             (['fc2.bias'], precision, f'layer_{i}_mlp_fc2.bias', False),
             (['final_layer_norm.weight'], precision, f'layer_{i}_final_norm.weights', False),
             (['final_layer_norm.bias'], precision, f'layer_{i}_final_norm.bias', False),
-            (['self_attn.q_proj.weight'], precision, f'layer_{i}_self_attn_q_proj.weights', False),
-            (['self_attn.k_proj.weight'], precision, f'layer_{i}_self_attn_k_proj.weights', False),
-            (['self_attn.v_proj.weight'], precision, f'layer_{i}_self_attn_v_proj.weights', False),
-            (['self_attn.q_proj.bias'], precision, f'layer_{i}_self_attn_q.bias.bias', False),
-            (['self_attn.v_proj.bias'], precision, f'layer_{i}_self_attn_v.bias.bias', False),
+            (['self_attn.q_proj.weight'], precision, f'layer_{i}_self_attn_q.weights', False),
+            (['self_attn.k_proj.weight'], precision, f'layer_{i}_self_attn_k.weights', False),
+            (['self_attn.v_proj.weight'], precision, f'layer_{i}_self_attn_v.weights', False),
+            (['self_attn.q_proj.bias'], precision, f'layer_{i}_self_attn_q.bias', False),
+            (['self_attn.v_proj.bias'], precision, f'layer_{i}_self_attn_v.bias', False),
             (['self_attn.out_proj.weight'], precision, f'layer_{i}_self_attn_output.weights', False),
             (['self_attn.out_proj.bias'], precision, f'layer_{i}_self_attn_output.bias', False),
             (['self_attn_layer_norm.weight'], precision, f'layer_{i}_self_attn_norm.weights', False),

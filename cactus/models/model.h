@@ -274,23 +274,60 @@ public:
 
 protected:
     size_t build_attention(CactusGraph* gb, size_t normalized_input, uint32_t layer_idx,
-                          ComputeBackend backend, bool use_cache = false, size_t position_offset = 0) override;
+                          ComputeBackend backend, bool use_cache = false, size_t position_offset = 0)=0;
 
     size_t build_mlp(CactusGraph* gb, size_t normalized_h, uint32_t layer_idx,
-                    ComputeBackend backend) const override;
+                    ComputeBackend backend) const = 0;
 
     size_t build_transformer_block(CactusGraph* gb, size_t hidden, uint32_t layer_idx,
-                                  ComputeBackend backend, bool use_cache = false, size_t position_offset = 0) override;
-    
-    size_t build_conv1d(CactusGraph* gb, size_t input, uint32_t layer_idx, ComputeBackend backend);
+                                  ComputeBackend backend, bool use_cache = false, size_t position_offset = 0)=0;
 
-    size_t forward(const std::vector<uint32_t>& tokens, bool use_cache = false) override;
+    size_t build_encoder_attention(CactusGraph* gb, size_t normalized_input, uint32_t layer_idx,
+                          ComputeBackend backend, bool use_cache = false, size_t position_offset = 0);
+    
+    size_t build_decoder_self_attention(CactusGraph* gb, size_t normalized_input, uint32_t layer_idx,
+                          ComputeBackend backend, bool use_cache = false, size_t position_offset = 0);
+
+    size_t build_encoder_self_attention(CactusGraph* gb, size_t normalized_input, uint32_t layer_idx,
+                          ComputeBackend backend, bool use_cache = false, size_t position_offset = 0);
+
+    size_t build_encoder_mlp(CactusGraph* gb, size_t normalized_h, uint32_t layer_idx,
+                    ComputeBackend backend) const;
+    
+    size_t build_decoder_mlp(CactusGraph* gb, size_t normalized_h, uint32_t layer_idx,
+                    ComputeBackend backend) const;
+    
+    size_t build_encoder_transformer_block(CactusGraph* gb, size_t hidden, uint32_t layer_idx,
+                                  ComputeBackend backend, bool use_cache = false, size_t position_offset = 0);
+    
+    size_t build_decoder_transformer_block(CactusGraph* gb, size_t hidden, uint32_t layer_idx,
+                                  ComputeBackend backend, bool use_cache = false, size_t position_offset = 0);
+    
+    size_t build_conv1d(CactusGraph* gb, size_t input, ComputeBackend backend);
+
+    size_t forward(const std::vector<uint32_t>& tokens, bool use_cache = false) = 0;
+
+    size_t forward(const std::vector<uint32_t>& mel_bins, const std::vector<uint32_t>& tokens, bool use_cache = false);
     void load_weights_to_graph(CactusGraph* gb) override;
 
 private:
     struct WeightNodeIDs {
         size_t output_weight;
         size_t output_norm_weight;
+
+        size_t decoder_norm_weight;
+        size_t decoder_norm_bias;
+        size_t decoder_position_embeddings_weight;
+
+        size_t encoder_position_embeddings;
+        size_t encoder_conv1_weight;
+        size_t encoder_conv1_bias;
+        size_t encoder_conv2_weight;
+        size_t encoder_conv2_bias;
+        size_t encoder_norm_weight;
+        size_t encoder_norm_bias;
+
+        size_t encoder_output;
 
         struct LayerWeights {
             //Decoder layers
@@ -305,18 +342,18 @@ private:
             size_t decoder_encoder_attn_q_bias;
             size_t decoder_encoder_attn_v_bias;
             size_t decoder_encoder_attn_output_weight;
-            size_t decoder_encoder_attn_otuput_bias;
+            size_t decoder_encoder_attn_output_bias;
 
-            size_t decoder_post_encoder_layernorm_weight1;
-            size_t decoder_post_encoder_layernorm_bias1;
+            size_t decoder_post_encoder_layernorm_weight;
+            size_t decoder_post_encoder_layernorm_bias;
 
             size_t decoder_ffn1_weight;
             size_t decoder_ffn1_bias;
             size_t decoder_ffn2_weight;
             size_t decoder_ffn2_bias;
 
-            size_t decoder_post_ffn_layernorm_weight1;
-            size_t decoder_post_ffn_layernorm_bias1;
+            size_t decoder_post_ffn_layernorm_weight;
+            size_t decoder_post_ffn_layernorm_bias;
             
             size_t decoder_self_attn_q_weight;
             size_t decoder_self_attn_k_weight;
@@ -324,27 +361,19 @@ private:
             size_t decoder_self_attn_q_bias;
             size_t decoder_self_attn_v_bias;
             size_t decoder_self_attn_output_weight;
-            size_t decoder_self_attn_otuput_bias;
+            size_t decoder_self_attn_output_bias;
 
-            size_t decoder_post_attn_layernorm_weight1;
-            size_t decoder_post_attn_layernorm_bias1;
+            size_t decoder_post_attn_layernorm_weight;
+            size_t decoder_post_attn_layernorm_bias;
 
             //Encoder layers
-            size_t encoder_output_norm_bias;
-            size_t encoder_output_norm_bias;
-            size_t encoder_position_embeddings_weight;
-            size_t encoder_conv1_weight;
-            size_t encoder_conv1_bias;
-            size_t encoder_conv2_weight;
-            size_t encoder_conv2_bias;
-
             size_t encoder_ffn1_weight;
             size_t encoder_ffn1_bias;
             size_t encoder_ffn2_weight;
             size_t encoder_ffn2_bias;
 
-            size_t encoder_post_ffn_layernorm_weight1;
-            size_t encoder_post_ffn_layernorm_bias1;
+            size_t encoder_post_ffn_layernorm_weight;
+            size_t encoder_post_ffn_layernorm_bias;
             
             size_t encoder_self_attn_q_weight;
             size_t encoder_self_attn_k_weight;
@@ -352,14 +381,15 @@ private:
             size_t encoder_self_attn_q_bias;
             size_t encoder_self_attn_v_bias;
             size_t encoder_self_attn_output_weight;
-            size_t encoder_self_attn_otuput_bias;
+            size_t encoder_self_attn_output_bias;
 
-            size_t encoder_post_attn_layernorm_weight1;
-            size_t encoder_post_attn_layernorm_bias1;
+            size_t encoder_post_attn_layernorm_weight;
+            size_t encoder_post_attn_layernorm_bias;
         };
 
         std::vector<LayerWeights> layers;
     } weight_nodes_;
+
 };
 
 }

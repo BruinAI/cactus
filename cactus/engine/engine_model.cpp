@@ -81,8 +81,13 @@ bool Model::init(const std::string& model_folder, size_t context_size, const std
     
     auto* gb = new CactusGraph();
     graph_handle_ = gb;
-    
-    embedding_file_path_ = model_folder + "/token_embeddings.weights";
+
+    if(config_.model_type == Config::ModelType::WHISPER){
+        embedding_file_path_ = model_folder+"/decoder_token_embeddings.weights";
+    }
+    else{
+        embedding_file_path_ = model_folder + "/token_embeddings.weights";
+    }
 
     load_weights_to_graph(gb);
     
@@ -293,6 +298,7 @@ bool Config::from_json(const std::string& config_path) {
             else if (value == "lfm2" || value == "LFM2") model_type = ModelType::LFM2;
             else if (value == "smol" || value == "SMOL" || value == "Smol") model_type = ModelType::SMOL;
             else if (value == "bert" || value == "BERT") model_type = ModelType::NOMIC;
+            else if (value == "whisper" || value == "WHISPER") model_type == ModelType::WHISPER;
             else model_type = ModelType::QWEN;
         }
         else if (key == "conv_L_cache") conv_L_cache = static_cast<size_t>(std::stoul(value));
@@ -328,6 +334,8 @@ bool Config::from_json(const std::string& config_path) {
         default_top_k = 20;
     }
 
+    //Yet to add for whisper;
+
     return true;
 }
 
@@ -354,6 +362,8 @@ std::unique_ptr<Model> create_model(const std::string& model_folder) {
             return std::make_unique<SmolModel>(config);
         case Config::ModelType::NOMIC:
             return std::make_unique<NomicModel>(config);
+        case Config::ModelType::WHISPER:
+            return std::make_unique<WhisperModel>(config);
         default:
             return std::make_unique<QwenModel>(config);
     }
