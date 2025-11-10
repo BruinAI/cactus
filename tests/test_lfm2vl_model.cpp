@@ -1,366 +1,19 @@
-#include <algorithm>
-#include <cmath>
+#include <cstdlib>
 #include <filesystem>
 #include <iomanip>
 #include <iostream>
-#include <limits>
-#include <map>
-#include <set>
+#include <system_error>
 #include <sstream>
 #include <string>
-#include <stdexcept>
-#include <tuple>
-#include <utility>
-#include <unordered_map>
 #include <vector>
 
 #include "../cactus/engine/engine.h"
-#define private public
-#define protected public
 #include "../cactus/models/model.h"
-#undef private
-#undef protected
 #include "../cactus/graph/graph.h"
 
 using namespace cactus::engine;
 
 namespace {
-
-struct NamedDebugNode {
-    std::string origin;
-    uint32_t layer_idx;
-    std::string name;
-    size_t node_id;
-};
-
-std::vector<float> extract_node_data(CactusGraph* gb, size_t node_id) {
-    try {
-        const auto& buf = gb->get_output_buffer(node_id);
-        void* output_ptr = gb->get_output(node_id);
-        if (!output_ptr) {
-            return {};
-        }
-
-        size_t total_size = 1;
-        for (auto dim : buf.shape) {
-            total_size *= dim;
-        }
-
-        if (total_size == 0) {
-            return {};
-        }
-
-        std::vector<float> data(total_size);
-        if (buf.precision == Precision::FP32) {
-            const float* ptr = static_cast<const float*>(output_ptr);
-            std::copy(ptr, ptr + total_size, data.begin());
-        } else if (buf.precision == Precision::FP16) {
-            const __fp16* ptr = static_cast<const __fp16*>(output_ptr);
-            for (size_t i = 0; i < total_size; ++i) {
-                data[i] = static_cast<float>(ptr[i]);
-            }
-        } else if (buf.precision == Precision::INT8) {
-            const int8_t* ptr = static_cast<const int8_t*>(output_ptr);
-            float scale = buf.quantization_scale;
-            for (size_t i = 0; i < total_size; ++i) {
-                data[i] = static_cast<float>(ptr[i]) * scale;
-            }
-        } else {
-            return {};
-        }
-
-        return data;
-    } catch (const std::out_of_range&) {
-        return {};
-    } catch (const std::exception&) {
-        return {};
-    }
-}
-
-void print_tensor_summary(CactusGraph* gb, size_t node_id, const std::string& name) {
-    const BufferDesc* buf_ptr = nullptr;
-    try {
-        buf_ptr = &gb->get_output_buffer(node_id);
-    } catch (const std::out_of_range&) {
-        std::cout << name << ": NOT AVAILABLE" << std::endl;
-        return;
-    } catch (const std::exception& ex) {
-        std::cout << name << ": ERROR - " << ex.what() << std::endl;
-        return;
-    }
-
-    auto data = extract_node_data(gb, node_id);
-    if (data.empty()) {
-        std::cout << name << ": NO DATA" << std::endl;
-        return;
-    }
-
-    const auto& buf = *buf_ptr;
-    std::cout << name << " shape=[";
-    for (size_t i = 0; i < buf.shape.size(); ++i) {
-        std::cout << buf.shape[i];
-        if (i + 1 < buf.shape.size()) {
-            std::cout << ",";
-        }
-    }
-    std::cout << "]" << std::endl;
-
-    float min_val = std::numeric_limits<float>::max();
-    float max_val = std::numeric_limits<float>::lowest();
-    double sum = 0.0;
-    double sum_sq = 0.0;
-    for (float v : data) {
-        min_val = std::min(min_val, v);
-        max_val = std::max(max_val, v);
-        sum += v;
-        sum_sq += static_cast<double>(v) * static_cast<double>(v);
-    }
-
-    double mean = sum / static_cast<double>(data.size());
-    double variance = std::max(0.0, (sum_sq / static_cast<double>(data.size())) - mean * mean);
-    double stddev = std::sqrt(variance);
-
-    std::cout << "  Min=" << std::setprecision(6) << min_val
-              << " Max=" << max_val
-              << " Mean=" << mean
-              << " Std=" << stddev << std::endl;
-
-    size_t preview_count = std::min<size_t>(16, data.size());
-    std::cout << "  First " << preview_count << " values:";
-    for (size_t i = 0; i < preview_count; ++i) {
-        if (i % 8 == 0) {
-            std::cout << "\n    ";
-        }
-        std::cout << std::setw(10) << std::setprecision(5) << data[i];
-    }
-    if (data.size() > preview_count) {
-        std::cout << " ...";
-    }
-    std::cout << std::endl;
-}
-
-size_t infer_token_dim(const std::vector<size_t>& shape);
-
-bool has_multiple_tokens(CactusGraph* gb, size_t node_id) {
-    try {
-        const auto& buf = gb->get_output_buffer(node_id);
-        if (buf.shape.empty()) {
-            return false;
-        }
-
-        size_t token_dim = infer_token_dim(buf.shape);
-        if (token_dim >= buf.shape.size()) {
-            return false;
-        }
-
-        return buf.shape[token_dim] > 1;
-    } catch (const std::exception&) {
-        return false;
-    }
-}
-
-size_t infer_token_dim(const std::vector<size_t>& shape) {
-    if (shape.empty()) {
-        return 0;
-    }
-
-    if (shape.size() >= 2 && shape[0] == 1 && shape[1] > 1) {
-        return 1;
-    }
-
-    return 0;
-}
-
-std::string shape_to_string(const std::vector<size_t>& shape) {
-    if (shape.empty()) {
-        return "[]";
-    }
-
-    std::ostringstream oss;
-    oss << "[";
-    for (size_t i = 0; i < shape.size(); ++i) {
-        oss << shape[i];
-        if (i + 1 < shape.size()) {
-            oss << ",";
-        }
-    }
-    oss << "]";
-    return oss.str();
-}
-
-std::vector<float> extract_final_token_slice(const std::vector<float>& data, const std::vector<size_t>& shape) {
-    if (data.empty()) {
-        return {};
-    }
-
-    if (shape.empty()) {
-        return data;
-    }
-
-    size_t expected_size = 1;
-    for (size_t dim : shape) {
-        expected_size *= dim;
-    }
-
-    if (expected_size != data.size()) {
-        return data;
-    }
-
-    size_t token_dim = infer_token_dim(shape);
-    size_t token_count = shape[token_dim];
-    if (token_count == 0) {
-        return {};
-    }
-
-    size_t block_size = 1;
-    for (size_t i = token_dim + 1; i < shape.size(); ++i) {
-        block_size *= shape[i];
-    }
-
-    if (block_size == 0) {
-        block_size = 1;
-    }
-
-    size_t groups = 1;
-    for (size_t i = 0; i < token_dim; ++i) {
-        groups *= shape[i];
-    }
-
-    if (groups == 0) {
-        groups = 1;
-    }
-
-    size_t group_stride = token_count * block_size;
-    size_t offset = (groups - 1) * group_stride + (token_count - 1) * block_size;
-
-    if (offset >= data.size()) {
-        if (block_size >= data.size()) {
-            return data;
-        }
-        offset = data.size() - block_size;
-    }
-
-    size_t length = block_size;
-    if (offset + length > data.size()) {
-        length = data.size() - offset;
-    }
-
-    std::vector<float> slice(length);
-    std::copy_n(data.begin() + offset, length, slice.begin());
-    return slice;
-}
-
-void print_final_token_output(CactusGraph* gb, size_t node_id, const std::string& name) {
-    const BufferDesc* buf_ptr = nullptr;
-    try {
-        buf_ptr = &gb->get_output_buffer(node_id);
-    } catch (const std::out_of_range&) {
-        std::cout << name << ": NOT AVAILABLE" << std::endl;
-        return;
-    } catch (const std::exception& ex) {
-        std::cout << name << ": ERROR - " << ex.what() << std::endl;
-        return;
-    }
-
-    auto data = extract_node_data(gb, node_id);
-    if (data.empty()) {
-        std::cout << name << ": NO DATA" << std::endl;
-        return;
-    }
-
-    const auto& shape = buf_ptr->shape;
-
-    auto final_token = extract_final_token_slice(data, shape);
-    if (final_token.empty()) {
-        std::cout << name << " shape=" << shape_to_string(shape)
-                  << "\n  Final token: NO DATA" << std::endl;
-        return;
-    }
-
-    size_t token_dim = infer_token_dim(shape);
-    size_t token_count = shape.empty() ? 1 : shape[token_dim];
-
-    float min_val = std::numeric_limits<float>::max();
-    float max_val = std::numeric_limits<float>::lowest();
-    double sum = 0.0;
-    double sum_sq = 0.0;
-    for (float v : final_token) {
-        min_val = std::min(min_val, v);
-        max_val = std::max(max_val, v);
-        sum += v;
-        sum_sq += static_cast<double>(v) * static_cast<double>(v);
-    }
-
-    double mean = sum / static_cast<double>(final_token.size());
-    double variance = std::max(0.0, (sum_sq / static_cast<double>(final_token.size())) - mean * mean);
-    double stddev = std::sqrt(variance);
-
-    std::cout << name << " shape=" << shape_to_string(shape) << std::endl;
-    std::cout << "  Tokens=" << token_count
-              << " FinalTokenLength=" << final_token.size() << std::endl;
-    std::cout << "  FinalToken Min=" << std::setprecision(6) << min_val
-              << " Max=" << max_val
-              << " Mean=" << mean
-              << " Std=" << stddev << std::endl;
-
-    size_t preview_count = std::min<size_t>(16, final_token.size());
-    std::cout << "  FinalToken Preview (first " << preview_count << "):";
-    for (size_t i = 0; i < preview_count; ++i) {
-        if (i % 8 == 0) {
-            std::cout << "\n    ";
-        }
-        std::cout << std::setw(10) << std::setprecision(5) << final_token[i];
-    }
-    if (final_token.size() > preview_count) {
-        std::cout << " ...";
-    }
-    std::cout << std::endl;
-}
-
-void dump_debug_node(CactusGraph* gb, const NamedDebugNode& node) {
-    std::ostringstream label;
-    if (!node.origin.empty()) {
-        label << node.origin << " ";
-    }
-    label << "Layer " << node.layer_idx << " - " << node.name;
-
-    std::string base_label = label.str();
-    print_tensor_summary(gb, node.node_id, base_label);
-    if (has_multiple_tokens(gb, node.node_id)) {
-        print_final_token_output(gb, node.node_id, base_label + " (final token view)");
-    }
-}
-
-std::vector<NamedDebugNode> collect_debug_nodes(const Lfm2VlModel& model) {
-    std::vector<NamedDebugNode> merged;
-    std::set<std::tuple<std::string, uint32_t, std::string>> seen;
-
-    auto append_nodes = [&](const std::string& origin, const std::vector<Model::DebugNode>& nodes) {
-        for (auto it = nodes.rbegin(); it != nodes.rend(); ++it) {
-            NamedDebugNode entry{origin, it->layer_idx, it->name, it->node_id};
-            if (!seen.insert({entry.origin, entry.layer_idx, entry.name}).second) {
-                continue;
-            }
-            merged.push_back(std::move(entry));
-        }
-    };
-
-    append_nodes("VLM", model.get_debug_nodes());
-    append_nodes("Language", model.language_model_.get_debug_nodes());
-    append_nodes("Vision", model.vision_tower_.get_debug_nodes());
-
-    std::sort(merged.begin(), merged.end(), [](const NamedDebugNode& a, const NamedDebugNode& b) {
-        if (a.origin != b.origin) {
-            return a.origin < b.origin;
-        }
-        if (a.layer_idx != b.layer_idx) {
-            return a.layer_idx < b.layer_idx;
-        }
-        return a.name < b.name;
-    });
-
-    return merged;
-}
 
 std::string sanitize_token_text(const std::string& text) {
     std::string sanitized;
@@ -480,6 +133,30 @@ int main(int argc, char** argv) {
         prompt = argv[3];
     }
 
+    std::string profile_file;
+    bool profile_to_stdout = false;
+
+    if (const char* env_stdout = std::getenv("CACTUS_PROFILE_STDOUT")) {
+        std::string value(env_stdout);
+        if (value == "1" || value == "true" || value == "TRUE" || value == "yes" || value == "YES") {
+            profile_to_stdout = true;
+        }
+    }
+
+    if (profile_to_stdout) {
+        profile_file = "/dev/stdout";
+    } else if (const char* env_file = std::getenv("CACTUS_PROFILE_FILE")) {
+        profile_file = env_file;
+    }
+
+    if (!profile_file.empty()) {
+        if (profile_to_stdout) {
+            std::cout << "Graph profiling enabled: writing to stdout" << std::endl;
+        } else {
+            std::cout << "Graph profiling enabled: writing to " << profile_file << std::endl;
+        }
+    }
+
     std::cout << "=== LFM2-VL Model Integration Test ===" << std::endl;
     std::cout << "Model folder : " << model_folder << std::endl;
     std::cout << "Image path   : " << image_path << std::endl;
@@ -548,19 +225,49 @@ int main(int argc, char** argv) {
 
     std::cout << "Starting multimodal generation (up to " << max_new_tokens << " tokens)..." << std::endl;
 
-    for (size_t step = 0; step < max_new_tokens; ++step) {
-        uint32_t next_token = model.generate_with_images(generation_context, image_paths, temperature, top_p, top_k);
+    bool encountered_eos = false;
+    auto generate_with_profile = [&](const std::vector<uint32_t>& ctx) {
+        if (!profile_file.empty()) {
+            return model.generate_with_images(ctx, image_paths, temperature, top_p, top_k, profile_file);
+        }
+        return model.generate_with_images(ctx, image_paths, temperature, top_p, top_k);
+    };
+
+    uint32_t first_token = generate_with_profile(generation_context);
+    generation_context.push_back(first_token);
+    generated_tokens.push_back(first_token);
+
+    std::string decoded_full = tokenizer->decode(generation_context);
+    std::string diff;
+    if (decoded_full.size() >= decoded_so_far.size()) {
+        diff = decoded_full.substr(decoded_so_far.size());
+    }
+    decoded_so_far = decoded_full;
+
+    std::cout << "  [" << std::setw(2) << generated_tokens.size() << "] token_id=" << first_token;
+    if (!diff.empty()) {
+        std::cout << " text=\"" << sanitize_token_text(diff) << "\"";
+    }
+    std::cout << std::endl;
+
+    if (first_token == config.eos_token_id) {
+        std::cout << "Encountered EOS token, stopping generation." << std::endl;
+        encountered_eos = true;
+    }
+
+    while (!encountered_eos && generated_tokens.size() < max_new_tokens) {
+        uint32_t next_token = generate_with_profile(generation_context);
         generation_context.push_back(next_token);
         generated_tokens.push_back(next_token);
 
-        std::string decoded_full = tokenizer->decode(generation_context);
-        std::string diff;
+        decoded_full = tokenizer->decode(generation_context);
+        diff.clear();
         if (decoded_full.size() >= decoded_so_far.size()) {
             diff = decoded_full.substr(decoded_so_far.size());
         }
         decoded_so_far = decoded_full;
 
-        std::cout << "  [" << std::setw(2) << step + 1 << "] token_id=" << next_token;
+        std::cout << "  [" << std::setw(2) << generated_tokens.size() << "] token_id=" << next_token;
         if (!diff.empty()) {
             std::cout << " text=\"" << sanitize_token_text(diff) << "\"";
         }
@@ -568,61 +275,13 @@ int main(int argc, char** argv) {
 
         if (next_token == config.eos_token_id) {
             std::cout << "Encountered EOS token, stopping generation." << std::endl;
-            break;
+            encountered_eos = true;
         }
     }
 
     std::cout << std::endl;
     std::string final_output = tokenizer->decode(generation_context);
     std::cout << "Final decoded output (including prompt markup):\n" << final_output << std::endl;
-
-    CactusGraph* gb = static_cast<CactusGraph*>(model.graph_handle_);
-    std::cout << std::endl << "=== Debug: Final Token Outputs ===" << std::endl;
-    if (gb) {
-        auto debug_nodes = collect_debug_nodes(model);
-        if (debug_nodes.empty()) {
-            std::cout << "No debug nodes were captured." << std::endl;
-        } else {
-                for (const auto& node : debug_nodes) {
-                    dump_debug_node(gb, node);
-                }
-
-                std::map<std::string, std::map<uint32_t, std::set<std::string>>> summary;
-                for (const auto& node : debug_nodes) {
-                    summary[node.origin][node.layer_idx].insert(node.name);
-                }
-
-                if (!summary.empty()) {
-                    std::cout << std::endl << "Summary of captured debug nodes:" << std::endl;
-                    for (const auto& origin_entry : summary) {
-                        std::cout << "  [" << origin_entry.first << "]" << std::endl;
-                        for (const auto& layer_entry : origin_entry.second) {
-                            const auto& names = layer_entry.second;
-                            std::cout << "    Layer " << layer_entry.first << " -> " << names.size() << " nodes";
-                            size_t preview_count = 0;
-                            for (const auto& name : names) {
-                                if (preview_count == 0) {
-                                    std::cout << " (";
-                                } else if (preview_count >= 5) {
-                                    std::cout << ", ...";
-                                    break;
-                                } else {
-                                    std::cout << ", ";
-                                }
-                                std::cout << name;
-                                ++preview_count;
-                            }
-                            if (!names.empty()) {
-                                std::cout << ")";
-                            }
-                            std::cout << std::endl;
-                        }
-                    }
-                }
-        }
-    } else {
-        std::cout << "Graph handle unavailable; unable to dump final token outputs." << std::endl;
-    }
 
     std::cout << std::endl << "Test completed successfully!" << std::endl;
     return 0;

@@ -17,12 +17,12 @@ namespace engine {
 
 
 Model::Model()
-    : tokenizer_(nullptr),
-      graph_handle_(nullptr),
-      initialized_(false),
-      attention_scale_(0.0f),
-      output_weight_node_id_(0),
-      owns_graph_(false) {
+        : tokenizer_(nullptr),
+            graph_handle_(nullptr),
+            initialized_(false),
+            attention_scale_(0.0f),
+            output_weight_node_id_(0),
+            owns_graph_(false) {
 }
 
 Model::Model(const Config& config)
@@ -32,7 +32,7 @@ Model::Model(const Config& config)
       initialized_(false),
       attention_scale_(0.0f),
       output_weight_node_id_(0),
-      owns_graph_(false) {
+            owns_graph_(false) {
 }
 
 Model::~Model() {
@@ -448,11 +448,34 @@ std::unique_ptr<Model> create_model(const std::string& model_folder) {
 }
 
 void Model::capture_debug_node(uint32_t layer_idx, const std::string& name, size_t node_id) const {
-    debug_nodes_.push_back({layer_idx, name, node_id});
+    auto* graph = static_cast<CactusGraph*>(graph_handle_);
+    if (!graph) {
+        return;
+    }
+    graph->capture_debug_node(layer_idx, name, node_id);
 }
 
 void Model::clear_debug_nodes() {
+    auto* graph = static_cast<CactusGraph*>(graph_handle_);
+    if (!graph) {
+        return;
+    }
+    graph->clear_debug_nodes();
+}
+
+const std::vector<Model::DebugNode>& Model::get_debug_nodes() const {
+    auto* graph = static_cast<CactusGraph*>(graph_handle_);
     debug_nodes_.clear();
+    if (!graph) {
+        return debug_nodes_;
+    }
+
+    const auto& entries = graph->get_debug_nodes();
+    debug_nodes_.reserve(entries.size());
+    for (const auto& entry : entries) {
+        debug_nodes_.push_back({entry.layer_idx, entry.name, entry.node_id});
+    }
+    return debug_nodes_;
 }
 
 }

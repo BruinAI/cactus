@@ -353,7 +353,7 @@ public:
 
     const Config& get_config() const { return config_; }
     Tokenizer* get_tokenizer() const { return tokenizer_.get(); }
-    const std::vector<DebugNode>& get_debug_nodes() const { return debug_nodes_; }
+    const std::vector<DebugNode>& get_debug_nodes() const;
 
     bool init(const std::string& model_folder, size_t context_size, const std::string& system_prompt = "", bool do_warmup = true);
     bool init(CactusGraph* external_graph, const std::string& model_folder, size_t context_size,

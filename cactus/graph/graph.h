@@ -190,6 +190,12 @@ namespace ValidationUtils {
 class CactusGraph {
 public:
     CactusGraph();
+
+    struct DebugNodeEntry {
+        uint32_t layer_idx;
+        std::string name;
+        size_t node_id;
+    };
     
     size_t input(const std::vector<size_t>& shape, Precision precision = Precision::INT8);
     size_t precision_cast(size_t input, Precision target_precision);
@@ -258,6 +264,11 @@ public:
     void execute(const std::string& profile_file = "");
     void hard_reset();
     void soft_reset();
+
+    void register_debug_node(uint32_t layer_idx, const std::string& name, size_t node_id);
+    void capture_debug_node(uint32_t layer_idx, const std::string& name, size_t node_id);
+    const std::vector<DebugNodeEntry>& get_debug_nodes() const;
+    void clear_debug_nodes();
     
     size_t add_node(OpType op_type, const std::vector<size_t>& inputs, const std::vector<size_t>& output_shape, const OpParams& params = {});
     const BufferDesc& get_output_buffer(size_t node_id) const;
@@ -271,6 +282,7 @@ private:
     size_t next_node_id_;
     std::vector<std::unique_ptr<GraphFile::MappedFile>> mapped_files_;
     std::unordered_map<std::string, size_t> weight_cache_;
+    std::vector<DebugNodeEntry> debug_nodes_;
 };
 
 

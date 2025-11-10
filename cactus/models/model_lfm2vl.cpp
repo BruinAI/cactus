@@ -207,10 +207,12 @@ size_t Lfm2VlModel::build_multimodal_projector(CactusGraph* gb, size_t image_fea
     
     size_t flattened = gb->reshape(unshuffled, {seq_len, in_channels});
     capture_debug_node(0, "projector_flattened", flattened);
-    
-    
+
+    size_t flattened_fp16 = gb->precision_cast(flattened, Precision::FP16);
+    capture_debug_node(0, "projector_flattened_fp16", flattened_fp16);
+
     // Layer norm
-    size_t normalized = gb->layer_norm(flattened, projector_weights_.layer_norm_weight,
+    size_t normalized = gb->layer_norm(flattened_fp16, projector_weights_.layer_norm_weight,
                                       projector_weights_.layer_norm_bias, config_.layer_norm_eps);
     capture_debug_node(0, "projector_normalized", normalized);
     
