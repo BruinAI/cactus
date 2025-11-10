@@ -284,7 +284,7 @@ def format_gemma3_tool_calling_example(sample: Dict[str, Any]) -> Optional[Dict[
             assert full_text.endswith('\n')
             full_text = full_text[:-1] + "<end_of_turn>\n"  # Remove last newline before end_of_turn
 
-    return {'text': full_text.rstrip()}
+    return {'text': full_text}
 
 
 # ============================================================================
