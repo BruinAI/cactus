@@ -85,8 +85,17 @@ MAX_TOOLS_AVAILABLE = 5
 CKPT_DIR = "/tmp/gemma_tool_calling_ckpts/"
 LORA_OUTPUT_DIR = f"/dev/shm/{MODEL_ID.split('/')[-1]}_tool_calling_lora"
 
-USE_SYSTEM_PROMPT = False
-SYSTEM_PROMPT = """You have access to functions/tools. If you decide to invoke any of the function(s)/tools, use them as follows:
+SYSTEM_PROMPT = """At each turn, if you decide to invoke any of the function(s), it should be wrapped with ```tool_code```. \
+The python methods described below are imported and available, you can only use defined methods. \
+The generated code should be readable and efficient. \
+The response to a method will be wrapped in ```tool_output``` use it to call more tools or generate a helpful, friendly response. \
+When using a ```tool_call``` think step by step why and how it should be used.
+
+The following Python methods are available:
+
+"""
+
+SYSTEM_PROMPT_QWEN_STYLE = """You have access to functions/tools. If you decide to invoke any of the function(s)/tools, use them as follows:
 1. Call the tool: <tool_call>
 {"name": "...", "parameters": {...}}
 </tool_call>
@@ -94,12 +103,15 @@ SYSTEM_PROMPT = """You have access to functions/tools. If you decide to invoke a
 {"name": "...", "result": ...}
 </tool_response>
 3. Use the result to answer the user's question.
+Here are the available tools that you can use:
+
 """
 
 # Calculating derived hyperparameters
 assert DESIRED_EFFECTIVE_BATCH_SIZE % BATCH_SIZE == 0
 GRADIENT_ACCUMULATION_STEPS = DESIRED_EFFECTIVE_BATCH_SIZE // BATCH_SIZE
 EVAL_EVERY_N_STEPS = GRADIENT_ACCUMULATION_STEPS * EVAL_EVERY_N_EFFECTIVE_BATCHES
+
 
 # ============================================================================
 # Tool Calling Format Functions
@@ -119,13 +131,92 @@ def correct_dict_type(tool: Dict[str, Any]) -> Dict[str, Any]:
     tool['function'] = function
     return tool
 
+def format_tools_for_prompt_json_style(tools: List[Dict[str, Any]]) -> str:
+    """
+    Format tools list for Gemma 3 prompt following PLAN.md format (JSON style).
+    """
+    return '\n'.join(json_dump(correct_dict_type(tool)) for tool in tools)
+
+
 def format_tools_for_prompt(tools: List[Dict[str, Any]]) -> str:
     """
-    Format tools list for Gemma 3 prompt following PLAN.md format.
+    Format tools list for Gemma 3 prompt following philschmid's Python function style.
+
+    Converts JSON tool definitions to Python function signatures with docstrings.
+    Following the format from https://www.philschmid.de/gemma-function-calling
+
+    Args:
+        tools: List of tool definitions in OpenAI function calling format
+
+    Returns:
+        Python code block with function signatures and docstrings
     """
-    return f"""<tools>
-{'\n'.join(json_dump(correct_dict_type(tool)) for tool in tools)}
-</tools>"""
+    python_functions = []
+
+    for tool in tools:
+        assert 'function' in tool, "Tool must have 'function' key"
+        func = tool['function']
+        func_name = func['name']
+        description = func.get('description', '')
+        parameters = func.get('parameters', {})
+        properties = parameters.get('properties', {})
+        required = parameters.get('required', [])
+
+        # Build function signature with type hints
+        params = []
+        for param_name, param_info in properties.items():
+            param_type = param_info.get('type', 'any')
+
+            # Map JSON schema types to Python types
+            type_map = {
+                'string': 'str',
+                'number': 'float',
+                'integer': 'int',
+                'boolean': 'bool',
+                'array': 'list',
+                'object': 'dict',
+                'any': 'Any'
+            }
+            python_type = type_map.get(param_type, 'Any')
+
+            params.append(f"{param_name}: {python_type}")
+
+        # Replace hyphens with underscores for valid Python identifiers
+        func_name_safe = func_name.replace('-', '_')
+        signature = f"def {func_name_safe}({', '.join(params)}):"
+
+        # Build docstring
+        docstring_lines = []
+        if description:
+            # Split description into lines and indent each line properly
+            desc_lines = description.split('\n')
+            docstring_lines.append(f'  """{desc_lines[0]}')
+            for line in desc_lines[1:]:
+                # Add proper indentation (2 spaces) to each line of the description
+                if line.strip():  # Only indent non-empty lines
+                    docstring_lines.append(f'  {line}')
+                else:
+                    docstring_lines.append('')
+        else:
+            docstring_lines.append('  """')
+
+        # Add Args section if there are parameters
+        if properties:
+            docstring_lines.append('')
+            docstring_lines.append('  Args:')
+            for param_name, param_info in properties.items():
+                param_desc = param_info.get('description', 'No description')
+                docstring_lines.append(f'    {param_name}: {param_desc}')
+
+        docstring_lines.append('  """')
+
+        # Combine signature and docstring
+        function_def = signature + '\n' + '\n'.join(docstring_lines)
+        python_functions.append(function_def)
+
+    # Wrap all functions in a Python code block
+    all_functions = '\n\n'.join(python_functions)
+    return f'```python\n{all_functions}\n```'
 
 
 def group_messages_by_turn(messages: List[Dict[str, Any]]) -> List[List[Dict[str, Any]]]:
@@ -179,7 +270,7 @@ def group_messages_by_turn(messages: List[Dict[str, Any]]) -> List[List[Dict[str
     return grouped_messages
 
 
-def format_gemma3_tool_calling_example(sample: Dict[str, Any]) -> Optional[Dict[str, str]]:
+def format_gemma3_tool_calling_example_qwen_style(sample: Dict[str, Any]) -> Optional[Dict[str, str]]:
     """
     Format a Toucan dataset sample into Gemma 3 tool calling format.
 
@@ -234,10 +325,8 @@ def format_gemma3_tool_calling_example(sample: Dict[str, Any]) -> Optional[Dict[
 
             # Add tools definition to first user message
             if turn_idx == 0:
-                if USE_SYSTEM_PROMPT:
-                    full_text += SYSTEM_PROMPT
-                full_text += "Here are the available tools that you can use:\n"
-                full_text += format_tools_for_prompt(tools)
+                full_text += SYSTEM_PROMPT
+                full_text += format_tools_for_prompt_json_style(tools)
                 full_text += "\n\n"
 
             # Add user content
@@ -287,6 +376,116 @@ def format_gemma3_tool_calling_example(sample: Dict[str, Any]) -> Optional[Dict[
                     "result": msg['content']
                 }
                 full_text += f'<tool_response>\n{json_dump(tool_response)}\n</tool_response>\n'
+
+            assert full_text.endswith('\n')
+            full_text = full_text[:-1] + "<end_of_turn>\n"  # Remove last newline before end_of_turn
+
+    assert full_text.endswith('<end_of_turn>\n')
+    return {'text': full_text[:-1]}  # Remove last newline
+
+
+def format_gemma3_tool_calling_example(sample: Dict[str, Any]) -> Optional[Dict[str, str]]:
+    """
+    Format a Toucan dataset sample into Gemma 3 tool calling format using philschmid's approach.
+
+    This uses the format from "Google Gemma 3 Function Calling Example" by philschmid:
+    - Tools are still wrapped in JSON format in the prompt (unchanged)
+    - Tool calls use ```tool_code with Python function call syntax
+    - Tool responses use ```tool_output with the result
+    - Multiple tool calls/responses each have their own enclosing backtick blocks
+
+    Following the format from https://www.philschmid.de/gemma-function-calling:
+    - Tool calls: ```tool_code\nfunction_name(arg1=value1, arg2=value2)\n```
+    - Tool responses: ```tool_output\nresult_value\n```
+
+    Args:
+        sample: A Toucan dataset sample with 'messages', 'tools', 'target_tools'
+
+    Returns:
+        Dictionary with 'text' (full input+output for SFT)
+    """
+    messages = json.loads(sample['messages'])
+    tools = json.loads(sample['tools'])
+
+    # Extract system message if present
+    system_content = ""
+    if len(messages) > 0 and messages[0]['role'] == 'system':
+        system_content = messages[0]['content']
+        messages = messages[1:]
+
+    # Group messages by turn
+    grouped_messages = group_messages_by_turn(messages)
+
+    full_text = ""
+
+    # Process each turn
+    for turn_idx, turn_group in enumerate(grouped_messages):
+        if not turn_group:
+            continue
+
+        first_msg = turn_group[0]
+        role = first_msg['role']
+
+        if role == 'user':
+            # User turn
+            full_text += "<start_of_turn>user\n"
+
+            # Add system instructions to first user message
+            if turn_idx == 0 and system_content:
+                full_text += system_content + "\n\n"
+
+            # Add tools definition to first user message
+            if turn_idx == 0:
+                if USE_SYSTEM_PROMPT:
+                    full_text += SYSTEM_PROMPT + "\n\n"
+                full_text += "The following Python methods are available:\n"
+                full_text += format_tools_for_prompt(tools)
+                full_text += "\n\n"
+
+            # Add user content
+            full_text += first_msg['content'] + "<end_of_turn>\n"
+
+        elif role == 'assistant' or role == 'tool_call':
+            # Assistant turn (may include tool calls)
+            full_text += "<start_of_turn>model\n"
+
+            for msg in turn_group:
+                msg_role = msg['role']
+
+                if msg_role == 'assistant':
+                    # Add assistant text content
+                    if 'content' in msg and msg['content']:
+                        full_text += msg['content'] + "\n"
+
+                elif msg_role == 'tool_call':
+                    # Toucan stores tool calls as Python dict strings
+                    # Format: "{'name': '...', 'arguments': '{...}'}"
+                    tool_call_content = msg['content']
+
+                    # Parse the Python dict string safely
+                    tool_call_data = ast.literal_eval(tool_call_content)
+                    try:
+                        tool_args = json.loads(tool_call_data['arguments'])
+                    except json.JSONDecodeError:
+                        return None
+
+                    # Convert to philschmid's format: function_name(arg1=value1, arg2=value2)
+                    # Replace hyphens with underscores for valid Python identifiers
+                    func_name = tool_call_data['name'].replace('-', '_')
+                    args_str = ', '.join([f"{k}={json.dumps(v)}" for k, v in tool_args.items()])
+                    full_text += f'```tool_code\n{func_name}({args_str})\n```\n'
+
+            assert full_text.endswith('\n')
+            full_text = full_text[:-1] + "<end_of_turn>\n"  # Remove last newline before end_of_turn
+
+        elif role == 'tool_response':
+            # Tool response turn (wrapped as user message with ```tool_output)
+            full_text += "<start_of_turn>user\n"
+
+            for msg in turn_group:
+                # Use philschmid's format: ```tool_output\nresult\n```
+                result = msg['content']
+                full_text += f'```tool_output\n{result}\n```\n'
 
             assert full_text.endswith('\n')
             full_text = full_text[:-1] + "<end_of_turn>\n"  # Remove last newline before end_of_turn

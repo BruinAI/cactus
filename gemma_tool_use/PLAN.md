@@ -11,6 +11,145 @@ System instructions and tool definitions must be prepended to the first user mes
 
 Reference: [Gemma 3 Formatting Guide](https://ai.google.dev/gemma/docs/formatting)
 
+---
+
+## Current Format: Philschmid Python-Style (ACTIVE)
+
+**Reference**: [Google Gemma 3 Function Calling Example](https://www.philschmid.de/gemma-function-calling) by philschmid
+
+This is the **currently implemented format** in `train_gemma3_tool_calling.py`. It uses Python-native syntax throughout for better code model performance.
+
+### Tool Definitions
+
+- Prefix: `"The following Python methods are available:\n"`
+- Tools formatted as Python function signatures with docstrings in ` ```python ` blocks
+- Type hints use Python types: `str`, `float`, `int`, `bool`, `list`, `dict`, `Any`
+- Docstrings with 2-space indentation, Args section with 4-space indentation
+- Function names have hyphens replaced with underscores for valid Python identifiers
+- Prepended to the **first user message** (NOT in a separate system turn)
+
+Example:
+````python
+```python
+def get_weather(location: str, unit: str):
+  """Get the current weather for a location
+
+  Args:
+    location: The city and state, e.g. San Francisco, CA
+    unit: Temperature unit (celsius or fahrenheit)
+  """
+
+def n8n_workflow_builder_create_workflow(nodes: list, connections: list):
+  """Create and configure n8n workflows programmatically
+
+  Args:
+    nodes: List of workflow nodes
+    connections: List of node connections
+  """
+```
+````
+
+### Tool Calling
+
+- Model generates Python function calls in ` ```tool_code ` blocks
+- Format: `function_name(arg1=value1, arg2=value2)`
+- Arguments use Python keyword syntax with JSON-serialized values
+- Each tool call gets its own separate ` ```tool_code ` block
+- Can include reasoning text before/after tool calls
+- Function names have hyphens replaced with underscores (e.g., `n8n-workflow-builder` → `n8n_workflow_builder`)
+
+Example:
+````
+```tool_code
+get_weather(location="Boston, MA", unit="fahrenheit")
+```
+```tool_code
+n8n_workflow_builder_create_workflow(nodes=[{"type": "cron", "name": "Trigger"}], connections=[])
+```
+````
+
+### Tool Responding
+
+- Use `user` chat role with results in ` ```tool_output ` blocks
+- Format: Raw result values (scalars, JSON objects, strings, etc.)
+- No metadata wrapping - just the actual result
+- Each response gets its own separate ` ```tool_output ` block
+- Preserves original formatting from dataset
+
+Example:
+````
+```tool_output
+{"temperature": 72, "condition": "Sunny", "humidity": 65}
+```
+```tool_output
+85.50
+```
+````
+
+### Complete Example (Philschmid Format)
+
+```
+<bos><start_of_turn>user
+The following Python methods are available:
+```python
+def get_weather(location: str, unit: str):
+  """Get the current weather for a location
+
+  Args:
+    location: The city and state, e.g. San Francisco, CA
+    unit: Temperature unit (celsius or fahrenheit)
+  """
+
+def convert_currency(amount: float, from_currency: str, to_currency: str):
+  """Convert an amount from one currency to another
+
+  Args:
+    amount: The amount to convert
+    from_currency: The source currency code (e.g., USD)
+    to_currency: The target currency code (e.g., EUR)
+  """
+```
+
+What's the weather in Boston and how much is 100 USD in EUR?<end_of_turn>
+<start_of_turn>model
+I'll check both of those for you.
+```tool_code
+get_weather(location="Boston, MA", unit="fahrenheit")
+```
+```tool_code
+convert_currency(amount=100.0, from_currency="USD", to_currency="EUR")
+```
+<end_of_turn>
+<start_of_turn>user
+```tool_output
+{"temperature": 72, "condition": "Sunny", "humidity": 65}
+```
+```tool_output
+85.50
+```
+<end_of_turn>
+<start_of_turn>model
+Based on the information I retrieved:
+
+1. **Weather in Boston**: It's currently 72°F and sunny with 65% humidity.
+2. **Currency Conversion**: 100 USD is approximately 85.50 EUR.
+
+Is there anything else you'd like to know?<end_of_turn>
+```
+
+**Benefits**:
+- Fully Python-native throughout (definitions, calls, responses)
+- Type hints match Python documentation standards
+- Better for code-trained models like Gemma 3
+- Cleaner output without nested JSON structures
+- Well-defined code blocks with triple backticks
+
+---
+
+## Alternative Format: Qwen-Style XML (DEPRECATED)
+
+This format is preserved in `format_gemma3_tool_calling_example_qwen_style()` but is no longer the default.
+
 #### Tool Definitions
 
 - Simple instruction: `"Available tools:\n"`
