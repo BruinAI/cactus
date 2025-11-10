@@ -3,12 +3,11 @@
 #include <filesystem>
 #include <chrono>
 #include <cstring>
-#include <cstdlib>
 #include <iostream>
+#include <iomanip>
 #include <cmath>
 #include <vector>
-#include <thread>
-#include <atomic>
+#include <sstream>
 
 const char* g_model_path = "../../weights/lfm2-350m-i8";
 
@@ -19,244 +18,221 @@ const char* g_options = R"({
 
 struct Timer {
     std::chrono::high_resolution_clock::time_point start;
-    
     Timer() : start(std::chrono::high_resolution_clock::now()) {}
-    
     double elapsed_ms() const {
         auto end = std::chrono::high_resolution_clock::now();
-        auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
-        return duration.count() / 1000.0;
+        return std::chrono::duration_cast<std::chrono::microseconds>(end - start).count() / 1000.0;
     }
 };
 
-struct StreamingTestData {
+struct StreamingData {
     std::vector<std::string> tokens;
     std::vector<uint32_t> token_ids;
-    int token_count;
+    int token_count = 0;
+    cactus_model_t model = nullptr;
+    int stop_at = -1;
 };
 
-void streaming_callback(const char* token, uint32_t token_id, void* user_data) {
-    auto* data = static_cast<StreamingTestData*>(user_data);
-    data->tokens.push_back(std::string(token));
+void stream_callback(const char* token, uint32_t token_id, void* user_data) {
+    auto* data = static_cast<StreamingData*>(user_data);
+    data->tokens.push_back(token);
     data->token_ids.push_back(token_id);
     data->token_count++;
     std::cout << token << std::flush;
+
+    if (data->stop_at > 0 && data->token_count >= data->stop_at) {
+        std::cout << "\n\n[→ Stopping at token #" << data->stop_at << "]" << std::endl;
+        cactus_stop(data->model);
+    }
+}
+
+struct Metrics {
+    double ttft = 0.0;
+    double tps = 0.0;
+
+    void parse(const std::string& response) {
+        size_t pos = response.find("\"time_to_first_token_ms\":");
+        if (pos != std::string::npos) ttft = std::stod(response.substr(pos + 25));
+
+        pos = response.find("\"tokens_per_second\":");
+        if (pos != std::string::npos) tps = std::stod(response.substr(pos + 20));
+    }
+
+    void print() const {
+        std::cout << "├─ Time to first token: " << std::fixed << std::setprecision(2)
+                  << ttft << " ms\n"
+                  << "├─ Tokens per second: " << tps << std::endl;
+    }
+};
+
+template<typename TestFunc>
+bool run_test(const char* title, const char* messages, TestFunc test_logic,
+              const char* tools = nullptr, int stop_at = -1) {
+
+    std::cout << "\n╔══════════════════════════════════════════╗\n"
+              << "║" << std::setw(42) << std::left << std::string("          ") + title << "║\n"
+              << "╚══════════════════════════════════════════╝\n";
+
+    cactus_model_t model = cactus_init(g_model_path, 2048);
+    if (!model) {
+        std::cerr << "[✗] Failed to initialize model\n";
+        return false;
+    }
+
+    StreamingData data;
+    data.model = model;
+    data.stop_at = stop_at;
+
+    char response[4096];
+    std::cout << "Response: ";
+
+    int result = cactus_complete(model, messages, response, sizeof(response),
+                                 g_options, tools, stream_callback, &data);
+
+    std::cout << "\n\n[Results]\n";
+
+    Metrics metrics;
+    metrics.parse(response);
+
+    bool success = test_logic(result, data, response, metrics);
+
+    std::cout << "└─ Status: " << (success ? "PASSED ✓" : "FAILED ✗") << std::endl;
+
+    cactus_destroy(model);
+    return success;
+}
+
+std::string escape_json(const std::string& s) {
+    std::ostringstream o;
+    for (auto c : s) {
+        switch (c) {
+            case '"':  o << "\\\""; break;
+            case '\\': o << "\\\\"; break;
+            case '\n': o << "\\n";  break;
+            case '\r': o << "\\r";  break;
+            default:   o << c;      break;
+        }
+    }
+    return o.str();
 }
 
 bool test_streaming() {
+    std::cout << "\n╔══════════════════════════════════════════╗\n"
+              << "║" << std::setw(42) << std::left << "      STREAMING & FOLLOW-UP TEST" << "║\n"
+              << "╚══════════════════════════════════════════╝\n";
+
     cactus_model_t model = cactus_init(g_model_path, 2048);
-    
-    const char* messages = R"([
-        {"role": "system", "content": "/no_think You are a helpful assistant. Be concise and friendly in your responses."},
-        {"role": "user", "content": "What is your name?"}
+    if (!model) {
+        std::cerr << "[✗] Failed to initialize model\n";
+        return false;
+    }
+
+    const char* messages1 = R"([
+        {"role": "system", "content": "You are a helpful assistant. Be concise."},
+        {"role": "user", "content": "My name is Henry Ndubuaku, how are you?"}
     ])";
-    
-    StreamingTestData stream_data;
-    stream_data.token_count = 0;
 
-    char response[2048];
-
-    std::cout << "\n=== Streaming ===" << std::endl;
-    int result = cactus_complete(model, messages, response, sizeof(response), g_options, nullptr,
-                                streaming_callback, &stream_data);
+    StreamingData data1;
+    data1.model = model;
+    char response1[4096];
     
-    std::cout << "\n=== End of Stream ===\n" << std::endl;
-    std::cout << "Final Response JSON:\n" << response << "\n" << std::endl;
-    
-    cactus_destroy(model);
+    std::cout << "\n[Turn 1]\n";
+    std::cout << "User: My name is Henry Ndubuaku, how are you?\n";
+    std::cout << "Assistant: ";
 
-    return result > 0 && stream_data.token_count > 0;
-}
+    int result1 = cactus_complete(model, messages1, response1, sizeof(response1),
+                                 g_options, nullptr, stream_callback, &data1);
 
-bool test_embeddings() {
-    cactus_model_t model = cactus_init(g_model_path, 2048);
-    
-    if (!model) {
-        std::cerr << "Failed to initialize model" << std::endl;
+    std::cout << "\n\n[Results - Turn 1]\n";
+    Metrics metrics1;
+    metrics1.parse(response1);
+    std::cout << "├─ Total tokens: " << data1.token_count << std::endl;
+    metrics1.print();
+
+    bool success1 = result1 > 0 && data1.token_count > 0;
+    std::cout << "└─ Status: " << (success1 ? "PASSED ✓" : "FAILED ✗") << std::endl;
+
+    if (!success1) {
+        cactus_destroy(model);
         return false;
     }
-    
-    const char* text1 = "My name is Henry Ndubuaku";
-    const char* text2 = "Your name is Henry Ndubuaku";
-    
-    std::vector<float> embeddings1(2048);  
-    std::vector<float> embeddings2(2048);
-    size_t embedding_dim1 = 0;
-    size_t embedding_dim2 = 0;
-    
-    Timer timer1;
-    int result1 = cactus_embed(model, text1, embeddings1.data(),
-                               embeddings1.size() * sizeof(float), &embedding_dim1);
-    (void)result1; 
-    double time1 = timer1.elapsed_ms();
 
-    Timer timer2;
-    int result2 = cactus_embed(model, text2, embeddings2.data(),
-                               embeddings2.size() * sizeof(float), &embedding_dim2);
-    (void)result2;  
-    double time2 = timer2.elapsed_ms();
-    
-    float dot_product = 0.0f;
-    float norm1 = 0.0f;
-    float norm2 = 0.0f;
-    
-    for (size_t i = 0; i < embedding_dim1; ++i) {
-        dot_product += embeddings1[i] * embeddings2[i];
-        norm1 += embeddings1[i] * embeddings1[i];
-        norm2 += embeddings2[i] * embeddings2[i];
+    std::string assistant_response;
+    for(const auto& token : data1.tokens) {
+        assistant_response += token;
     }
-    
-    norm1 = std::sqrt(norm1);
-    norm2 = std::sqrt(norm2);
-    
-    float cosine_similarity = dot_product / (norm1 * norm2);
-    
-    std::cout << "\n=== Embedding Test Results ===" << std::endl;
-    std::cout << "Text 1: \"" << text1 << "\"" << std::endl;
-    std::cout << "Text 2: \"" << text2 << "\"" << std::endl;
-    std::cout << "Embedding dimension: " << embedding_dim1 << std::endl;
-    std::cout << "Time for text1: " << time1 << " ms" << std::endl;
-    std::cout << "Time for text2: " << time2 << " ms" << std::endl;
-    std::cout << "Cosine similarity: " << cosine_similarity << std::endl;
-    
-    cactus_destroy(model);
-    return true;
-}
 
-bool test_generation_control() {
-    cactus_model_t model = cactus_init(g_model_path, 2048);
-    
-    if (!model) {
-        std::cerr << "Failed to initialize model for control test" << std::endl;
-        return false;
-    }
-    
-    const char* messages = R"([
-        {"role": "system", "content": "/no_think You are a helpful assistant."},
-        {"role": "user", "content": "Count to 10"}
-    ])";
-    
-    char response[2048];
-    
-    std::cout << "\n=== Generation Control Test ===" << std::endl;
-    
-    struct ControlData {
-        cactus_model_t model;
-        int token_count = 0;
-    } control_data;
-    
-    control_data.model = model;
-    
-    auto control_callback = [](const char* token, uint32_t token_id, void* user_data) {
-        (void)token_id;  
-        auto* data = static_cast<ControlData*>(user_data);
-        std::cout << token << std::flush;
-        data->token_count++;
-        
-        if (data->token_count >= 5) {
-            std::cout << "\n[Stopping after 5 tokens...]" << std::endl;
-            cactus_stop(data->model);
-        }
-    };
-    
-    int result = cactus_complete(model, messages, response, sizeof(response), 
-                                g_options, nullptr, control_callback, &control_data);
-    
-    std::cout << "\n[Test complete]" << std::endl;
-    std::cout << "Generated " << control_data.token_count << " tokens" << std::endl;
-    
-    cactus_destroy(model);
-    return result > 0;
-}
-
-bool test_conversation() {
-    cactus_model_t model = cactus_init(g_model_path, 2048);
-    
-    if (!model) {
-        std::cerr << "Failed to initialize model for incremental test" << std::endl;
-        return false;
-    }
-    
-    char response[2048];
-
-    const char* messages = R"([
-        {"role": "system", "content": "/no_think You are a helpful assistant."},
-        {"role": "user", "content": "My name is Henry."},
-        {"role": "assistant", "content": "/no_think Nice to meet you, Henry! How can I help you today?"},
+    std::string messages2_str = R"([
+        {"role": "system", "content": "You are a helpful assistant. Be concise."},
+        {"role": "user", "content": "My name is Henry Ndubuaku, how are you?"},
+        {"role": "assistant", "content": ")" + escape_json(assistant_response) + R"("},
         {"role": "user", "content": "What is my name?"}
     ])";
-    
-    int result = cactus_complete(model, messages, response, sizeof(response), g_options, nullptr, nullptr, nullptr);
-    std::cout << "Response: " << response << "\n" << std::endl;
-    
+
+    StreamingData data2;
+    data2.model = model;
+    char response2[4096];
+
+    std::cout << "\n[Turn 2]\n";
+    std::cout << "User: What is my name?\n";
+    std::cout << "Assistant: ";
+
+    int result2 = cactus_complete(model, messages2_str.c_str(), response2, sizeof(response2),
+                                 g_options, nullptr, stream_callback, &data2);
+
+    std::cout << "\n\n[Results - Turn 2]\n";
+    Metrics metrics2;
+    metrics2.parse(response2);
+    std::cout << "├─ Total tokens: " << data2.token_count << std::endl;
+    metrics2.print();
+
+    bool success2 = result2 > 0 && data2.token_count > 0;
+    std::cout << "└─ Status: " << (success2 ? "PASSED ✓" : "FAILED ✗") << std::endl;
+
     cactus_destroy(model);
-    
-    return result > 0;
+    return success1 && success2;
 }
 
 bool test_tool_call() {
-    cactus_model_t model = cactus_init(g_model_path, 2048);
-    
-    if (!model) {
-        std::cerr << "Failed to initialize model for tools test" << std::endl;
-        return false;
-    }
-    
     const char* messages = R"([
         {"role": "system", "content": "You are a helpful assistant that can use tools."},
         {"role": "user", "content": "What's the weather in San Francisco?"}
     ])";
-    
-    const char* tools = R"([
-        {
-            "function": {
-                "name": "get_weather",
-                "description": "Get weather for a location",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "location": {
-                            "type": "string",
-                            "description": "The location to get the weather for, in the format \"City, State, Country\"."
-                        }
-                    },
-                    "required": ["location"]
-                }
+
+    const char* tools = R"([{
+        "function": {
+            "name": "get_weather",
+            "description": "Get weather for a location",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "location": {"type": "string", "description": "City, State, Country"}
+                },
+                "required": ["location"]
             }
         }
-    ])";
-    
-    StreamingTestData stream_data;
-    stream_data.token_count = 0;
-    
-    char response[4096];
-    
-    std::cout << "User: What's the weather in San Francisco?" << std::endl;
-    std::cout << "Assistant: ";
-    
-    int result = cactus_complete(model, messages, response, sizeof(response), g_options, tools,
-                                streaming_callback, &stream_data);
-    
-    std::cout << "\n\n=== Tool Response ===" << std::endl;
-    std::cout << "Final Response JSON:\n" << response << "\n" << std::endl;
-    
-    std::string response_str(response);
-    bool has_function_call = response_str.find("\"function_call\"") != std::string::npos;
-    bool has_tool_name = response_str.find("get_weather") != std::string::npos;
-    bool has_location = response_str.find("location") != std::string::npos;
+    }])";
 
-    std::cout << "Tool recognition: " << (has_function_call && has_tool_name ? "PASSED ✓" : "FAILED ✗") << std::endl;
-    std::cout << "  - function_call field: " << (has_function_call ? "✓" : "✗") << std::endl;
-    std::cout << "  - get_weather name: " << (has_tool_name ? "✓" : "✗") << std::endl;
-    std::cout << "  - location argument: " << (has_location ? "✓" : "✗") << std::endl;
-    
-    cactus_destroy(model);
-    return result > 0 && stream_data.token_count > 0;
+    return run_test("TOOL CALL TEST", messages,
+        [](int result, const StreamingData& data, const std::string& response, const Metrics& m) {
+            bool has_function = response.find("function_call") != std::string::npos;
+            bool has_tool = response.find("get_weather") != std::string::npos;
+
+            std::cout << "├─ Function call: " << (has_function ? "YES ✓" : "NO ✗") << "\n"
+                      << "├─ Correct tool: " << (has_tool ? "YES ✓" : "NO ✗") << "\n"
+                      << "├─ Total tokens: " << data.token_count << std::endl;
+            m.print();
+
+            return result > 0 && has_function && has_tool;
+        }, tools);
 }
 
 bool test_image_input() {
     std::string model_path_str(g_model_path);
-    if (model_path_str.find("vlm") == std::string::npos) {
+    if (model_path_str.find("vlm") == std::string::npos && model_path_str.find("vl") == std::string::npos) {
+        std::cout << "\n╔══════════════════════════════════════════╗\n"
+                  << "║          IMAGE INPUT TEST (SKIPPED)      ║\n"
+                  << "╚══════════════════════════════════════════╝\n";
         std::cout << "Skipping image input test: model is not a VLM." << std::endl;
         return true;
     }
@@ -264,10 +240,17 @@ bool test_image_input() {
     std::string vision_file = model_path_str + std::string("/vision_patch_embedding.weights");
     std::ifstream vf(vision_file);
     if (!vf.good()) {
+        std::cout << "\n╔══════════════════════════════════════════╗\n"
+                  << "║          IMAGE INPUT TEST (SKIPPED)      ║\n"
+                  << "╚══════════════════════════════════════════╝\n";
         std::cout << "Skipping image input test: vision weights not found." << std::endl;
         return true;
     }
     vf.close();
+
+    std::cout << "\n╔══════════════════════════════════════════╗\n"
+              << "║          IMAGE INPUT TEST                ║\n"
+              << "╚══════════════════════════════════════════╝\n";
 
     cactus_model_t model = cactus_init(g_model_path, 2048);
     if (!model) {
@@ -288,31 +271,94 @@ bool test_image_input() {
     const std::string& messages_ref = messages_json;
     const char* messages = messages_ref.c_str();
 
-    StreamingTestData stream_data;
-    stream_data.token_count = 0;
+    StreamingData stream_data;
+    stream_data.model = model;
 
     char response[4096];
 
-    std::cout << "\n=== Image Input Test ===" << std::endl;
+    std::cout << "Response: ";
     int result = cactus_complete(model, messages, response, sizeof(response), g_options, nullptr,
-                                streaming_callback, &stream_data);
+                                stream_callback, &stream_data);
 
-    std::cout << "\nFinal Response JSON:\n" << response << "\n" << std::endl;
+    std::cout << "\n\n[Results]\n";
+    Metrics metrics;
+    metrics.parse(response);
+    std::cout << "├─ Total tokens: " << stream_data.token_count << std::endl;
+    metrics.print();
+
+    bool success = result > 0 && stream_data.token_count > 0;
+    std::cout << "└─ Status: " << (success ? "PASSED ✓" : "FAILED ✗") << std::endl;
 
     cactus_destroy(model);
 
-    return result > 0 && stream_data.token_count > 0;
+    return success;
+}
+
+bool test_embeddings() {
+    std::cout << "\n╔══════════════════════════════════════════╗\n"
+              << "║          EMBEDDINGS TEST                 ║\n"
+              << "╚══════════════════════════════════════════╝\n";
+
+    cactus_model_t model = cactus_init(g_model_path, 2048);
+    if (!model) return false;
+
+    const char* texts[] = {"My name is Henry Ndubuaku", "Your name is Henry Ndubuaku"};
+    std::vector<float> emb1(2048), emb2(2048);
+    size_t dim1, dim2;
+
+    Timer t1;
+    cactus_embed(model, texts[0], emb1.data(), emb1.size() * sizeof(float), &dim1);
+    double time1 = t1.elapsed_ms();
+
+    Timer t2;
+    cactus_embed(model, texts[1], emb2.data(), emb2.size() * sizeof(float), &dim2);
+    double time2 = t2.elapsed_ms();
+
+    float dot = 0, norm1 = 0, norm2 = 0;
+    for (size_t i = 0; i < dim1; ++i) {
+        dot += emb1[i] * emb2[i];
+        norm1 += emb1[i] * emb1[i];
+        norm2 += emb2[i] * emb2[i];
+    }
+    float similarity = dot / (std::sqrt(norm1) * std::sqrt(norm2));
+
+    std::cout << "\n[Results]\n"
+              << "├─ Embedding dim: " << dim1 << "\n"
+              << "├─ Time (text1): " << std::fixed << std::setprecision(2) << time1 << " ms\n"
+              << "├─ Time (text2): " << time2 << " ms\n"
+              << "├─ Similarity: " << std::setprecision(4) << similarity << "\n"
+              << "└─ Status: PASSED ✓" << std::endl;
+
+    cactus_destroy(model);
+    return true;
+}
+
+bool test_huge_context() {
+    std::string msg = "[{\"role\": \"system\", \"content\": \"/no_think You are helpful. ";
+    for (int i = 0; i < 230; i++) {
+        msg += "Context " + std::to_string(i) + ": Background knowledge. ";
+    }
+    msg += "\"}, {\"role\": \"user\", \"content\": \"";
+    for (int i = 0; i < 230; i++) {
+        msg += "Data " + std::to_string(i) + " = " + std::to_string(i * 3.14159) + ". ";
+    }
+    msg += "Explain the data.\"}]";
+
+    return run_test("4K CONTEXT TEST", msg.c_str(),
+        [](int result, const StreamingData& data, const std::string&, const Metrics& m) {
+            std::cout << "├─ Tokens generated: " << data.token_count << std::endl;
+            m.print();
+            std::cout << "├─ Early stop: " << (data.token_count == 100 ? "SUCCESS ✓" : "N/A") << std::endl;
+            return result > 0;
+        }, nullptr, 100);
 }
 
 int main() {
     TestUtils::TestRunner runner("Engine Tests");
-    runner.run_test("streaming", test_streaming());  
-    runner.run_test("embeddings", test_embeddings());
-    runner.run_test("generation_control", test_generation_control());
-    runner.run_test("conversation", test_conversation());
+    runner.run_test("streaming", test_streaming());
     runner.run_test("tool_calls", test_tool_call());
-    // runner.run_test("incremental_processing", test_incremental_processing());
-    // runner.run_test("ffi_with_tools", test_ffi_with_tools());
+    runner.run_test("embeddings", test_embeddings());
+    runner.run_test("huge_context", test_huge_context());
     runner.run_test("image_input", test_image_input());
     runner.print_summary();
     return runner.all_passed() ? 0 : 1;

@@ -5,6 +5,7 @@ import sys
 import json
 import argparse
 from pathlib import Path
+from typing import Optional
 
 try:
     from transformers import AutoTokenizer, AutoModelForCausalLM, AutoProcessor, AutoModelForImageTextToText, AutoModel, AutoConfig, Lfm2VlForConditionalGeneration
@@ -18,6 +19,33 @@ try:
     from huggingface_hub import hf_hub_download  # type: ignore
 except ImportError:
     hf_hub_download = None  # type: ignore
+
+
+def add_lora_weights(name, tensor, lora_dir_path: Path) -> np.ndarray:
+    if isinstance(tensor, torch.Tensor):
+        data = tensor.detach().cpu().numpy()
+    else:
+        data = np.array(tensor)
+
+    if not name.endswith('.weight'):
+        return data
+
+    root_name = name.rstrip('.weight')
+    lora_path_a = lora_dir_path / f"{root_name}.lora_a.npy"
+    lora_path_b = lora_dir_path / f"{root_name}.lora_b.npy"
+    path_exist_count = int(lora_path_a.exists()) + int(lora_path_b.exists())
+    if path_exist_count == 0:
+        return data
+    if path_exist_count == 1:
+        raise ValueError(f"LoRA weights found for only one of the low rank matrices for {name}")
+
+    lora_a = np.load(lora_path_a, allow_pickle=False)
+    lora_b = np.load(lora_path_b, allow_pickle=False)
+
+    combined_lora = (lora_a @ lora_b).T
+    if combined_lora.shape != data.shape:
+        raise ValueError(f"LoRA shape mismatch for {name}: combined_lora {combined_lora.shape} vs data {data.shape}")
+    return data + combined_lora
 
 def save_tensor_with_header(tensor, output_path, precision='FP32', transpose=False, stats_tracker=None, args=None, model_type=None):
     if isinstance(tensor, torch.Tensor):
@@ -39,7 +67,8 @@ def save_tensor_with_header(tensor, output_path, precision='FP32', transpose=Fal
     
     if precision == 'INT8':
         filename = output_path.name
-        if any(x in filename for x in ['norm', 'bias']) or (model_type == 'bert' and 'embedding' in filename):
+        if any(x in filename for x in ['norm', 'bias', 'vision_position_embedding']) or (model_type == 'bert' and 'embedding' in filename):
+            # print(f"Skipping INT8 quantization for {filename}, using FP16 instead.")
             precision = 'FP16'
     
     if precision == 'INT8':
@@ -153,7 +182,6 @@ def save_tensor_with_header(tensor, output_path, precision='FP32', transpose=Fal
         with open(scale_path, 'w') as f:
             f.write(f"{scale:.10f}\n")
 
-
 def format_config_value(value):
     if isinstance(value, bool):
         return 'true' if value else 'false'
@@ -162,6 +190,7 @@ def format_config_value(value):
     return str(value)
 
 def convert_hf_model_weights(model, output_dir, precision='INT8', args=None):
+    
     quantization_stats = {
         'total_tensors': 0,
         'quantized_tensors': 0,
@@ -190,6 +219,13 @@ def convert_hf_model_weights(model, output_dir, precision='INT8', args=None):
             return getattr(c, key, default)
         except Exception:
             return default
+    
+    # Add LoRA support if specified
+    if args and getattr(args, 'lora_dir_path', None):
+        lora_dir_path = Path(args.lora_dir_path)
+        print(f"Adding LoRA weights from {lora_dir_path}")
+        for name, tensor in state_dict.items():
+            state_dict[name] = add_lora_weights(name, tensor, lora_dir_path)
     
     # Check if this is a VLM model by looking for text_config/vision_config
     text_cfg = _cfg_get(config, 'text_config', None)
@@ -504,7 +540,7 @@ def convert_hf_model_weights(model, output_dir, precision='INT8', args=None):
             (['mlp.experts.mlp.w2'], precision, f'layer_{i}_mlp_expert_{{channel}}.mlp2.weights', True),
             (['mlp.router.layer.weight'], precision, f'layer_{i}_mlp_router.layer.weights', False),
         ]
-        found = False
+
         for name_patterns, tensor_precision, output_name, should_transpose in weight_patterns:
             found = False
             for pattern in name_patterns:
@@ -556,11 +592,11 @@ def convert_hf_model_weights(model, output_dir, precision='INT8', args=None):
                     saved_tensor_full_names.add(attn_name)
                     found = True
     
-            if saved_tensor_full_names != set(state_dict.keys()):
-                print(f"Warning: Unsaved tensors: {set(state_dict.keys()) - saved_tensor_full_names}")
-                    
-                if not found:
-                    missing_tensors.append((i, output_name, name_patterns))
+    if saved_tensor_full_names != set(state_dict.keys()):
+        print(f"Warning: Unsaved tensors: {set(state_dict.keys()) - saved_tensor_full_names}")
+        
+        if not found:
+            missing_tensors.append((i, output_name, name_patterns))
     
     if missing_tensors:
         missing_report = output_dir / "missing_weights.txt"
@@ -873,6 +909,87 @@ def convert_processors(processor, model_name, output_dir):
         except Exception:
             pass
     
+def convert_hf_to_cactus_vlm(model_name, output_dir, precision='INT8', cache_dir=None, args=None):
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    print(f"Converting VLM {model_name} to {precision}...")
+
+    try:
+        missing_deps = []
+        try:
+            from PIL import Image  # Pillow
+        except Exception:
+            missing_deps.append('Pillow')
+        try:
+            import num2words
+        except Exception:
+            missing_deps.append('num2words')
+        try:
+            import torchvision
+        except Exception:
+            missing_deps.append('torchvision')
+
+        if missing_deps:
+            print(f"Error: Missing packages required for VLM models: {', '.join(missing_deps)}")
+            print(f"Install with: pip install {' '.join(missing_deps)}")
+            sys.exit(1)
+
+        processor = AutoProcessor.from_pretrained(
+            model_name,
+            cache_dir=cache_dir,
+            trust_remote_code=True
+        )
+        model = AutoModelForImageTextToText.from_pretrained(
+            model_name,
+            cache_dir=cache_dir,
+            trust_remote_code=True,
+            torch_dtype=torch.float32
+        )
+
+        tokenizer = None
+        try:
+            tokenizer = processor.tokenizer
+        except Exception:
+            tokenizer = None
+
+        if tokenizer is None:
+            tokenizer = AutoTokenizer.from_pretrained(
+                model_name,
+                cache_dir=cache_dir,
+                trust_remote_code=True
+            )
+        try:
+            convert_processors(processor, model_name, output_dir)
+        except Exception as e:
+            print(f"  Warning: convert_processors failed: {e}")
+    except Exception as e:
+        print(f"Error: {e}")
+        sys.exit(1)
+
+    config = convert_hf_model_weights_vlm(model, output_dir, precision, args)
+
+    if precision == 'INT8':
+        config['precision'] = "FP16"
+    else:
+        config['precision'] = precision
+
+    config_path = output_dir / "config.txt"
+    with open(config_path, 'w') as f:
+        for key, value in config.items():
+            if isinstance(value, bool):
+                value_str = str(value).lower()
+            else:
+                value_str = str(value)
+            f.write(f"{key}={value_str}\n")
+
+    convert_hf_tokenizer(tokenizer, output_dir)
+    print(f"\nConversion complete: {output_dir}")
+
+    del model
+    del tokenizer
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
 
 def _pick_dtype():
     if torch.cuda.is_available():
@@ -1022,7 +1139,7 @@ def convert_hf_to_cactus(model_name, output_dir, precision='INT8', cache_dir=Non
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    if 'vl' in str(model_name).lower():
+    if 'vl' in str(model_name).lower() or 'vlm' in str(model_name).lower():
         return convert_hf_to_cactus_vlm(model_name, output_dir, precision, cache_dir, args)
 
     print(f"Converting {model_name} to {precision}...")
@@ -1080,7 +1197,8 @@ def create_parser():
     parser.add_argument('--precision', choices=['INT8', 'FP16', 'FP32'], default='INT8',
                        help='Quantization precision')
     parser.add_argument('--cache-dir', help='Cache directory for HuggingFace models')
-    
+    parser.add_argument('--lora-dir-path', type=str, help='Directory containing LoRA weights (.npy files)')
+
     quant_group = parser.add_argument_group('Quantization Parameters')
     quant_group.add_argument('--snr-threshold', type=float, default=20.0,
                             help='Minimum SNR (dB) for INT8 quantization, fallback to FP32 below this')

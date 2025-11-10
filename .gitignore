@@ -4,6 +4,7 @@ build
 .DS_Store
 *.gguf
 weights/
+.cache/
 
 android/build/
 android/libs/
@@ -15,7 +16,7 @@ apple/build-static/
 apple/*.xcframework
 apple/libcactus.a
 *.a
-
 *.bin
 
 reference_code
+venv

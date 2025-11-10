@@ -7,7 +7,7 @@
 #include <vector>
 #include <iostream>
 
-// Include stb_image headers (implementation is in cactus_ffi.cpp)
+// Include stb_image headers (declaration only, implementation is in cactus_ffi.cpp)
 #include "../ffi/stb_image.h"
 #include "../ffi/stb_image_resize2.h"
 

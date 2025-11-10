@@ -7,6 +7,10 @@
 #include <cstdint>
 
 #include "../graph/graph.h"
+extern "C" {
+    #include "../ffi/stb_image.h"
+    #include "../ffi/stb_image_resize2.h"
+}
 
 class CactusGraph;
 
@@ -293,7 +297,7 @@ private:
 };
 
 struct KVCache {
-    static constexpr size_t DEFAULT_WINDOW_SIZE = 1024;
+    static constexpr size_t DEFAULT_WINDOW_SIZE = 512;
     static constexpr size_t DEFAULT_SINK_SIZE = 4;
 
     struct LayerCache {

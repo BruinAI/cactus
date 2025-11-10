@@ -9,24 +9,24 @@ PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 WEIGHTS_DIR="$PROJECT_ROOT/weights/lfm2-350m-i8"
 if [ ! -d "$WEIGHTS_DIR" ] || [ ! -f "$WEIGHTS_DIR/config.txt" ]; then
     echo ""
-    echo "Qwen weights not found. Generating weights..."
+    echo "Weights not found. Generating weights..."
     echo "============================================="
     cd "$PROJECT_ROOT"
     if command -v python3 &> /dev/null; then
-        echo "Running: python3 tools/convert_hf.py Qwen/Qwen3-0.6B weights/qwen3-600m/ --precision INT8"
-        if python3 tools/convert_hf.py Qwen/Qwen3-0.6B weights/qwen3-600m/ --precision INT8; then
-            echo "Successfully generated Qwen weights"
+        echo "Running: python3 tools/convert_hf.py LiquidAI/LFM2-350M weights/lfm2-350m/ --precision INT8"
+        if python3 tools/convert_hf.py LiquidAI/LFM2-350M weights/lfm2-350m/ --precision INT8; then
+            echo "Successfully generated Weights"
         else
-            echo "Warning: Failed to generate Qwen weights. Tests may fail."
-            echo "Please run manually: python3 tools/convert_hf.py Qwen/Qwen3-0.6B weights/qwen3-600m-i8/ --precision INT8"
+            echo "Warning: Failed to generate Weights. Tests may fail."
+            echo "Please run manually: python3 tools/convert_hf.py LiquidAI/LFM2-350M weights/lfm2-350m/ --precision INT8"
         fi
     else
         echo "Warning: Python3 not found. Cannot generate weights automatically."
-        echo "Please run manually: python3 tools/convert_hf.py Qwen/Qwen3-0.6B weights/qwen3-600m-i8/ --precision INT8"
+        echo "Please run manually: python3 tools/convert_hf.py LiquidAI/LFM2-350M weights/lfm2-350m/ --precision INT8"
     fi
 else
     echo ""
-    echo "Qwen weights found at $WEIGHTS_DIR"
+    echo "Weights found at $WEIGHTS_DIR"
 fi
 
 echo ""
@@ -45,7 +45,7 @@ rm -rf build
 mkdir -p build
 cd build
 
-if ! cmake ..; then
+if ! cmake .. -DCMAKE_RULE_MESSAGES=OFF -DCMAKE_VERBOSE_MAKEFILE=OFF > /dev/null 2>&1; then
     echo "Failed to configure tests"
     exit 1
 fi
