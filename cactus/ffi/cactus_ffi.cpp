@@ -198,11 +198,18 @@ int cactus_complete(
         double tokens_per_second = completion_tokens > 1 ? ((completion_tokens - 1) * 1000.0) / decode_time_ms : 0.0;
         
         std::string response_text = tokenizer->decode(generated_tokens);
-        
+
         std::string regular_response;
         std::vector<std::string> function_calls;
-        parse_function_calls_from_response(response_text, regular_response, function_calls);
-        
+
+        // Determine function call format based on model type
+        auto model_type = handle->model->get_config().model_type;
+        FunctionCallFormat format = (model_type == Config::ModelType::QWEN)
+            ? FunctionCallFormat::QWEN
+            : FunctionCallFormat::BFCL;
+
+        parse_function_calls_from_response(response_text, regular_response, function_calls, format);
+
         std::string result = construct_response_json(regular_response, function_calls, time_to_first_token,
                                                      total_time_ms, tokens_per_second, prompt_tokens,
                                                      completion_tokens);

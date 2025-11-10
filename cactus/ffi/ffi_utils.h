@@ -205,9 +205,131 @@ inline std::string format_tools_for_prompt(const std::vector<ToolFunction>& tool
     return formatted_tools_json;
 }
 
-inline void parse_function_calls_from_response(const std::string& response_text, 
-                                               std::string& regular_response, 
-                                               std::vector<std::string>& function_calls) {
+enum class FunctionCallFormat {
+    QWEN,  // JSON format: {"function_call": {"name": "...", "arguments": {...}}}
+    BFCL   // Python-style format: [func_name(param=value), ...]
+};
+
+// Parse BFCL-style function calls: [func_name(param=value), ...]
+inline void parse_bfcl_function_calls(const std::string& response_text,
+                                      std::string& regular_response,
+                                      std::vector<std::string>& function_calls) {
+    regular_response = response_text;
+    function_calls.clear();
+
+    size_t bracket_start = response_text.find('[');
+    if (bracket_start == std::string::npos) return;
+
+    size_t bracket_end = response_text.find(']', bracket_start);
+    if (bracket_end == std::string::npos) return;
+
+    std::string bfcl_content = response_text.substr(bracket_start + 1, bracket_end - bracket_start - 1);
+
+    // Check if this looks like BFCL format (has function call pattern)
+    if (bfcl_content.find('(') == std::string::npos) {
+        return;
+    }
+
+    // Parse BFCL format and convert to JSON
+    size_t pos = 0;
+
+    while (pos < bfcl_content.length()) {
+        // Skip whitespace and commas
+        while (pos < bfcl_content.length() && (bfcl_content[pos] == ' ' || bfcl_content[pos] == ',' || bfcl_content[pos] == '\n')) pos++;
+        if (pos >= bfcl_content.length()) break;
+
+        // Find function name
+        size_t name_end = bfcl_content.find('(', pos);
+        if (name_end == std::string::npos) break;
+
+        std::string func_name = bfcl_content.substr(pos, name_end - pos);
+
+        // Find matching closing paren
+        int paren_count = 1;
+        size_t args_end = name_end + 1;
+        while (args_end < bfcl_content.length() && paren_count > 0) {
+            if (bfcl_content[args_end] == '(') paren_count++;
+            else if (bfcl_content[args_end] == ')') paren_count--;
+            args_end++;
+        }
+
+        if (paren_count == 0) {
+            std::string args_str = bfcl_content.substr(name_end + 1, args_end - name_end - 2);
+
+            // Convert to JSON: {"name": "func", "arguments": {...}}
+            std::string json_call = "{\"name\":\"" + func_name + "\",\"arguments\":{";
+
+            // Parse arguments
+            size_t arg_pos = 0;
+            bool first_arg = true;
+            int param_index = 0;
+
+            while (arg_pos < args_str.length()) {
+                while (arg_pos < args_str.length() && (args_str[arg_pos] == ' ' || args_str[arg_pos] == '\n')) arg_pos++;
+                if (arg_pos >= args_str.length()) break;
+
+                // Check if this is a named parameter (has '=' sign)
+                size_t eq_pos = args_str.find('=', arg_pos);
+                size_t comma_pos = args_str.find(',', arg_pos);
+                bool is_named = (eq_pos != std::string::npos && (comma_pos == std::string::npos || eq_pos < comma_pos));
+
+                std::string param_name;
+                size_t value_start = arg_pos;
+
+                if (is_named) {
+                    // Named parameter: extract name
+                    param_name = args_str.substr(arg_pos, eq_pos - arg_pos);
+                    while (!param_name.empty() && param_name.back() == ' ') param_name.pop_back();
+                    value_start = eq_pos + 1;
+                    while (value_start < args_str.length() && args_str[value_start] == ' ') value_start++;
+                } else {
+                    // Positional parameter: use generic name
+                    param_name = "arg" + std::to_string(param_index);
+                }
+
+                // Extract value
+                size_t value_end = value_start;
+                if (value_start < args_str.length() && (args_str[value_start] == '\'' || args_str[value_start] == '"')) {
+                    char quote = args_str[value_start];
+                    value_end++;
+                    while (value_end < args_str.length() && (args_str[value_end] != quote || args_str[value_end - 1] == '\\')) {
+                        value_end++;
+                    }
+                    value_end++;
+                } else {
+                    while (value_end < args_str.length() && args_str[value_end] != ',' && args_str[value_end] != ')') {
+                        value_end++;
+                    }
+                }
+
+                std::string param_value = args_str.substr(value_start, value_end - value_start);
+                while (!param_value.empty() && param_value.back() == ' ') param_value.pop_back();
+
+                if (!first_arg) json_call += ",";
+                json_call += "\"" + param_name + "\":" + param_value;
+                first_arg = false;
+                param_index++;
+
+                arg_pos = value_end;
+                while (arg_pos < args_str.length() && (args_str[arg_pos] == ',' || args_str[arg_pos] == ' ')) arg_pos++;
+            }
+
+            json_call += "}}";
+            function_calls.push_back(json_call);
+        }
+
+        pos = args_end;
+    }
+
+    if (!function_calls.empty()) {
+        regular_response = "";
+    }
+}
+
+// Parse Qwen-style function calls: {"function_call": {"name": "...", "arguments": {...}}}
+inline void parse_qwen_function_calls(const std::string& response_text,
+                                      std::string& regular_response,
+                                      std::vector<std::string>& function_calls) {
     regular_response = response_text;
     function_calls.clear();
 
@@ -232,13 +354,24 @@ inline void parse_function_calls_from_response(const std::string& response_text,
 
         if (brace_count == 0) {
             function_calls.push_back(response_text.substr(json_start, json_end - json_start));
-            regular_response = response_text.substr(0, marker_pos); 
+            regular_response = response_text.substr(0, marker_pos);
             size_t last_bracket = regular_response.rfind('{');
             if(last_bracket != std::string::npos) {
                 regular_response = regular_response.substr(0, last_bracket);
             }
         }
         search_pos = json_end;
+    }
+}
+
+inline void parse_function_calls_from_response(const std::string& response_text,
+                                               std::string& regular_response,
+                                               std::vector<std::string>& function_calls,
+                                               FunctionCallFormat type = FunctionCallFormat::BFCL) {
+    if (type == FunctionCallFormat::BFCL) {
+        parse_bfcl_function_calls(response_text, regular_response, function_calls);
+    } else {
+        parse_qwen_function_calls(response_text, regular_response, function_calls);
     }
 }
 

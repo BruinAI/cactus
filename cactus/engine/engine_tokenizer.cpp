@@ -180,11 +180,6 @@ std::string Tokenizer::format_lfm2_style(const std::vector<ChatMessage>& message
 
 
 std::string Tokenizer::format_gemma_style(const std::vector<ChatMessage>& messages, bool add_generation_prompt, const std::string& tools_json) const {
-
-    if (!tools_json.empty()) {
-        return "ERROR: Tool calls are not supported for Gemma models";
-    }
-
     std::string result;
 
     result = "<bos>";
@@ -192,7 +187,65 @@ std::string Tokenizer::format_gemma_style(const std::vector<ChatMessage>& messag
     std::string first_user_prefix = "";
     size_t start_idx = 0;
 
-    if (!messages.empty() && messages[0].role == "system") {
+    // Handle system message and tool definitions using BFCL format
+    if (!tools_json.empty()) {
+        // If there's a system message, prepend it to the BFCL prompt
+        if (!messages.empty() && messages[0].role == "system") {
+            first_user_prefix = messages[0].content + "\n\n";
+            start_idx = 1;
+        }
+
+        // Extract BFCL-style function definitions from OpenAI-wrapped format
+        // Input: {"type": "function", "function": {...}}
+        // Output: {...}
+        std::string bfcl_tools = "";
+        size_t search_pos = 0;
+        bool first_func = true;
+
+        while (search_pos < tools_json.length()) {
+            size_t func_pos = tools_json.find("\"function\"", search_pos);
+            if (func_pos == std::string::npos) break;
+
+            size_t colon_pos = tools_json.find(':', func_pos);
+            if (colon_pos == std::string::npos) break;
+
+            size_t brace_start = tools_json.find('{', colon_pos);
+            if (brace_start == std::string::npos) break;
+
+            // Find matching closing brace
+            int brace_count = 1;
+            size_t brace_end = brace_start + 1;
+            while (brace_end < tools_json.length() && brace_count > 0) {
+                if (tools_json[brace_end] == '{') brace_count++;
+                else if (tools_json[brace_end] == '}') brace_count--;
+                brace_end++;
+            }
+
+            if (brace_count == 0) {
+                if (!first_func) bfcl_tools += ",\n";
+                bfcl_tools += "  " + tools_json.substr(brace_start, brace_end - brace_start);
+                first_func = false;
+            }
+
+            search_pos = brace_end;
+        }
+
+        // Add BFCL system prompt for Gemma 3 tool use
+        first_user_prefix += "You are a helpful assistant with access to functions. When the user's request requires a function call, respond with:\n";
+        first_user_prefix += "[function_name(param1='value1', param2='value2')]\n\n";
+        first_user_prefix += "Available functions:\n";
+        first_user_prefix += "[\n";
+        first_user_prefix += bfcl_tools;
+        first_user_prefix += "\n]\n\n";
+        first_user_prefix += "Function call format rules:\n";
+        first_user_prefix += "- Start with [ and end with ]\n";
+        first_user_prefix += "- ALWAYS use parameter names: param='value' (NOT just 'value')\n";
+        first_user_prefix += "- Use single quotes for strings: 'value' not \"value\"\n";
+        first_user_prefix += "- Use numbers without quotes: 42 not '42'\n";
+        first_user_prefix += "- Multiple functions: [func1(x='a'), func2(y='b')]\n\n";
+        first_user_prefix += "If the request doesn't need a function, respond normally. If none of the functions match, explain what you can help with.\n\n";
+    } else if (!messages.empty() && messages[0].role == "system") {
+        // No tools, but there is a system message
         first_user_prefix = messages[0].content + "\n\n";
         start_idx = 1;
     }
@@ -214,6 +267,13 @@ std::string Tokenizer::format_gemma_style(const std::vector<ChatMessage>& messag
         } else if (msg.role == "assistant") {
             result += "<start_of_turn>model";
             result += "\n";
+            result += msg.content;
+            result += "<end_of_turn>";
+            result += "\n";
+        } else if (msg.role == "tool") {
+            // BFCL format for tool responses (multi-turn conversations)
+            result += "<start_of_turn>user\n";
+            result += "[Role: tool]\n";
             result += msg.content;
             result += "<end_of_turn>";
             result += "\n";
