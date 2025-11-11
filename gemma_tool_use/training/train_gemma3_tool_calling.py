@@ -359,6 +359,12 @@ def format_gemma3_tool_calling_example(sample: Dict[str, Any]) -> Optional[List[
             for msg in turn_group:
                 # Use philschmid's format: ```tool_output\nresult\n```
                 result = msg['content']
+                # Handle both string and dict content (Toucan dataset can have either)
+                if isinstance(result, dict):
+                    result = json.dumps(result)
+                elif not isinstance(result, str):
+                    raise ValueError("Tool response content must be string or dict")
+
                 if not result.strip():
                     return None
                 new_text += f'```tool_output\n{result}\n```\n'
