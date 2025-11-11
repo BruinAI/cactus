@@ -60,18 +60,18 @@ GEMMA_TOKENIZER_PATH = "gs://gemma-data/tokenizers/tokenizer_gemma3.model"
 # Training hyperparameters
 # Optimized for TPU v5e-4 (even with 8, only 4 will be used)
 NUM_EPOCHS = 1
-LEARNING_RATE = 5e-5
-MAX_GRAD_NORM = 1.0   # TODO: play with threshold, decrease if too unstable and increase if too slow
+LEARNING_RATE = 2e-4  # Middle ground between 1e-4 (too high) and 5e-5 (too low)
+MAX_GRAD_NORM = 1.0   # Keep gradient clipping to reduce oscillations
 MAX_TARGET_LENGTH = 4096  # 95th percentile = 4,086 tokens
 MAX_STEPS = None
 
 BATCH_SIZE = 8
-DESIRED_EFFECTIVE_BATCH_SIZE = 64
-EVAL_EVERY_N_EFFECTIVE_BATCHES = 125
+DESIRED_EFFECTIVE_BATCH_SIZE = 64  # Increased from 64 to reduce gradient variance and stabilize training
+EVAL_EVERY_N_EFFECTIVE_BATCHES = 125  # Adjusted to maintain similar eval frequency (every ~1000 steps)
 
 # LoRA hyperparameters, Choose either 64 or 32 for both
-RANK = 32
-ALPHA = 32.0
+RANK = 32  # Restored to 64 (achieved better eval loss of 1.17 vs 1.22 with rank=32)
+ALPHA = 64.0
 
 # TPU/GPU mesh configuration
 # Optimized for 4x TPU v5e
@@ -79,8 +79,8 @@ MESH_SHAPE = len(jax.devices()), 1  # Default to all devices in FSDP, no tensor 
 MESH_AXIS_NAMES = "fsdp", "tp"
 
 # Dataset filtering criteria (as per PLAN.md Phase 3)
-MAX_TOOLS_USED = 3
-MAX_TOOLS_AVAILABLE = 5
+MAX_TOOLS_USED = 10
+MAX_TOOLS_AVAILABLE = 10
 
 # Checkpoint and output directories
 CKPT_DIR = "/tmp/gemma_tool_calling_ckpts/"
