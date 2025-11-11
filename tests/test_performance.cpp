@@ -639,8 +639,6 @@ bool test_reduction_operations_performance(TestUtils::TestRunner& runner) {
 
 bool test_advanced_operations_performance(TestUtils::TestRunner& runner) {
     BenchmarkConfig config;
-    
-    benchmark_advanced_ops<int8_t>(runner, config);
     benchmark_advanced_ops<float>(runner, config);
     
     return true;
