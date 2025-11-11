@@ -317,6 +317,7 @@ def format_gemma3_tool_calling_example_qwen_style(sample: Dict[str, Any]) -> Opt
 
         if role == 'user':
             # User turn
+            assert len(turn_group) == 1, "User turns should only have one message"
             full_text += "<start_of_turn>user\n"
 
             # Add system instructions to first user message
@@ -330,6 +331,7 @@ def format_gemma3_tool_calling_example_qwen_style(sample: Dict[str, Any]) -> Opt
                 full_text += "\n\n"
 
             # Add user content
+            assert first_msg['content'].strip(), "User message content should not be empty"
             full_text += first_msg['content'] + "<end_of_turn>\n"
 
         elif role == 'assistant' or role == 'tool_call':
@@ -341,8 +343,8 @@ def format_gemma3_tool_calling_example_qwen_style(sample: Dict[str, Any]) -> Opt
 
                 if msg_role == 'assistant':
                     # Add assistant text content
-                    if 'content' in msg and msg['content']:
-                        full_text += msg['content'] + "\n"
+                    assert 'content' in msg and msg['content'].strip(), "Assistant message content should not be empty"
+                    full_text += msg['content'] + "\n"
 
                 elif msg_role == 'tool_call':
                     # Toucan stores tool calls as Python dict strings
@@ -370,6 +372,7 @@ def format_gemma3_tool_calling_example_qwen_style(sample: Dict[str, Any]) -> Opt
             full_text += "<start_of_turn>user\n"
 
             for msg in turn_group:
+                assert msg['content'].strip(), "Tool response content should not be empty"
                 # Use compact format like tool calls
                 tool_response = {
                     "name": msg.get('name', ''),
