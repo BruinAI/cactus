@@ -60,8 +60,8 @@ GEMMA_TOKENIZER_PATH = "gs://gemma-data/tokenizers/tokenizer_gemma3.model"
 # Training hyperparameters
 # Optimized for TPU v5e-4 (even with 8, only 4 will be used)
 NUM_EPOCHS = 1
-LEARNING_RATE = 1e-4  # Proven optimal - converges cleanly, best BFCL score
-MAX_TARGET_LENGTH = 4096  # 95th percentile = 3,845 tokens
+LEARNING_RATE = 1e-4
+MAX_TARGET_LENGTH = 4096  # 95th percentile = 4,086 tokens
 MAX_STEPS = None
 
 BATCH_SIZE = 8
@@ -95,18 +95,6 @@ The following Python methods are available:
 
 """
 
-SYSTEM_PROMPT_QWEN_STYLE = """You have access to functions/tools. If you decide to invoke any of the function(s)/tools, use them as follows:
-1. Call the tool: <tool_call>
-{"name": "...", "parameters": {...}}
-</tool_call>
-2. You will receive tool results from the user as: <tool_response>
-{"name": "...", "result": ...}
-</tool_response>
-3. Use the result to answer the user's question.
-Here are the available tools that you can use:
-
-"""
-
 # Calculating derived hyperparameters
 assert DESIRED_EFFECTIVE_BATCH_SIZE % BATCH_SIZE == 0
 GRADIENT_ACCUMULATION_STEPS = DESIRED_EFFECTIVE_BATCH_SIZE // BATCH_SIZE
@@ -116,10 +104,6 @@ EVAL_EVERY_N_STEPS = GRADIENT_ACCUMULATION_STEPS * EVAL_EVERY_N_EFFECTIVE_BATCHE
 # ============================================================================
 # Tool Calling Format Functions
 # ============================================================================
-def json_dump(obj) -> str:
-    """Helper function to dump JSON with compact separators."""
-    return json.dumps(obj, separators=(',', ':'))
-
 def correct_dict_type(tool: Dict[str, Any]) -> Dict[str, Any]:
     """
     Ensure that the 'type' field in tool function parameters is 'dict'.
@@ -135,7 +119,7 @@ def format_tools_for_prompt_json_style(tools: List[Dict[str, Any]]) -> str:
     """
     Format tools list for Gemma 3 prompt following PLAN.md format (JSON style).
     """
-    return '\n'.join(json_dump(correct_dict_type(tool)) for tool in tools)
+    return '\n'.join(json.dumps(correct_dict_type(tool), indent=2) for tool in tools)
 
 
 def format_tools_for_prompt(tools: List[Dict[str, Any]]) -> str:
@@ -163,7 +147,10 @@ def format_tools_for_prompt(tools: List[Dict[str, Any]]) -> str:
         required = parameters.get('required', [])
 
         # Build function signature with type hints
-        params = []
+        # Separate required and optional parameters
+        required_params = []
+        optional_params = []
+
         for param_name, param_info in properties.items():
             param_type = param_info.get('type', 'any')
 
@@ -179,11 +166,18 @@ def format_tools_for_prompt(tools: List[Dict[str, Any]]) -> str:
             }
             python_type = type_map.get(param_type, 'Any')
 
-            params.append(f"{param_name}: {python_type}")
+            # Check if parameter is required
+            if param_name in required:
+                required_params.append(f"{param_name}: {python_type}")
+            else:
+                optional_params.append(f"{param_name}: {python_type} = None")
+
+        # Combine params: required first, then optional
+        all_params = required_params + optional_params
 
         # Replace hyphens with underscores for valid Python identifiers
         func_name_safe = func_name.replace('-', '_')
-        signature = f"def {func_name_safe}({', '.join(params)}):"
+        signature = f"def {func_name_safe}({', '.join(all_params)}):"
 
         # Build docstring
         docstring_lines = []
@@ -206,7 +200,9 @@ def format_tools_for_prompt(tools: List[Dict[str, Any]]) -> str:
             docstring_lines.append('  Args:')
             for param_name, param_info in properties.items():
                 param_desc = param_info.get('description', 'No description')
-                docstring_lines.append(f'    {param_name}: {param_desc}')
+                # Mark required parameters
+                required_marker = ' (required)' if param_name in required else ' (optional)'
+                docstring_lines.append(f'    {param_name}: {param_desc}{required_marker}')
 
         docstring_lines.append('  """')
 
@@ -269,125 +265,7 @@ def group_messages_by_turn(messages: List[Dict[str, Any]]) -> List[List[Dict[str
             raise ValueError(f"Unknown message role: {role}")
     return grouped_messages
 
-
-def format_gemma3_tool_calling_example_qwen_style(sample: Dict[str, Any]) -> Optional[Dict[str, str]]:
-    """
-    Format a Toucan dataset sample into Gemma 3 tool calling format.
-
-    Following the format from gemma_tool_use/PLAN.md:
-    - Tools are wrapped in <tools></tools> tags
-    - Tool calls are wrapped in <tool_call></tool_call> tags
-    - Format: {"name": "<function-name>", "parameters": {...}}
-    - System instructions and tools are prepended to first user message
-
-    Toucan dataset structure:
-    - Separate messages with role="tool_call" and role="tool_response"
-    - Multi-turn format with grouped messages:
-      - Each user message is a separate turn
-      - Each assistant + tool_calls group is a separate turn
-      - Each tool_responses group is a separate turn
-
-    Args:
-        sample: A Toucan dataset sample with 'messages', 'tools', 'target_tools'
-
-    Returns:
-        Dictionary with 'text' (full input+output for SFT)
-    """
-    messages = json.loads(sample['messages'])
-    tools = json.loads(sample['tools'])
-
-    # Extract system message if present
-    system_content = ""
-    if len(messages) > 0 and messages[0]['role'] == 'system':
-        system_content = messages[0]['content']
-        messages = messages[1:]
-
-    # Group messages by turn
-    grouped_messages = group_messages_by_turn(messages)
-
-    full_text = ""
-
-    # Process each turn
-    for turn_idx, turn_group in enumerate(grouped_messages):
-        if not turn_group:
-            continue
-
-        first_msg = turn_group[0]
-        role = first_msg['role']
-
-        if role == 'user':
-            # User turn
-            assert len(turn_group) == 1, "User turns should only have one message"
-            full_text += "<start_of_turn>user\n"
-
-            # Add system instructions to first user message
-            if turn_idx == 0 and system_content:
-                full_text += system_content + "\n\n"
-
-            # Add tools definition to first user message
-            if turn_idx == 0:
-                full_text += SYSTEM_PROMPT
-                full_text += format_tools_for_prompt_json_style(tools)
-                full_text += "\n\n"
-
-            # Add user content
-            assert first_msg['content'].strip(), "User message content should not be empty"
-            full_text += first_msg['content'] + "<end_of_turn>\n"
-
-        elif role == 'assistant' or role == 'tool_call':
-            # Assistant turn (may include tool calls)
-            full_text += "<start_of_turn>model\n"
-
-            for msg in turn_group:
-                msg_role = msg['role']
-
-                if msg_role == 'assistant':
-                    # Add assistant text content
-                    assert 'content' in msg and msg['content'].strip(), "Assistant message content should not be empty"
-                    full_text += msg['content'] + "\n"
-
-                elif msg_role == 'tool_call':
-                    # Toucan stores tool calls as Python dict strings
-                    # Format: "{'name': '...', 'arguments': '{...}'}"
-                    tool_call_content = msg['content']
-
-                    # Parse the Python dict string safely
-                    tool_call_data = ast.literal_eval(tool_call_content)
-                    try:
-                        tool_args = json.loads(tool_call_data['arguments'])
-                    except json.JSONDecodeError:
-                        return None
-
-                    call_data = {
-                        "name": tool_call_data['name'],
-                        "parameters": tool_args
-                    }
-                    full_text += f'<tool_call>\n{json_dump(call_data)}\n</tool_call>\n'
-
-            assert full_text.endswith('\n')
-            full_text = full_text[:-1] + "<end_of_turn>\n"  # Remove last newline before end_of_turn
-
-        elif role == 'tool_response':
-            # Tool response turn (wrapped as user message)
-            full_text += "<start_of_turn>user\n"
-
-            for msg in turn_group:
-                assert msg['content'].strip(), "Tool response content should not be empty"
-                # Use compact format like tool calls
-                tool_response = {
-                    "name": msg.get('name', ''),
-                    "result": msg['content']
-                }
-                full_text += f'<tool_response>\n{json_dump(tool_response)}\n</tool_response>\n'
-
-            assert full_text.endswith('\n')
-            full_text = full_text[:-1] + "<end_of_turn>\n"  # Remove last newline before end_of_turn
-
-    assert full_text.endswith('<end_of_turn>\n')
-    return {'text': full_text[:-1]}  # Remove last newline
-
-
-def format_gemma3_tool_calling_example(sample: Dict[str, Any]) -> Optional[Dict[str, str]]:
+def format_gemma3_tool_calling_example(sample: Dict[str, Any]) -> Optional[List[Dict[str, str]]]:
     """
     Format a Toucan dataset sample into Gemma 3 tool calling format using philschmid's approach.
 
@@ -419,49 +297,46 @@ def format_gemma3_tool_calling_example(sample: Dict[str, Any]) -> Optional[Dict[
     # Group messages by turn
     grouped_messages = group_messages_by_turn(messages)
 
-    full_text = ""
-
+    role_messages = []
     # Process each turn
     for turn_idx, turn_group in enumerate(grouped_messages):
-        if not turn_group:
-            continue
+        assert turn_group, "Turn group should not be empty"
 
         first_msg = turn_group[0]
         role = first_msg['role']
 
+        new_text = ''
         if role == 'user':
             # User turn
-            full_text += "<start_of_turn>user\n"
-
             # Add system instructions to first user message
             if turn_idx == 0 and system_content:
-                full_text += system_content + "\n\n"
+                new_text += system_content + "\n\n"
 
             # Add tools definition to first user message
             if turn_idx == 0:
-                full_text += SYSTEM_PROMPT
-                full_text += format_tools_for_prompt(tools)
-                full_text += "\n\n"
+                new_text += SYSTEM_PROMPT
+                new_text += format_tools_for_prompt(tools)
+                new_text += "\n\n"
 
             # Add user content
-            full_text += first_msg['content'] + "<end_of_turn>\n"
-
+            assert first_msg['content'].strip(), "User message content should not be empty"
+            new_text += first_msg['content']
+            role_messages.append({'role': 'user', 'text': new_text})
         elif role == 'assistant' or role == 'tool_call':
             # Assistant turn (may include tool calls)
-            full_text += "<start_of_turn>model\n"
-
             for msg in turn_group:
                 msg_role = msg['role']
 
                 if msg_role == 'assistant':
                     # Add assistant text content
-                    if 'content' in msg and msg['content']:
-                        full_text += msg['content'] + "\n"
+                    assert 'content' in msg and msg['content'].strip(), "Assistant message content should not be empty"
+                    new_text += msg['content'] + "\n"
 
                 elif msg_role == 'tool_call':
                     # Toucan stores tool calls as Python dict strings
                     # Format: "{'name': '...', 'arguments': '{...}'}"
                     tool_call_content = msg['content']
+                    assert tool_call_content.strip(), "Tool call content should not be empty"
 
                     # Parse the Python dict string safely
                     tool_call_data = ast.literal_eval(tool_call_content)
@@ -474,25 +349,36 @@ def format_gemma3_tool_calling_example(sample: Dict[str, Any]) -> Optional[Dict[
                     # Replace hyphens with underscores for valid Python identifiers
                     func_name = tool_call_data['name'].replace('-', '_')
                     args_str = ', '.join([f"{k}={json.dumps(v)}" for k, v in tool_args.items()])
-                    full_text += f'```tool_code\n{func_name}({args_str})\n```\n'
+                    new_text += f'```tool_code\n{func_name}({args_str})\n```\n'
 
-            assert full_text.endswith('\n')
-            full_text = full_text[:-1] + "<end_of_turn>\n"  # Remove last newline before end_of_turn
-
+            assert new_text.endswith('\n')
+            new_text = new_text[:-1]  # Remove last newline before end_of_turn
+            role_messages.append({'role': 'model', 'text': new_text})
         elif role == 'tool_response':
             # Tool response turn (wrapped as user message with ```tool_output)
-            full_text += "<start_of_turn>user\n"
-
             for msg in turn_group:
                 # Use philschmid's format: ```tool_output\nresult\n```
                 result = msg['content']
-                full_text += f'```tool_output\n{result}\n```\n'
+                if not result.strip():
+                    return None
+                new_text += f'```tool_output\n{result}\n```\n'
 
-            assert full_text.endswith('\n')
-            full_text = full_text[:-1] + "<end_of_turn>\n"  # Remove last newline before end_of_turn
+            assert new_text.endswith('\n')
+            new_text = new_text[:-1]  # Remove last newline before end_of_turn
+            role_messages.append({'role': 'user', 'text': new_text})
+        else:
+            raise ValueError(f"Unknown message role: {role}")
 
-    assert full_text.endswith('<end_of_turn>\n')
-    return {'text': full_text[:-1]}  # Remove last newline
+    def format_tags(role, message):
+        if role == 'user':
+            return {"role": role, "text": f"\n<start_of_turn>user\n{message}<end_of_turn>\n<start_of_turn>model\n"}
+        elif role == 'model':
+            return {"role": role, "text": f"{message}<end_of_turn>"}
+        else:
+            raise ValueError(f"Unknown role: {role}")
+    role_messages = [format_tags(m['role'], m['text']) for m in role_messages]
+    role_messages[0]['text'] = role_messages[0]['text'].lstrip()  # Remove leading newline from first user message
+    return role_messages
 
 
 # ============================================================================
@@ -606,35 +492,73 @@ def filter_toucan_dataset(dataset, max_tools_used, max_tools_available, max_numb
 # ============================================================================
 
 class _Tokenize(grain.MapTransform):
-    """Tokenize formatted text examples."""
+    """Tokenize role-based messages and create proper masks."""
 
     def __init__(self, tokenizer: tokenizer_lib.Tokenizer):
         self._tokenizer = tokenizer
 
-    def map(self, element: Dict[str, str]) -> np.ndarray:
-        """Tokenize the text field."""
-        tokens = self._tokenizer.encode(element['text'])
-        return np.array(tokens, dtype=np.int32)
+    def map(self, element: Dict[str, str]) -> Dict[str, np.ndarray]:
+        """
+        Tokenize role messages and create loss mask.
+
+        The text field already contains complete formatting:
+        - User: "\n<start_of_turn>user\n{content}<end_of_turn>\n<start_of_turn>model\n"
+        - Model: "{content}<end_of_turn>"
+
+        Returns dict with:
+        - tokens: Full token sequence
+        - mask: Loss mask (1 for model outputs, 0 for user inputs)
+        """
+        # Parse role messages
+        role_messages = json.loads(element['role_messages'])
+
+        all_tokens = []
+        all_masks = []
+
+        for turn in role_messages:
+            role = turn['role']
+            text = turn['text']
+
+            # Tokenize the complete text (which already has formatting tags)
+            tokens = self._tokenizer.encode(text)
+
+            # Create mask based on role
+            if role == 'user':
+                # Don't train on user input (including the <start_of_turn>model\n at the end)
+                all_tokens.extend(tokens)
+                all_masks.extend([0] * len(tokens))
+
+            elif role == 'model':
+                # TRAIN on model output (including <end_of_turn>)
+                all_tokens.extend(tokens)
+                all_masks.extend([1] * len(tokens))
+
+        return {
+            'tokens': np.array(all_tokens, dtype=np.int32),
+            'mask': np.array(all_masks, dtype=np.float32)
+        }
 
 
 class _BuildTrainInput(grain.MapTransform):
-    """Build TrainingInput from tokens."""
+    """Build TrainingInput from tokens with proper loss masking."""
 
     def __init__(self, max_seq_len: int, pad_value: int):
         self._max_seq_len = max_seq_len
         self._pad_value = pad_value
 
-    def map(self, tokens: np.ndarray) -> peft_trainer.TrainingInput:
-        """Build training input from tokens."""
+    def map(self, tokenized_dict: Dict[str, np.ndarray]) -> peft_trainer.TrainingInput:
+        """Build training input from tokens and mask."""
+        tokens = tokenized_dict['tokens']
+        mask = tokenized_dict['mask']
+
         # Pad or truncate to max_seq_len
         if len(tokens) > self._max_seq_len:
             tokens = tokens[:self._max_seq_len]
+            mask = mask[:self._max_seq_len]
         else:
             pad_len = self._max_seq_len - len(tokens)
             tokens = np.pad(tokens, [[0, pad_len]], mode='constant', constant_values=self._pad_value)
-
-        # Create mask (1 for real tokens, 0 for padding)
-        mask = (tokens != self._pad_value).astype(np.float32)
+            mask = np.pad(mask, [[0, pad_len]], mode='constant', constant_values=0)  # Pad with 0 (don't train)
 
         return peft_trainer.TrainingInput(
             input_tokens=tokens,
@@ -712,8 +636,8 @@ def create_tool_calling_dataset(tokenizer, global_batch_size, max_target_length,
     print("Formatting examples for Gemma 3 tool calling...")
 
     def format_function(examples):
-        """Format a batch of examples, marking failed ones as None"""
-        texts = []
+        """Format a batch of examples into role-based format"""
+        role_messages_list = []
 
         for i in range(len(examples['messages'])):
             sample = {
@@ -723,10 +647,10 @@ def create_tool_calling_dataset(tokenizer, global_batch_size, max_target_length,
             }
 
             formatted = format_gemma3_tool_calling_example(sample)
-            if formatted and formatted['text'].strip():  # skipping empty/invalid texts
-                texts.append(formatted['text'])
+            if formatted:  # Returns list of {'role': ..., 'text': ...} dicts
+                role_messages_list.append(json.dumps(formatted))
 
-        return {'text': texts}
+        return {'role_messages': role_messages_list}
     
     filtered_dataset = filtered_dataset.map(
         format_function,
@@ -749,9 +673,18 @@ def create_tool_calling_dataset(tokenizer, global_batch_size, max_target_length,
     print(f"Formatted {len(train_dataset):,} training examples")
     print(f"Formatted {len(validation_dataset):,} validation examples")
 
-    count_no_tool_call = len(train_dataset.filter(lambda x: '<tool_call>' not in x['text']))
+    # Count examples without tool calls (need to parse JSON and check all turns)
+    def has_tool_call(example):
+        """Check if any turn in the role_messages contains a tool call."""
+        role_messages = json.loads(example['role_messages'])
+        return any('```tool_code' in turn['text'] for turn in role_messages)
+
+    count_with_tool_call = len(train_dataset.filter(has_tool_call))
+    count_no_tool_call = len(train_dataset) - count_with_tool_call
     print(f"  Training examples without tool calls: {count_no_tool_call} ({100 * count_no_tool_call / len(train_dataset):.2f}%)")
-    count_no_tool_call_val = len(validation_dataset.filter(lambda x: '<tool_call>' not in x['text']))
+
+    count_with_tool_call_val = len(validation_dataset.filter(has_tool_call))
+    count_no_tool_call_val = len(validation_dataset) - count_with_tool_call_val
     print(f"  Validation examples without tool calls: {count_no_tool_call_val} ({100 * count_no_tool_call_val / len(validation_dataset):.2f}%)")
 
     # Build grain DataLoaders (HuggingFace Dataset objects work as grain data sources)
@@ -784,6 +717,48 @@ def create_tool_calling_dataset(tokenizer, global_batch_size, max_target_length,
     print(f"  Steps per epoch: {steps_per_epoch:,}")
     print(f"  Total steps ({num_train_epochs} epochs): {total_steps:,}")
     print(f"  Effective batch size: {global_batch_size}")
+
+    # Validate loss masking by inspecting a sample batch
+    print(f"\n{'='*60}")
+    print("Validating Loss Masking")
+    print(f"{'='*60}")
+    sample_batch = next(iter(train_loader))
+    sample_tokens = np.array(sample_batch.input_tokens[0])  # First example in batch
+    sample_mask = np.array(sample_batch.input_mask[0])
+
+    # Count masked tokens
+    total_tokens = len(sample_tokens)
+    train_tokens = int(np.sum(sample_mask))
+    skip_tokens = total_tokens - train_tokens
+    pad_tokens = int(np.sum(sample_tokens == tokenizer.pad_id()))
+
+    print("Sample masking statistics:")
+    print(f"  Total tokens: {total_tokens}")
+    print(f"  Training tokens (mask=1): {train_tokens} ({100*train_tokens/total_tokens:.1f}%)")
+    print(f"  Skipped tokens (mask=0): {skip_tokens} ({100*skip_tokens/total_tokens:.1f}%)")
+    print(f"  Padding tokens: {pad_tokens} ({100*pad_tokens/total_tokens:.1f}%)")
+
+    # Show first 100 tokens with their mask values to verify correctness
+    print("\nFirst 100 tokens with mask (✓=train, ✗=skip):")
+    print("-" * 80)
+    for i in range(min(100, len(sample_tokens))):
+        token_id = int(sample_tokens[i])
+        mask_val = sample_mask[i]
+        if token_id == tokenizer.pad_id():
+            decoded = "<PAD>"
+        else:
+            decoded = tokenizer.decode([token_id])
+        symbol = "✓" if mask_val == 1 else "✗"
+        # Truncate long decoded strings
+        decoded_display = repr(decoded)[:40]
+        print(f"{i:3d} {symbol} [{mask_val:.0f}] {decoded_display}")
+
+    print("-" * 80)
+    print("Expected pattern:")
+    print("  ✗ for <start_of_turn>user and all user content")
+    print("  ✓ for model outputs after <start_of_turn>model")
+    print("  ✗ for padding tokens")
+    print(f"{'='*60}\n")
 
     return train_loader, validation_loader, total_steps, train_dataset
 
@@ -974,7 +949,7 @@ def show_training_examples(dataset, num_examples=5):
     Display random training examples from the formatted dataset.
 
     Args:
-        dataset: HuggingFace dataset with 'text' field
+        dataset: HuggingFace dataset with 'role_messages' field
         num_examples: Number of examples to display (default: 5)
     """
     print(f"\n{'='*60}")
@@ -986,12 +961,21 @@ def show_training_examples(dataset, num_examples=5):
 
     for i, idx in enumerate(indices, 1):
         example = dataset[idx]
-        text = example['text']
+        role_messages = json.loads(example['role_messages'])
 
         print(f"\n{'─'*60}")
         print(f"Example {i}/{num_examples} (Index: {idx})")
         print(f"{'─'*60}")
-        print(text)
+
+        # Reconstruct the formatted text for display
+        for turn_idx, turn in enumerate(role_messages):
+            role = turn['role']
+            text = turn['text']
+            mask_indicator = "✓ TRAIN" if role == 'model' else "✗ SKIP"
+
+            print(f"\n<start_of_turn>{role} [{mask_indicator}]")
+            print(text)
+            print(f"<end_of_turn>")
 
     print(f"\n{'='*60}\n")
 
@@ -1066,12 +1050,9 @@ def test_model_generation(model, tokenizer, model_config, eos_tokens, label="Mod
     formatted2 = format_gemma3_tool_calling_example(sample2)
     assert formatted1 and formatted2, "Failed to format test examples"
 
-    # Extract the prompt up to where model should generate
-    # For example 1: everything up to the model turn
-    prompt1 = formatted1['text'] + "\n<start_of_turn>model\n"
-
-    # For example 2: everything up to the final model turn
-    prompt2 = formatted2['text'] + "\n<start_of_turn>model\n"
+    prompt1 = ''.join(turn['text'] for turn in formatted1)
+    prompt2 = ''.join(turn['text'] for turn in formatted2)
+    assert prompt1 and prompt2, "Formatted prompts are empty"
 
     out_data = sampler(
         input_strings=[prompt1, prompt2],
