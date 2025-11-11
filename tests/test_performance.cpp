@@ -450,8 +450,15 @@ void benchmark_mmap_embedding(TestUtils::TestRunner& runner, BenchmarkConfig& co
                 size_t temp_embeddings = graph.input({vocab_size, embedding_dim}, Precision::FP32);
                 graph.set_input(temp_embeddings, embeddings_data.data(), Precision::FP32);
                 
-                const std::string temp_file = "/tmp/perf_embeddings_" + 
-                    std::to_string(vocab_size) + "_" + std::to_string(embedding_dim) + ".bin";
+                std::filesystem::path tmpdir;
+                try {
+                    tmpdir = std::filesystem::temp_directory_path();
+                } catch (...) {
+                    tmpdir = std::filesystem::current_path();
+                }
+                std::filesystem::path tmpfile = tmpdir / (std::string("perf_embeddings_") +
+                    std::to_string(vocab_size) + "_" + std::to_string(embedding_dim) + ".bin");
+                const std::string temp_file = tmpfile.string();
                 
                 GraphFile::save_node(graph, temp_embeddings, temp_file);
                 graph.hard_reset();
@@ -483,7 +490,8 @@ void benchmark_mmap_embedding(TestUtils::TestRunner& runner, BenchmarkConfig& co
                     std::to_string(time_ms) + "ms, " + std::to_string(throughput) + " GB/s"
                 );
                 
-                std::remove(temp_file.c_str());
+                std::error_code ec;
+                std::filesystem::remove(tmpfile, ec);
             }
         }
     }
