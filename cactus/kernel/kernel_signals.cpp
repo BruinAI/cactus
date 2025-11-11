@@ -28,25 +28,37 @@ static void to_db(
     reference = std::max(min_value, reference);
     const float log_ref = std::log10(reference);
 
-    for (size_t i = 0; i < size; i++) {
-        float value = std::max(min_value, spectrogram[i]);
-        spectrogram[i] = multiplier * (std::log10(value) - log_ref);
-    }
+    CactusThreading::parallel_for(size, 10000, [&](size_t start, size_t end) {
+        for (size_t i = start; i < end; i++) {
+            float value = std::max(min_value, spectrogram[i]);
+            spectrogram[i] = multiplier * (std::log10(value) - log_ref);
+        }
+    });
 
     if (db_range != nullptr) {
         if (*db_range <= 0.0f) {
             throw std::invalid_argument("db_range must be greater than zero");
         }
 
-        float max_db = -std::numeric_limits<float>::infinity();
-        for (size_t i = 0; i < size; i++) {
-            max_db = std::max(max_db, spectrogram[i]);
-        }
+        float max_db = CactusThreading::parallel_reduce<std::function<float(size_t, size_t)>, float, std::function<float(float, float)>>(
+            size, 10000,
+            [&](size_t start, size_t end) {
+                float local_max = -std::numeric_limits<float>::infinity();
+                for (size_t i = start; i < end; i++) {
+                    local_max = std::max(local_max, spectrogram[i]);
+                }
+                return local_max;
+            },
+            -std::numeric_limits<float>::infinity(),
+            [](float a, float b) { return std::max(a, b); }
+        );
 
         float min_db = max_db - *db_range;
-        for (size_t i = 0; i < size; i++) {
-            spectrogram[i] = std::max(min_db, spectrogram[i]);
-        }
+        CactusThreading::parallel_for(size, 10000, [&](size_t start, size_t end) {
+            for (size_t i = start; i < end; i++) {
+                spectrogram[i] = std::max(min_db, spectrogram[i]);
+            }
+        });
     }
 }
 
@@ -155,87 +167,90 @@ void cactus_spectrogram_f32(
 
     std::vector<float> temp_spectrogram(num_frames * num_frequency_bins);
 
-    size_t timestep = 0;
-    for (size_t frame_idx = 0; frame_idx < num_frames; frame_idx++) {
-        std::fill(buffer.begin(), buffer.end(), 0.0f);
+    CactusThreading::parallel_for(num_frames, 100, [&](size_t start_frame, size_t end_frame) {
+        std::vector<float> local_buffer(actual_fft_length);
+        std::vector<float> local_complex_frequencies(num_frequency_bins * 2);
 
-        size_t available_length = std::min(frame_length, input_length - timestep);
-        std::copy(input_waveform + timestep, input_waveform + timestep + available_length, buffer.data());
+        for (size_t frame_idx = start_frame; frame_idx < end_frame; frame_idx++) {
+            size_t timestep = frame_idx * hop_length;
+            std::fill(local_buffer.begin(), local_buffer.end(), 0.0f);
 
-        if (dither != 0.0f) {
+            size_t available_length = std::min(frame_length, input_length - timestep);
+            std::copy(input_waveform + timestep, input_waveform + timestep + available_length, local_buffer.data());
+
+            if (dither != 0.0f) {
+                for (size_t i = 0; i < frame_length; i++) {
+                    float u1 = static_cast<float>(rand()) / static_cast<float>(RAND_MAX);
+                    float u2 = static_cast<float>(rand()) / static_cast<float>(RAND_MAX);
+                    float randn = std::sqrt(-2.0f * std::log(u1)) * std::cos(2.0f * std::numbers::pi * u2);
+                    local_buffer[i] += dither * randn;
+                }
+            }
+
+            if (remove_dc_offset) {
+                float mean = 0.0f;
+                for (size_t i = 0; i < frame_length; i++) {
+                    mean += local_buffer[i];
+                }
+                mean /= static_cast<float>(frame_length);
+
+                for (size_t i = 0; i < frame_length; i++) {
+                    local_buffer[i] -= mean;
+                }
+            }
+
+            if (preemphasis != nullptr) {
+                float preemph_coef = *preemphasis;
+                for (size_t i = frame_length - 1; i > 0; i--) {
+                    local_buffer[i] -= preemph_coef * local_buffer[i - 1];
+                }
+                local_buffer[0] *= (1.0f - preemph_coef);
+            }
+
             for (size_t i = 0; i < frame_length; i++) {
-                float u1 = static_cast<float>(rand()) / static_cast<float>(RAND_MAX);
-                float u2 = static_cast<float>(rand()) / static_cast<float>(RAND_MAX);
-                float randn = std::sqrt(-2.0f * std::log(u1)) * std::cos(2.0f * std::numbers::pi * u2);
-                buffer[i] += dither * randn;
+                local_buffer[i] *= actual_window[i];
+            }
+
+            cactus_rfft_f32_1d(local_buffer.data(), local_complex_frequencies.data(), actual_fft_length, "backward");
+
+            for (size_t i = 0; i < num_frequency_bins; i++) {
+                float real = local_complex_frequencies[i * 2];
+                float imag = local_complex_frequencies[i * 2 + 1];
+                float magnitude = std::hypot(real, imag);
+                temp_spectrogram[frame_idx * num_frequency_bins + i] = std::pow(magnitude, power);
             }
         }
-
-        if (remove_dc_offset) {
-            float mean = 0.0f;
-            for (size_t i = 0; i < frame_length; i++) {
-                mean += buffer[i];
-            }
-            mean /= static_cast<float>(frame_length);
-
-            for (size_t i = 0; i < frame_length; i++) {
-                buffer[i] -= mean;
-            }
-        }
-
-        if (preemphasis != nullptr) {
-            float preemph_coef = *preemphasis;
-            for (size_t i = frame_length - 1; i > 0; i--) {
-                buffer[i] -= preemph_coef * buffer[i - 1];
-            }
-            buffer[0] *= (1.0f - preemph_coef);
-        }
-
-        for (size_t i = 0; i < frame_length; i++) {
-            buffer[i] *= actual_window[i];
-        }
-        
-        cactus_rfft_f32_1d(buffer.data(), raw_complex_frequencies.data(), actual_fft_length, "backward");
-
-        for (size_t i = 0; i < num_frequency_bins; i++) {
-            float real = raw_complex_frequencies[i * 2];
-            float imag = raw_complex_frequencies[i * 2 + 1];
-            float magnitude = std::hypot(real, imag);
-            temp_spectrogram[frame_idx * num_frequency_bins + i] = std::pow(magnitude, power);
-        }
-
-        timestep += hop_length;
-    }
+    });
 
     if (mel_filters != nullptr) {
-        for (size_t m = 0; m < num_mel_bins; m++) {
-            for (size_t t = 0; t < num_frames; t++) {
-                float sum = 0.0f;
-                for (size_t f = 0; f < num_frequency_bins; f++) {
-                    sum += mel_filters[m * num_frequency_bins + f] * temp_spectrogram[t * num_frequency_bins + f];
-                }
-                spectrogram[m * num_frames + t] = std::max(mel_floor, sum);
-            }
-        }
-    } else {
-        for (size_t t = 0; t < num_frames; t++) {
+        CactusThreading::parallel_for_2d(num_mel_bins, num_frames, 1000, [&](size_t m, size_t t) {
+            float sum = 0.0f;
             for (size_t f = 0; f < num_frequency_bins; f++) {
-                spectrogram[f * num_frames + t] = temp_spectrogram[t * num_frequency_bins + f];
+                sum += mel_filters[m * num_frequency_bins + f] * temp_spectrogram[t * num_frequency_bins + f];
             }
-        }
+            spectrogram[m * num_frames + t] = std::max(mel_floor, sum);
+        });
+    } else {
+        CactusThreading::parallel_for_2d(num_frames, num_frequency_bins, 1000, [&](size_t t, size_t f) {
+            spectrogram[f * num_frames + t] = temp_spectrogram[t * num_frequency_bins + f];
+        });
     }
 
     if (power != 0.0f && log_mel != nullptr) {
         const size_t total_elements = spectrogram_bins * num_frames;
 
         if (std::strcmp(log_mel, "log") == 0) {
-            for (size_t i = 0; i < total_elements; i++) {
-                spectrogram[i] = std::log(spectrogram[i]);
-            }
+            CactusThreading::parallel_for(total_elements, 10000, [&](size_t start, size_t end) {
+                for (size_t i = start; i < end; i++) {
+                    spectrogram[i] = std::log(spectrogram[i]);
+                }
+            });
         } else if (std::strcmp(log_mel, "log10") == 0) {
-            for (size_t i = 0; i < total_elements; i++) {
-                spectrogram[i] = std::log10(spectrogram[i]);
-            }
+            CactusThreading::parallel_for(total_elements, 10000, [&](size_t start, size_t end) {
+                for (size_t i = start; i < end; i++) {
+                    spectrogram[i] = std::log10(spectrogram[i]);
+                }
+            });
         } else if (std::strcmp(log_mel, "dB") == 0) {
             if (power == 1.0f) {
                 to_db(spectrogram, total_elements, reference, min_value, db_range, 20.0f);
