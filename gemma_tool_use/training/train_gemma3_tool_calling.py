@@ -60,7 +60,8 @@ GEMMA_TOKENIZER_PATH = "gs://gemma-data/tokenizers/tokenizer_gemma3.model"
 # Training hyperparameters
 # Optimized for TPU v5e-4 (even with 8, only 4 will be used)
 NUM_EPOCHS = 1
-LEARNING_RATE = 1e-4
+LEARNING_RATE = 5e-5
+MAX_GRAD_NORM = 1.0   # TODO: play with threshold, decrease if too unstable and increase if too slow
 MAX_TARGET_LENGTH = 4096  # 95th percentile = 4,086 tokens
 MAX_STEPS = None
 
@@ -69,8 +70,8 @@ DESIRED_EFFECTIVE_BATCH_SIZE = 64
 EVAL_EVERY_N_EFFECTIVE_BATCHES = 125
 
 # LoRA hyperparameters, Choose either 64 or 32 for both
-RANK = 64
-ALPHA = 64.0
+RANK = 32
+ALPHA = 32.0
 
 # TPU/GPU mesh configuration
 # Optimized for 4x TPU v5e
@@ -1187,9 +1188,13 @@ def main():
     print(f"Learning rate schedule: warmup for {warmup_steps} steps, then cosine decay")
 
     optimizer = optax.MultiSteps(
-        optax.adamw(learning_rate=lr_schedule),
+        optax.chain(
+            optax.clip_by_global_norm(MAX_GRAD_NORM),
+            optax.adamw(learning_rate=lr_schedule)
+        ),
         every_k_schedule=GRADIENT_ACCUMULATION_STEPS
     )
+    print(f"Gradient clipping enabled with max_norm={MAX_GRAD_NORM}")
     trainer = peft_trainer.PeftTrainer(
         lora_model,
         optimizer,
