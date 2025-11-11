@@ -276,8 +276,6 @@ size_t WhisperModel::build_decoder_transformer_block(CactusGraph* gb, size_t hid
     size_t ffn_out = build_decoder_mlp(gb, ln3, layer_idx, backend);
     size_t x_post_ffn = gb->add(x_post_ca, ffn_out);
 
-    
-
     return x_post_ffn;
 
 }
