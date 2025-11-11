@@ -8,6 +8,8 @@
 #include <stdexcept>
 #include <sstream>
 #include <iomanip>
+#include <fstream>
+#include <iostream>
 
 namespace cactus {
 namespace ffi {
@@ -278,6 +280,218 @@ inline std::string construct_response_json(const std::string& regular_response,
     json_response << "\"total_tokens\":" << (prompt_tokens + completion_tokens);
     json_response << "}";
     return json_response.str();
+}
+
+inline std::string trim_quotes(const std::string& s) {
+    if (s.size() >= 2 && s.front() == '\'' && s.back() == '\'')
+        return s.substr(1, s.size() - 2);
+    return s;
+}
+
+inline std::vector<size_t> parse_shape(const std::string& shape_str) {
+    std::vector<size_t> shape;
+    size_t start = shape_str.find('(');
+    size_t end   = shape_str.find(')');
+    if (start == std::string::npos || end == std::string::npos)
+        throw std::runtime_error("Invalid NPY shape");
+
+    std::string inside = shape_str.substr(start + 1, end - start - 1);
+
+    size_t pos = 0;
+    while (pos < inside.size()) {
+        size_t comma = inside.find(',', pos);
+        std::string tok = (comma == std::string::npos)
+                            ? inside.substr(pos)
+                            : inside.substr(pos, comma - pos);
+
+        if (!tok.empty()) {
+            size_t val = std::stoul(tok);
+            shape.push_back(val);
+        }
+
+        if (comma == std::string::npos)
+            break;
+
+        pos = comma + 1;
+    }
+
+    return shape;
+}
+
+inline bool load_npy_float32(const char* path,
+                             std::vector<float>& out,
+                             std::vector<size_t>& shape)
+{
+    std::ifstream f(path, std::ios::binary);
+    if (!f) return false;
+
+    std::cout<<"Made it here"<<std::endl;
+
+    // Read magic + version
+    char magic[6];
+    f.read(magic, 6);
+    if (std::strncmp(magic, "\x93NUMPY", 6) != 0)
+        return false;
+
+    uint8_t major, minor;
+    f.read((char*)&major, 1);
+    f.read((char*)&minor, 1);
+
+    uint16_t header_len16 = 0;
+    uint32_t header_len32 = 0;
+    size_t header_len = 0;
+
+    if (major == 1) {
+        f.read((char*)&header_len16, 2);
+        header_len = header_len16;
+    } else if (major == 2) {
+        f.read((char*)&header_len32, 4);
+        header_len = header_len32;
+    } else {
+        throw std::runtime_error("Unsupported NPY version");
+    }
+
+    // Read header dict
+    std::vector<char> header(header_len);
+    f.read(header.data(), header_len);
+    std::string hdr(header.begin(), header.end());
+
+    // Parse descriptor
+    bool fortran = false;
+    std::string descr;
+    std::string shape_str;
+
+    size_t pos_descr = hdr.find("'descr':");
+    size_t pos_shape = hdr.find("'shape':");
+    size_t pos_fortran = hdr.find("'fortran_order':");
+
+    if (pos_descr == std::string::npos || pos_shape == std::string::npos)
+        return false;
+
+    // descr
+    {
+        size_t start = hdr.find_first_of("'\"", pos_descr + 8);
+        size_t end   = hdr.find_first_of("'\"", start + 1);
+        descr = trim_quotes(hdr.substr(start, end - start + 1));
+    }
+
+    // shape
+    {
+        size_t start = hdr.find('(', pos_shape);
+        size_t end   = hdr.find(')', start);
+        shape_str = hdr.substr(start, end - start + 1);
+        shape = parse_shape(shape_str);
+    }
+
+    // fortran order
+    {
+        size_t pos = hdr.find("True", pos_fortran);
+        fortran = (pos != std::string::npos);
+        if (fortran) {
+            throw std::runtime_error("Fortran-order NPY not supported");
+        }
+    }
+
+    // type must be <f4 (little-endian float32)
+    if (descr != "<f4" && descr != "|f4")
+        throw std::runtime_error("NPY dtype must be float32");
+
+    // compute number of elements
+    size_t total = 1;
+    for (auto s : shape) total *= s;
+
+    out.resize(total);
+
+    f.read(reinterpret_cast<char*>(out.data()), total * sizeof(float));
+    return true;
+}
+
+// ============================================================
+// LOAD INT32
+// ============================================================
+inline bool load_npy_int32(const char* path,
+                           std::vector<int32_t>& out,
+                           std::vector<size_t>& shape)
+{
+    std::ifstream f(path, std::ios::binary);
+    if (!f) return false;
+
+    // Read magic + version
+    char magic[6];
+    f.read(magic, 6);
+    if (std::strncmp(magic, "\x93NUMPY", 6) != 0)
+        return false;
+
+    uint8_t major, minor;
+    f.read((char*)&major, 1);
+    f.read((char*)&minor, 1);
+
+    uint16_t header_len16 = 0;
+    uint32_t header_len32 = 0;
+    size_t header_len = 0;
+
+    if (major == 1) {
+        f.read((char*)&header_len16, 2);
+        header_len = header_len16;
+    } else if (major == 2) {
+        f.read((char*)&header_len32, 4);
+        header_len = header_len32;
+    } else {
+        throw std::runtime_error("Unsupported NPY version");
+    }
+
+    // Read header dict
+    std::vector<char> header(header_len);
+    f.read(header.data(), header_len);
+    std::string hdr(header.begin(), header.end());
+
+    // Parse descriptor
+    bool fortran = false;
+    std::string descr;
+    std::string shape_str;
+
+    size_t pos_descr = hdr.find("'descr':");
+    size_t pos_shape = hdr.find("'shape':");
+    size_t pos_fortran = hdr.find("'fortran_order':");
+
+    if (pos_descr == std::string::npos || pos_shape == std::string::npos)
+        return false;
+
+    // descr
+    {
+        size_t start = hdr.find_first_of("'\"", pos_descr + 8);
+        size_t end   = hdr.find_first_of("'\"", start + 1);
+        descr = trim_quotes(hdr.substr(start, end - start + 1));
+    }
+
+    // shape
+    {
+        size_t start = hdr.find('(', pos_shape);
+        size_t end   = hdr.find(')', start);
+        shape_str = hdr.substr(start, end - start + 1);
+        shape = parse_shape(shape_str);
+    }
+
+    // fortran order
+    {
+        size_t pos = hdr.find("True", pos_fortran);
+        fortran = (pos != std::string::npos);
+        if (fortran) {
+            throw std::runtime_error("Fortran-order NPY not supported");
+        }
+    }
+
+    // dtype must be <i4 (little-int32)
+    if (descr != "<i4" && descr != "|i4")
+        throw std::runtime_error("NPY dtype must be int32");
+
+    size_t total = 1;
+    for (auto s : shape) total *= s;
+
+    out.resize(total);
+
+    f.read(reinterpret_cast<char*>(out.data()), total * sizeof(int32_t));
+    return true;
 }
 
 } // namespace ffi

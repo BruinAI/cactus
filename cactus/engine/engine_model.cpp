@@ -74,10 +74,14 @@ bool Model::init(const std::string& model_folder, size_t context_size, const std
     } else {
         tokenizer_ = std::make_unique<SPTokenizer>();
     }
+
+    
     
     if (!tokenizer_->load_vocabulary_with_config(vocab_file, merges_file, tokenizer_config_file)) {
         return false;
     }
+    
+    
     
     auto* gb = new CactusGraph();
     graph_handle_ = gb;
@@ -130,16 +134,28 @@ bool Model::init(const std::string& model_folder, size_t context_size, const std
     cache_v_output_nodes_.resize(config_.num_layers);
     
     post_init();
-    
+
     initialized_ = true;
-    
-    std::string warmup_text = system_prompt.empty() ? "Henry" : system_prompt;
-    auto warmup_tokens = tokenizer_->encode(warmup_text);
-    forward(warmup_tokens);
+
+    if(config_.model_type == Config::ModelType::WHISPER){
+        
+    }
+
+    else{
+        std::string warmup_text = system_prompt.empty() ? "Henry" : system_prompt;
+        auto warmup_tokens = tokenizer_->encode(warmup_text);
+        forward(warmup_tokens);
+    }
+
+    //Add warmup for whisper
+
     kv_cache_.reset();
     return true;
 }
 
+size_t Model::forward(const std::vector<uint32_t>& mel_bins, const std::vector<uint32_t>& tokens, bool use_cache){
+    forward(tokens, use_cache);
+}
 
 uint32_t Model::generate(const std::vector<uint32_t>& tokens, float temperature, float top_p,
                         size_t top_k, const std::string& profile_file) {
@@ -174,6 +190,10 @@ uint32_t Model::generate(const std::vector<uint32_t>& tokens, float temperature,
     
     auto* output_ptr = gb->get_output(sampled_token_id);
     return *static_cast<uint32_t*>(output_ptr);
+}
+
+uint32_t Model::generate_with_audio(const std::vector<uint32_t>& tokens, const std::vector<uint32_t>& mel_bins, float temperature, float top_p, size_t top_k, const std::string& profile_file){
+    generate(tokens, temperature, top_p, top_k, profile_file);
 }
 
 void Model::update_kv_cache(CactusGraph* gb, size_t seq_len) {
@@ -352,6 +372,8 @@ std::unique_ptr<Model> create_model(const std::string& model_folder) {
     if (!config.from_json(config_path)) {
         return nullptr;
     }
+
+    
 
     switch (config.model_type) {
         case Config::ModelType::QWEN:

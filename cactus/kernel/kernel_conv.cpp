@@ -235,6 +235,7 @@ void cactus_conv1d_f32_k3(
     size_t C_in, size_t C_out,
     size_t stride
 ){
+    std::cout<<"Entered Conv f32" << std::endl;
     const size_t out_len = ((L - 1) / stride) + 1;
 
     const size_t in_bs = C_in * L;
@@ -325,6 +326,17 @@ void cactus_conv1d_f32_k3(
                         acc1 = vfmaq_f32(acc1, xv1, wv);
                     }
                 }
+
+                float32x2_t s0 = vadd_f32(vget_low_f32(acc0), vget_high_f32(acc0));
+                float sum0 = vget_lane_f32(s0, 0) + vget_lane_f32(s0, 1);
+                Yb[oc * out_len + out_t0] = sum0;
+
+                if (have_t1) {
+                    float32x2_t s1 = vadd_f32(vget_low_f32(acc1), vget_high_f32(acc1));
+                    float sum1 = vget_lane_f32(s1, 0) + vget_lane_f32(s1, 1);
+                    Yb[oc * out_len + out_t1] = sum1;
+                }
+
             }
         }
     }
@@ -338,6 +350,7 @@ void cactus_conv1d_f16_k3(
     size_t C_in, size_t C_out,
     size_t stride
 ){
+    std::cout<<"Entered Conv f16" << std::endl;
     const size_t out_len = ((L - 1) / stride) + 1;
 
     const size_t in_bs  = C_in * L;
@@ -446,17 +459,21 @@ void cactus_conv1d_f16_k3(
                         acc1 = vfmaq_f32(acc1, vcvt_f32_f16(xv1_h), vcvt_f32_f16(wv1_h));
                     }
                 }
+                __fp16* Yoc = Yb + oc * out_len;
+
 
                 float32x2_t s0 = vadd_f32(vget_low_f32(acc0), vget_high_f32(acc0));
                 float sum0 = vget_lane_f32(s0, 0) + vget_lane_f32(s0, 1);
-
-                __fp16* Yoc = Yb + oc * out_len;
+                Yoc[out_t0] = (__fp16)sum0;
 
                 if (have_t1) {
                     float32x2_t s1 = vadd_f32(vget_low_f32(acc1), vget_high_f32(acc1));
                     float sum1 = vget_lane_f32(s1, 0) + vget_lane_f32(s1, 1);
+                    Yoc[out_t1] = (__fp16)sum1;
                 }
             }
+
+            
         }
     }
 }

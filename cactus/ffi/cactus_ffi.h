@@ -33,6 +33,20 @@ CACTUS_FFI_EXPORT int cactus_complete(
     void* user_data
 );
 
+int cactus_test_whisper_from_files_json(
+    cactus_model_t model,
+    const char* mel_npy_path,
+    const char* tokens_npy_path,
+    char* response_buffer,
+    size_t buffer_size,
+    float temperature,
+    float top_p,
+    size_t top_k,
+    size_t max_tokens,
+    cactus_token_callback callback,
+    void* user_data
+);
+
 
 CACTUS_FFI_EXPORT int cactus_embed(
     cactus_model_t model,

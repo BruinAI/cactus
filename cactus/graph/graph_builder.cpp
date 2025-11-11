@@ -329,6 +329,7 @@ size_t CactusGraph::conv1d_causal(size_t input, size_t weight, size_t, size_t di
 
 size_t CactusGraph::conv1d_k3(size_t input, size_t weight, size_t stride){
     OpParams params{.stride = stride};
+    std::cout<<"Entered conv1d in graph builder"<<std::endl;
     return add_node(OpType::CONV1D_K3, {input, weight}, {}, params);
 }
 

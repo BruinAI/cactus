@@ -3,6 +3,7 @@
 #include <cmath>
 #include <stdexcept>
 #include <set>
+#include <iostream>
 
 namespace cactus {
 namespace engine {
@@ -16,7 +17,6 @@ WhisperModel::WhisperModel(const Config& config) : Model(config) {
 void WhisperModel::load_weights_to_graph(CactusGraph* gb) {
 
     embedding_node_id_ = gb->mmap_embeddings(embedding_file_path_); //Updated engine_model to use decoder embeddings for whisper
-    // weight_nodes_.output_norm_weight = gb->mmap_weights(model_folder_path_ + "/output_norm.weights"); UPDATE THIS TO BE NORM FROM LAST DECODER LAYER
     
     weight_nodes_.decoder_norm_weight = gb->mmap_weights(model_folder_path_ + "/decoder_norm.weights");
     weight_nodes_.decoder_norm_bias = gb->mmap_weights(model_folder_path_ + "/decoder_norm.bias");
@@ -234,10 +234,21 @@ size_t WhisperModel::build_encoder_self_attention(CactusGraph* gb, size_t input,
 
 size_t WhisperModel::build_conv1d(CactusGraph* gb, size_t input, ComputeBackend backend) 
 {
-    size_t ncl = gb->transpose(input, ComputeBackend::CPU);
+    // size_t ncl = gb->transpose(input, ComputeBackend::CPU);
 
-    size_t conv1 = gb->conv1d_k3(ncl, weight_nodes_.encoder_conv1_weight, 1);
+    auto input_shape = gb->get_output_buffer(input).shape;
+
+    size_t conv1 = gb->conv1d_k3(input, weight_nodes_.encoder_conv1_weight, 1);
+    auto sh_bias  = gb->get_output_buffer(weight_nodes_.encoder_conv1_bias).shape;
+    
+    size_t bias = weight_nodes_.encoder_conv1_bias;
+
+    auto bias_shape = gb->get_output_buffer(bias).shape;
+    bias = gb->reshape(bias, {1,bias_shape[0]});
+    weight_nodes_.encoder_conv1_bias = bias;
+    
     conv1 = gb->add(conv1, weight_nodes_.encoder_conv1_bias);
+    std::cout<<"reshape"<<std::endl;
 
     size_t conv2 = gb->conv1d_k3(conv1, weight_nodes_.encoder_conv2_weight, 2);
     conv2 = gb->add(conv2, weight_nodes_.encoder_conv2_bias);
@@ -280,81 +291,142 @@ size_t WhisperModel::build_decoder_transformer_block(CactusGraph* gb, size_t hid
 
 }
 
+void WhisperModel::run_encoder(const std::vector<uint32_t>& mel_bins) {
 
-
-size_t WhisperModel::forward(const std::vector<uint32_t>& mel_bins, const std::vector<uint32_t>& tokens, bool use_cache)
-{
-    if (!initialized_ || !graph_handle_) {
-        throw std::runtime_error("Model not initialized - call init() first");
+    const size_t T_mel = mel_bins.size() / 80;
+    if (T_mel == 0) {
+        throw std::runtime_error("Mel bins length must be divisible by 80.");
     }
-
-    if (mel_bins.empty()) {
-        throw std::runtime_error("Mel spectrogram cannot be empty");
-    }
-    if (tokens.empty()) {
-        throw std::runtime_error("Token sequence cannot be empty");
-    }
-
-    auto* gb = static_cast<CactusGraph*>(graph_handle_);
-    gb->soft_reset();
 
     auto backend = config_.default_backend == Config::Backend::CPU
         ? ComputeBackend::CPU
         : ComputeBackend::NPU;
+
+    auto* gb = static_cast<CactusGraph*>(graph_handle_);
     
-    
-    //Encoder
-    const size_t T_mel = mel_bins.size() / 80;
-    size_t mel_input = gb->input({T_mel, (size_t)80}, Precision::FP32);
+    size_t mel_input = gb->input({ (size_t)1, (size_t)80, T_mel}, Precision::FP32);
+    gb->set_input(mel_input, mel_bins.data(), Precision::FP32);
+
+
     size_t enc_hidden = build_conv1d(gb, mel_input, backend);
 
     size_t T_enc = gb->get_output_buffer(enc_hidden).shape[0];
     size_t enc_pos = gb->slice(weight_nodes_.encoder_position_embeddings, 0, 0, T_enc);
     enc_hidden = gb->add(enc_hidden, enc_pos);
+
     enc_hidden = gb->layernorm(enc_hidden, weight_nodes_.encoder_norm_weight, weight_nodes_.encoder_norm_bias);
 
     for (uint32_t layer_idx = 0; layer_idx < config_.num_layers; layer_idx++) {
         enc_hidden = build_encoder_transformer_block(gb, enc_hidden, layer_idx, backend, false);
     }
-
+    
     weight_nodes_.encoder_output = enc_hidden;
-    gb->set_input(mel_input, mel_bins.data(), Precision::FP32);
+}
 
-
-    //Decoder
+size_t WhisperModel::run_decoder_step(const std::vector<uint32_t>& tokens, bool use_cache) {
+    
+    auto* gb = static_cast<CactusGraph*>(graph_handle_);
     const size_t full_len = tokens.size();
-    size_t position_offset = use_cache ? kv_cache_.current_seq_len : 0;
+    if (full_len == 0) {
+        throw std::runtime_error("Decoder token list cannot be empty.");
+    }
+
+    auto backend = config_.default_backend == Config::Backend::CPU
+        ? ComputeBackend::CPU
+        : ComputeBackend::NPU;
 
     size_t start_idx = 0;
     if (use_cache && kv_cache_.current_seq_len > 0) {
         start_idx = full_len - 1;
     }
     size_t new_tokens = full_len - start_idx;
+
     size_t tok_input = gb->input({new_tokens}, Precision::FP32);
+
+    std::vector<float> tok_f(new_tokens);
+    for (size_t i = 0; i < new_tokens; i++)
+        tok_f[i] = float(tokens[start_idx + i]);
+
+    gb->set_input(tok_input, tok_f.data(), Precision::FP32);
+
     size_t dec_hidden = gb->embedding(embedding_node_id_, tok_input);
 
-    size_t dec_pos = gb->slice(weight_nodes_.decoder_position_embeddings_weight, 0, position_offset, new_tokens);
+    size_t position_offset = kv_cache_.current_seq_len;
+    size_t dec_pos = gb->slice(weight_nodes_.decoder_position_embeddings_weight, 0, position_offset,new_tokens);
     dec_hidden = gb->add(dec_hidden, dec_pos);
 
     for (uint32_t layer_idx = 0; layer_idx < config_.num_layers; layer_idx++) {
         dec_hidden = build_decoder_transformer_block(gb, dec_hidden, layer_idx, backend, use_cache, position_offset);
     }
 
-    // Update cache length after processing new tokens
     kv_cache_.current_seq_len += new_tokens;
+
     size_t dec_norm = gb->layernorm(dec_hidden, weight_nodes_.decoder_norm_weight, weight_nodes_.decoder_norm_bias);
+
     size_t logits = gb->matmul(dec_norm, output_weight_node_id_, true, backend);
 
-    std::vector<float> tok_f(new_tokens);
-    for (size_t i = 0; i < new_tokens; i++)
-        tok_f[i] = float(tokens[start_idx + i]);
-    gb->set_input(tok_input, tok_f.data(), Precision::FP32);
-
-    if (new_tokens > 1) logits = gb->slice(logits, 0, new_tokens - 1,1); 
+    if (new_tokens > 1) {
+        logits = gb->slice(logits, 0, new_tokens - 1, 1);
+    }
 
     return logits;
 }
 
 
+size_t WhisperModel::forward(const std::vector<uint32_t>& mel_bins, const std::vector<uint32_t>& tokens, bool use_cache)
+{
+
+    if (!initialized_ || !graph_handle_) {
+        throw std::runtime_error("Model not initialized");
+    }
+
+    if (!use_cache) {
+        kv_cache_.reset();
+        kv_cache_.current_seq_len = 0;
+        run_encoder(mel_bins);
+    }
+
+    return run_decoder_step(tokens, use_cache);
+}
+
+uint32_t WhisperModel::generate_with_audio( const std::vector<uint32_t>& tokens, const std::vector<uint32_t>& mel_bins, float temperature, float top_p, size_t top_k, const std::string& profile_file){
+    if (!initialized_ || !graph_handle_) {
+        throw std::runtime_error("Model not initialized - call init() first");
+    }
+    if (tokens.empty()) {
+        throw std::runtime_error("Token sequence cannot be empty");
+    }
+    if (mel_bins.empty()) {
+        throw std::runtime_error("Mel bins cannot be empty in Whisper generate_with_audio");
+    }
+
+    if (temperature < 0) temperature = config_.default_temperature;
+    if (top_p < 0) top_p = config_.default_top_p;
+    if (top_k == 0) top_k = config_.default_top_k;
+
+    auto* gb = static_cast<CactusGraph*>(graph_handle_);
+    auto backend = (config_.default_backend == Config::Backend::CPU)
+        ? ComputeBackend::CPU
+        : ComputeBackend::NPU;
+
+    bool use_cache = (kv_cache_.current_seq_len > 0);
+
+    size_t logits_node = forward(mel_bins, tokens, use_cache);
+
+    size_t sampled_id_node = gb->sample(logits_node, temperature, top_p, top_k);
+
+    if (!profile_file.empty()) {
+        gb->execute(profile_file);
+    } 
+    else {
+        gb->execute();
+    }
+
+    post_execute_updates(gb, tokens.size());
+    update_kv_cache(gb, 1);
+
+    auto* out_ptr = gb->get_output(sampled_id_node);
+    return *reinterpret_cast<uint32_t*>(out_ptr);
+}
 }
 }

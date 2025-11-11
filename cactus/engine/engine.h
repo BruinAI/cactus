@@ -309,6 +309,9 @@ public:
     bool init(const std::string& model_folder, size_t context_size, const std::string& system_prompt = "");
     uint32_t generate(const std::vector<uint32_t>& tokens, float temperature = -1.0f, float top_p = -1.0f,
                       size_t top_k = 0, const std::string& profile_file = "");
+    
+    virtual uint32_t generate_with_audio(const std::vector<uint32_t>& tokens, const std::vector<uint32_t>& mel_bins, float temperature = -1.0f, float top_p = -1.0f,
+                      size_t top_k = 0, const std::string& profile_file = "");
 
     std::vector<float> get_embeddings(const std::vector<uint32_t>& tokens, bool pooled = true, const std::string& profile_file = "");
 
@@ -317,6 +320,7 @@ public:
 
 protected:
     virtual size_t forward(const std::vector<uint32_t>& tokens, bool use_cache = false) = 0;
+    virtual size_t forward(const std::vector<uint32_t>& mel_bins, const std::vector<uint32_t>& tokens, bool use_cache = false);
     virtual void load_weights_to_graph(CactusGraph* gb) = 0;
     virtual size_t build_attention(CactusGraph* gb, size_t normalized_input, uint32_t layer_idx,
                           ComputeBackend backend, bool use_cache = false, size_t position_offset = 0) = 0;
