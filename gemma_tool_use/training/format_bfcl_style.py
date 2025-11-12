@@ -217,6 +217,7 @@ def format_gemma3_bfcl_style(sample: Dict[str, Any]) -> Optional[List[Dict[str, 
             if tool_calls:
                 model_text += format_tool_calls_list_bfcl_style(tool_calls)
 
+            # Must have either assistant content or tool calls
             if not model_text.strip():
                 return None
 
@@ -259,8 +260,25 @@ def format_gemma3_bfcl_style(sample: Dict[str, Any]) -> Optional[List[Dict[str, 
             role_messages.append({'role': 'user', 'text': tool_response_text})
 
         elif role == 'tool_call':
-            # Standalone tool calls without assistant message (shouldn't happen, but handle it)
-            return None
+            # Standalone tool calls without assistant message
+            # Collect all consecutive tool calls
+            tool_calls = []
+            while i < len(messages) and messages[i]['role'] == 'tool_call':
+                tool_call_content = messages[i]['content']
+                if not tool_call_content.strip():
+                    return None
+
+                try:
+                    formatted_call = format_tool_call_bfcl_style(tool_call_content)
+                    tool_calls.append(formatted_call)
+                except (ValueError, SyntaxError, json.JSONDecodeError):
+                    return None
+
+                i += 1
+
+            # Format as model output
+            model_text = format_tool_calls_list_bfcl_style(tool_calls)
+            role_messages.append({'role': 'model', 'text': model_text})
         else:
             raise ValueError(f"Unknown message role: {role}")
 
