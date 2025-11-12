@@ -153,7 +153,7 @@ bool Model::init(const std::string& model_folder, size_t context_size, const std
     return true;
 }
 
-size_t Model::forward(const std::vector<uint32_t>& mel_bins, const std::vector<uint32_t>& tokens, bool use_cache){
+size_t Model::forward(const std::vector<float>& mel_bins, const std::vector<uint32_t>& tokens, bool use_cache){
     forward(tokens, use_cache);
 }
 
@@ -192,7 +192,7 @@ uint32_t Model::generate(const std::vector<uint32_t>& tokens, float temperature,
     return *static_cast<uint32_t*>(output_ptr);
 }
 
-uint32_t Model::generate_with_audio(const std::vector<uint32_t>& tokens, const std::vector<uint32_t>& mel_bins, float temperature, float top_p, size_t top_k, const std::string& profile_file){
+uint32_t Model::generate_with_audio(const std::vector<uint32_t>& tokens, const std::vector<float>& mel_bins, float temperature, float top_p, size_t top_k, const std::string& profile_file){
     generate(tokens, temperature, top_p, top_k, profile_file);
 }
 

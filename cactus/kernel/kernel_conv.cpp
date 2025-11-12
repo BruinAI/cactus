@@ -236,7 +236,7 @@ void cactus_conv1d_f32_k3(
     size_t stride
 ){
     std::cout<<"Entered Conv f32" << std::endl;
-    const size_t out_len = ((L - 1) / stride) + 1;
+    const size_t out_len = (L + 2 * 1 - 3) / stride + 1;
 
     const size_t in_bs = C_in * L;
     const size_t out_bs = C_out * out_len;
@@ -340,6 +340,7 @@ void cactus_conv1d_f32_k3(
             }
         }
     }
+    std::cout<<"exit conv f32"<<std::endl;
 }
 
 void cactus_conv1d_f16_k3(
@@ -351,7 +352,7 @@ void cactus_conv1d_f16_k3(
     size_t stride
 ){
     std::cout<<"Entered Conv f16" << std::endl;
-    const size_t out_len = ((L - 1) / stride) + 1;
+    const size_t out_len = (L + 2 * 1 - 3) / stride + 1;
 
     const size_t in_bs  = C_in * L;
     const size_t out_bs = C_out * out_len;

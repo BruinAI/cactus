@@ -4,6 +4,7 @@
 #include <stdexcept>
 #include <cstring>
 #include <cmath>
+#include <iostream>
 
 namespace Quantization {
     void int8_to_fp32(const int8_t* src, float* dst, size_t count, float scale) {
@@ -66,6 +67,7 @@ void dispatch_binary_op(OpType op, const T* lhs, const T* rhs, T* output, size_t
     switch (op) {
         case OpType::ADD:
             if constexpr (std::is_same_v<T, int8_t>) {
+                std::cout<<"add Entered"<<std::endl;
                 cactus_add_int8(lhs, rhs, output, count);
             } else if constexpr (std::is_same_v<T, __fp16>) {
                 cactus_add_f16(lhs, rhs, output, count);

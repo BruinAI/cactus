@@ -325,8 +325,6 @@ inline bool load_npy_float32(const char* path,
     std::ifstream f(path, std::ios::binary);
     if (!f) return false;
 
-    std::cout<<"Made it here"<<std::endl;
-
     // Read magic + version
     char magic[6];
     f.read(magic, 6);

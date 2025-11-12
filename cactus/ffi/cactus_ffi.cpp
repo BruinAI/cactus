@@ -121,9 +121,7 @@ int cactus_test_whisper_from_files_json(
         }
 
         // Convert float → uint32_t bit pattern (same hack used in your Python extractor)
-        std::vector<uint32_t> mel_bins(mel_len);
-        for (size_t i = 0; i < mel_len; i++)
-            mel_bins[i] = reinterpret_cast<const uint32_t&>(mel_f32[i]);
+        std::vector<float> mel_bins = std::move(mel_f32);
 
         // ------------------------------------------------------------------------------------
         // LOAD DECODER TOKENS
@@ -164,7 +162,6 @@ int cactus_test_whisper_from_files_json(
                 tokens, mel_bins, temperature, top_p, top_k
             );
         } catch (const std::exception& e) {
-            std::cout<<"entered here lol"<<std::endl;
             handle_error_response(std::string("Whisper prefill failed: ") + e.what(),
                                   response_buffer, buffer_size);
             return -1;

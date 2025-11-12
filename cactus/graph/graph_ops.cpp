@@ -644,7 +644,6 @@ void compute_fused_node(GraphNode& node, const std::vector<std::unique_ptr<Graph
         }
 
         case OpType::CONV1D_K3: {
-            std::cout<<"Entered OpType conv"<<std::endl;
 
             if (node.params.backend == ComputeBackend::NPU) {
                 throw std::runtime_error("NPU causal convolution operation not yet implemented");
@@ -676,7 +675,6 @@ void compute_fused_node(GraphNode& node, const std::vector<std::unique_ptr<Graph
             Y.precision = X.precision;
 
             if (X.precision == Precision::FP32) {
-                std::cout<<"Fp32"<<std::endl;
                 cactus_conv1d_f32_k3(
                     X.data_as<float>(), W.data_as<float>(), Y.data_as<float>(), N, L, C_in, C_out, stride);
             } 

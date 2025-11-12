@@ -289,9 +289,9 @@ protected:
         throw std::runtime_error("Whisper requires mel+token forward().");
     }
 
-    size_t forward(const std::vector<uint32_t>& mel_bins, const std::vector<uint32_t>& tokens, bool use_cache = false) override;
+    size_t forward(const std::vector<float>& mel_bins, const std::vector<uint32_t>& tokens, bool use_cache = false) override;
 
-    void run_encoder(const std::vector<uint32_t>& mel_bins);
+    void run_encoder(const std::vector<float>& mel_bins);
 
     size_t run_decoder_step(const std::vector<uint32_t>& tokens, bool use_cache);
 
@@ -320,7 +320,7 @@ protected:
     
     size_t build_conv1d(CactusGraph* gb, size_t input, ComputeBackend backend);
 
-    uint32_t generate_with_audio(const std::vector<uint32_t>& tokens, const std::vector<uint32_t>& mel_bins, 
+    uint32_t generate_with_audio(const std::vector<uint32_t>& tokens, const std::vector<float>& mel_bins, 
                                     float temperature = -1.0f, float top_p = -1.0f, size_t top_k = 0, const std::string& profile_file = "") override;
 
 private:
@@ -404,6 +404,7 @@ private:
     } weight_nodes_;
 
     // bool audio_encoded = false;
+    bool encoder_ready_ = false;
 
 };
 

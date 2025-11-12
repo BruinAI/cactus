@@ -207,7 +207,7 @@ size_t WhisperModel::build_encoder_self_attention(CactusGraph* gb, size_t input,
 
     if(use_cache)
         throw std::runtime_error("The encoder attention layers are not auto-regressive, and thus don't use KV caching!");
-    
+
     auto q = gb->matmul(input, layer.encoder_self_attn_q_weight, true, backend);
     q = gb->add(q, layer.encoder_self_attn_q_bias);
     auto v = gb->matmul(input, layer.encoder_self_attn_v_weight, true, backend);
@@ -234,23 +234,20 @@ size_t WhisperModel::build_encoder_self_attention(CactusGraph* gb, size_t input,
 
 size_t WhisperModel::build_conv1d(CactusGraph* gb, size_t input, ComputeBackend backend) 
 {
-    // size_t ncl = gb->transpose(input, ComputeBackend::CPU);
+    // size_t ncl = gb->transpose(input, ComputeBackend::CPU); May need to add this for final implementation
 
-    auto input_shape = gb->get_output_buffer(input).shape;
+    auto in_shape = gb->get_output_buffer(input).shape;
 
     size_t conv1 = gb->conv1d_k3(input, weight_nodes_.encoder_conv1_weight, 1);
-    auto sh_bias  = gb->get_output_buffer(weight_nodes_.encoder_conv1_bias).shape;
-    
-    size_t bias = weight_nodes_.encoder_conv1_bias;
-
-    auto bias_shape = gb->get_output_buffer(bias).shape;
-    bias = gb->reshape(bias, {1,bias_shape[0]});
-    weight_nodes_.encoder_conv1_bias = bias;
-    
+    auto bias1_shape = gb->get_output_buffer(weight_nodes_.encoder_conv1_bias).shape;
+    size_t C1 = bias1_shape[0];
+    weight_nodes_.encoder_conv1_bias = gb->reshape(weight_nodes_.encoder_conv1_bias, {1, C1, 1});
     conv1 = gb->add(conv1, weight_nodes_.encoder_conv1_bias);
-    std::cout<<"reshape"<<std::endl;
 
     size_t conv2 = gb->conv1d_k3(conv1, weight_nodes_.encoder_conv2_weight, 2);
+    auto bias2_shape = gb->get_output_buffer(weight_nodes_.encoder_conv2_bias).shape;
+    size_t C2 = bias2_shape[0];
+    weight_nodes_.encoder_conv2_bias = gb->reshape(weight_nodes_.encoder_conv2_bias, {1, C2, 1});
     conv2 = gb->add(conv2, weight_nodes_.encoder_conv2_bias);
 
     size_t output_nlc = gb->transpose(conv2, ComputeBackend::CPU);
@@ -291,7 +288,7 @@ size_t WhisperModel::build_decoder_transformer_block(CactusGraph* gb, size_t hid
 
 }
 
-void WhisperModel::run_encoder(const std::vector<uint32_t>& mel_bins) {
+void WhisperModel::run_encoder(const std::vector<float>& mel_bins) {
 
     const size_t T_mel = mel_bins.size() / 80;
     if (T_mel == 0) {
@@ -309,18 +306,23 @@ void WhisperModel::run_encoder(const std::vector<uint32_t>& mel_bins) {
 
 
     size_t enc_hidden = build_conv1d(gb, mel_input, backend);
+    auto enc_hidden_size = gb->get_output_buffer(enc_hidden).shape;
 
     size_t T_enc = gb->get_output_buffer(enc_hidden).shape[0];
     size_t enc_pos = gb->slice(weight_nodes_.encoder_position_embeddings, 0, 0, T_enc);
     enc_hidden = gb->add(enc_hidden, enc_pos);
 
+    
+
     enc_hidden = gb->layernorm(enc_hidden, weight_nodes_.encoder_norm_weight, weight_nodes_.encoder_norm_bias);
+    enc_hidden = gb->reshape(enc_hidden,{enc_hidden_size[1], enc_hidden_size[2]});
 
     for (uint32_t layer_idx = 0; layer_idx < config_.num_layers; layer_idx++) {
         enc_hidden = build_encoder_transformer_block(gb, enc_hidden, layer_idx, backend, false);
     }
     
     weight_nodes_.encoder_output = enc_hidden;
+    std::cout<<"Finished encoder"<<std::endl;
 }
 
 size_t WhisperModel::run_decoder_step(const std::vector<uint32_t>& tokens, bool use_cache) {
@@ -369,12 +371,16 @@ size_t WhisperModel::run_decoder_step(const std::vector<uint32_t>& tokens, bool 
         logits = gb->slice(logits, 0, new_tokens - 1, 1);
     }
 
+    std::cout<<"Finished decoder"<<std::endl;
+
     return logits;
 }
 
 
-size_t WhisperModel::forward(const std::vector<uint32_t>& mel_bins, const std::vector<uint32_t>& tokens, bool use_cache)
+size_t WhisperModel::forward(const std::vector<float>& mel_bins, const std::vector<uint32_t>& tokens, bool use_cache)
 {
+
+    std::cout<<"Yo"<<std::endl;
 
     if (!initialized_ || !graph_handle_) {
         throw std::runtime_error("Model not initialized");
@@ -389,44 +395,47 @@ size_t WhisperModel::forward(const std::vector<uint32_t>& mel_bins, const std::v
     return run_decoder_step(tokens, use_cache);
 }
 
-uint32_t WhisperModel::generate_with_audio( const std::vector<uint32_t>& tokens, const std::vector<uint32_t>& mel_bins, float temperature, float top_p, size_t top_k, const std::string& profile_file){
-    if (!initialized_ || !graph_handle_) {
-        throw std::runtime_error("Model not initialized - call init() first");
-    }
-    if (tokens.empty()) {
-        throw std::runtime_error("Token sequence cannot be empty");
-    }
-    if (mel_bins.empty()) {
-        throw std::runtime_error("Mel bins cannot be empty in Whisper generate_with_audio");
-    }
-
-    if (temperature < 0) temperature = config_.default_temperature;
-    if (top_p < 0) top_p = config_.default_top_p;
-    if (top_k == 0) top_k = config_.default_top_k;
+uint32_t WhisperModel::generate_with_audio( const std::vector<uint32_t>& tokens, const std::vector<float>& mel_bins, float temperature, float top_p, size_t top_k, const std::string& profile_file){
+    if (!initialized_ || !graph_handle_) throw std::runtime_error("Model not initialized - call init() first");
+    if (tokens.empty())                  throw std::runtime_error("Token sequence cannot be empty");
+    if (mel_bins.empty())                throw std::runtime_error("Mel bins cannot be empty in Whisper generate_with_audio");
 
     auto* gb = static_cast<CactusGraph*>(graph_handle_);
-    auto backend = (config_.default_backend == Config::Backend::CPU)
-        ? ComputeBackend::CPU
-        : ComputeBackend::NPU;
 
-    bool use_cache = (kv_cache_.current_seq_len > 0);
+    // Always clear transient nodes between steps (keeps mmap’d weights)
+    gb->soft_reset();
 
-    size_t logits_node = forward(mel_bins, tokens, use_cache);
+    size_t logits_node = 0;
 
-    size_t sampled_id_node = gb->sample(logits_node, temperature, top_p, top_k);
+    if (!encoder_ready_) {
+        // New sequence: build encoder and first decoder step with no cache.
+        kv_cache_.reset();
+        kv_cache_.current_seq_len = 0;
 
-    if (!profile_file.empty()) {
-        gb->execute(profile_file);
-    } 
-    else {
-        gb->execute();
+        run_encoder(mel_bins);                  // builds conv1/conv2 … exactly once
+        logits_node = run_decoder_step(tokens, /*use_cache=*/false);
+
+        encoder_ready_ = true;                  // next calls are cached decode
+    } else {
+        // Ongoing sequence: only decoder with KV cache.
+        logits_node = run_decoder_step(tokens, /*use_cache=*/true);
     }
 
+    size_t sampled_id_node = gb->sample(logits_node, temperature < 0 ? config_.default_temperature : temperature,
+                                        top_p < 0 ? config_.default_top_p : top_p,
+                                        top_k == 0 ? config_.default_top_k : top_k);
+
+    if (!profile_file.empty()) gb->execute(profile_file); else gb->execute();
+
+    auto* out_ptr = gb->get_output(sampled_id_node);
+    uint32_t sampled = *reinterpret_cast<uint32_t*>(out_ptr);
+    std::cerr << "[Debug] Returning sampled token " << sampled << std::endl;
+
+    // Update KV cache *before* clearing transient graph for next step
     post_execute_updates(gb, tokens.size());
     update_kv_cache(gb, 1);
 
-    auto* out_ptr = gb->get_output(sampled_id_node);
-    return *reinterpret_cast<uint32_t*>(out_ptr);
+    return sampled;
 }
 }
 }
