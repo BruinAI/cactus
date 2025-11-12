@@ -8,8 +8,11 @@ using the Toucan-1.5M dataset, filtered for:
 - ≤2 tools used per sample
 - ≤3 tools available in prompt
 
-The tool calling format follows gemma_tool_use/PLAN.md and is compatible with
-the evaluation format in gemma_fc.py.
+The tool calling format follows BFCL simple_python test style (see gemma_tool_use/BFCL_GEMMA_FORMAT.md):
+- Tools provided as JSON schemas
+- Model outputs: [func_name(param1=value1, param2=value2)]
+- Tool responses as Python list of dicts
+- Compatible with BFCL evaluation
 
 Optimized for 4x TPU v5e chips.
 """
@@ -44,6 +47,9 @@ from tunix.models.gemma3 import params_safetensors as params_safetensors_lib
 from tunix.sft import metrics_logger
 from tunix.sft import peft_trainer
 from tunix.sft import utils
+
+# Import BFCL-style formatting functions
+from format_bfcl_style import format_gemma3_bfcl_style
 
 # Setup logging
 logger = logging.getLogger()
@@ -86,15 +92,8 @@ MAX_TOOLS_AVAILABLE = 10
 CKPT_DIR = "/tmp/gemma_tool_calling_ckpts/"
 LORA_OUTPUT_DIR = f"/dev/shm/{MODEL_ID.split('/')[-1]}_tool_calling_lora"
 
-SYSTEM_PROMPT = """At each turn, if you decide to invoke any of the function(s), it should be wrapped with ```tool_code```. \
-The python methods described below are imported and available, you can only use defined methods. \
-The generated code should be readable and efficient. \
-The response to a method will be wrapped in ```tool_output``` use it to call more tools or generate a helpful, friendly response. \
-When using a ```tool_call``` think step by step why and how it should be used.
-
-The following Python methods are available:
-
-"""
+# NOTE: SYSTEM_PROMPT is now defined in format_bfcl_style.py as BFCL_SYSTEM_PROMPT
+# The BFCL-style system prompt includes instructions for Python function call format
 
 # Calculating derived hyperparameters
 assert DESIRED_EFFECTIVE_BATCH_SIZE % BATCH_SIZE == 0
@@ -643,7 +642,7 @@ def create_tool_calling_dataset(tokenizer, global_batch_size, max_target_length,
     print("Formatting examples for Gemma 3 tool calling...")
 
     def format_function(examples):
-        """Format a batch of examples into role-based format"""
+        """Format a batch of examples into role-based format using BFCL style"""
         role_messages_list = []
 
         for i in range(len(examples['messages'])):
@@ -653,7 +652,8 @@ def create_tool_calling_dataset(tokenizer, global_batch_size, max_target_length,
                 'target_tools': examples['target_tools'][i]
             }
 
-            formatted = format_gemma3_tool_calling_example(sample)
+            # Use BFCL-style formatting
+            formatted = format_gemma3_bfcl_style(sample)
             if formatted:  # Returns list of {'role': ..., 'text': ...} dicts
                 role_messages_list.append(json.dumps(formatted))
 
@@ -682,9 +682,11 @@ def create_tool_calling_dataset(tokenizer, global_batch_size, max_target_length,
 
     # Count examples without tool calls (need to parse JSON and check all turns)
     def has_tool_call(example):
-        """Check if any turn in the role_messages contains a tool call."""
+        """Check if any turn in the role_messages contains a tool call (BFCL format: [func(...)])."""
         role_messages = json.loads(example['role_messages'])
-        return any('```tool_code' in turn['text'] for turn in role_messages)
+        # Look for BFCL-style function calls: [func_name(
+        import re
+        return any(re.search(r'\[[\w\.]+\(', turn['text']) for turn in role_messages)
 
     count_with_tool_call = len(train_dataset.filter(has_tool_call))
     count_no_tool_call = len(train_dataset) - count_with_tool_call
@@ -993,7 +995,7 @@ def test_model_generation(model, tokenizer, model_config, eos_tokens, label="Mod
     1. Simple tool calling (model requests weather)
     2. Tool response usage (model uses weather data to respond)
 
-    Uses format_gemma3_tool_calling_example to ensure consistency with training format.
+    Uses format_gemma3_bfcl_style to ensure consistency with training format.
     """
     print(f"\n{'='*60}")
     print(f"{label} - Generation Examples")
@@ -1011,7 +1013,7 @@ def test_model_generation(model, tokenizer, model_config, eos_tokens, label="Mod
         ),
     )
 
-    # Define tools in the format expected by format_gemma3_tool_calling_example
+    # Define tools in the format expected by format_gemma3_bfcl_style
     tools = [
         {
             "type": "function",
@@ -1052,9 +1054,9 @@ def test_model_generation(model, tokenizer, model_config, eos_tokens, label="Mod
         'target_tools': json.dumps([])
     }
 
-    # Format both examples using the same function as training
-    formatted1 = format_gemma3_tool_calling_example(sample1)
-    formatted2 = format_gemma3_tool_calling_example(sample2)
+    # Format both examples using BFCL-style formatting (same as training)
+    formatted1 = format_gemma3_bfcl_style(sample1)
+    formatted2 = format_gemma3_bfcl_style(sample2)
     assert formatted1 and formatted2, "Failed to format test examples"
 
     prompt1 = ''.join(turn['text'] for turn in formatted1)
