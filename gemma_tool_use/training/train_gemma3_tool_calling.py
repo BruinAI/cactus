@@ -1184,7 +1184,7 @@ def main():
         peak_value=LEARNING_RATE,
         warmup_steps=warmup_steps,
         decay_steps=max_steps - warmup_steps,
-        end_value=LEARNING_RATE * 0.2,
+        end_value=LEARNING_RATE * 0.1,
     )
 
     print(f"Learning rate schedule: warmup for {warmup_steps} steps, then cosine decay")
