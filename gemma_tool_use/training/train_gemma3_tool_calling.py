@@ -404,16 +404,7 @@ def main():
 
     print(f"\n{'='*60}")
     print("Training complete!")
-    print(f"{'='*60}")
-
-    # Run final evaluation after training
-    print(f"\n{'='*60}")
-    print("Running final evaluation")
-    print(f"{'='*60}")
-    with mesh:
-        final_metrics = trainer.evaluate(validation_loader)
-        print(f"Final validation loss: {final_metrics.get('loss', 'N/A'):.4f}")
-        print(f"Final validation perplexity: {final_metrics.get('perplexity', 'N/A'):.4f}")
+    print(f"{'='*60}\n")
 
     # Test trained model
     print(f"\n{'='*60}")
