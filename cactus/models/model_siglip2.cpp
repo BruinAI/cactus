@@ -44,8 +44,6 @@ Siglip2VisionModel::Siglip2VisionModel(const Config& cfg) : Model(cfg) {
 
 void Siglip2VisionModel::load_weights_to_graph(CactusGraph* gb) {
     vision_weight_nodes_.vision_layers.resize(config_.vision_num_layers);
-    
-
     std::string base = model_folder_path_ + "/";
 
     vision_weight_nodes_.patch_embedding_weight = gb->mmap_weights(base + "vision_patch_embedding.weights");
@@ -85,8 +83,6 @@ Siglip2VisionModel::VisionEmbeddingResult Siglip2VisionModel::build_vision_embed
     CactusGraph* gb,
     const Lfm2VlPreprocessor::PreprocessedImage& preprocessed_image,
     ComputeBackend backend) {
-
-    
     const int num_tiles = preprocessed_image.num_tiles;
     const int max_patches = preprocessed_image.max_patches_per_tile;
     const int patch_dim = preprocessed_image.patch_dim;
@@ -100,8 +96,6 @@ Siglip2VisionModel::VisionEmbeddingResult Siglip2VisionModel::build_vision_embed
             " * patch_dim=" + std::to_string(patch_dim) + ") but got " +
             std::to_string(preprocessed_image.pixel_values.size()));
     }
-    
-
     for (size_t i = 0; i < std::min<size_t>(100, preprocessed_image.pixel_values.size()); ++i) {
         float val = preprocessed_image.pixel_values[i];
         if (std::isnan(val) || std::isinf(val)) {
@@ -116,14 +110,9 @@ Siglip2VisionModel::VisionEmbeddingResult Siglip2VisionModel::build_vision_embed
     size_t reshaped_weight = gb->reshape(
         vision_weight_nodes_.patch_embedding_weight,
         {static_cast<size_t>(config_.vision_embed_dim), static_cast<size_t>(patch_dim)});
-    capture_debug_node(0, "vision_reshaped_weight", reshaped_weight);
-
     gb->set_quantization_scale(reshaped_weight, original_weight_buffer_quantization_scale);
 
     size_t patch_bias = vision_weight_nodes_.patch_embedding_bias;
-    capture_debug_node(0, "vision_patch_bias", patch_bias);
-    
-
     std::vector<size_t> tile_embeddings;
     tile_embeddings.reserve(static_cast<size_t>(num_tiles));
 
@@ -132,8 +121,6 @@ Siglip2VisionModel::VisionEmbeddingResult Siglip2VisionModel::build_vision_embed
         const int tile_h = shape.first;
         const int tile_w = shape.second;
         const int actual_patches = tile_h * tile_w;
-        
-
         if (actual_patches <= 0) {
             
             continue;
@@ -146,45 +133,21 @@ Siglip2VisionModel::VisionEmbeddingResult Siglip2VisionModel::build_vision_embed
         size_t tile_input_fp32 = gb->input(
             {static_cast<size_t>(actual_patches), static_cast<size_t>(patch_dim)}, Precision::FP32);
         gb->set_input(tile_input_fp32, tile_data, Precision::FP32);
-        capture_debug_node(tile_idx, "vision_tile_" + std::to_string(tile_idx) + "_patches_fp32", tile_input_fp32);
-        
-        
-
         size_t tile_input = gb->precision_cast(tile_input_fp32, Precision::FP16);
-        capture_debug_node(tile_idx, "vision_tile_" + std::to_string(tile_idx) + "_patches", tile_input);
-
         size_t tile_patch = gb->matmul(tile_input, reshaped_weight, true, backend);
-        capture_debug_node(tile_idx, "vision_tile_" + std::to_string(tile_idx) + "_patch_proj", tile_patch);
-        
         size_t tile_bias = gb->add(tile_patch, patch_bias);
-        
-        capture_debug_node(tile_idx, "vision_tile_" + std::to_string(tile_idx) + "_patch_embeds", tile_bias);
-        
-
         size_t tile_pos = gb->bilinear_interpolation(
             vision_weight_nodes_.position_embedding,
             static_cast<size_t>(tile_h),
             static_cast<size_t>(tile_w));
-        
-        capture_debug_node(tile_idx, "vision_tile_pos_" + std::to_string(tile_idx), tile_pos);
-        
-
         size_t tile_pos_cast = gb->precision_cast(tile_pos, Precision::FP16);
-        
-        
         size_t tile_embed = gb->add(tile_bias, tile_pos_cast);
-        
-        capture_debug_node(tile_idx, "vision_tile_" + std::to_string(tile_idx) + "_embeddings", tile_embed);
-        
-
         tile_embeddings.push_back(tile_embed);
     }
 
     if (tile_embeddings.empty()) {
         throw std::runtime_error("No valid tiles produced embeddings in build_vision_embeddings");
     }
-    
-
     auto concat_nodes = [&](const std::vector<size_t>& nodes) {
         if (nodes.empty()) {
             throw std::runtime_error("Attempted to concatenate an empty node list");
@@ -197,9 +160,6 @@ Siglip2VisionModel::VisionEmbeddingResult Siglip2VisionModel::build_vision_embed
     };
 
     size_t embeddings = concat_nodes(tile_embeddings);
-    capture_debug_node(0, "vision_final_embeddings", embeddings);
-    
-
     return VisionEmbeddingResult{embeddings, std::move(tile_embeddings)};
 }
 
@@ -209,18 +169,10 @@ size_t Siglip2VisionModel::build_vision_attention(CactusGraph* gb, size_t hidden
     
     size_t q = gb->matmul(hidden_states, layer.attn_q_weight, true, backend);
     q = gb->add(q, layer.attn_q_bias);
-    capture_debug_node(layer_idx, "vision_attn_q", q);
-    
-    
     size_t k = gb->matmul(hidden_states, layer.attn_k_weight, true, backend);
     k = gb->add(k, layer.attn_k_bias);
-    capture_debug_node(layer_idx, "vision_attn_k", k);
-    
-    
     size_t v = gb->matmul(hidden_states, layer.attn_v_weight, true, backend);
     v = gb->add(v, layer.attn_v_bias);
-    capture_debug_node(layer_idx, "vision_attn_v", v);
-    
     const size_t num_heads = static_cast<size_t>(config_.vision_attention_heads);
     const size_t head_dim = static_cast<size_t>(config_.vision_embed_dim / config_.vision_attention_heads);
     const auto& q_buf = gb->get_output_buffer(q);
@@ -232,16 +184,9 @@ size_t Siglip2VisionModel::build_vision_attention(CactusGraph* gb, size_t hidden
     
     float scale = 1.0f / std::sqrt(static_cast<float>(head_dim));
     size_t attn_output = gb->attention(q_4d, k_4d, v_4d, scale, false, backend);
-    capture_debug_node(layer_idx, "vision_attn_scores", attn_output);
-    
     size_t attn_2d = gb->reshape(attn_output, {seq_len, num_heads * head_dim});
-    capture_debug_node(layer_idx, "vision_attn_2d", attn_2d);
-    
     size_t output = gb->matmul(attn_2d, layer.attn_output_weight, true, backend);
     output = gb->add(output, layer.attn_output_bias);
-    capture_debug_node(layer_idx, "vision_attn_output", output);
-    
-    
     return output;
 }
 
@@ -251,16 +196,9 @@ size_t Siglip2VisionModel::build_vision_mlp(CactusGraph* gb, size_t hidden_state
     
     size_t fc1_output = gb->matmul(hidden_states, layer.mlp_fc1_weight, true, backend);
     fc1_output = gb->add(fc1_output, layer.mlp_fc1_bias);
-    capture_debug_node(layer_idx, "vision_mlp_fc1", fc1_output);
-    
     size_t activated = gb->gelu(fc1_output);
-    capture_debug_node(layer_idx, "vision_mlp_gelu", activated);
-    
     size_t fc2_output = gb->matmul(activated, layer.mlp_fc2_weight, true, backend);
     fc2_output = gb->add(fc2_output, layer.mlp_fc2_bias);
-    capture_debug_node(layer_idx, "vision_mlp_fc2", fc2_output);
-    
-    
     return fc2_output;
 }
 
@@ -271,22 +209,13 @@ size_t Siglip2VisionModel::build_vision_transformer_layer(CactusGraph* gb, size_
     size_t residual = hidden_states;
     size_t normalized = gb->layer_norm(hidden_states, layer.layer_norm1_weight, 
                                       layer.layer_norm1_bias, config_.layer_norm_eps);
-    capture_debug_node(layer_idx, "vision_attn_norm", normalized);
-    
     size_t attn_output = build_vision_attention(gb, normalized, layer_idx, backend);
     hidden_states = gb->add(residual, attn_output);
-    capture_debug_node(layer_idx, "vision_after_attn", hidden_states);
-    
     residual = hidden_states;
     normalized = gb->layer_norm(hidden_states, layer.layer_norm2_weight, 
                                layer.layer_norm2_bias, config_.layer_norm_eps);
-    capture_debug_node(layer_idx, "vision_mlp_norm", normalized);
-    
     size_t mlp_output = build_vision_mlp(gb, normalized, layer_idx, backend);
     hidden_states = gb->add(residual, mlp_output);
-    capture_debug_node(layer_idx, "vision_after_mlp", hidden_states);
-    
-    
     return hidden_states;
 }
 
@@ -295,8 +224,6 @@ size_t Siglip2VisionModel::forward_vision(
     const Lfm2VlPreprocessor::PreprocessedImage& preprocessed_image,
     ComputeBackend backend) {
     auto embedding_result = build_vision_embeddings(gb, preprocessed_image, backend);
-    
-
     auto concat_nodes = [&](const std::vector<size_t>& nodes) {
         if (nodes.empty()) {
             throw std::runtime_error("Attempted to concatenate an empty node list in forward_vision");
@@ -323,11 +250,6 @@ size_t Siglip2VisionModel::forward_vision(
                                        vision_weight_nodes_.post_layernorm_weight,
                                        vision_weight_nodes_.post_layernorm_bias,
                                        config_.layer_norm_eps);
-        capture_debug_node(config_.vision_num_layers,
-                           "vision_tile_" + std::to_string(tile_idx) + "_post_norm",
-                           hidden_states);
-        
-
         tile_outputs.push_back(hidden_states);
         
     }
@@ -337,10 +259,6 @@ size_t Siglip2VisionModel::forward_vision(
     }
 
     size_t combined_output = concat_nodes(tile_outputs);
-    capture_debug_node(config_.vision_num_layers, "vision_tile_ablation_final", combined_output);
-    capture_debug_node(config_.vision_num_layers, "vision_post_norm", combined_output);
-    
-
     return combined_output;
 }
 
@@ -348,15 +266,9 @@ size_t Siglip2VisionModel::forward_vision(const Lfm2VlPreprocessor::Preprocessed
     if (!initialized_ || !graph_handle_) {
         throw std::runtime_error("Model not initialized - call init() first");
     }
-    
-
     auto* gb = static_cast<CactusGraph*>(graph_handle_);
     gb->soft_reset();
-    
-
     auto backend = config_.default_backend == Config::Backend::CPU ? ComputeBackend::CPU : ComputeBackend::NPU;
-    
-
     return forward_vision(gb, preprocessed_image, backend);
 }
 
@@ -386,8 +298,6 @@ std::vector<float> Siglip2VisionModel::get_image_features(const Lfm2VlPreprocess
     void* output_data = gb->get_output(last_hidden_state);
     const float* output_ptr = static_cast<const float*>(output_data);
     std::copy(output_ptr, output_ptr + total_elements, features.begin());
-    
-    
     return features;
 }
 

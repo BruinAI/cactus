@@ -50,8 +50,6 @@ bool Lfm2VlModel::init(const std::string& model_folder, size_t context_size, con
     if (!Model::init(model_folder, context_size, system_prompt, false)) {
         return false;
     }
-    
-
     auto* shared_graph = static_cast<CactusGraph*>(graph_handle_);
     if (!shared_graph) {
         throw std::runtime_error("Shared graph was not initialized for Lfm2VlModel");
@@ -99,22 +97,13 @@ void Lfm2VlModel::load_weights_to_graph(CactusGraph* gb) {
     };
 
     projector_weights_.layer_norm_weight = gb->mmap_weights(resolve_weight("projector_layer_norm.weights"));
-    capture_debug_node(0, "projector_layer_norm_weight", projector_weights_.layer_norm_weight);
+    
     projector_weights_.layer_norm_bias = gb->mmap_weights(resolve_weight("projector_layer_norm.bias.weights"));
-    capture_debug_node(0, "projector_layer_norm_bias", projector_weights_.layer_norm_bias);
+    
     projector_weights_.linear_1_weight = gb->mmap_weights(resolve_weight("projector_linear_1.weights", "projector_linear1.weights"));
-    capture_debug_node(0, "projector_linear1_weight", projector_weights_.linear_1_weight);
-
     projector_weights_.linear_1_bias = gb->mmap_weights(resolve_weight("projector_linear_1.bias.weights", "projector_linear1.bias.weights"));
-    capture_debug_node(0, "projector_linear1_bias_weight", projector_weights_.linear_1_bias);
-
     projector_weights_.linear_2_weight = gb->mmap_weights(resolve_weight("projector_linear_2.weights", "projector_linear2.weights"));
-    capture_debug_node(0, "projector_linear2_weight", projector_weights_.linear_2_weight);
-
     projector_weights_.linear_2_bias = gb->mmap_weights(resolve_weight("projector_linear_2.bias.weights", "projector_linear2.bias.weights"));
-    capture_debug_node(0, "projector_linear2_bias_weight", projector_weights_.linear_2_bias);
-
-
     output_weight_node_id_ = gb->mmap_weights(resolve_weight("output_weight.weights"));
 }
 
@@ -124,21 +113,10 @@ size_t Lfm2VlModel::pixel_unshuffle(CactusGraph* gb, size_t hidden_states,
     const size_t factor = config_.downsample_factor;
     const size_t new_height = height / factor;
     const size_t new_width = width / factor;
-    
-    
     size_t step1 = gb->reshape(hidden_states, {1, height, new_width, channels * factor});
-    capture_debug_node(0, "pixel_unshuffle_step1", step1);
-    
     step1 = gb->transposeN(step1, {0, 2, 1, 3});
-    capture_debug_node(0, "pixel_unshuffle_step1_transpose", step1);
-    
     size_t step2 = gb->reshape(step1, {1, new_width, new_height, channels * factor * factor});
-    capture_debug_node(0, "pixel_unshuffle_step2", step2);
-
     size_t result = gb->transposeN(step2, {0, 2, 1, 3});
-    capture_debug_node(0, "pixel_unshuffle_result", result);
-    
-    
     return result;
 }
 
@@ -147,43 +125,21 @@ size_t Lfm2VlModel::build_multimodal_projector(CactusGraph* gb, size_t image_fea
     const size_t vision_hidden = config_.vision_embed_dim;
     
     size_t image_features_fp32 = gb->precision_cast(image_features, Precision::FP32);
-    capture_debug_node(0, "projector_image_features_fp32", image_features_fp32);
-
     size_t unshuffled = pixel_unshuffle(gb, image_features_fp32, tile_h, tile_w, vision_hidden);
-    capture_debug_node(0, "projector_unshuffled", unshuffled);
-    
     const size_t factor = config_.downsample_factor;
     const size_t new_h = tile_h / factor;
     const size_t new_w = tile_w / factor;
     const size_t in_channels = vision_hidden * factor * factor;
     const size_t seq_len = new_h * new_w;
-    
-    
     size_t flattened = gb->reshape(unshuffled, {seq_len, in_channels});
-    capture_debug_node(0, "projector_flattened", flattened);
-
     size_t flattened_fp16 = gb->precision_cast(flattened, Precision::FP16);
-    capture_debug_node(0, "projector_flattened_fp16", flattened_fp16);
-
     size_t normalized = gb->layer_norm(flattened_fp16, projector_weights_.layer_norm_weight,
                                       projector_weights_.layer_norm_bias, config_.layer_norm_eps);
-    capture_debug_node(0, "projector_normalized", normalized);
-    
     size_t hidden = gb->matmul(normalized, projector_weights_.linear_1_weight, true, backend);
-    capture_debug_node(0, "projector_linear1", hidden);
-    
     hidden = gb->add(hidden, projector_weights_.linear_1_bias);
-    capture_debug_node(0, "projector_linear1_bias_applied", hidden);
-    
     hidden = gb->gelu(hidden);
-    capture_debug_node(0, "projector_gelu", hidden);
-    
     size_t output = gb->matmul(hidden, projector_weights_.linear_2_weight, true, backend);
-    capture_debug_node(0, "projector_linear2", output);
-    
     output = gb->add(output, projector_weights_.linear_2_bias);
-    capture_debug_node(0, "projector_linear2_bias_applied", output);
-    
     return output;
 }
 
@@ -193,8 +149,6 @@ std::vector<Lfm2VlModel::ProjectedTileFeature> Lfm2VlModel::get_image_features(
     ComputeBackend backend) {
     
     size_t vision_output = vision_tower_.forward_vision(gb, preprocessed_image, backend);
-    capture_debug_node(0, "vision_output_combined", vision_output);
-    
     std::vector<ProjectedTileFeature> projected_features;
     projected_features.reserve(preprocessed_image.spatial_shapes.size());
     
@@ -205,8 +159,6 @@ std::vector<Lfm2VlModel::ProjectedTileFeature> Lfm2VlModel::get_image_features(
         const size_t tile_w = shape.second;
         const size_t tile_tokens = tile_h * tile_w;
         const size_t factor = config_.downsample_factor;
-        
-
         if (factor == 0) {
             throw std::runtime_error("Downsample factor must be greater than zero");
         }
@@ -218,16 +170,10 @@ std::vector<Lfm2VlModel::ProjectedTileFeature> Lfm2VlModel::get_image_features(
         const size_t projected_tokens = new_h * new_w;
         
         size_t tile_features = gb->slice(vision_output, 0, offset, tile_tokens);
-        capture_debug_node(static_cast<uint32_t>(tile_idx), "vision_tile_slice_" + std::to_string(tile_idx), tile_features);
-        
         offset += tile_tokens;
         
         size_t reshaped = gb->reshape(tile_features, {1, tile_h, tile_w, config_.vision_embed_dim});
-        capture_debug_node(static_cast<uint32_t>(tile_idx), "vision_tile_reshaped_" + std::to_string(tile_idx), reshaped);
-        
         size_t projected = build_multimodal_projector(gb, reshaped, tile_h, tile_w, backend);
-        capture_debug_node(static_cast<uint32_t>(tile_idx), "vision_tile_projected_" + std::to_string(tile_idx), projected);
-        
         ProjectedTileFeature feature{};
         feature.node_id = projected;
         feature.token_count = projected_tokens;
@@ -280,14 +226,9 @@ Lfm2VlModel::MergedEmbeddingResult Lfm2VlModel::merge_image_text_embeddings(
         }
 
         const size_t segment_len = current_segment.size();
-        
-
         TextEmbeddingInput segment;
         segment.tokens.swap(current_segment);
-        segment.input_node = gb->input({segment.tokens.size()}, Precision::FP32);
-        capture_debug_node(static_cast<uint32_t>(text_embedding_inputs.size()),
-                           "merge_segment_input_" + std::to_string(text_embedding_inputs.size()),
-                           segment.input_node);
+    segment.input_node = gb->input({segment.tokens.size()}, Precision::FP32);
 
         const auto& embedding_buffer = gb->get_output_buffer(language_model_.embedding_node_id_);
 
@@ -295,10 +236,7 @@ Lfm2VlModel::MergedEmbeddingResult Lfm2VlModel::merge_image_text_embeddings(
             (void)i; 
         }
 
-        size_t embedding_node = gb->embedding(language_model_.embedding_node_id_, segment.input_node);
-        capture_debug_node(static_cast<uint32_t>(text_embedding_inputs.size()),
-                           "merge_segment_embedding_" + std::to_string(text_embedding_inputs.size()),
-                           embedding_node);
+    size_t embedding_node = gb->embedding(language_model_.embedding_node_id_, segment.input_node);
 
         text_embedding_inputs.push_back(std::move(segment));
 
@@ -341,9 +279,6 @@ Lfm2VlModel::MergedEmbeddingResult Lfm2VlModel::merge_image_text_embeddings(
 
                     const auto& tile = tiles[tile_index++];
                     sequence_nodes.push_back(tile.node_id);
-                    capture_debug_node(static_cast<uint32_t>(image_index),
-                                       "merge_image_tile_" + std::to_string(image_index) + "_" + std::to_string(tile_index - 1),
-                                       tile.node_id);
                     
                     total_seq_len += tile.token_count;
                     
@@ -373,7 +308,7 @@ Lfm2VlModel::MergedEmbeddingResult Lfm2VlModel::merge_image_text_embeddings(
             if (tile_index != tiles.size()) {
                 if (tile_index < tiles.size()) {
                     for (size_t remaining = tile_index; remaining < tiles.size(); ++remaining) {
-                        const auto& remaining_tile = tiles[remaining];
+                        (void)tiles[remaining];
                     }
                 }
                 throw std::runtime_error("Unused projected tile features remain after processing image block");
@@ -390,8 +325,6 @@ Lfm2VlModel::MergedEmbeddingResult Lfm2VlModel::merge_image_text_embeddings(
     }
 
     flush_segment();
-    
-
     if (image_index != image_embedding_nodes.size()) {
         throw std::runtime_error("Not all image features were consumed while merging embeddings");
     }
@@ -401,11 +334,9 @@ Lfm2VlModel::MergedEmbeddingResult Lfm2VlModel::merge_image_text_embeddings(
     }
 
     size_t merged = sequence_nodes[0];
-    capture_debug_node(0, "merge_sequence_init", merged);
-    
     for (size_t idx = 1; idx < sequence_nodes.size(); ++idx) {
         merged = gb->concat(merged, sequence_nodes[idx], 0);
-        capture_debug_node(0, "merge_sequence_concat_" + std::to_string(idx), merged);
+        
     }
 
     return MergedEmbeddingResult{merged, total_seq_len};
@@ -436,7 +367,7 @@ size_t Lfm2VlModel::forward(const std::vector<uint32_t>& tokens, bool use_cache)
         : ComputeBackend::NPU;
     
     size_t final_hidden = language_model_.forward(gb, tokens, backend, use_cache);
-    capture_debug_node(0, "text_only_final_hidden", final_hidden);
+    
     return final_hidden;
 }
 
@@ -492,9 +423,6 @@ Lfm2VlModel::ForwardImageResult Lfm2VlModel::forward_images(
     text_embedding_inputs.reserve(tokens.size() / 4 + 1);
     
     auto merged_embeddings = merge_image_text_embeddings(gb, tokens, all_image_embeddings, text_embedding_inputs);
-    capture_debug_node(0, "merged_image_text_embeddings", merged_embeddings.node_id);
-    
-
     if (merged_embeddings.seq_len == 0) {
         throw std::runtime_error("Merged embedding sequence length cannot be zero");
     }
@@ -511,8 +439,6 @@ Lfm2VlModel::ForwardImageResult Lfm2VlModel::forward_images(
         gb->set_input(embedding_input.input_node, segment_data.data(), Precision::FP32);
     }
     size_t final_hidden = language_model_.forward(gb, merged_embeddings.node_id, merged_embeddings.seq_len, backend, use_cache);
-    capture_debug_node(0, "language_model_final_hidden", final_hidden);
-
     return ForwardImageResult{final_hidden, merged_embeddings.seq_len};
 }
 
@@ -550,8 +476,6 @@ uint32_t Lfm2VlModel::generate_with_images(
     auto backend = config_.default_backend == Config::Backend::CPU
         ? ComputeBackend::CPU
         : ComputeBackend::NPU;
-    
-
     bool cache_empty = language_model_.is_cache_empty();
     bool need_prefill = cache_empty || !image_prefill_completed_;
 
@@ -566,7 +490,7 @@ uint32_t Lfm2VlModel::generate_with_images(
 
     if (need_prefill) {
         auto forward_result = forward_images(gb, tokens, image_paths, backend, true);
-        capture_debug_node(0, "prefill_final_hidden", forward_result.final_hidden_node);
+        
         final_hidden_node = forward_result.final_hidden_node;
         seq_len_for_updates = forward_result.seq_len;
         image_prefill_completed_ = true;
@@ -586,18 +510,13 @@ uint32_t Lfm2VlModel::generate_with_images(
         std::vector<uint32_t> incremental_tokens(tokens.end() - delta, tokens.end());
         
         final_hidden_node = language_model_.forward(gb, incremental_tokens, backend, true);
-        capture_debug_node(0, "decode_final_hidden", final_hidden_node);
+        
         seq_len_for_updates = incremental_tokens.size();
         last_token_count_ = tokens.size();
     }
 
     auto logits_node_id = gb->matmul(final_hidden_node, language_model_.output_weight_node_id_, true, backend);
-    capture_debug_node(0, "generate_logits", logits_node_id);
-
     auto sampled_token_id = gb->sample(logits_node_id, temperature, top_p, top_k);
-    capture_debug_node(0, "generate_sampled_token", sampled_token_id);
-    
-
     if (!profile_file.empty()) {
         gb->execute(profile_file);
         
