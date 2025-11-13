@@ -2,7 +2,6 @@
 #include <fstream>
 #include <sstream>
 #include <algorithm>
-// #include "../ffi/stb_image.h"
 
 namespace cactus {
 namespace engine {

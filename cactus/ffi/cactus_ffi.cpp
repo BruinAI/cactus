@@ -12,19 +12,6 @@
 #include <cmath>
 #include <algorithm>
 
-// STB image library - define implementation flags before including
-// #define STB_IMAGE_IMPLEMENTATION
-// #define STBI_NO_BMP
-// #define STBI_NO_PSD
-// #define STBI_NO_HDR
-// #define STBI_NO_PIC
-// #define STBI_NO_PNM
-// #define STBI_NO_TGA
-// #include "stb_image_impl.h"
-
-// #define STB_IMAGE_RESIZE_IMPLEMENTATION
-// #include "stb_image_resize_impl.h"
-
 using namespace cactus::engine;
 using namespace cactus::ffi;
 

@@ -7,9 +7,6 @@
 #include <vector>
 #include <iostream>
 
-// #include "../ffi/stb_image.h"
-// #include "../ffi/stb_image_resize2.h"
-
 namespace cactus {
 namespace engine {
 
