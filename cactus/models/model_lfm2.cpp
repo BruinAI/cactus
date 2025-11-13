@@ -88,7 +88,6 @@ bool LFM2Model::init(CactusGraph* external_graph, const std::string& model_folde
 }
 
 void LFM2Model::load_weights_to_graph(CactusGraph* gb) {
-    
     if (weight_nodes_.layers.size() != config_.num_layers) {
         weight_nodes_.layers.resize(config_.num_layers);
     }

@@ -67,7 +67,7 @@ def save_tensor_with_header(tensor, output_path, precision='FP32', transpose=Fal
     
     if precision == 'INT8':
         filename = output_path.name
-        if any(x in filename for x in ['norm', 'bias', 'vision_position_embedding']) or (model_type == 'bert' and 'embedding' in filename):
+        if any(x in filename for x in ['norm', 'bias', 'vision']) or (model_type == 'bert' and 'embedding' in filename):
             # print(f"Skipping INT8 quantization for {filename}, using FP16 instead.")
             precision = 'FP16'
     

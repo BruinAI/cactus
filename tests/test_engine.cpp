@@ -9,7 +9,7 @@
 #include <vector>
 #include <sstream>
 
-const char* g_model_path = "../../weights/lfm2-350m-i8";
+const char* g_model_path = "../../weights/lfm2-vl-350m-i8";
 
 const char* g_options = R"({
         "max_tokens": 256,
@@ -72,7 +72,7 @@ bool run_test(const char* title, const char* messages, TestFunc test_logic,
     std::cout << "\n╔══════════════════════════════════════════╗\n"
               << "║" << std::setw(42) << std::left << std::string("          ") + title << "║\n"
               << "╚══════════════════════════════════════════╝\n";
-
+    
     cactus_model_t model = cactus_init(g_model_path, 2048);
     if (!model) {
         std::cerr << "[✗] Failed to initialize model\n";
@@ -229,7 +229,7 @@ bool test_tool_call() {
 
 bool test_image_input() {
     std::string model_path_str(g_model_path);
-    if (model_path_str.find("vlm") == std::string::npos && model_path_str.find("vl") == std::string::npos) {
+    if (model_path_str.find("vl") == std::string::npos && model_path_str.find("vl") == std::string::npos) {
         std::cout << "\n╔══════════════════════════════════════════╗\n"
                   << "║          IMAGE INPUT TEST (SKIPPED)      ║\n"
                   << "╚══════════════════════════════════════════╝\n";
@@ -258,14 +258,13 @@ bool test_image_input() {
         return false;
     }
 
-    std::filesystem::path rel_img_path = std::filesystem::path("assets/test_image2.png");
+    std::filesystem::path rel_img_path = std::filesystem::path("../../assets/test_monkey.png");
     std::filesystem::path abs_img_path = std::filesystem::absolute(rel_img_path);
     std::string img_path_str = abs_img_path.string();
     std::string messages_json = "[";
-    messages_json += "{\"role\": \"user\", \"content\": [";
-    messages_json += "{\"type\": \"image\", \"path\": \"" + img_path_str + "\"},";
-    messages_json += "{\"type\": \"text\", \"text\": \"Describe what is happening in this image in two sentences.\"}";
-    messages_json += "]}";
+    messages_json += "{\"role\": \"user\", ";
+    messages_json += "\"content\": \"Describe what is happening in this image in two sentences.\", ";
+    messages_json += "\"images\": [\"" + img_path_str + "\"]}";
     messages_json += "]";
 
     const std::string& messages_ref = messages_json;
@@ -358,8 +357,8 @@ int main() {
     runner.run_test("streaming", test_streaming());
     runner.run_test("tool_calls", test_tool_call());
     runner.run_test("embeddings", test_embeddings());
-    runner.run_test("huge_context", test_huge_context());
     runner.run_test("image_input", test_image_input());
+    runner.run_test("huge_context", test_huge_context());
     runner.print_summary();
     return runner.all_passed() ? 0 : 1;
 }

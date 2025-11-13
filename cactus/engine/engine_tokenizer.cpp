@@ -84,10 +84,10 @@ std::vector<uint32_t> Tokenizer::apply_chat_template(const std::vector<ChatMessa
 }
 
 std::string Tokenizer::format_chat_prompt(const std::vector<ChatMessage>& messages, bool add_generation_prompt, const std::string& tools_json) const {
-    // Check if any messages have type="image" to determine if this is LFM2-VL
+    // Check if any messages have images to determine if this is LFM2-VL
     bool has_images = false;
     for (const auto& msg : messages) {
-        if (msg.type == "image") {
+        if (!msg.images.empty()) {
             has_images = true;
             break;
         }
@@ -239,28 +239,17 @@ std::string Tokenizer::format_lfm2_vl_style(
 
     std::string result = "<|startoftext|>";
     
-    // Group consecutive messages by role to handle interleaved text/image content
-    std::string current_role;
-    std::string current_content;
-    
-    for (size_t i = 0; i < messages.size(); ++i) {
-        const auto& msg = messages[i];
+    for (const auto& msg : messages) {
+        result += "<|im_start|>" + msg.role + "\n";
         
-        // If role changes, output previous message
-        if (!current_role.empty() && current_role != msg.role) {
-            result += "<|im_start|>" + current_role + "\n";
-            result += current_content;
-            result += "<|im_end|>\n";
-            current_content.clear();
-        }
+        // Add text content first
+        result += msg.content;
         
-        current_role = msg.role;
-        
-        // Handle based on message type
-        if (msg.type == "image") {
+        // Process any images associated with this message
+        for (const auto& image_path : msg.images) {
             // Load image to get dimensions
             int width = 0, height = 0, channels = 0;
-            unsigned char* img_data = stbi_load(msg.content.c_str(), &width, &height, &channels, 0);
+            unsigned char* img_data = stbi_load(image_path.c_str(), &width, &height, &channels, 0);
             
             if (img_data) {
                 // Use preprocessor to compute spatial shapes and grid dimensions
@@ -277,7 +266,7 @@ std::string Tokenizer::format_lfm2_vl_style(
                 int num_tiles = grid_rows * grid_cols;
                 
                 // Expand placeholder
-                current_content += "<|image_start|>";
+                result += "<|image_start|>";
                 
                 if (num_tiles > 1) {
                     // Multiple tiles - emit row/col tokens
@@ -285,26 +274,26 @@ std::string Tokenizer::format_lfm2_vl_style(
                         int row = tile_idx / grid_cols;
                         int col = tile_idx % grid_cols;
                         
-                        current_content += "<|img_row_" + std::to_string(row + 1) + "_col_" + std::to_string(col + 1) + "|>";
+                        result += "<|img_row_" + std::to_string(row + 1) + "_col_" + std::to_string(col + 1) + "|>";
                         
                         // Calculate tokens for this tile: tile_height * tile_width / downsample_factor^2
                         auto [tile_height, tile_width] = shape_result.shapes[tile_idx];
                         int tile_tokens = (tile_height * tile_width) / (downsample_factor * downsample_factor);
                         
                         for (int t = 0; t < tile_tokens; ++t) {
-                            current_content += "<image>";
+                            result += "<image>";
                         }
                     }
                     
                     // Add thumbnail if present
                     if (use_thumbnail && static_cast<size_t>(num_tiles) < shape_result.shapes.size()) {
-                        current_content += "<|img_thumbnail|>";
+                        result += "<|img_thumbnail|>";
                         
                         auto [thumb_height, thumb_width] = shape_result.shapes[num_tiles];
                         int thumbnail_tokens = (thumb_height * thumb_width) / (downsample_factor * downsample_factor);
                         
                         for (int t = 0; t < thumbnail_tokens; ++t) {
-                            current_content += "<image>";
+                            result += "<image>";
                         }
                     }
                 } else if (num_tiles == 1) {
@@ -313,27 +302,19 @@ std::string Tokenizer::format_lfm2_vl_style(
                     int thumbnail_tokens = (thumb_height * thumb_width) / (downsample_factor * downsample_factor);
                     
                     for (int t = 0; t < thumbnail_tokens; ++t) {
-                        current_content += "<image>";
+                        result += "<image>";
                     }
                 }
                 
-                current_content += "<|image_end|>";
+                result += "<|image_end|>";
                 
                 stbi_image_free(img_data);
             } else {
                 // If image fails to load, just put a placeholder
-                current_content += "<image>";
+                result += "<image>";
             }
-        } else {
-            // Regular text content
-            current_content += msg.content;
         }
-    }
-    
-    // Output final message
-    if (!current_role.empty()) {
-        result += "<|im_start|>" + current_role + "\n";
-        result += current_content;
+        
         result += "<|im_end|>\n";
     }
 

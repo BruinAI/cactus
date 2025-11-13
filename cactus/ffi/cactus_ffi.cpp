@@ -28,9 +28,6 @@
 using namespace cactus::engine;
 using namespace cactus::ffi;
 
-// Import types from ffi_utils
-using cactus::ffi::ToolFunction;
-
 struct CactusModelHandle {
     std::unique_ptr<Model> model;
     std::atomic<bool> should_stop;
@@ -38,153 +35,6 @@ struct CactusModelHandle {
 
     CactusModelHandle() : should_stop(false) {}
 };
-
-static std::vector<ChatMessage> parse_messages_json(const std::string& json, std::vector<std::string>& out_image_paths, std::vector<size_t>& out_image_placeholder_indices) {
-    std::vector<ChatMessage> messages;
-    out_image_paths.clear();
-    out_image_placeholder_indices.clear();
-
-    size_t pos = json.find('[');
-    if (pos == std::string::npos) {
-        throw std::runtime_error("Invalid JSON: expected array");
-    }
-
-    pos = json.find('{', pos);
-    while (pos != std::string::npos) {
-        ChatMessage msg;
-
-        size_t role_pos = json.find("\"role\"", pos);
-        if (role_pos == std::string::npos) break;
-
-        size_t role_start = json.find('\"', role_pos + 6) + 1;
-        size_t role_end = json.find('\"', role_start);
-        msg.role = json.substr(role_start, role_end - role_start);
-
-        size_t content_pos = json.find("\"content\"", role_end);
-        if (content_pos == std::string::npos) break;
-
-        size_t colon_pos = json.find(':', content_pos);
-        if (colon_pos == std::string::npos) break;
-
-        size_t after_colon = json.find_first_not_of(" \t\n\r", colon_pos + 1);
-        if (after_colon == std::string::npos) break;
-
-        if (json[after_colon] == '"') {
-            size_t content_start = json.find('\"', content_pos + 9) + 1;
-            size_t content_end = content_start;
-
-            while (content_end < json.length()) {
-                content_end = json.find('\"', content_end);
-                if (content_end == std::string::npos) break;
-                if (json[content_end - 1] != '\\') break;
-                content_end++;
-            }
-
-            msg.content = json.substr(content_start, content_end - content_start);
-
-            size_t escape_pos = 0;
-            while ((escape_pos = msg.content.find("\\n", escape_pos)) != std::string::npos) {
-                msg.content.replace(escape_pos, 2, "\n");
-                escape_pos += 1;
-            }
-            escape_pos = 0;
-            while ((escape_pos = msg.content.find("\\\"", escape_pos)) != std::string::npos) {
-                msg.content.replace(escape_pos, 2, "\"");
-                escape_pos += 1;
-            }
-
-            messages.push_back(msg);
-
-            pos = json.find('{', content_pos);
-            continue;
-        }
-
-        if (json[after_colon] == '[') {
-            size_t arr_start = after_colon;
-            int bracket_count = 1;
-            size_t idx = arr_start + 1;
-
-            while (idx < json.size() && bracket_count > 0) {
-                if (json[idx] == '{') {
-                    size_t obj_start = idx;
-                    int obj_brace = 1;
-                    size_t j = obj_start + 1;
-                    while (j < json.size() && obj_brace > 0) {
-                        if (json[j] == '{') obj_brace++;
-                        else if (json[j] == '}') obj_brace--;
-                        j++;
-                    }
-                    size_t obj_end = j;
-                    std::string obj = json.substr(obj_start, obj_end - obj_start);
-
-                    size_t type_pos = obj.find("\"type\"");
-                    if (type_pos != std::string::npos) {
-                        size_t type_colon = obj.find(':', type_pos);
-                        size_t type_quote = obj.find('"', type_colon);
-                        size_t type_quote_end = obj.find('"', type_quote + 1);
-                        std::string type = obj.substr(type_quote + 1, type_quote_end - type_quote - 1);
-
-                        if (type == "text") {
-                            size_t text_pos = obj.find("\"text\"");
-                            if (text_pos != std::string::npos) {
-                                size_t tcol = obj.find(':', text_pos);
-                                size_t tquote = obj.find('"', tcol);
-                                size_t tquote_end = obj.find('"', tquote + 1);
-                                std::string text = obj.substr(tquote + 1, tquote_end - tquote - 1);
-                                
-                                ChatMessage text_msg;
-                                text_msg.role = msg.role;
-                                text_msg.content = text;
-                                text_msg.type = "text";
-                                messages.push_back(text_msg);
-                            }
-                        } else if (type == "image") {
-                            size_t path_pos = obj.find("\"path\"");
-                            if (path_pos != std::string::npos) {
-                                size_t pcol = obj.find(':', path_pos);
-                                size_t pquote = obj.find('"', pcol);
-                                size_t pquote_end = obj.find('"', pquote + 1);
-                                std::string relpath = obj.substr(pquote + 1, pquote_end - pquote - 1);
-                                
-                                std::string abs_path;
-                                try {
-                                    std::filesystem::path p(relpath);
-                                    abs_path = std::filesystem::absolute(p).string();
-                                } catch (...) {
-                                    abs_path = relpath;
-                                }
-                                
-                                ChatMessage img_msg;
-                                img_msg.role = msg.role;
-                                img_msg.content = abs_path;
-                                img_msg.type = "image";
-                                messages.push_back(img_msg);
-                                
-                                out_image_paths.push_back(abs_path);
-                            }
-                        }
-                    }
-
-                    idx = obj_end;
-                    continue;
-                } else if (json[idx] == '[') {
-                    bracket_count++;
-                } else if (json[idx] == ']') {
-                    bracket_count--;
-                    if (bracket_count == 0) break;
-                }
-                idx++;
-            }
-
-            pos = json.find('{', idx);
-            continue;
-        }
-
-        pos = json.find('{', after_colon);
-    }
-
-    return messages;
-}
 
 static bool matches_stop_sequence(const std::vector<uint32_t>& generated_tokens,
                                    const std::vector<std::vector<uint32_t>>& stop_sequences) {
@@ -261,14 +111,11 @@ int cactus_complete(
         auto start_time = std::chrono::high_resolution_clock::now();
         
         auto* handle = static_cast<CactusModelHandle*>(model);
-        auto* tokenizer = handle->model->get_tokenizer();
-        handle->should_stop = false;
-        
-        handle->model->reset_cache();
+    auto* tokenizer = handle->model->get_tokenizer();
+    handle->should_stop = false;
         
         std::vector<std::string> image_paths;
-        std::vector<size_t> image_placeholder_indices;
-        auto messages = parse_messages_json(messages_json, image_paths, image_placeholder_indices);
+        auto messages = parse_messages_json(messages_json, image_paths);
         
         if (messages.empty()) {
             handle_error_response("No messages provided", response_buffer, buffer_size);
@@ -318,7 +165,6 @@ int cactus_complete(
 
         std::vector<uint32_t> generated_tokens;
         double time_to_first_token = 0.0;
-
         // Generate first token - use image support from HEAD if images are present
         uint32_t next_token;
         if (tokens_to_process.empty()) {
@@ -341,7 +187,7 @@ int cactus_complete(
         auto token_end = std::chrono::high_resolution_clock::now();
         time_to_first_token = std::chrono::duration_cast<std::chrono::microseconds>(token_end - start_time).count() / 1000.0;
 
-        generated_tokens.push_back(next_token);
+    generated_tokens.push_back(next_token);
         handle->processed_tokens.push_back(next_token);
 
         if (!matches_stop_sequence(generated_tokens, stop_token_sequences)) {

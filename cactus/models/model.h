@@ -383,10 +383,16 @@ public:
     explicit Lfm2VlModel(const Config& config);
     ~Lfm2VlModel() override = default;
 
-    bool init(const std::string& model_folder, size_t context_size, const std::string& system_prompt = "");
+    bool init(const std::string& model_folder, size_t context_size, const std::string& system_prompt = "", bool do_warmup = true) override;
 
     // Main forward pass for vision-language model
     size_t forward(const std::vector<uint32_t>& tokens, bool use_cache = false) override;
+
+    uint32_t generate(const std::vector<uint32_t>& tokens,
+                      float temperature = -1.0f,
+                      float top_p = -1.0f,
+                      size_t top_k = 0,
+                      const std::string& profile_file = "") override;
     
     // Vision-language forward with image input
     uint32_t generate_with_images(

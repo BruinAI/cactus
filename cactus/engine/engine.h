@@ -108,7 +108,8 @@ struct MergeRule {
 struct ChatMessage {
     std::string role;
     std::string content;
-    std::string type;  // "text" or "image" (path to image file)
+    std::string type;  // Deprecated - kept for compatibility
+    std::vector<std::string> images;  // Image paths associated with this message
 };
 
 class Tokenizer {
@@ -359,10 +360,10 @@ public:
     Tokenizer* get_tokenizer() const { return tokenizer_.get(); }
     const std::vector<DebugNode>& get_debug_nodes() const;
 
-    bool init(const std::string& model_folder, size_t context_size, const std::string& system_prompt = "", bool do_warmup = true);
-    bool init(CactusGraph* external_graph, const std::string& model_folder, size_t context_size,
+    virtual bool init(const std::string& model_folder, size_t context_size, const std::string& system_prompt = "", bool do_warmup = true);
+    virtual bool init(CactusGraph* external_graph, const std::string& model_folder, size_t context_size,
               const std::string& system_prompt = "", bool do_warmup = true);
-    uint32_t generate(const std::vector<uint32_t>& tokens, float temperature = -1.0f, float top_p = -1.0f,
+    virtual uint32_t generate(const std::vector<uint32_t>& tokens, float temperature = -1.0f, float top_p = -1.0f,
                       size_t top_k = 0, const std::string& profile_file = "");
 
     // Image-aware generation entrypoint. Default implementation forwards to generate()

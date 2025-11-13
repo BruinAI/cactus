@@ -45,7 +45,7 @@ Lfm2VlModel::Lfm2VlModel(const Config& config)
     preprocessor_ = Lfm2VlPreprocessor(preprocessor_config);
 }
 
-bool Lfm2VlModel::init(const std::string& model_folder, size_t context_size, const std::string& system_prompt) {
+bool Lfm2VlModel::init(const std::string& model_folder, size_t context_size, const std::string& system_prompt, bool do_warmup) {
 
     if (!Model::init(model_folder, context_size, system_prompt, false)) {
         return false;
@@ -62,7 +62,6 @@ bool Lfm2VlModel::init(const std::string& model_folder, size_t context_size, con
     }
     
     vision_weights_loaded_ = true;
-    
     if (!language_model_.init(shared_graph, model_folder, context_size, system_prompt, false)) {
         throw std::runtime_error("Failed to initialize language model");
     }
@@ -70,7 +69,6 @@ bool Lfm2VlModel::init(const std::string& model_folder, size_t context_size, con
     language_model_.output_weight_node_id_ = output_weight_node_id_;
     
     language_weights_loaded_ = true;
-    
     
     return true;
 }
@@ -442,6 +440,31 @@ size_t Lfm2VlModel::forward(const std::vector<uint32_t>& tokens, bool use_cache)
     return final_hidden;
 }
 
+uint32_t Lfm2VlModel::generate(const std::vector<uint32_t>& tokens,
+                               float temperature,
+                               float top_p,
+                               size_t top_k,
+                               const std::string& profile_file) {
+    if (!initialized_ || !graph_handle_) {
+        throw std::runtime_error("Model not initialized - call init() first");
+    }
+
+    if (temperature < 0) {
+        temperature = config_.default_temperature;
+    }
+    if (top_p < 0) {
+        top_p = config_.default_top_p;
+    }
+    if (top_k == 0) {
+        top_k = config_.default_top_k;
+    }
+
+    image_prefill_completed_ = false;
+    last_token_count_ = tokens.size();
+
+    return language_model_.generate(tokens, temperature, top_p, top_k, profile_file);
+}
+
 Lfm2VlModel::ForwardImageResult Lfm2VlModel::forward_images(
     CactusGraph* gb,
     const std::vector<uint32_t>& tokens,
@@ -487,10 +510,8 @@ Lfm2VlModel::ForwardImageResult Lfm2VlModel::forward_images(
         }
         gb->set_input(embedding_input.input_node, segment_data.data(), Precision::FP32);
     }
-
     size_t final_hidden = language_model_.forward(gb, merged_embeddings.node_id, merged_embeddings.seq_len, backend, use_cache);
     capture_debug_node(0, "language_model_final_hidden", final_hidden);
-    
 
     return ForwardImageResult{final_hidden, merged_embeddings.seq_len};
 }
@@ -507,7 +528,6 @@ uint32_t Lfm2VlModel::generate_with_images(
         throw std::runtime_error("Model not initialized - call init() first");
     }
     
-
     if (image_paths.empty()) {
         
         image_prefill_completed_ = false;
@@ -527,7 +547,6 @@ uint32_t Lfm2VlModel::generate_with_images(
 
     auto* gb = static_cast<CactusGraph*>(graph_handle_);
     gb->soft_reset();
-
     auto backend = config_.default_backend == Config::Backend::CPU
         ? ComputeBackend::CPU
         : ComputeBackend::NPU;
@@ -588,9 +607,7 @@ uint32_t Lfm2VlModel::generate_with_images(
     }
 
     language_model_.post_execute_updates(gb, seq_len_for_updates);
-    
     language_model_.update_kv_cache(gb, seq_len_for_updates);
-    
 
     auto* output_ptr = gb->get_output(sampled_token_id);
     return *static_cast<uint32_t*>(output_ptr);

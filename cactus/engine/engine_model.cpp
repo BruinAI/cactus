@@ -45,7 +45,6 @@ bool Model::init(const std::string& model_folder, size_t context_size, const std
     if (initialized_) {
         return true;
     }
-    
     auto* gb = new CactusGraph();
     owns_graph_ = true;
     graph_handle_ = gb;
@@ -416,7 +415,7 @@ std::unique_ptr<Model> create_model(const std::string& model_folder) {
     if (!config.from_json(config_path)) {
         return nullptr;
     }
-    
+
     const bool has_vision_support =
     config.use_image_tokens ||
     config.vision_num_layers > 0 ||
