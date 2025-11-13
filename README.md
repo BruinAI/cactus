@@ -102,31 +102,6 @@ Vanilla M3 CPU-only can run Qwen3-600m-INT8 at 60+ toks/sec, just run the follow
 tests/run.sh 
 ```
 
-## Profiling & debug captures
-
-Cactus Graph exposes lightweight instrumentation via environment variables so you can inspect execution timing and tensor snapshots without changing code:
-
-| Variable | Description |
-| --- | --- |
-| `CACTUS_PROFILE_STDOUT` | Set to `1/true` to print per-op timings to stdout. |
-| `CACTUS_PROFILE_FILE` | Path to append profiling output. Overrides stdout when set. |
-| `CACTUS_CAPTURE_ENABLE` | Explicitly turn captures on/off. Defaults to on when stdout or file targets are provided. |
-| `CACTUS_CAPTURE_STDOUT` | Set to `1/true` to stream tensor stats to stdout. |
-| `CACTUS_CAPTURE_FILE` | Path to append capture logs. Missing parent folders are created automatically. |
-| `CACTUS_CAPTURE_PREVIEW_COUNT` | Number of preview values per tensor (default `8`). |
-| `CACTUS_CAPTURE_MAX_ELEMENTS` | Maximum elements sampled when computing stats (default `65536`). |
-
-Captures run after each graph execution and append to the configured file so consecutive runs accumulate history. A typical invocation looks like:
-
-```bash
-CACTUS_PROFILE_FILE=lfm2vl_profile.txt \
-CACTUS_CAPTURE_FILE=lfm2vl_capture.txt \
-CACTUS_CAPTURE_STDOUT=1 \
-tests/build/test_lfm2vl_model ../../weights/lfm2-vl-350m-fp16 ../test_synthetic.png
-```
-
-Disable captures entirely by exporting `CACTUS_CAPTURE_ENABLE=0`.
-
 ## Generating weights from HuggingFace 
 
 Run one of the following 
