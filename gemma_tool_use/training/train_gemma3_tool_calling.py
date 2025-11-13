@@ -62,7 +62,7 @@ GEMMA_TOKENIZER_PATH = "gs://gemma-data/tokenizers/tokenizer_gemma3.model"
 NUM_EPOCHS = 1
 LEARNING_RATE = 2e-4  # Middle ground between 1e-4 (too high) and 5e-5 (too low)
 MAX_GRAD_NORM = 1.0   # Keep gradient clipping to reduce oscillations
-MAX_TARGET_LENGTH = 4096  # 95th percentile = 4,086 tokens
+MAX_TARGET_LENGTH = 8192  # 95th percentile w/ max 1 turn= 4,086 tokens, w/ no max turns = 7,090
 MAX_STEPS = None
 
 BATCH_SIZE = 8
@@ -81,6 +81,7 @@ MESH_AXIS_NAMES = "fsdp", "tp"
 # Dataset filtering criteria (as per PLAN.md Phase 3)
 MAX_TOOLS_USED = 10
 MAX_TOOLS_AVAILABLE = 10
+MAX_NUMBER_OF_TURNS = float('inf')  # No limit on number of turns
 
 # Checkpoint and output directories
 CKPT_DIR = "/tmp/gemma_tool_calling_ckpts/"
@@ -306,6 +307,7 @@ def main():
         num_train_epochs=NUM_EPOCHS,
         max_tools_used=MAX_TOOLS_USED,
         max_tools_available=MAX_TOOLS_AVAILABLE,
+        max_number_of_turns=MAX_NUMBER_OF_TURNS,
         format_function=format_function
     )
 

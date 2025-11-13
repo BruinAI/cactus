@@ -60,7 +60,7 @@ def is_english_only(text: str) -> bool:
             latin_extended_count < 3)
 
 
-def filter_toucan_dataset(dataset, max_tools_used, max_tools_available, max_number_of_turns=1, english_only=True) -> Dataset:
+def filter_toucan_dataset(dataset, max_tools_used, max_tools_available, max_number_of_turns, english_only=True) -> Dataset:
     """
     Filter Toucan dataset for single-turn examples with limited tools.
 
@@ -260,6 +260,7 @@ def create_tool_calling_dataset(
     num_train_epochs,
     max_tools_used,
     max_tools_available,
+    max_number_of_turns,
     format_function
 ):
     """
@@ -285,11 +286,10 @@ def create_tool_calling_dataset(
     dataset = load_dataset('Agent-Ark/Toucan-1.5M', 'SFT', split='train')
 
     # Filter dataset
-    filtered_dataset = filter_toucan_dataset(dataset, max_tools_used, max_tools_available)
-
+    filtered_dataset = filter_toucan_dataset(dataset, max_tools_used, max_tools_available, max_number_of_turns)
+    
     # Format examples
     print("Formatting examples for Gemma 3 tool calling...")
-
     filtered_dataset = filtered_dataset.map(
         format_function,
         batched=True,
