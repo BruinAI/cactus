@@ -62,10 +62,10 @@ GEMMA_TOKENIZER_PATH = "gs://gemma-data/tokenizers/tokenizer_gemma3.model"
 NUM_EPOCHS = 1
 LEARNING_RATE = 2e-4  # Middle ground between 1e-4 (too high) and 5e-5 (too low)
 MAX_GRAD_NORM = 1.0   # Keep gradient clipping to reduce oscillations
-MAX_TARGET_LENGTH = 8192  # 95th percentile w/ max 1 turn= 4,086 tokens, w/ no max turns = 7,090
+MAX_TARGET_LENGTH = 4096  # 95th percentile w/ max 1 turn= 4,086 tokens, w/ no max turns = 7,090
 MAX_STEPS = None
 
-BATCH_SIZE = 4
+BATCH_SIZE = 8
 DESIRED_EFFECTIVE_BATCH_SIZE = 64  # Increased from 64 to reduce gradient variance and stabilize training
 EVAL_EVERY_N_EFFECTIVE_BATCHES = 125  # Adjusted to maintain similar eval frequency (every ~1000 steps)
 
