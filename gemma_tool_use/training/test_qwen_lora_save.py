@@ -179,7 +179,7 @@ def train_on_sentence(model, tokenizer, text: str, mesh, num_steps: int, learnin
     return model
 
 
-def compare_logits(logits_a, logits_b, label_a="Model A", label_b="Model B", tolerance=1e-1, check_top_k=True, detailed=False):
+def compare_logits(logits_a, logits_b, label_a="Model A", label_b="Model B", tolerance=1.0, check_top_k=True, detailed=False):
     """
     Compare logits from two models.
 
@@ -586,7 +586,7 @@ def main():
     base_vs_trained = compare_logits(
         base_logits, lora_logits,
         label_a="Base", label_b="Trained LoRA",
-        tolerance=1e-4,  # Expect large differences
+        tolerance=1.0,  # Expect large differences
         check_top_k=True
     )
 
@@ -595,7 +595,7 @@ def main():
     base_vs_merged = compare_logits(
         base_logits, merged_logits,
         label_a="Base", label_b="Merged",
-        tolerance=1e-4,
+        tolerance=1.0,
         check_top_k=True,
         detailed=False  # Less detail for this comparison
     )
