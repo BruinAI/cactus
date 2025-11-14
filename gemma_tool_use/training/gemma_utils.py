@@ -164,8 +164,8 @@ def save_lora_weights(lora_model, local_model_path: str, output_dir: str):
         )
         assert state_key in base_state
 
-        lora_a_val = jnp.asarray(getattr(lora_a, 'value', lora_a)).astype(np.float32)
-        lora_b_val = jnp.asarray(getattr(lora_b, 'value', lora_b)).astype(np.float32)
+        lora_a_val = jnp.asarray(getattr(lora_a, 'value', lora_a))
+        lora_b_val = jnp.asarray(getattr(lora_b, 'value', lora_b))
 
         # Reshape 3D LoRA matrices to 2D for matrix multiplication
         # LoRA A: (d0, d1, d2) -> (d0*d1, d2)  |  LoRA B: (d0, d1, d2) -> (d0, d1*d2)
@@ -187,8 +187,9 @@ def save_lora_weights(lora_model, local_model_path: str, output_dir: str):
             print("    Reshaped LoRA B to:", lora_b_val.shape)
 
         combined_lora = lora_a_val @ lora_b_val
+        # TODO: multiply by alpha/rank if needed
         assert jnp.all(combined_lora == 0), f"Non-zero values found in combined LoRA for {lora_name}"
-        base_state[state_key] = base_state[state_key] + combined_lora.T
+        base_state[state_key] += combined_lora.T.astype(base_state[state_key].dtype)
 
     print(f"\nMerged {len(lora_layers)} LoRA layers into base weights")
 
