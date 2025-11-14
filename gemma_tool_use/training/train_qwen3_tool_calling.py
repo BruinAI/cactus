@@ -56,7 +56,7 @@ logger.setLevel(logging.INFO)
 # ============================================================================
 
 # Model configuration
-MODEL_ID = "Qwen/Qwen3-0.6B-Chat"  # Can also use Qwen3-1.7B, Qwen3-8B, etc.
+MODEL_ID = "Qwen/Qwen3-0.6B"  # Can also use Qwen3-1.7B, Qwen3-8B, etc.
 QWEN_TOKENIZER_PATH = None  # Will be loaded from the model directory
 
 # Dataset paths
