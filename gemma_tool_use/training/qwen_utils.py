@@ -129,41 +129,17 @@ def save_lora_weights(lora_model, local_model_path: str, output_dir: str):
     # Extract LoRA layers from both attention and MLP
     lora_layers = {}
     for layer in lora_model.layers:
-        k_proj_path = path_to_str(layer.attn.k_proj.qwix_path)
-        q_proj_path = path_to_str(layer.attn.q_proj.qwix_path)
-        v_proj_path = path_to_str(layer.attn.v_proj.qwix_path)
-        o_proj_path = path_to_str(layer.attn.o_proj.qwix_path)
-        down_proj_path = path_to_str(layer.mlp.down_proj.qwix_path)
-        up_proj_path = path_to_str(layer.mlp.up_proj.qwix_path)
-        gate_proj_path = path_to_str(layer.mlp.gate_proj.qwix_path)
-        lora_layers[k_proj_path] = (
-            layer.attn.k_proj.w_lora_a,
-            layer.attn.k_proj.w_lora_b
-        )
-        lora_layers[q_proj_path] = (
-            layer.attn.q_proj.w_lora_a,
-            layer.attn.q_proj.w_lora_b
-        )
-        lora_layers[v_proj_path] = (
-            layer.attn.v_proj.w_lora_a,
-            layer.attn.v_proj.w_lora_b
-        )
-        lora_layers[o_proj_path] = (
-            layer.attn.o_proj.w_lora_a,
-            layer.attn.o_proj.w_lora_b
-        )
-        lora_layers[down_proj_path] = (
-            layer.mlp.down_proj.kernel_lora_a,
-            layer.mlp.down_proj.kernel_lora_b
-        )
-        lora_layers[up_proj_path] = (
-            layer.mlp.up_proj.kernel_lora_a,
-            layer.mlp.up_proj.kernel_lora_b
-        )
-        lora_layers[gate_proj_path] = (
-            layer.mlp.gate_proj.kernel_lora_a,
-            layer.mlp.gate_proj.kernel_lora_b
-        )
+        # Attention projections
+        for proj_name in ['q_proj', 'k_proj', 'v_proj', 'o_proj']:
+            proj = getattr(layer.attn, proj_name)
+            path = path_to_str(proj.qwix_path)
+            lora_layers[path] = (proj.w_lora_a, proj.w_lora_b)
+
+        # MLP projections
+        for proj_name in ['gate_proj', 'up_proj', 'down_proj']:
+            proj = getattr(layer.mlp, proj_name)
+            path = path_to_str(proj.qwix_path)
+            lora_layers[path] = (proj.kernel_lora_a, proj.kernel_lora_b)
 
     print(f"Found {len(lora_layers)} LoRA layers")
     print(f"LoRA layer names: {list(lora_layers.keys())[:3]}...")
@@ -182,27 +158,17 @@ def save_lora_weights(lora_model, local_model_path: str, output_dir: str):
         assert state_key in base_state, \
                f"LoRA layer {lora_name} (key: {state_key}) not found in base model state dict"
 
-        print(f"Merging LoRA layer: {lora_name} into {state_key}")
-        print(f"  Base weight shape: {base_state[state_key].shape}")
-        print(f"  LoRA A shape: {lora_a.shape}")
-        print(f"  LoRA B shape: {lora_b.shape}")
-
         lora_a_val = jnp.asarray(lora_a.value).astype(np.float32)
         lora_b_val = jnp.asarray(lora_b.value).astype(np.float32)
 
-        # Reshape LoRA matrices if they're 3D (for multi-head attention projections)
-        # LoRA A: (rank, num_heads, head_dim) -> (rank, num_heads * head_dim)
-        # LoRA B: (rank, num_heads, head_dim) -> (rank, num_heads * head_dim)
-        assert lora_a_val.ndim in (2, 3) and lora_b_val.ndim in (2, 3)
+        # Reshape 3D LoRA matrices to 2D for matrix multiplication
+        # LoRA A: (d0, d1, d2) -> (d0*d1, d2)  |  LoRA B: (d0, d1, d2) -> (d0, d1*d2)
         if lora_a_val.ndim == 3:
-            dims = lora_a_val.shape
-            lora_a_val = lora_a_val.reshape(dims[0] * dims[1], dims[2])
-            print(f"  Reshaped LoRA A from {dims} to {lora_a_val.shape}")
-
+            d0, d1, d2 = lora_a_val.shape
+            lora_a_val = lora_a_val.reshape(d0 * d1, d2)
         if lora_b_val.ndim == 3:
-            dims = lora_b_val.shape
-            lora_b_val = lora_b_val.reshape(dims[0], dims[1] * dims[2])
-            print(f"  Reshaped LoRA B from {dims} to {lora_b_val.shape}")
+            d0, d1, d2 = lora_b_val.shape
+            lora_b_val = lora_b_val.reshape(d0, d1 * d2)
 
         combined_lora = lora_a_val @ lora_b_val
         base_state[state_key] = base_state[state_key] + combined_lora.T
