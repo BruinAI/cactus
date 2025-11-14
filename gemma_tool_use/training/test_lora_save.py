@@ -111,15 +111,15 @@ def compare_logits(lora_logits, merged_logits, tolerance=1e-4):
 
     # Compute differences
     abs_diff = np.abs(lora_logits_np - merged_logits_np)
-    max_abs_diff = np.max(abs_diff)
-    mean_abs_diff = np.mean(abs_diff)
+    max_abs_diff = float(np.max(abs_diff))
+    mean_abs_diff = float(np.mean(abs_diff))
 
     # Compute relative differences (where values are non-zero)
     mask = np.abs(lora_logits_np) > 1e-8
     rel_diff = np.zeros_like(abs_diff)
     rel_diff[mask] = abs_diff[mask] / np.abs(lora_logits_np[mask])
-    max_rel_diff = np.max(rel_diff)
-    mean_rel_diff = np.mean(rel_diff[mask]) if np.any(mask) else 0.0
+    max_rel_diff = float(np.max(rel_diff))
+    mean_rel_diff = float(np.mean(rel_diff[mask])) if np.any(mask) else 0.0
 
     print("\nAbsolute Difference Statistics:")
     print(f"  Max:  {max_abs_diff:.2e}")
@@ -258,9 +258,6 @@ def main():
     else:
         print("\n✗ FAILURE: LoRA merging has issues!")
         print("  The merged model outputs differ from the LoRA model.")
-
-    print(f"\nYou can now test this model with:")
-    print(f"  python3 tools/convert_hf.py {saved_path} weights/gemma3-1b-test/ --precision INT8")
 
     return 0 if matches else 1
 
