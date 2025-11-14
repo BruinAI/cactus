@@ -167,6 +167,11 @@ def save_lora_weights(lora_model, local_model_path: str, output_dir: str):
         lora_a_val = jnp.asarray(lora_a.value).astype(np.float32)
         lora_b_val = jnp.asarray(lora_b.value).astype(np.float32)
 
+        print(f"Merging LoRA layer: {lora_name} -> {state_key}")
+        print("  Base weight shape:", base_state[state_key].shape)
+        print("  LoRA A shape:", lora_a_val.shape)
+        print("  LoRA B shape:", lora_b_val.shape)
+
         combined_lora = lora_a_val @ lora_b_val
         base_state[state_key] = base_state[state_key] + combined_lora.T
 
