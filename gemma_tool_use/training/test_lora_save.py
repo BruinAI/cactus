@@ -12,11 +12,11 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 import optax
-from flax import nnx
 from transformers import AutoTokenizer
 from tunix.models.gemma3 import params_safetensors as params_safetensors_lib
 from tunix.models.gemma3 import model as gemma_lib
 from tunix.generate import tokenizer_adapter as tokenizer_lib
+from tunix.sft import peft_trainer, utils
 import qwix
 
 from gemma_utils import download_and_setup_model, create_lora_model, save_lora_weights
@@ -92,9 +92,22 @@ def run_forward_pass(model, tokenizer, input_text: str, mesh):
     return logits
 
 
+def gen_model_input_fn(x: peft_trainer.TrainingInput, tokenizer):
+    """Generate model inputs from training data."""
+    pad_mask = x.input_tokens != tokenizer.pad_id()
+    positions = utils.build_positions_from_mask(pad_mask)
+    attention_mask = utils.make_causal_attn_mask(pad_mask)
+    return {
+        'input_tokens': x.input_tokens,
+        'input_mask': x.input_mask,
+        'positions': positions,
+        'attention_mask': attention_mask,
+    }
+
+
 def train_on_sentence(model, tokenizer, text: str, mesh, num_steps: int, learning_rate: float):
     """
-    Train the model on a simple sentence for a few steps.
+    Train the model on a simple sentence for a few steps using tunix PeftTrainer.
 
     Args:
         model: LoRA model to train
@@ -119,53 +132,45 @@ def train_on_sentence(model, tokenizer, text: str, mesh, num_steps: int, learnin
     print(f"Token IDs: {token_ids}")
     print(f"Number of tokens: {len(token_ids)}")
 
-    # Prepare inputs
+    # Prepare inputs as TrainingInput batches
     num_devices = len(jax.devices())
     batch_size = num_devices
-    seq_len = len(token_ids)
 
-    # Create input and target sequences (autoregressive: predict next token)
-    input_tokens = jnp.array([token_ids[:-1]] * batch_size, dtype=jnp.int32)
-    target_tokens = jnp.array([token_ids[1:]] * batch_size, dtype=jnp.int32)
-    positions = jnp.tile(jnp.arange(seq_len - 1, dtype=jnp.int32)[None, :], (batch_size, 1))
-    attention_mask = jnp.ones((batch_size, 1, seq_len - 1), dtype=jnp.bool_)
+    # Create a simple dataset that repeats the sentence
+    input_tokens = jnp.array([token_ids] * batch_size, dtype=jnp.int32)
+    input_mask = jnp.ones_like(input_tokens, dtype=jnp.float32)
 
     print(f"Input shape: {input_tokens.shape}")
-    print(f"Target shape: {target_tokens.shape}")
+
+    # Create training config
+    training_config = peft_trainer.TrainingConfig(
+        eval_every_n_steps=num_steps + 1,  # No eval during training
+        max_steps=num_steps,
+        gradient_accumulation_steps=1,
+    )
 
     # Create optimizer
-    optimizer = nnx.Optimizer(model, optax.adam(learning_rate))
+    optimizer = optax.adam(learning_rate)
 
-    # Training loop
-    @nnx.jit
-    def train_step(model, optimizer, input_tokens, target_tokens, positions, attention_mask):
-        def loss_fn(model):
-            with mesh:
-                logits, _ = model(
-                    last_tokens=input_tokens,
-                    positions=positions,
-                    cache=None,
-                    attention_mask=attention_mask,
-                    output_hidden_states=False
-                )
-            # Compute cross-entropy loss
-            log_probs = jax.nn.log_softmax(logits, axis=-1)
-            target_log_probs = jnp.take_along_axis(
-                log_probs, target_tokens[..., None], axis=-1
-            ).squeeze(-1)
-            loss = -jnp.mean(target_log_probs)
-            return loss
+    # Create trainer
+    trainer = peft_trainer.PeftTrainer(
+        model,
+        optimizer,
+        training_config
+    ).with_gen_model_input_fn(lambda x: gen_model_input_fn(x, tokenizer))
 
-        loss, grads = nnx.value_and_grad(loss_fn)(model)
-        optimizer.update(grads)
-        return loss
+    # Create a simple data iterator that yields the same batch repeatedly
+    def train_data_iter():
+        for _ in range(num_steps):
+            yield peft_trainer.TrainingInput(
+                input_tokens=input_tokens,
+                input_mask=input_mask
+            )
 
-    # Train for specified number of steps
+    # Train
     print("\nTraining...")
-    for step in range(num_steps):
-        loss = train_step(model, optimizer, input_tokens, target_tokens, positions, attention_mask)
-        if step % 10 == 0 or step == num_steps - 1:
-            print(f"  Step {step:3d}: loss = {float(loss):.4f}")
+    with mesh:
+        trainer.train(train_data_iter(), eval_data_iter=None)
 
     print("Training complete!")
     return model
