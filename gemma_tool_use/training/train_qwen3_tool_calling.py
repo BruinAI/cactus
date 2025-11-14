@@ -30,7 +30,6 @@ from transformers import AutoTokenizer
 
 # Import tunix libraries
 from tunix.generate import sampler as sampler_lib
-from tunix.generate import tokenizer_adapter as tokenizer_lib
 from tunix.models.qwen3 import model as qwen_lib
 from tunix.models.qwen3 import params as params_lib
 from tunix.sft import metrics_logger
@@ -96,10 +95,29 @@ LORA_OUTPUT_DIR = f"/dev/shm/{MODEL_ID.split('/')[-1]}_tool_calling_lora"
 # Data Loading and Processing
 # ============================================================================
 
+class TokenizerWrapper:
+    """Wrapper to adapt HuggingFace tokenizer to tunix tokenizer API."""
+
+    def __init__(self, hf_tokenizer):
+        self._tokenizer = hf_tokenizer
+
+    def encode(self, text: str):
+        """Encode text to token IDs."""
+        return self._tokenizer.encode(text, add_special_tokens=False)
+
+    def pad_id(self):
+        """Get padding token ID."""
+        return self._tokenizer.pad_token_id
+
+    def eos_id(self):
+        """Get EOS token ID."""
+        return self._tokenizer.eos_token_id
+
+
 class _Tokenize(grain.MapTransform):
     """Tokenize role-based messages and create proper masks."""
 
-    def __init__(self, tokenizer: tokenizer_lib.Tokenizer):
+    def __init__(self, tokenizer: TokenizerWrapper):
         self._tokenizer = tokenizer
 
     def map(self, element: Dict[str, str]) -> Dict[str, np.ndarray]:
@@ -182,7 +200,7 @@ def _build_data_loader(
     batch_size: int,
     num_epochs: int,
     max_seq_len: int,
-    tokenizer: tokenizer_lib.Tokenizer,
+    tokenizer: TokenizerWrapper,
     shuffle: bool,
     seed: int = 42
 ) -> grain.DataLoader:
@@ -372,20 +390,21 @@ def main():
     # Download model
     local_model_path, eos_tokens = download_and_setup_model(MODEL_ID)
 
-    # Initialize tokenizers
+    # Initialize tokenizer
     print(f"\n{'='*60}")
-    print("Initializing tokenizers")
+    print("Initializing tokenizer")
     print(f"{'='*60}")
-    # tunix tokenizer for training data loading
-    tokenizer_path = os.path.join(local_model_path, "tokenizer.json")
-    tokenizer = tokenizer_lib.Tokenizer(tokenizer_path=tokenizer_path)
-    if tokenizer.eos_id() not in eos_tokens:
-        eos_tokens.append(tokenizer.eos_id())
+    # Load HuggingFace tokenizer
+    hf_tokenizer = AutoTokenizer.from_pretrained(local_model_path)
+    print(f"Loaded tokenizer from {local_model_path}")
+
+    # Update EOS tokens
+    if hf_tokenizer.eos_token_id not in eos_tokens:
+        eos_tokens.append(hf_tokenizer.eos_token_id)
         print(f"Updated EOS token IDs: {eos_tokens}")
 
-    # HuggingFace tokenizer for generation (used by sampler)
-    hf_tokenizer = AutoTokenizer.from_pretrained(local_model_path)
-    print(f"Loaded tokenizers from {local_model_path}")
+    # Wrap HF tokenizer for compatibility with training pipeline
+    tokenizer = TokenizerWrapper(hf_tokenizer)
 
     # Load tools and dataset
     print(f"\n{'='*60}")
