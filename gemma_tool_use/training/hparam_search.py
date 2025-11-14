@@ -476,7 +476,7 @@ def main():
     parser.add_argument(
         "--keep_checkpoints",
         action="store_true",
-        help="Keep checkpoints after each run (default: delete to save space)"
+        help="Keep checkpoints after each run (default: False, checkpoints are deleted to save space)"
     )
 
     args = parser.parse_args()
