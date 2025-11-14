@@ -83,6 +83,10 @@ MAX_TOOLS_USED = 10
 MAX_TOOLS_AVAILABLE = 10
 MAX_NUMBER_OF_TURNS = float('inf')  # No limit on number of turns
 
+# Dataset selection
+USE_FULL_DATASET = False  # Set to True to use all configurations (Kimi-K2, OSS, Qwen3, SFT)
+                          # Set to False to use only SFT split (default)
+
 # Checkpoint and output directories
 CKPT_DIR = "/tmp/gemma_tool_calling_ckpts/"
 LORA_OUTPUT_DIR = f"/dev/shm/{MODEL_ID.split('/')[-1]}_tool_calling_lora"
@@ -257,6 +261,7 @@ def main():
     print("Gemma 3 270M Tool Calling Training Script")
     print("="*60)
     print(f"Model: {MODEL_ID}")
+    print(f"Dataset mode: {'FULL (Kimi-K2 + OSS + Qwen3 + SFT)' if USE_FULL_DATASET else 'SFT only'}")
     print(f"Global batch size: {BATCH_SIZE}")
     print(f"Epochs: {NUM_EPOCHS}")
     print(f"Learning rate: {LEARNING_RATE}")
@@ -308,7 +313,8 @@ def main():
         max_tools_used=MAX_TOOLS_USED,
         max_tools_available=MAX_TOOLS_AVAILABLE,
         max_number_of_turns=MAX_NUMBER_OF_TURNS,
-        format_function=format_function
+        format_function=format_function,
+        use_full_dataset=USE_FULL_DATASET
     )
 
     # Show sample training examples
