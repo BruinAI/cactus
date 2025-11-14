@@ -297,12 +297,13 @@ def test_model_generation(model, tokenizer, model_config, eos_tokens, tools, lab
     print(f"{label} - Generation Examples")
     print(f"{'='*60}")
 
-    # Create sampler
+    # Create sampler with larger cache for tool calling prompts
+    # Tool definitions in system prompt can be very long (>2000 tokens)
     sampler = sampler_lib.Sampler(
         transformer=model,
         tokenizer=tokenizer,
         cache_config=sampler_lib.CacheConfig(
-            cache_size=1024,
+            cache_size=4096,  # Increased from 1024 to handle long tool definitions
             num_layers=model_config.num_layers,
             num_kv_heads=model_config.num_kv_heads,
             head_dim=model_config.head_dim,
