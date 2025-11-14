@@ -182,6 +182,11 @@ def save_lora_weights(lora_model, local_model_path: str, output_dir: str):
         assert state_key in base_state, \
                f"LoRA layer {lora_name} (key: {state_key}) not found in base model state dict"
 
+        print(f"Merging LoRA layer: {lora_name} into {state_key}")
+        print(f"  Base weight shape: {base_state[state_key].shape}")
+        print(f"  LoRA A shape: {lora_a.shape}")
+        print(f"  LoRA B shape: {lora_b.shape}")
+
         lora_a_val = jnp.asarray(lora_a.value).astype(np.float32)
         lora_b_val = jnp.asarray(lora_b.value).astype(np.float32)
 
