@@ -187,6 +187,7 @@ def save_lora_weights(lora_model, local_model_path: str, output_dir: str):
             print("    Reshaped LoRA B to:", lora_b_val.shape)
 
         combined_lora = lora_a_val @ lora_b_val
+        assert jnp.all(combined_lora == 0), f"Non-zero values found in combined LoRA for {lora_name}"
         base_state[state_key] = base_state[state_key] + combined_lora.T
 
     print(f"\nMerged {len(lora_layers)} LoRA layers into base weights")
