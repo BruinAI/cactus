@@ -45,7 +45,8 @@ class HyperparameterSearch:
         strategy: str = "grid",
         num_trials: Optional[int] = None,
         output_dir: str = "./hparam_search_results",
-        resume: bool = False
+        resume: bool = False,
+        keep_checkpoints: bool = False
     ):
         """
         Initialize hyperparameter search.
@@ -56,12 +57,14 @@ class HyperparameterSearch:
             num_trials: Number of trials for random search (ignored for grid)
             output_dir: Directory to save results
             resume: Whether to resume from previous run
+            keep_checkpoints: Whether to keep checkpoints after each run (default: False to save space)
         """
         self.config_path = config_path
         self.strategy = strategy
         self.num_trials = num_trials
         self.output_dir = Path(output_dir)
         self.resume = resume
+        self.keep_checkpoints = keep_checkpoints
 
         # Create output directory
         self.output_dir.mkdir(parents=True, exist_ok=True)
@@ -285,6 +288,17 @@ class HyperparameterSearch:
         with open(result_file, 'w') as f:
             json.dump(result, f, indent=2)
 
+        # Clean up checkpoints if not keeping them (saves disk space)
+        if not self.keep_checkpoints:
+            import shutil
+            if ckpt_dir.exists():
+                logger.info("Cleaning up checkpoints to save disk space...")
+                try:
+                    shutil.rmtree(ckpt_dir)
+                    logger.info(f"Removed checkpoint directory: {ckpt_dir}")
+                except Exception as e:
+                    logger.warning(f"Failed to remove checkpoints: {e}")
+
         return result
 
     def _extract_metrics(self, run_dir: Path, log_file: Path) -> Dict[str, Any]:
@@ -459,6 +473,11 @@ def main():
         action="store_true",
         help="Resume from previous search (skip completed runs)"
     )
+    parser.add_argument(
+        "--keep_checkpoints",
+        action="store_true",
+        help="Keep checkpoints after each run (default: delete to save space)"
+    )
 
     args = parser.parse_args()
 
@@ -472,7 +491,8 @@ def main():
         strategy=args.strategy,
         num_trials=args.num_trials,
         output_dir=args.output_dir,
-        resume=args.resume
+        resume=args.resume,
+        keep_checkpoints=args.keep_checkpoints
     )
 
     search.run()
