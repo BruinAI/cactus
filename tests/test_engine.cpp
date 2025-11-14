@@ -10,7 +10,7 @@
 #include <sstream>
 
 
-const char* g_model_path = "../../weights/lfm2-vl-350m-i8";
+const char* g_model_path = "../../weights/qwen3-1.7B";
 
 const char* g_options = R"({
         "max_tokens": 256,
