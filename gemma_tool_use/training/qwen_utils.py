@@ -129,13 +129,11 @@ def save_lora_weights(lora_model, local_model_path: str, output_dir: str):
     # Extract LoRA layers from both attention and MLP
     lora_layers = {}
     for layer in lora_model.layers:
-        # Attention projections
         for proj_name in ['q_proj', 'k_proj', 'v_proj', 'o_proj']:
             proj = getattr(layer.attn, proj_name)
             path = path_to_str(proj.qwix_path)
             lora_layers[path] = (proj.w_lora_a, proj.w_lora_b)
 
-        # MLP projections
         for proj_name in ['gate_proj', 'up_proj', 'down_proj']:
             proj = getattr(layer.mlp, proj_name)
             path = path_to_str(proj.qwix_path)

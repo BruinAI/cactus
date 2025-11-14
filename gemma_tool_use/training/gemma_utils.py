@@ -125,16 +125,15 @@ def save_lora_weights(lora_model, local_model_path: str, output_dir: str):
     # Extract LoRA layers
     lora_layers = {}
     for layer in lora_model.layers:
-        down_proj_path = path_to_str(layer.mlp.down_proj.qwix_path)
-        up_proj_path = path_to_str(layer.mlp.up_proj.qwix_path)
-        lora_layers[down_proj_path] = (
-            layer.mlp.down_proj.kernel_lora_a,
-            layer.mlp.down_proj.kernel_lora_b
-        )
-        lora_layers[up_proj_path] = (
-            layer.mlp.up_proj.kernel_lora_a,
-            layer.mlp.up_proj.kernel_lora_b
-        )
+        for proj_name in ['q_proj', 'k_proj', 'v_proj', 'o_proj']:
+            proj = getattr(layer.attn, proj_name)
+            path = path_to_str(proj.qwix_path)
+            lora_layers[path] = (proj.w_lora_a, proj.w_lora_b)
+
+        for proj_name in ['gate_proj', 'up_proj', 'down_proj']:
+            proj = getattr(layer.mlp, proj_name)
+            path = path_to_str(proj.qwix_path)
+            lora_layers[path] = (proj.kernel_lora_a, proj.kernel_lora_b)
 
     print(f"Found {len(lora_layers)} LoRA layers")
     print(f"LoRA layer names: {list(lora_layers.keys())[:3]}...")
