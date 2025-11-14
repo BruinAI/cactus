@@ -190,6 +190,13 @@ def save_lora_weights(lora_model, local_model_path: str, output_dir: str):
         lora_a_val = jnp.asarray(lora_a.value).astype(np.float32)
         lora_b_val = jnp.asarray(lora_b.value).astype(np.float32)
 
+        # Reshape LoRA B if it's 3D (for multi-head attention projections)
+        # Shape: (rank, num_heads, head_dim) -> (rank, num_heads * head_dim)
+        if lora_b_val.ndim == 3:
+            rank, num_heads, head_dim = lora_b_val.shape
+            lora_b_val = lora_b_val.reshape(rank, num_heads * head_dim)
+            print(f"  Reshaped LoRA B from ({rank}, {num_heads}, {head_dim}) to {lora_b_val.shape}")
+
         combined_lora = lora_a_val @ lora_b_val
         base_state[state_key] = base_state[state_key] + combined_lora.T
 
