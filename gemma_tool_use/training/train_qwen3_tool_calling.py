@@ -16,6 +16,7 @@ Optimized for 4x TPU v5e chips.
 import os
 import json
 import logging
+from typing import Dict
 import nest_asyncio
 nest_asyncio.apply()
 
@@ -72,6 +73,7 @@ MAX_TARGET_LENGTH = 2048  # Noah's dataset has shorter sequences
 MAX_STEPS = None
 
 BATCH_SIZE = 8
+GRADIENT_ACCUMULATION_STEPS = 1
 EVAL_EVERY_N_STEPS = 5
 
 # LoRA hyperparameters
