@@ -129,56 +129,41 @@ def save_lora_weights(lora_model, local_model_path: str, output_dir: str):
     # Extract LoRA layers from both attention and MLP
     lora_layers = {}
     for layer in lora_model.layers:
-        # Attention projections
-        if hasattr(layer.self_attn, 'q_proj') and hasattr(layer.self_attn.q_proj, 'kernel_lora_a'):
-            q_proj_path = path_to_str(layer.self_attn.q_proj.qwix_path)
-            lora_layers[q_proj_path] = (
-                layer.self_attn.q_proj.kernel_lora_a,
-                layer.self_attn.q_proj.kernel_lora_b
-            )
-
-        if hasattr(layer.self_attn, 'k_proj') and hasattr(layer.self_attn.k_proj, 'kernel_lora_a'):
-            k_proj_path = path_to_str(layer.self_attn.k_proj.qwix_path)
-            lora_layers[k_proj_path] = (
-                layer.self_attn.k_proj.kernel_lora_a,
-                layer.self_attn.k_proj.kernel_lora_b
-            )
-
-        if hasattr(layer.self_attn, 'v_proj') and hasattr(layer.self_attn.v_proj, 'kernel_lora_a'):
-            v_proj_path = path_to_str(layer.self_attn.v_proj.qwix_path)
-            lora_layers[v_proj_path] = (
-                layer.self_attn.v_proj.kernel_lora_a,
-                layer.self_attn.v_proj.kernel_lora_b
-            )
-
-        if hasattr(layer.self_attn, 'o_proj') and hasattr(layer.self_attn.o_proj, 'kernel_lora_a'):
-            o_proj_path = path_to_str(layer.self_attn.o_proj.qwix_path)
-            lora_layers[o_proj_path] = (
-                layer.self_attn.o_proj.kernel_lora_a,
-                layer.self_attn.o_proj.kernel_lora_b
-            )
-
-        # MLP projections
-        if hasattr(layer.mlp, 'down_proj') and hasattr(layer.mlp.down_proj, 'kernel_lora_a'):
-            down_proj_path = path_to_str(layer.mlp.down_proj.qwix_path)
-            lora_layers[down_proj_path] = (
-                layer.mlp.down_proj.kernel_lora_a,
-                layer.mlp.down_proj.kernel_lora_b
-            )
-
-        if hasattr(layer.mlp, 'up_proj') and hasattr(layer.mlp.up_proj, 'kernel_lora_a'):
-            up_proj_path = path_to_str(layer.mlp.up_proj.qwix_path)
-            lora_layers[up_proj_path] = (
-                layer.mlp.up_proj.kernel_lora_a,
-                layer.mlp.up_proj.kernel_lora_b
-            )
-
-        if hasattr(layer.mlp, 'gate_proj') and hasattr(layer.mlp.gate_proj, 'kernel_lora_a'):
-            gate_proj_path = path_to_str(layer.mlp.gate_proj.qwix_path)
-            lora_layers[gate_proj_path] = (
-                layer.mlp.gate_proj.kernel_lora_a,
-                layer.mlp.gate_proj.kernel_lora_b
-            )
+        k_proj_path = path_to_str(layer.attn.k_proj.qwix_path)
+        q_proj_path = path_to_str(layer.attn.q_proj.qwix_path)
+        v_proj_path = path_to_str(layer.attn.v_proj.qwix_path)
+        o_proj_path = path_to_str(layer.attn.o_proj.qwix_path)
+        down_proj_path = path_to_str(layer.mlp.down_proj.qwix_path)
+        up_proj_path = path_to_str(layer.mlp.up_proj.qwix_path)
+        gate_proj_path = path_to_str(layer.mlp.gate_proj.qwix_path)
+        lora_layers[k_proj_path] = (
+            layer.attn.k_proj.w_lora_a,
+            layer.attn.k_proj.w_lora_b
+        )
+        lora_layers[q_proj_path] = (
+            layer.attn.q_proj.w_lora_a,
+            layer.attn.q_proj.w_lora_b
+        )
+        lora_layers[v_proj_path] = (
+            layer.attn.v_proj.w_lora_a,
+            layer.attn.v_proj.w_lora_b
+        )
+        lora_layers[o_proj_path] = (
+            layer.attn.o_proj.w_lora_a,
+            layer.attn.o_proj.w_lora_b
+        )
+        lora_layers[down_proj_path] = (
+            layer.mlp.down_proj.kernel_lora_a,
+            layer.mlp.down_proj.kernel_lora_b
+        )
+        lora_layers[up_proj_path] = (
+            layer.mlp.up_proj.kernel_lora_a,
+            layer.mlp.up_proj.kernel_lora_b
+        )
+        lora_layers[gate_proj_path] = (
+            layer.mlp.gate_proj.kernel_lora_a,
+            layer.mlp.gate_proj.kernel_lora_b
+        )
 
     print(f"Found {len(lora_layers)} LoRA layers")
     print(f"LoRA layer names: {list(lora_layers.keys())[:3]}...")
@@ -191,9 +176,11 @@ def save_lora_weights(lora_model, local_model_path: str, output_dir: str):
     # Step 3: Apply LoRA deltas to base weights
     print("\nStep 3: Merging LoRA deltas with base weights...")
     for lora_name, (lora_a, lora_b) in lora_layers.items():
-        state_key = f'model.{lora_name}.weight'
+        # Convert qwix path to HuggingFace state dict key
+        # qwix uses 'attn' but HF uses 'self_attn'
+        state_key = f'model.{lora_name}.weight'.replace('.attn.', '.self_attn.')
         assert state_key in base_state, \
-               f"LoRA layer {lora_name} not found in base model state dict"
+               f"LoRA layer {lora_name} (key: {state_key}) not found in base model state dict"
 
         lora_a_val = jnp.asarray(lora_a.value).astype(np.float32)
         lora_b_val = jnp.asarray(lora_b.value).astype(np.float32)
