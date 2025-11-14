@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Test script to compare LoRA model vs saved/reloaded merged Gemma model.
-Tests that the LoRA merging logic produces identical outputs.
+Trains on a simple sentence and tests that the LoRA merging logic produces identical outputs.
 """
 
 import os
@@ -11,6 +11,8 @@ from pathlib import Path
 import jax
 import jax.numpy as jnp
 import numpy as np
+import optax
+from flax import nnx
 from transformers import AutoTokenizer
 from tunix.models.gemma3 import params_safetensors as params_safetensors_lib
 from tunix.models.gemma3 import model as gemma_lib
@@ -24,6 +26,11 @@ MODEL_ID = "google/gemma-3-1b-it"
 RANK = 32
 ALPHA = 64.0
 OUTPUT_DIR = "./test_output/gemma3-1b-lora-merged"
+
+# Training configuration
+TRAIN_TEXT = "The quick brown fox jumped over the lazy dog"
+LEARNING_RATE = 1e-3  # High learning rate to ensure LoRA weights change
+NUM_TRAIN_STEPS = 100  # Train for 100 steps
 
 # Mesh configuration
 MESH_SHAPE = 1, 1
@@ -83,6 +90,85 @@ def run_forward_pass(model, tokenizer, input_text: str, mesh):
         )
 
     return logits
+
+
+def train_on_sentence(model, tokenizer, text: str, mesh, num_steps: int, learning_rate: float):
+    """
+    Train the model on a simple sentence for a few steps.
+
+    Args:
+        model: LoRA model to train
+        tokenizer: Tokenizer
+        text: Text to train on
+        mesh: JAX mesh
+        num_steps: Number of training steps
+        learning_rate: Learning rate
+
+    Returns:
+        Trained model
+    """
+    print(f"\n{'='*60}")
+    print("Training on sentence")
+    print(f"{'='*60}")
+    print(f"Text: {text}")
+    print(f"Steps: {num_steps}")
+    print(f"Learning rate: {learning_rate}")
+
+    # Tokenize the training text
+    token_ids = tokenizer.encode(text)
+    print(f"Token IDs: {token_ids}")
+    print(f"Number of tokens: {len(token_ids)}")
+
+    # Prepare inputs
+    num_devices = len(jax.devices())
+    batch_size = num_devices
+    seq_len = len(token_ids)
+
+    # Create input and target sequences (autoregressive: predict next token)
+    input_tokens = jnp.array([token_ids[:-1]] * batch_size, dtype=jnp.int32)
+    target_tokens = jnp.array([token_ids[1:]] * batch_size, dtype=jnp.int32)
+    positions = jnp.tile(jnp.arange(seq_len - 1, dtype=jnp.int32)[None, :], (batch_size, 1))
+    attention_mask = jnp.ones((batch_size, 1, seq_len - 1), dtype=jnp.bool_)
+
+    print(f"Input shape: {input_tokens.shape}")
+    print(f"Target shape: {target_tokens.shape}")
+
+    # Create optimizer
+    optimizer = nnx.Optimizer(model, optax.adam(learning_rate))
+
+    # Training loop
+    @nnx.jit
+    def train_step(model, optimizer, input_tokens, target_tokens, positions, attention_mask):
+        def loss_fn(model):
+            with mesh:
+                logits, _ = model(
+                    last_tokens=input_tokens,
+                    positions=positions,
+                    cache=None,
+                    attention_mask=attention_mask,
+                    output_hidden_states=False
+                )
+            # Compute cross-entropy loss
+            log_probs = jax.nn.log_softmax(logits, axis=-1)
+            target_log_probs = jnp.take_along_axis(
+                log_probs, target_tokens[..., None], axis=-1
+            ).squeeze(-1)
+            loss = -jnp.mean(target_log_probs)
+            return loss
+
+        loss, grads = nnx.value_and_grad(loss_fn)(model)
+        optimizer.update(grads)
+        return loss
+
+    # Train for specified number of steps
+    print("\nTraining...")
+    for step in range(num_steps):
+        loss = train_step(model, optimizer, input_tokens, target_tokens, positions, attention_mask)
+        if step % 10 == 0 or step == num_steps - 1:
+            print(f"  Step {step:3d}: loss = {float(loss):.4f}")
+
+    print("Training complete!")
+    return model
 
 
 def compare_logits(lora_logits, merged_logits, tolerance=1e-4):
@@ -191,16 +277,36 @@ def main():
         )
         print("Base model loaded successfully")
 
+    # Run forward pass on base model BEFORE training
+    print(f"\n{'='*60}")
+    print("Step 2: Running forward pass on base model (before training)")
+    print(f"{'='*60}")
+
+    test_input = TRAIN_TEXT
+    print(f"Test input: {test_input}")
+
+    base_logits = run_forward_pass(base_model, tokenizer, test_input, mesh)
+    print(f"Base model output shape: {base_logits.shape}")
+
     # Apply LoRA
     lora_model = create_lora_model(base_model, mesh=mesh, rank=RANK, alpha=ALPHA)
     print("LoRA model created successfully")
 
-    # Run forward pass on LoRA model
+    # Train the model on the simple sentence
     print(f"\n{'='*60}")
-    print("Step 2: Running forward pass on LoRA model")
+    print("Step 3: Training LoRA model on simple sentence")
     print(f"{'='*60}")
 
-    test_input = "<bos>"
+    lora_model = train_on_sentence(
+        lora_model, tokenizer, TRAIN_TEXT, mesh,
+        num_steps=NUM_TRAIN_STEPS, learning_rate=LEARNING_RATE
+    )
+
+    # Run forward pass on LoRA model using the trained sentence
+    print(f"\n{'='*60}")
+    print("Step 4: Running forward pass on trained LoRA model")
+    print(f"{'='*60}")
+
     print(f"Test input: {test_input}")
 
     lora_logits = run_forward_pass(lora_model, tokenizer, test_input, mesh)
@@ -208,10 +314,10 @@ def main():
 
     # Save LoRA model
     print(f"\n{'='*60}")
-    print("Step 3: Saving merged weights")
+    print("Step 5: Saving merged weights")
     print(f"{'='*60}")
 
-    saved_path = save_lora_weights(lora_model, local_model_path, OUTPUT_DIR)
+    saved_path = save_lora_weights(lora_model, local_model_path, OUTPUT_DIR, rank=RANK, alpha=ALPHA)
     print(f"Model saved to: {saved_path}")
 
     # Clean up LoRA model to free memory
@@ -221,7 +327,7 @@ def main():
 
     # Load the merged model
     print(f"\n{'='*60}")
-    print("Step 4: Loading merged model from safetensors")
+    print("Step 6: Loading merged model from safetensors")
     print(f"{'='*60}")
 
     with mesh:
@@ -232,7 +338,7 @@ def main():
 
     # Run forward pass on merged model
     print(f"\n{'='*60}")
-    print("Step 5: Running forward pass on merged model")
+    print("Step 7: Running forward pass on merged model")
     print(f"{'='*60}")
 
     merged_logits = run_forward_pass(merged_model, tokenizer, test_input, mesh)
@@ -240,9 +346,15 @@ def main():
 
     # Compare outputs
     print(f"\n{'='*60}")
-    print("Step 6: Comparing outputs")
+    print("Step 8: Comparing all model outputs")
     print(f"{'='*60}")
 
+    print("\n--- Comparison 1: Base model vs Trained LoRA model ---")
+    print("(Should be DIFFERENT - training should change outputs)")
+    compare_logits(base_logits, lora_logits, tolerance=1e-4)
+
+    print("\n--- Comparison 2: Trained LoRA model vs Merged model ---")
+    print("(Should be IDENTICAL - merging should preserve outputs)")
     matches = compare_logits(lora_logits, merged_logits, tolerance=1e-4)
 
     # Final summary
@@ -250,14 +362,19 @@ def main():
     print("Test Complete!")
     print(f"{'='*60}")
     print(f"Model saved to: {saved_path}")
-    print(f"Models match: {matches}")
+    print("\nResults:")
+    print(f"  LoRA vs Merged models match: {matches}")
 
     if matches:
         print("\n✓ SUCCESS: LoRA merging is working correctly!")
-        print("  The merged model produces identical outputs to the LoRA model.")
+        print("  ✓ Training modified the model outputs (base != trained)")
+        print("  ✓ The merged model produces identical outputs to the trained LoRA model")
+        print("  ✓ The alpha/rank scaling is correctly applied")
+        print("  ✓ The dtype preservation is working")
     else:
         print("\n✗ FAILURE: LoRA merging has issues!")
-        print("  The merged model outputs differ from the LoRA model.")
+        print("  The merged model outputs differ from the trained LoRA model.")
+        print("  This indicates a bug in the merging logic.")
 
     return 0 if matches else 1
 

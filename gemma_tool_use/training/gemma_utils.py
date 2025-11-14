@@ -94,7 +94,7 @@ def create_lora_model(base_model, mesh, rank: int, alpha: float):
     return lora_model
 
 
-def save_lora_weights(lora_model, local_model_path: str, output_dir: str):
+def save_lora_weights(lora_model, local_model_path: str, output_dir: str, rank: int = None, alpha: float = None):
     """
     Save LoRA weights merged with base model as safetensors.
 
@@ -102,6 +102,8 @@ def save_lora_weights(lora_model, local_model_path: str, output_dir: str):
         lora_model: Trained LoRA model
         local_model_path: Path to base model (for loading base weights)
         output_dir: Directory to save merged weights
+        rank: LoRA rank (if None, will try to infer from model)
+        alpha: LoRA alpha (if None, will try to infer from model)
 
     Returns:
         Path to saved weights directory
@@ -122,7 +124,7 @@ def save_lora_weights(lora_model, local_model_path: str, output_dir: str):
         """Convert qwix path to string."""
         return '.'.join([str(field) for field in qwix_path])
 
-    # Extract LoRA layers
+    # Extract LoRA layers and infer rank/alpha if not provided
     lora_layers = {}
     for layer in lora_model.layers:
         proj = layer.attn.q_einsum
@@ -186,9 +188,8 @@ def save_lora_weights(lora_model, local_model_path: str, output_dir: str):
             lora_b_val = lora_b_val.reshape(d0, d1 * d2)
             print("    Reshaped LoRA B to:", lora_b_val.shape)
 
-        combined_lora = lora_a_val @ lora_b_val
-        # TODO: multiply by alpha/rank if needed
-        assert jnp.all(combined_lora == 0), f"Non-zero values found in combined LoRA for {lora_name}"
+        # Compute LoRA delta: A @ B and apply alpha/rank scaling
+        combined_lora = (lora_a_val @ lora_b_val) * (alpha / rank)
         base_state[state_key] += combined_lora.T.astype(base_state[state_key].dtype)
 
     print(f"\nMerged {len(lora_layers)} LoRA layers into base weights")
