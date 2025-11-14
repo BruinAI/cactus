@@ -170,20 +170,20 @@ def save_lora_weights(lora_model, local_model_path: str, output_dir: str):
         # Reshape 3D LoRA matrices to 2D for matrix multiplication
         # LoRA A: (d0, d1, d2) -> (d0*d1, d2)  |  LoRA B: (d0, d1, d2) -> (d0, d1*d2)
         if lora_a_val.ndim == 3:
-            d0, d1, d2 = lora_a_val.shape
-            lora_a_val = lora_a_val.reshape(d0 * d1, d2)
             print(f"Merging LoRA layer: {lora_name} -> {state_key}")
             print("  Base weight shape:", base_state[state_key].shape)
             print("  LoRA A shape:", lora_a_val.shape)
+            d0, d1, d2 = lora_a_val.shape
+            lora_a_val = lora_a_val.reshape(d0 * d1, d2)
             print("    Reshaped LoRA A to:", lora_a_val.shape)
             print("  LoRA B shape:", lora_b_val.shape)
         if lora_b_val.ndim == 3:
-            d0, d1, d2 = lora_b_val.shape
-            lora_b_val = lora_b_val.reshape(d0, d1 * d2)
             print(f"Merging LoRA layer: {lora_name} -> {state_key}")
             print("  Base weight shape:", base_state[state_key].shape)
             print("  LoRA A shape:", lora_a_val.shape)
             print("  LoRA B shape:", lora_b_val.shape)
+            d0, d1, d2 = lora_b_val.shape
+            lora_b_val = lora_b_val.reshape(d0, d1 * d2)
             print("    Reshaped LoRA B to:", lora_b_val.shape)
 
         combined_lora = lora_a_val @ lora_b_val
