@@ -26,7 +26,7 @@ ALPHA = 64.0
 OUTPUT_DIR = "./test_output/gemma3-1b-lora-merged"
 
 # Mesh configuration
-MESH_SHAPE = len(jax.devices()), 1
+MESH_SHAPE = 1, 1
 MESH_AXIS_NAMES = "fsdp", "tp"
 
 
@@ -57,15 +57,20 @@ def run_forward_pass(model, tokenizer, input_text: str, mesh):
     else:
         token_ids = tokenizer.encode(input_text)
 
-    # Prepare inputs
-    batch_size = 1
+    # Prepare inputs - use batch_size that matches FSDP sharding
+    # Get number of devices in FSDP dimension
+    num_devices = len(jax.devices())
+    batch_size = num_devices  # Must be divisible by FSDP sharding
     seq_len = len(token_ids)
-    last_tokens = jnp.array([token_ids], dtype=jnp.int32)  # [1, seq_len]
-    positions = jnp.arange(seq_len, dtype=jnp.int32)[None, :]  # [1, seq_len]
+
+    # Replicate the same input across all batch positions
+    last_tokens = jnp.array([token_ids] * batch_size, dtype=jnp.int32)  # [batch_size, seq_len]
+    positions = jnp.tile(jnp.arange(seq_len, dtype=jnp.int32)[None, :], (batch_size, 1))  # [batch_size, seq_len]
     attention_mask = jnp.ones((batch_size, 1, seq_len), dtype=jnp.bool_)
 
     print(f"  Input tokens: {token_ids}")
     print(f"  Input shape: {last_tokens.shape}")
+    print(f"  Batch size adjusted to: {batch_size} (to match FSDP sharding)")
 
     # Run forward pass
     with mesh:
@@ -102,6 +107,7 @@ def compare_logits(lora_logits, merged_logits, tolerance=1e-4):
 
     print(f"LoRA logits shape: {lora_logits_np.shape}")
     print(f"Merged logits shape: {merged_logits_np.shape}")
+    print("Note: Comparing first batch element (all batch elements are identical)")
 
     # Compute differences
     abs_diff = np.abs(lora_logits_np - merged_logits_np)
