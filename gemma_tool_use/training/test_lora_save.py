@@ -6,6 +6,7 @@ Tests that the LoRA merging logic produces identical outputs.
 
 import os
 import gc
+from pathlib import Path
 
 import jax
 import jax.numpy as jnp
@@ -219,7 +220,7 @@ def main():
 
     with mesh:
         merged_model = params_safetensors_lib.create_model_from_safe_tensors(
-            saved_path, model_config, mesh
+            Path.abs(saved_path), model_config, mesh
         )
         print("Merged model loaded successfully")
 
