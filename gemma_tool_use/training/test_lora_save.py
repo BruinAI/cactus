@@ -220,7 +220,7 @@ def main():
 
     with mesh:
         merged_model = params_safetensors_lib.create_model_from_safe_tensors(
-            Path(saved_path).resolve(), model_config, mesh
+            str(Path(saved_path).resolve()), model_config, mesh
         )
         print("Merged model loaded successfully")
 
