@@ -8,6 +8,9 @@ import os
 import gc
 from pathlib import Path
 
+import wandb
+wandb.init(mode="disabled")  # Disable wandb for test runs
+
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -30,7 +33,7 @@ OUTPUT_DIR = "./test_output/gemma3-1b-lora-merged"
 # Training configuration
 TRAIN_TEXT = "The quick brown fox jumped over the lazy dog"
 LEARNING_RATE = 1e-3  # High learning rate to ensure LoRA weights change
-NUM_TRAIN_STEPS = 100  # Train for 100 steps
+NUM_TRAIN_STEPS = 10  # Train for 10 steps (enough to see significant changes)
 
 # Mesh configuration
 MESH_SHAPE = 1, 1
@@ -170,7 +173,7 @@ def train_on_sentence(model, tokenizer, text: str, mesh, num_steps: int, learnin
     # Train
     print("\nTraining...")
     with mesh:
-        trainer.train(train_data_iter(), eval_data_iter=None)
+        trainer.train(train_data_iter())
 
     print("Training complete!")
     return model
