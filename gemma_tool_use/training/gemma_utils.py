@@ -94,7 +94,7 @@ def create_lora_model(base_model, mesh, rank: int, alpha: float):
     return lora_model
 
 
-def save_lora_weights(lora_model, local_model_path: str, output_dir: str, rank: int = None, alpha: float = None):
+def save_lora_weights(lora_model, local_model_path: str, output_dir: str, rank: int, alpha: float):
     """
     Save LoRA weights merged with base model as safetensors.
 
@@ -102,8 +102,8 @@ def save_lora_weights(lora_model, local_model_path: str, output_dir: str, rank: 
         lora_model: Trained LoRA model
         local_model_path: Path to base model (for loading base weights)
         output_dir: Directory to save merged weights
-        rank: LoRA rank (if None, will try to infer from model)
-        alpha: LoRA alpha (if None, will try to infer from model)
+        rank: LoRA rank
+        alpha: LoRA alpha
 
     Returns:
         Path to saved weights directory

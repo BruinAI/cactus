@@ -98,7 +98,7 @@ def create_lora_model(base_model, mesh, rank: int, alpha: float):
     return lora_model
 
 
-def save_lora_weights(lora_model, local_model_path: str, output_dir: str):
+def save_lora_weights(lora_model, local_model_path: str, output_dir: str, rank: int, alpha: float):
     """
     Save LoRA weights merged with base model as safetensors.
 
@@ -106,6 +106,8 @@ def save_lora_weights(lora_model, local_model_path: str, output_dir: str):
         lora_model: Trained LoRA model
         local_model_path: Path to base model (for loading base weights)
         output_dir: Directory to save merged weights
+        rank: LoRA rank
+        alpha: LoRA alpha
 
     Returns:
         Path to saved weights directory
@@ -141,6 +143,7 @@ def save_lora_weights(lora_model, local_model_path: str, output_dir: str):
 
     print(f"Found {len(lora_layers)} LoRA layers")
     print(f"LoRA layer names: {list(lora_layers.keys())[:3]}...")
+    print(f"Using LoRA scaling: alpha={alpha}, rank={rank}, scaling_factor={alpha/rank}")
 
     # Load base model state
     print("\nStep 2: Loading base model weights...")
@@ -168,7 +171,8 @@ def save_lora_weights(lora_model, local_model_path: str, output_dir: str):
             d0, d1, d2 = lora_b_val.shape
             lora_b_val = lora_b_val.reshape(d0, d1 * d2)
 
-        combined_lora = lora_a_val @ lora_b_val
+        # Compute LoRA delta: A @ B and apply alpha/rank scaling
+        combined_lora = (lora_a_val @ lora_b_val) * (alpha / rank)
         base_state[state_key] = base_state[state_key] + combined_lora.T
 
     print(f"Merged {len(lora_layers)} LoRA layers into base weights")
