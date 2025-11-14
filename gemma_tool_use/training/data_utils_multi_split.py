@@ -261,7 +261,8 @@ def create_tool_calling_dataset(
     max_tools_used,
     max_tools_available,
     max_number_of_turns,
-    format_function
+    format_function,
+    use_full_dataset=False
 ):
     """
     Create and format the tool calling dataset.
@@ -274,6 +275,8 @@ def create_tool_calling_dataset(
         max_tools_used: Maximum number of tools used per example
         max_tools_available: Maximum number of tools available per example
         format_function: Function to format examples (takes batched examples dict)
+        use_full_dataset: If True, load all configurations (OSS, Qwen3, SFT).
+                          If False, only load SFT split (default: False)
 
     Returns:
         Tuple of (train_loader, validation_loader, total_steps, train_dataset)
@@ -282,18 +285,67 @@ def create_tool_calling_dataset(
     print("Loading Toucan-1.5M dataset")
     print(f"{'='*60}")
 
-    dataset = load_dataset('Agent-Ark/Toucan-1.5M', 'SFT', split='train')
+    if use_full_dataset:
+        # Load all configurations: OSS, Qwen3, and SFT
+        # skipping Kimi-K2, it cannot be parsed for SFT
+        print("Loading ALL dataset configurations (OSS, Qwen3, SFT)...")
 
-    # Filter dataset
-    filtered_dataset = filter_toucan_dataset(dataset, max_tools_used, max_tools_available, max_number_of_turns)
+        # Load each configuration
+        from datasets import concatenate_datasets
 
-    # Split into train and validation sets: 95% train, 5% validation
-    split = filtered_dataset.train_test_split(test_size=0.05, seed=42)
-    filtered_dataset = split['train']
-    validation_dataset = split['test']
+        oss_dataset = load_dataset('Agent-Ark/Toucan-1.5M', 'OSS', split='train')
+        qwen_dataset = load_dataset('Agent-Ark/Toucan-1.5M', 'Qwen3', split='train')
+        sft_dataset = load_dataset('Agent-Ark/Toucan-1.5M', 'SFT', split='train')
 
-    print(f"SFT training split: {len(filtered_dataset):,} samples")
-    print(f"SFT validation split: {len(validation_dataset):,} samples")
+        print(f"  OSS: {len(oss_dataset):,} samples")
+        print(f"  Qwen3: {len(qwen_dataset):,} samples")
+        print(f"  SFT: {len(sft_dataset):,} samples")
+        print(f"  Total raw samples: {len(oss_dataset) + len(qwen_dataset) + len(sft_dataset):,}")
+
+        # Filter each dataset separately
+        print("\nFiltering each dataset configuration...")
+        filtered_oss = filter_toucan_dataset(oss_dataset, max_tools_used, max_tools_available, max_number_of_turns)
+        filtered_qwen = filter_toucan_dataset(qwen_dataset, max_tools_used, max_tools_available, max_number_of_turns)
+        filtered_sft = filter_toucan_dataset(sft_dataset, max_tools_used, max_tools_available, max_number_of_turns)
+
+        print(f"\nFiltered sizes:")
+        print(f"  OSS: {len(filtered_oss):,} samples")
+        print(f"  Qwen3: {len(filtered_qwen):,} samples")
+        print(f"  SFT: {len(filtered_sft):,} samples")
+
+        # Concatenate non-SFT datasets first, then SFT
+        # This ensures non-SFT data comes before SFT data in training
+        non_sft_dataset = concatenate_datasets([filtered_oss, filtered_qwen])
+        print(f"\nCombined non-SFT dataset: {len(non_sft_dataset):,} samples")
+
+        # Split the SFT dataset: 95% for training, 5% for validation
+        sft_split = filtered_sft.train_test_split(test_size=0.05, seed=42)
+        sft_train = sft_split['train']
+        validation_dataset = sft_split['test']
+
+        print(f"SFT training split: {len(sft_train):,} samples")
+        print(f"SFT validation split: {len(validation_dataset):,} samples")
+
+        # Combine non-SFT data with SFT training data (non-SFT first)
+        filtered_dataset = concatenate_datasets([non_sft_dataset, sft_train])
+        print(f"\nFinal combined training dataset: {len(filtered_dataset):,} samples")
+        print(f"  - Non-SFT portion: {len(non_sft_dataset):,} samples (first)")
+        print(f"  - SFT portion: {len(sft_train):,} samples (second)")
+
+    else:
+        # Original behavior: Load only SFT dataset
+        dataset = load_dataset('Agent-Ark/Toucan-1.5M', 'SFT', split='train')
+
+        # Filter dataset
+        filtered_dataset = filter_toucan_dataset(dataset, max_tools_used, max_tools_available, max_number_of_turns)
+
+        # Split into train and validation sets: 95% train, 5% validation
+        split = filtered_dataset.train_test_split(test_size=0.05, seed=42)
+        filtered_dataset = split['train']
+        validation_dataset = split['test']
+
+        print(f"SFT training split: {len(filtered_dataset):,} samples")
+        print(f"SFT validation split: {len(validation_dataset):,} samples")
     
     # Format examples
     print("\nFormatting examples for Gemma 3 tool calling...")
