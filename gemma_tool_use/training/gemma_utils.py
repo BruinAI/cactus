@@ -125,10 +125,18 @@ def save_lora_weights(lora_model, local_model_path: str, output_dir: str):
     # Extract LoRA layers
     lora_layers = {}
     for layer in lora_model.layers:
-        for proj_name in ['q_proj', 'k_proj', 'v_proj', 'o_proj']:
-            proj = getattr(layer.attn, proj_name)
-            path = path_to_str(proj.qwix_path)
-            lora_layers[path] = (proj.w_lora_a, proj.w_lora_b)
+        proj = layer.attn.q_einsum
+        path = path_to_str(proj.qwix_path)
+        lora_layers[path] = (proj.w_lora_a, proj.w_lora_b)
+
+        proj = layer.attn.kv_einsum
+        path = path_to_str(proj.qwix_path)
+        lora_layers[path.replace('kv_einsum', 'k_einsum')] = (
+            proj.w_lora_a[0], proj.w_lora_b[0]
+        )
+        lora_layers[path.replace('kv_einsum', 'v_einsum')] = (
+            proj.w_lora_a[1], proj.w_lora_b[1]
+        )
 
         for proj_name in ['gate_proj', 'up_proj', 'down_proj']:
             proj = getattr(layer.mlp, proj_name)
@@ -145,10 +153,16 @@ def save_lora_weights(lora_model, local_model_path: str, output_dir: str):
 
     # Step 3: Apply LoRA deltas to base weights
     print("\nStep 3: Merging LoRA deltas with base weights...")
+
     for lora_name, (lora_a, lora_b) in lora_layers.items():
-        state_key = f'model.{lora_name}.weight'
-        assert state_key in base_state, \
-               f"LoRA layer {lora_name} not found in base model state dict"
+        state_key = (
+            f'model.{lora_name}.weight'
+            .replace('.attn.', '.self_attn.')
+            .replace('q_einsum', 'q_proj')
+            .replace('k_einsum', 'k_proj')
+            .replace('v_einsum', 'v_proj')
+        )
+        assert state_key in base_state
 
         lora_a_val = jnp.asarray(lora_a.value).astype(np.float32)
         lora_b_val = jnp.asarray(lora_b.value).astype(np.float32)
@@ -156,7 +170,7 @@ def save_lora_weights(lora_model, local_model_path: str, output_dir: str):
         combined_lora = lora_a_val @ lora_b_val
         base_state[state_key] = base_state[state_key] + combined_lora.T
 
-    print(f"Merged {len(lora_layers)} LoRA layers into base weights")
+    print(f"\nMerged {len(lora_layers)} LoRA layers into base weights")
 
     # Step 4: Save merged weights as safetensors
     print("\nStep 4: Saving as safetensors...")
