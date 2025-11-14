@@ -251,43 +251,4 @@ void cactus_fp16_to_int8(const __fp16* src, int8_t* dst, size_t count, float sca
 float cactus_fp16_max_abs(const __fp16* src, size_t count);
 void cactus_int32_to_fp16_scaled(const int32_t* src, __fp16* dst, size_t count, float scale);
 
-void cactus_rfft_f32_1d(const float* input, float* output, const size_t n, const char* norm = "backward");
-
-void mel_filter_bank(
-    float* mel_filters,
-    const int num_frequency_bins, 
-    const int num_mel_filters, 
-    const float min_frequency, 
-    const float max_frequency, 
-    const int sampling_rate, 
-    const char* norm = nullptr, 
-    const char* mel_scale = "htk", 
-    const bool triangularize_in_mel_space = false
-);
-
-void cactus_spectrogram_f32(
-    const float* waveform,
-    size_t waveform_length,
-    const float* window,
-    size_t window_length,
-    size_t frame_length,
-    size_t hop_length,
-    const size_t* fft_length,
-    float* spectrogram,
-    float power = 1.0f,
-    bool center = true,
-    const char* pad_mode = "reflect",
-    bool onesided = true,
-    float dither = 0.0f,
-    const float* preemphasis = nullptr,
-    const float* mel_filters = nullptr,
-    size_t mel_filters_size = 0,
-    float mel_floor = 1e-10f,
-    const char* log_mel = nullptr,
-    float reference = 1.0f,
-    float min_value = 1e-10f,
-    const float* db_range = nullptr,
-    bool remove_dc_offset = false
-);
-
 #endif 
