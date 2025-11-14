@@ -164,8 +164,8 @@ def save_lora_weights(lora_model, local_model_path: str, output_dir: str):
         )
         assert state_key in base_state
 
-        lora_a_val = jnp.asarray(lora_a.value).astype(np.float32)
-        lora_b_val = jnp.asarray(lora_b.value).astype(np.float32)
+        lora_a_val = jnp.asarray(getattr(lora_a, 'value', lora_a)).astype(np.float32)
+        lora_b_val = jnp.asarray(getattr(lora_b, 'value', lora_b)).astype(np.float32)
 
         # Reshape 3D LoRA matrices to 2D for matrix multiplication
         # LoRA A: (d0, d1, d2) -> (d0*d1, d2)  |  LoRA B: (d0, d1, d2) -> (d0, d1*d2)
