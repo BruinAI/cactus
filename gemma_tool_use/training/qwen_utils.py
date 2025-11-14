@@ -193,9 +193,10 @@ def save_lora_weights(lora_model, local_model_path: str, output_dir: str):
         # Reshape LoRA matrices if they're 3D (for multi-head attention projections)
         # LoRA A: (rank, num_heads, head_dim) -> (rank, num_heads * head_dim)
         # LoRA B: (rank, num_heads, head_dim) -> (rank, num_heads * head_dim)
+        assert lora_a_val.ndim in (2, 3) and lora_b_val.ndim in (2, 3)
         if lora_a_val.ndim == 3:
             dims = lora_a_val.shape
-            lora_a_val = lora_a_val.reshape(dims[0], dims[1] * dims[2])
+            lora_a_val = lora_a_val.reshape(dims[0] * dims[1], dims[2])
             print(f"  Reshaped LoRA A from {dims} to {lora_a_val.shape}")
 
         if lora_b_val.ndim == 3:
