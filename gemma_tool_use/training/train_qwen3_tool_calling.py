@@ -14,7 +14,9 @@ Optimized for 4x TPU v5e chips.
 """
 
 import os
+import sys
 import json
+import argparse
 import logging
 from typing import Dict
 import nest_asyncio
@@ -51,7 +53,7 @@ logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 # ============================================================================
-# Configuration
+# Configuration (Default values - can be overridden by command-line arguments)
 # ============================================================================
 
 # Model configuration
@@ -66,7 +68,7 @@ TOOLS_PATH = os.path.join(DATA_DIR, "noah_tools.json")
 # Training hyperparameters
 NUM_EPOCHS = 5
 LEARNING_RATE = 5e-5
-MAX_TARGET_LENGTH = 2048  # Noah's dataset has shorter sequences
+MAX_TARGET_LENGTH = 1500  # Noah's dataset has shorter sequences
 
 # Allow max_steps override
 MAX_STEPS = None
@@ -89,6 +91,10 @@ TRAIN_TEST_SPLIT = 1/6
 # Checkpoint and output directories
 CKPT_DIR = "/tmp/qwen_tool_calling_ckpts/"
 LORA_OUTPUT_DIR = f"/dev/shm/{MODEL_ID.split('/')[-1]}_tool_calling_lora"
+
+# W&B configuration
+WANDB_PROJECT = "qwen3-tool-calling"
+WANDB_ENTITY = None  # Set to your W&B username/team
 
 
 # ============================================================================
@@ -365,31 +371,211 @@ def test_model_generation(model, tokenizer, model_config, eos_tokens, tools, lab
 
 
 # ============================================================================
+# Argument Parsing
+# ============================================================================
+
+def parse_args():
+    """Parse command-line arguments."""
+    parser = argparse.ArgumentParser(
+        description="Train Qwen 3 on tool calling using LoRA"
+    )
+
+    # Model arguments
+    parser.add_argument(
+        "--model_id",
+        type=str,
+        default=MODEL_ID,
+        help=f"Model ID to train (default: {MODEL_ID})"
+    )
+
+    # Training hyperparameters
+    parser.add_argument(
+        "--learning_rate",
+        type=float,
+        default=LEARNING_RATE,
+        help=f"Learning rate (default: {LEARNING_RATE})"
+    )
+    parser.add_argument(
+        "--num_epochs",
+        type=int,
+        default=NUM_EPOCHS,
+        help=f"Number of epochs (default: {NUM_EPOCHS})"
+    )
+    parser.add_argument(
+        "--batch_size",
+        type=int,
+        default=BATCH_SIZE,
+        help=f"Batch size (default: {BATCH_SIZE})"
+    )
+    parser.add_argument(
+        "--gradient_accumulation_steps",
+        type=int,
+        default=GRADIENT_ACCUMULATION_STEPS,
+        help=f"Gradient accumulation steps (default: {GRADIENT_ACCUMULATION_STEPS})"
+    )
+    parser.add_argument(
+        "--max_target_length",
+        type=int,
+        default=MAX_TARGET_LENGTH,
+        help=f"Max sequence length (default: {MAX_TARGET_LENGTH})"
+    )
+    parser.add_argument(
+        "--max_steps",
+        type=int,
+        default=MAX_STEPS,
+        help="Max steps (overrides epochs if set)"
+    )
+    parser.add_argument(
+        "--eval_every_n_steps",
+        type=int,
+        default=EVAL_EVERY_N_STEPS,
+        help=f"Evaluate every N steps (default: {EVAL_EVERY_N_STEPS})"
+    )
+
+    # LoRA hyperparameters
+    parser.add_argument(
+        "--lora_rank",
+        type=int,
+        default=RANK,
+        help=f"LoRA rank (default: {RANK})"
+    )
+    parser.add_argument(
+        "--lora_alpha",
+        type=float,
+        default=ALPHA,
+        help=f"LoRA alpha (default: {ALPHA})"
+    )
+
+    # Dataset arguments
+    parser.add_argument(
+        "--dataset_path",
+        type=str,
+        default=DATASET_PATH,
+        help=f"Path to dataset (default: {DATASET_PATH})"
+    )
+    parser.add_argument(
+        "--tools_path",
+        type=str,
+        default=TOOLS_PATH,
+        help=f"Path to tools JSON (default: {TOOLS_PATH})"
+    )
+    parser.add_argument(
+        "--train_test_split",
+        type=float,
+        default=TRAIN_TEST_SPLIT,
+        help=f"Train/test split ratio (default: {TRAIN_TEST_SPLIT})"
+    )
+
+    # Output directories
+    parser.add_argument(
+        "--checkpoint_dir",
+        type=str,
+        default=CKPT_DIR,
+        help=f"Checkpoint directory (default: {CKPT_DIR})"
+    )
+    parser.add_argument(
+        "--output_dir",
+        type=str,
+        default=None,
+        help="LoRA output directory (default: /dev/shm/MODEL_tool_calling_lora)"
+    )
+
+    # W&B arguments
+    parser.add_argument(
+        "--wandb_project",
+        type=str,
+        default=WANDB_PROJECT,
+        help=f"W&B project name (default: {WANDB_PROJECT})"
+    )
+    parser.add_argument(
+        "--wandb_entity",
+        type=str,
+        default=WANDB_ENTITY,
+        help="W&B entity (username/team)"
+    )
+    parser.add_argument(
+        "--run_name",
+        type=str,
+        default=None,
+        help="W&B run name (auto-generated if not provided)"
+    )
+    parser.add_argument(
+        "--no_wandb",
+        action="store_true",
+        help="Disable W&B logging"
+    )
+
+    return parser.parse_args()
+
+
+# ============================================================================
 # Main Training Script
 # ============================================================================
 
 def main():
     """Main training function."""
+    # Parse arguments
+    args = parse_args()
+
+    # Update global variables with args
+    model_id = args.model_id
+    learning_rate = args.learning_rate
+    num_epochs = args.num_epochs
+    batch_size = args.batch_size
+    gradient_accumulation_steps = args.gradient_accumulation_steps
+    max_target_length = args.max_target_length
+    max_steps = args.max_steps
+    eval_every_n_steps = args.eval_every_n_steps
+    lora_rank = args.lora_rank
+    lora_alpha = args.lora_alpha
+    dataset_path = args.dataset_path
+    tools_path = args.tools_path
+    train_test_split = args.train_test_split
+    ckpt_dir = args.checkpoint_dir
+    lora_output_dir = args.output_dir or f"/dev/shm/{model_id.split('/')[-1]}_tool_calling_lora"
+
     print("="*60)
     print("Qwen 3 Tool Calling Training Script (Noah's Dataset)")
     print("="*60)
-    print(f"Model: {MODEL_ID}")
-    print(f"Dataset: {DATASET_PATH}")
-    print(f"Tools: {TOOLS_PATH}")
-    print(f"Global batch size: {BATCH_SIZE}")
-    print(f"Epochs: {NUM_EPOCHS}")
-    print(f"Learning rate: {LEARNING_RATE}")
-    print(f"LoRA rank: {RANK}, alpha: {ALPHA}")
-    print(f"Max sequence length: {MAX_TARGET_LENGTH}")
+    print(f"Model: {model_id}")
+    print(f"Dataset: {dataset_path}")
+    print(f"Tools: {tools_path}")
+    print(f"Global batch size: {batch_size}")
+    print(f"Epochs: {num_epochs}")
+    print(f"Learning rate: {learning_rate}")
+    print(f"LoRA rank: {lora_rank}, alpha: {lora_alpha}")
+    print(f"Max sequence length: {max_target_length}")
     print(f"Devices: {len(jax.devices())} x {jax.devices()[0].platform}")
     print(f"Mesh configuration: {MESH_SHAPE} x {MESH_AXIS_NAMES}")
 
+    # Initialize W&B if enabled
+    if not args.no_wandb:
+        run_name = args.run_name or f"qwen3_lr{learning_rate}_ep{num_epochs}_r{lora_rank}_a{lora_alpha}"
+        wandb.init(
+            project=args.wandb_project,
+            entity=args.wandb_entity,
+            name=run_name,
+            config={
+                "model_id": model_id,
+                "learning_rate": learning_rate,
+                "num_epochs": num_epochs,
+                "batch_size": batch_size,
+                "gradient_accumulation_steps": gradient_accumulation_steps,
+                "max_target_length": max_target_length,
+                "lora_rank": lora_rank,
+                "lora_alpha": lora_alpha,
+                "eval_every_n_steps": eval_every_n_steps,
+                "train_test_split": train_test_split,
+            }
+        )
+        print(f"\nW&B run: {run_name}")
+
     # Create checkpoint directories
-    os.makedirs(CKPT_DIR, exist_ok=True)
-    print(f"Checkpoint directory: {CKPT_DIR}")
+    os.makedirs(ckpt_dir, exist_ok=True)
+    print(f"Checkpoint directory: {ckpt_dir}")
 
     # Download model
-    local_model_path, eos_tokens = download_and_setup_model(MODEL_ID)
+    local_model_path, eos_tokens = download_and_setup_model(model_id)
 
     # Initialize tokenizer
     print(f"\n{'='*60}")
@@ -411,8 +597,8 @@ def main():
     print(f"\n{'='*60}")
     print("Loading Noah's dataset and tools")
     print(f"{'='*60}")
-    tools = load_noah_tools(TOOLS_PATH)
-    dataset_samples = load_noah_dataset(DATASET_PATH)
+    tools = load_noah_tools(tools_path)
+    dataset_samples = load_noah_dataset(dataset_path)
     print(f"Loaded {len(tools)} tools")
     print(f"Loaded {len(dataset_samples)} dataset samples")
 
@@ -428,7 +614,7 @@ def main():
 
     # Create HuggingFace dataset and split
     full_dataset = Dataset.from_list(formatted_samples)
-    split = full_dataset.train_test_split(test_size=TRAIN_TEST_SPLIT, seed=42)
+    split = full_dataset.train_test_split(test_size=train_test_split, seed=42)
     train_dataset = split['train']
     validation_dataset = split['test']
 
@@ -441,33 +627,34 @@ def main():
     # Build grain DataLoaders
     train_loader = _build_data_loader(
         data_source=train_dataset,
-        batch_size=BATCH_SIZE,
-        num_epochs=NUM_EPOCHS,
-        max_seq_len=MAX_TARGET_LENGTH,
+        batch_size=batch_size,
+        num_epochs=num_epochs,
+        max_seq_len=max_target_length,
         tokenizer=tokenizer,
         shuffle=True
     )
 
     validation_loader = _build_data_loader(
         data_source=validation_dataset,
-        batch_size=BATCH_SIZE,
+        batch_size=batch_size,
         num_epochs=1,
-        max_seq_len=MAX_TARGET_LENGTH,
+        max_seq_len=max_target_length,
         tokenizer=tokenizer,
         shuffle=False
     )
 
     # Calculate steps
     num_train_examples = len(train_dataset)
-    steps_per_epoch = num_train_examples // BATCH_SIZE
-    total_steps = steps_per_epoch * NUM_EPOCHS
-    max_steps = MAX_STEPS if MAX_STEPS is not None else total_steps
+    steps_per_epoch = num_train_examples // batch_size
+    total_steps = steps_per_epoch * num_epochs
+    if max_steps is None:
+        max_steps = total_steps
 
     print(f"\nDataset statistics:")
     print(f"  Training examples: {num_train_examples}")
     print(f"  Validation examples: {len(validation_dataset)}")
     print(f"  Steps per epoch: {steps_per_epoch}")
-    print(f"  Total steps ({NUM_EPOCHS} epochs): {total_steps}")
+    print(f"  Total steps ({num_epochs} epochs): {total_steps}")
     print(f"  Max steps: {max_steps}")
 
     # Initialize model
@@ -476,18 +663,18 @@ def main():
     print(f"{'='*60}")
 
     # Determine model config based on model name
-    if "0.6" in MODEL_ID or "0_6" in MODEL_ID:
+    if "0.6" in model_id or "0_6" in model_id:
         model_config = qwen_lib.ModelConfig.qwen3_0_6b()
-    elif "1.7" in MODEL_ID or "1_7" in MODEL_ID:
+    elif "1.7" in model_id or "1_7" in model_id:
         model_config = qwen_lib.ModelConfig.qwen3_1_7b()
-    elif "8" in MODEL_ID:
+    elif "8" in model_id:
         model_config = qwen_lib.ModelConfig.qwen3_8b()
-    elif "14" in MODEL_ID:
+    elif "14" in model_id:
         model_config = qwen_lib.ModelConfig.qwen3_14b()
-    elif "30" in MODEL_ID:
+    elif "30" in model_id:
         model_config = qwen_lib.ModelConfig.qwen3_30b()
     else:
-        raise ValueError(f"Unsupported model ID: {MODEL_ID}")
+        raise ValueError(f"Unsupported model ID: {model_id}")
 
     mesh = jax.make_mesh(MESH_SHAPE, MESH_AXIS_NAMES)
     with mesh:
@@ -497,7 +684,7 @@ def main():
         print("Base model loaded successfully")
 
     # Apply LoRA
-    lora_model = create_lora_model(base_model, mesh=mesh, rank=RANK, alpha=ALPHA)
+    lora_model = create_lora_model(base_model, mesh=mesh, rank=lora_rank, alpha=lora_alpha)
 
     # Test base model before training
     print(f"\n{'='*60}")
@@ -512,15 +699,15 @@ def main():
     print(f"{'='*60}")
 
     logging_options = metrics_logger.MetricsLoggerOptions(
-        log_dir=os.path.join(CKPT_DIR, "tensorboard"),
+        log_dir=os.path.join(ckpt_dir, "tensorboard"),
         flush_every_n_steps=20
     )
 
     training_config = peft_trainer.TrainingConfig(
-        eval_every_n_steps=EVAL_EVERY_N_STEPS,
+        eval_every_n_steps=eval_every_n_steps,
         max_steps=max_steps,
         metrics_logging_options=logging_options,
-        checkpoint_root_directory=CKPT_DIR,
+        checkpoint_root_directory=ckpt_dir,
     )
 
     print(f"Training for {max_steps:,} steps total")
@@ -528,17 +715,17 @@ def main():
     warmup_steps = int(0.05 * max_steps)
     lr_schedule = optax.warmup_cosine_decay_schedule(
         init_value=0.0,
-        peak_value=LEARNING_RATE,
+        peak_value=learning_rate,
         warmup_steps=warmup_steps,
         decay_steps=max_steps - warmup_steps,
-        end_value=LEARNING_RATE * 0.1,
+        end_value=learning_rate * 0.1,
     )
 
     print(f"Learning rate schedule: warmup for {warmup_steps} steps, then cosine decay")
 
     optimizer = optax.MultiSteps(
         optax.adamw(learning_rate=lr_schedule),
-        every_k_schedule=GRADIENT_ACCUMULATION_STEPS
+        every_k_schedule=gradient_accumulation_steps
     )
 
     trainer = peft_trainer.PeftTrainer(
@@ -552,13 +739,12 @@ def main():
     print("Starting training")
     print(f"{'='*60}")
     print("This may take several minutes for the first step...")
-    print(f"TensorBoard logs will be located at: {os.path.join(CKPT_DIR, 'tensorboard')}")
+    print(f"TensorBoard logs will be located at: {os.path.join(ckpt_dir, 'tensorboard')}")
     print(f"\nTo view training metrics, run:")
-    print(f"  tensorboard --logdir {os.path.join(CKPT_DIR, 'tensorboard')}")
+    print(f"  tensorboard --logdir {os.path.join(ckpt_dir, 'tensorboard')}")
 
     with mesh:
         trainer.train(train_loader, validation_loader)
-    wandb.init()
 
     print(f"\n{'='*60}")
     print("Training complete!")
@@ -572,15 +758,19 @@ def main():
                           label="Trained Model (After Training)")
 
     # Save LoRA weights merged with base model
-    saved_path = save_lora_weights(lora_model, local_model_path, LORA_OUTPUT_DIR)
+    saved_path = save_lora_weights(lora_model, local_model_path, lora_output_dir)
 
     print(f"\n{'='*60}")
     print("Summary")
     print(f"{'='*60}")
     print(f"Model saved to: {saved_path}")
-    print(f"Training checkpoints: {CKPT_DIR}")
+    print(f"Training checkpoints: {ckpt_dir}")
     print(f"\nThe model is ready to use for inference!")
     print(f"Load it from: {saved_path}")
+
+    # Finish W&B run
+    if not args.no_wandb:
+        wandb.finish()
 
 
 if __name__ == '__main__':
