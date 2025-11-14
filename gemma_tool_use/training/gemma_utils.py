@@ -132,10 +132,10 @@ def save_lora_weights(lora_model, local_model_path: str, output_dir: str):
         proj = layer.attn.kv_einsum
         path = path_to_str(proj.qwix_path)
         lora_layers[path.replace('kv_einsum', 'k_einsum')] = (
-            proj.w_lora_a[0], proj.w_lora_b[0]
+            proj.w_lora_a, proj.w_lora_b[:, 0]
         )
         lora_layers[path.replace('kv_einsum', 'v_einsum')] = (
-            proj.w_lora_a[1], proj.w_lora_b[1]
+            proj.w_lora_a, proj.w_lora_b[:, 1]
         )
 
         for proj_name in ['gate_proj', 'up_proj', 'down_proj']:
