@@ -303,10 +303,15 @@ class HyperparameterSearch:
 
     def _extract_metrics(self, run_dir: Path, log_file: Path) -> Dict[str, Any]:
         """
-        Extract final metrics from training logs.
+        Extract final metrics from training.
 
-        Looks for validation loss, training loss, and any other metrics
-        logged during training.
+        Tries multiple sources in order of preference:
+        1. metrics.json file (saved by training script)
+        2. TensorBoard event files
+        3. Parsing training logs
+
+        Returns:
+            Dictionary with final_train_loss, final_val_loss, and best_val_loss
         """
         metrics = {
             "final_train_loss": None,
@@ -314,38 +319,161 @@ class HyperparameterSearch:
             "best_val_loss": None,
         }
 
-        if not log_file.exists():
-            return metrics
+        # Method 1: Try to load from metrics.json (most reliable)
+        metrics_json = run_dir / "checkpoints" / "metrics.json"
+        if metrics_json.exists():
+            try:
+                with open(metrics_json, 'r') as f:
+                    saved_metrics = json.load(f)
+                logger.info(f"Loaded metrics from {metrics_json}")
+                return {
+                    "final_train_loss": saved_metrics.get("final_train_loss"),
+                    "final_val_loss": saved_metrics.get("final_val_loss"),
+                    "best_val_loss": saved_metrics.get("best_val_loss"),
+                }
+            except Exception as e:
+                logger.warning(f"Failed to load metrics.json: {e}")
+
+        # Method 2: Try to read from TensorBoard events
+        try:
+            tb_dir = run_dir / "checkpoints" / "tensorboard"
+            if tb_dir.exists():
+                metrics_from_tb = self._extract_metrics_from_tensorboard(tb_dir)
+                if metrics_from_tb["best_val_loss"] is not None:
+                    logger.info("Loaded metrics from TensorBoard events")
+                    return metrics_from_tb
+        except Exception as e:
+            logger.warning(f"Failed to extract from TensorBoard: {e}")
+
+        # Method 3: Parse training logs (least reliable, but fallback)
+        if log_file.exists():
+            try:
+                metrics_from_logs = self._extract_metrics_from_logs(log_file)
+                if metrics_from_logs["best_val_loss"] is not None:
+                    logger.info("Loaded metrics from training logs")
+                    return metrics_from_logs
+            except Exception as e:
+                logger.warning(f"Failed to extract from logs: {e}")
+
+        logger.warning(f"Could not extract metrics for run in {run_dir}")
+        return metrics
+
+    def _extract_metrics_from_tensorboard(self, tb_dir: Path) -> Dict[str, Any]:
+        """
+        Extract metrics from TensorBoard event files.
+
+        Args:
+            tb_dir: Directory containing TensorBoard event files
+
+        Returns:
+            Dictionary with extracted metrics
+        """
+        metrics = {
+            "final_train_loss": None,
+            "final_val_loss": None,
+            "best_val_loss": None,
+        }
+
+        try:
+            from tensorboard.backend.event_processing import event_accumulator
+
+            # Find all event files
+            event_files = list(tb_dir.glob("events.out.tfevents.*"))
+            if not event_files:
+                return metrics
+
+            # Load events from the most recent file
+            event_file = max(event_files, key=lambda p: p.stat().st_mtime)
+            ea = event_accumulator.EventAccumulator(str(event_file))
+            ea.Reload()
+
+            # Extract scalars
+            train_losses = []
+            val_losses = []
+
+            # Try common metric names
+            for tag in ea.Tags().get('scalars', []):
+                if 'train' in tag.lower() and 'loss' in tag.lower():
+                    events = ea.Scalars(tag)
+                    train_losses.extend([e.value for e in events])
+                elif 'val' in tag.lower() and 'loss' in tag.lower():
+                    events = ea.Scalars(tag)
+                    val_losses.extend([e.value for e in events])
+                elif 'eval' in tag.lower() and 'loss' in tag.lower():
+                    events = ea.Scalars(tag)
+                    val_losses.extend([e.value for e in events])
+
+            if train_losses:
+                metrics["final_train_loss"] = train_losses[-1]
+            if val_losses:
+                metrics["final_val_loss"] = val_losses[-1]
+                metrics["best_val_loss"] = min(val_losses)
+
+        except ImportError:
+            logger.debug("tensorboard package not available for reading event files")
+        except Exception as e:
+            logger.debug(f"Error reading TensorBoard events: {e}")
+
+        return metrics
+
+    def _extract_metrics_from_logs(self, log_file: Path) -> Dict[str, Any]:
+        """
+        Extract metrics by parsing training log file.
+
+        Args:
+            log_file: Path to training log file
+
+        Returns:
+            Dictionary with extracted metrics
+        """
+        metrics = {
+            "final_train_loss": None,
+            "final_val_loss": None,
+            "best_val_loss": None,
+        }
 
         try:
             with open(log_file, 'r') as f:
                 lines = f.readlines()
 
-            # Parse metrics from log
-            # This is a simple parser - adjust based on actual log format
             train_losses = []
             val_losses = []
 
-            for line in lines:
-                # Look for loss values in logs
-                if "train_loss" in line.lower():
-                    try:
-                        # Try to extract number after "train_loss"
-                        parts = line.split("train_loss")
-                        if len(parts) > 1:
-                            loss_str = parts[1].split()[0].strip(":=,")
-                            train_losses.append(float(loss_str))
-                    except (ValueError, IndexError):
-                        pass
+            # Improved patterns to match various log formats
+            import re
+            train_patterns = [
+                r'train[_\s]loss[:\s=]+([0-9.]+)',
+                r'training[_\s]loss[:\s=]+([0-9.]+)',
+                r'Final training loss:\s*([0-9.]+)',
+            ]
+            val_patterns = [
+                r'val[_\s]loss[:\s=]+([0-9.]+)',
+                r'validation[_\s]loss[:\s=]+([0-9.]+)',
+                r'eval[_\s]loss[:\s=]+([0-9.]+)',
+                r'Final validation loss:\s*([0-9.]+)',
+                r'Best validation loss:\s*([0-9.]+)',
+            ]
 
-                if "val_loss" in line.lower() or "validation_loss" in line.lower():
-                    try:
-                        parts = line.split("val_loss" if "val_loss" in line.lower() else "validation_loss")
-                        if len(parts) > 1:
-                            loss_str = parts[1].split()[0].strip(":=,")
-                            val_losses.append(float(loss_str))
-                    except (ValueError, IndexError):
-                        pass
+            for line in lines:
+                line_lower = line.lower()
+
+                # Try to match training loss
+                for pattern in train_patterns:
+                    match = re.search(pattern, line_lower)
+                    if match:
+                        try:
+                            train_losses.append(float(match.group(1)))
+                        except (ValueError, IndexError):
+                            pass
+
+                # Try to match validation loss
+                for pattern in val_patterns:
+                    match = re.search(pattern, line_lower)
+                    if match:
+                        try:
+                            val_losses.append(float(match.group(1)))
+                        except (ValueError, IndexError):
+                            pass
 
             if train_losses:
                 metrics["final_train_loss"] = train_losses[-1]
@@ -355,7 +483,7 @@ class HyperparameterSearch:
                 metrics["best_val_loss"] = min(val_losses)
 
         except Exception as e:
-            logger.warning(f"Failed to extract metrics: {e}")
+            logger.debug(f"Error parsing log file: {e}")
 
         return metrics
 

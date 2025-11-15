@@ -24,7 +24,6 @@ nest_asyncio.apply()
 
 import jax
 import optax
-import wandb
 import numpy as np
 from datasets import Dataset
 import grain.python as grain
@@ -92,9 +91,6 @@ TRAIN_TEST_SPLIT = 1/6
 CKPT_DIR = "/tmp/qwen_tool_calling_ckpts/"
 LORA_OUTPUT_DIR = f"/dev/shm/{MODEL_ID.split('/')[-1]}_tool_calling_lora"
 
-# W&B configuration
-WANDB_PROJECT = "qwen3-tool-calling"
-WANDB_ENTITY = None  # Set to your W&B username/team
 
 
 # ============================================================================
@@ -480,31 +476,6 @@ def parse_args():
         help="LoRA output directory (default: /dev/shm/MODEL_tool_calling_lora)"
     )
 
-    # W&B arguments
-    parser.add_argument(
-        "--wandb_project",
-        type=str,
-        default=WANDB_PROJECT,
-        help=f"W&B project name (default: {WANDB_PROJECT})"
-    )
-    parser.add_argument(
-        "--wandb_entity",
-        type=str,
-        default=WANDB_ENTITY,
-        help="W&B entity (username/team)"
-    )
-    parser.add_argument(
-        "--run_name",
-        type=str,
-        default=None,
-        help="W&B run name (auto-generated if not provided)"
-    )
-    parser.add_argument(
-        "--no_wandb",
-        action="store_true",
-        help="Disable W&B logging"
-    )
-
     return parser.parse_args()
 
 
@@ -547,28 +518,6 @@ def main():
     print(f"Max sequence length: {max_target_length}")
     print(f"Devices: {len(jax.devices())} x {jax.devices()[0].platform}")
     print(f"Mesh configuration: {MESH_SHAPE} x {MESH_AXIS_NAMES}")
-
-    # Initialize W&B if enabled
-    if not args.no_wandb:
-        run_name = args.run_name or f"qwen3_lr{learning_rate}_ep{num_epochs}_r{lora_rank}_a{lora_alpha}"
-        wandb.init(
-            project=args.wandb_project,
-            entity=args.wandb_entity,
-            name=run_name,
-            config={
-                "model_id": model_id,
-                "learning_rate": learning_rate,
-                "num_epochs": num_epochs,
-                "batch_size": batch_size,
-                "gradient_accumulation_steps": gradient_accumulation_steps,
-                "max_target_length": max_target_length,
-                "lora_rank": lora_rank,
-                "lora_alpha": lora_alpha,
-                "eval_every_n_steps": eval_every_n_steps,
-                "train_test_split": train_test_split,
-            }
-        )
-        print(f"\nW&B run: {run_name}")
 
     # Create checkpoint directories
     os.makedirs(ckpt_dir, exist_ok=True)
@@ -745,10 +694,56 @@ def main():
 
     with mesh:
         trainer.train(train_loader, validation_loader)
+    wandb.init()
 
     print(f"\n{'='*60}")
     print("Training complete!")
     print(f"{'='*60}\n")
+
+    # Extract and save final metrics for hyperparameter search
+    try:
+        # Get metrics from trainer's metrics_logger
+        final_metrics = {
+            "final_train_loss": None,
+            "final_val_loss": None,
+            "best_val_loss": None,
+            "total_steps": trainer.train_steps,
+        }
+
+        # Get training loss (most recent)
+        try:
+            train_loss = trainer.metrics_logger.get_metric(trainer.metrics_prefix, "loss", "train")
+            if train_loss is not None:
+                final_metrics["final_train_loss"] = float(train_loss)
+        except Exception as e:
+            logger.debug(f"Could not get train loss: {e}")
+
+        # Get validation/eval loss
+        try:
+            eval_loss = trainer.metrics_logger.get_metric(trainer.metrics_prefix, "loss", "eval")
+            if eval_loss is not None:
+                final_metrics["final_val_loss"] = float(eval_loss)
+                # For now, use final_val_loss as best_val_loss
+                # TODO: Track all eval losses to get true minimum
+                final_metrics["best_val_loss"] = float(eval_loss)
+        except Exception as e:
+            logger.debug(f"Could not get eval loss: {e}")
+
+        # Save metrics to JSON file for hyperparameter search
+        metrics_file = os.path.join(ckpt_dir, "metrics.json")
+        with open(metrics_file, 'w') as f:
+            json.dump(final_metrics, f, indent=2)
+        print(f"Saved training metrics to: {metrics_file}")
+
+        # Print final metrics
+        if final_metrics["final_train_loss"] is not None:
+            print(f"Final training loss: {final_metrics['final_train_loss']:.4f}")
+        if final_metrics["final_val_loss"] is not None:
+            print(f"Final validation loss: {final_metrics['final_val_loss']:.4f}")
+        if final_metrics["best_val_loss"] is not None:
+            print(f"Best validation loss: {final_metrics['best_val_loss']:.4f}")
+    except Exception as e:
+        logger.warning(f"Failed to save metrics: {e}")
 
     # Test trained model
     print(f"\n{'='*60}")
@@ -758,7 +753,7 @@ def main():
                           label="Trained Model (After Training)")
 
     # Save LoRA weights merged with base model
-    saved_path = save_lora_weights(lora_model, local_model_path, lora_output_dir)
+    saved_path = save_lora_weights(lora_model, local_model_path, lora_output_dir, rank=RANK, alpha=ALPHA)
 
     print(f"\n{'='*60}")
     print("Summary")
@@ -767,10 +762,6 @@ def main():
     print(f"Training checkpoints: {ckpt_dir}")
     print(f"\nThe model is ready to use for inference!")
     print(f"Load it from: {saved_path}")
-
-    # Finish W&B run
-    if not args.no_wandb:
-        wandb.finish()
 
 
 if __name__ == '__main__':
