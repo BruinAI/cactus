@@ -23,6 +23,7 @@ import nest_asyncio
 nest_asyncio.apply()
 
 import jax
+import wandb
 import optax
 import numpy as np
 from datasets import Dataset
