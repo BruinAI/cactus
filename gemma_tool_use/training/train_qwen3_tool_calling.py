@@ -477,6 +477,12 @@ def parse_args():
         default=None,
         help="LoRA output directory (default: /dev/shm/MODEL_tool_calling_lora)"
     )
+    parser.add_argument(
+        "--run_name",
+        type=str,
+        default=None,
+        help="Name for this training run (used by hyperparameter search)"
+    )
 
     return parser.parse_args()
 
