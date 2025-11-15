@@ -132,7 +132,7 @@ def save_lora_weights(lora_model, local_model_path: str, output_dir: str, rank: 
             path = path_to_str(proj.qwix_path)
             lora_layers[path] = (proj.w_lora_a, proj.w_lora_b)
 
-        # special logic splitting k and v projections
+        # specific logic splitting k and v projections
         proj = layer.attn.kv_einsum
         path = path_to_str(proj.qwix_path)
         lora_layers[path.replace('kv_einsum', 'k_einsum')] = (

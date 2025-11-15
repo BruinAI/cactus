@@ -81,7 +81,7 @@ MESH_AXIS_NAMES = "fsdp", "tp"
 # Dataset filtering criteria (as per PLAN.md Phase 3)
 MAX_TOOLS_USED = 10
 MAX_TOOLS_AVAILABLE = 10
-MAX_NUMBER_OF_TURNS = 2  # Limit on number of turns
+MAX_NUMBER_OF_TURNS = 1  # Limit on number of turns
 
 # Checkpoint and output directories
 CKPT_DIR = "/tmp/gemma_tool_calling_ckpts/"
@@ -413,7 +413,7 @@ def main():
     test_model_generation(lora_model, tokenizer, model_config, eos_tokens, label="Trained Model (After Training)")
 
     # Save LoRA weights merged with base model
-    saved_path = save_lora_weights(lora_model, local_model_path, LORA_OUTPUT_DIR)
+    saved_path = save_lora_weights(lora_model, local_model_path, LORA_OUTPUT_DIR, rank=RANK, alpha=ALPHA)
 
     print(f"\n{'='*60}")
     print("Summary")
