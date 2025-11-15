@@ -127,10 +127,12 @@ def save_lora_weights(lora_model, local_model_path: str, output_dir: str, rank: 
     # Extract LoRA layers and infer rank/alpha if not provided
     lora_layers = {}
     for layer in lora_model.layers:
-        proj = layer.attn.q_einsum
-        path = path_to_str(proj.qwix_path)
-        lora_layers[path] = (proj.w_lora_a, proj.w_lora_b)
+        for proj_name in ['q_einsum', 'attn_vec_einsum']:
+            proj = getattr(layer.attn, proj_name)
+            path = path_to_str(proj.qwix_path)
+            lora_layers[path] = (proj.w_lora_a, proj.w_lora_b)
 
+        # special logic splitting k and v projections
         proj = layer.attn.kv_einsum
         path = path_to_str(proj.qwix_path)
         lora_layers[path.replace('kv_einsum', 'k_einsum')] = (
