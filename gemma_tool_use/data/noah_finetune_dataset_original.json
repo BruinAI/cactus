@@ -1,0 +1,1267 @@
+[
+  {
+    "input":"Remember this: 12345 is the code.",
+    "output":{
+      "function_call":{
+        "name":"create_note",
+        "arguments":{
+          "text":"12345 is the code."
+        }
+      }
+    }
+  },
+  {
+    "input":"take a note, call Sarah about the project",
+    "output":{
+      "function_call":{
+        "name":"create_note",
+        "arguments":{
+          "text":"call Sarah about the project"
+        }
+      }
+    }
+  },
+  {
+    "input":"I need to remember to buy milk",
+    "output":{
+      "function_call":{
+        "name":"create_note",
+        "arguments":{
+          "text":"buy milk"
+        }
+      }
+    }
+  },
+  {
+    "input":"remind me to check the oven",
+    "output":{
+      "function_call":{
+        "name":"create_note",
+        "arguments":{
+          "text":"check the oven"
+        }
+      }
+    }
+  },
+  {
+    "input":"Remember to read 'The Knife of Never Letting Go.'",
+    "output":{
+      "function_call":{
+        "name":"create_note",
+        "arguments":{
+          "text":"Remember to read 'The Knife of Never Letting Go.'"
+        }
+      }
+    }
+  },
+  {
+    "input":"Remind me tomorrow to ask Raphael about his dad's new driver.",
+    "output":{
+      "function_call":{
+        "name":"create_note",
+        "arguments":{
+          "text":"Remind me tomorrow to ask Raphael about his dad's new driver."
+        }
+      }
+    }
+  },
+  {
+    "input":"note to self: don't forget the keys",
+    "output":{
+      "function_call":{
+        "name":"create_note",
+        "arguments":{
+          "text":"don't forget the keys"
+        }
+      }
+    }
+  },
+  {
+    "input":"Just remember that I parked in section B-4.",
+    "output":{
+      "function_call":{
+        "name":"create_note",
+        "arguments":{
+          "text":"I parked in section B-4."
+        }
+      }
+    }
+  },
+  {
+    "input":"set an alarm for 7 AM",
+    "output":{
+      "function_call":{
+        "name":"set_alarm",
+        "arguments":{
+          "time_hours":7,
+          "time_minutes":0
+        }
+      }
+    }
+  },
+  {
+    "input":"wake me up at 6:30",
+    "output":{
+      "function_call":{
+        "name":"set_alarm",
+        "arguments":{
+          "time_hours":6,
+          "time_minutes":30
+        }
+      }
+    }
+  },
+  {
+    "input":"I need an alarm for 10 PM",
+    "output":{
+      "function_call":{
+        "name":"set_alarm",
+        "arguments":{
+          "time_hours":22,
+          "time_minutes":0
+        }
+      }
+    }
+  },
+  {
+    "input":"set alarm for 15:45",
+    "output":{
+      "function_call":{
+        "name":"set_alarm",
+        "arguments":{
+          "time_hours":15,
+          "time_minutes":45
+        }
+      }
+    }
+  },
+  {
+    "input":"alarm for 8 o'clock",
+    "output":{
+      "function_call":{
+        "name":"set_alarm",
+        "arguments":{
+          "time_hours":8,
+          "time_minutes":0
+        }
+      }
+    }
+  },
+  {
+    "input":"Set an alarm for 2. Silent at home.",
+    "output":{
+      "function_call":{
+        "name":"set_alarm",
+        "arguments":{
+          "time_hours":2,
+          "time_minutes":0
+        }
+      }
+    }
+  },
+  {
+    "input":"set a timer for 10 minutes",
+    "output":{
+      "function_call":{
+        "name":"set_timer",
+        "arguments":{
+          "time_hours":null,
+          "time_minutes":10,
+          "time_seconds":null
+        }
+      }
+    }
+  },
+  {
+    "input":"5 minute timer",
+    "output":{
+      "function_call":{
+        "name":"set_timer",
+        "arguments":{
+          "time_hours":null,
+          "time_minutes":5,
+          "time_seconds":null
+        }
+      }
+    }
+  },
+  {
+    "input":"timer for 45 seconds",
+    "output":{
+      "function_call":{
+        "name":"set_timer",
+        "arguments":{
+          "time_hours":null,
+          "time_minutes":null,
+          "time_seconds":45
+        }
+      }
+    }
+  },
+  {
+    "input":"set a timer for 1 hour and 30 minutes",
+    "output":{
+      "function_call":{
+        "name":"set_timer",
+        "arguments":{
+          "time_hours":1,
+          "time_minutes":30,
+          "time_seconds":null
+        }
+      }
+    }
+  },
+  {
+    "input":"I need a 2 hour timer",
+    "output":{
+      "function_call":{
+        "name":"set_timer",
+        "arguments":{
+          "time_hours":2,
+          "time_minutes":null,
+          "time_seconds":null
+        }
+      }
+    }
+  },
+  {
+    "input":"set a timer for 10 minutes and 30 seconds",
+    "output":{
+      "function_call":{
+        "name":"set_timer",
+        "arguments":{
+          "time_hours":null,
+          "time_minutes":10,
+          "time_seconds":30
+        }
+      }
+    }
+  },
+  {
+    "input":"timer for 1.5 hours",
+    "output":{
+      "function_call":{
+        "name":"set_timer",
+        "arguments":{
+          "time_hours":1,
+          "time_minutes":30,
+          "time_seconds":null
+        }
+      }
+    }
+  },
+  {
+    "input":"set a timer for 5 PM today",
+    "output":{
+      "function_call":{
+        "name":"set_timer_absolute",
+        "arguments":{
+          "day_offset":"today",
+          "time_hours":17,
+          "time_minutes":0
+        }
+      }
+    }
+  },
+  {
+    "input":"set a timer for tomorrow at 9 AM",
+    "output":{
+      "function_call":{
+        "name":"set_timer_absolute",
+        "arguments":{
+          "day_offset":"tomorrow",
+          "time_hours":9,
+          "time_minutes":0
+        }
+      }
+    }
+  },
+  {
+    "input":"I need a timer for 8:15 PM",
+    "output":{
+      "function_call":{
+        "name":"set_timer_absolute",
+        "arguments":{
+          "day_offset":"today",
+          "time_hours":20,
+          "time_minutes":15
+        }
+      }
+    }
+  },
+  {
+    "input":"set a timer for next Friday at noon",
+    "output":{
+      "function_call":{
+        "name":"set_timer_absolute",
+        "arguments":{
+          "day_offset":"friday",
+          "time_hours":12,
+          "time_minutes":0
+        }
+      }
+    }
+  },
+  {
+    "input":"timer for 6:00 on Monday",
+    "output":{
+      "function_call":{
+        "name":"set_timer_absolute",
+        "arguments":{
+          "day_offset":"monday",
+          "time_hours":6,
+          "time_minutes":0
+        }
+      }
+    }
+  },
+  {
+    "input":"set a timer to go off at 10:30",
+    "output":{
+      "function_call":{
+        "name":"set_timer_absolute",
+        "arguments":{
+          "day_offset":"today",
+          "time_hours":10,
+          "time_minutes":30
+        }
+      }
+    }
+  },
+  {
+    "input":"set timer for 3 days from now at 11:00",
+    "output":{
+      "function_call":{
+        "name":"set_timer_absolute",
+        "arguments":{
+          "day_offset":"3",
+          "time_hours":11,
+          "time_minutes":0
+        }
+      }
+    }
+  },
+  {
+    "input":"remind me to buy milk in 10 minutes",
+    "output":{
+      "function_call":{
+        "name":"create_reminder_relative",
+        "arguments":{
+          "relative_time":10,
+          "time_unit":"minutes",
+          "message":"buy milk"
+        }
+      }
+    }
+  },
+  {
+    "input":"in 2 hours, remind me to check the oven",
+    "output":{
+      "function_call":{
+        "name":"create_reminder_relative",
+        "arguments":{
+          "relative_time":2,
+          "time_unit":"hours",
+          "message":"check the oven"
+        }
+      }
+    }
+  },
+  {
+    "input":"remind me to call mom in 30 seconds",
+    "output":{
+      "function_call":{
+        "name":"create_reminder_relative",
+        "arguments":{
+          "relative_time":30,
+          "time_unit":"seconds",
+          "message":"call mom"
+        }
+      }
+    }
+  },
+  {
+    "input":"in 5 days, remind me to pay the bill",
+    "output":{
+      "function_call":{
+        "name":"create_reminder_relative",
+        "arguments":{
+          "relative_time":5,
+          "time_unit":"days",
+          "message":"pay the bill"
+        }
+      }
+    }
+  },
+  {
+    "input":"remind me to stretch in 1 hour",
+    "output":{
+      "function_call":{
+        "name":"create_reminder_relative",
+        "arguments":{
+          "relative_time":1,
+          "time_unit":"hours",
+          "message":"stretch"
+        }
+      }
+    }
+  },
+  {
+    "input":"set a reminder for 3 weeks to book flights",
+    "output":{
+      "function_call":{
+        "name":"create_reminder_relative",
+        "arguments":{
+          "relative_time":3,
+          "time_unit":"weeks",
+          "message":"book flights"
+        }
+      }
+    }
+  },
+  {
+    "input":"remind me 'it's time to go' in 15 minutes",
+    "output":{
+      "function_call":{
+        "name":"create_reminder_relative",
+        "arguments":{
+          "relative_time":15,
+          "time_unit":"minutes",
+          "message":"it's time to go"
+        }
+      }
+    }
+  },
+  {
+    "input":"remind me in 2 months to check my savings",
+    "output":{
+      "function_call":{
+        "name":"create_reminder_relative",
+        "arguments":{
+          "relative_time":2,
+          "time_unit":"months",
+          "message":"check my savings"
+        }
+      }
+    }
+  },
+  {
+    "input":"remind me to call mom tomorrow at 8 PM",
+    "output":{
+      "function_call":{
+        "name":"reminder_absolute",
+        "arguments":{
+          "day_offset":"tomorrow",
+          "absolute_time_hour":20,
+          "absolute_time_minute":0,
+          "date_month_day":null,
+          "date_year":null,
+          "message":"call mom"
+        }
+      }
+    }
+  },
+  {
+    "input":"remind me to take out the trash today at 7:30 PM",
+    "output":{
+      "function_call":{
+        "name":"reminder_absolute",
+        "arguments":{
+          "day_offset":"today",
+          "absolute_time_hour":19,
+          "absolute_time_minute":30,
+          "date_month_day":null,
+          "date_year":null,
+          "message":"take out the trash"
+        }
+      }
+    }
+  },
+  {
+    "input":"set a reminder for next Tuesday at 10 AM to 'Present the report'",
+    "output":{
+      "function_call":{
+        "name":"reminder_absolute",
+        "arguments":{
+          "day_offset":"tuesday",
+          "absolute_time_hour":10,
+          "absolute_time_minute":0,
+          "date_month_day":null,
+          "date_year":null,
+          "message":"Present the report"
+        }
+      }
+    }
+  },
+  {
+    "input":"on December 31st, remind me to 'review new year's goals' at 8:00",
+    "output":{
+      "function_call":{
+        "name":"reminder_absolute",
+        "arguments":{
+          "day_offset":null,
+          "absolute_time_hour":8,
+          "absolute_time_minute":0,
+          "date_month_day":"12-31",
+          "date_year":null,
+          "message":"review new year's goals"
+        }
+      }
+    }
+  },
+  {
+    "input":"remind me on 07-04-2026 at 9:00 'Happy Independence Day'",
+    "output":{
+      "function_call":{
+        "name":"reminder_absolute",
+        "arguments":{
+          "day_offset":null,
+          "absolute_time_hour":9,
+          "absolute_time_minute":0,
+          "date_month_day":"07-04",
+          "date_year":2026,
+          "message":"Happy Independence Day"
+        }
+      }
+    }
+  },
+  {
+    "input":"at 4 PM on Wednesday, remind me to pick up the dry cleaning",
+    "output":{
+      "function_call":{
+        "name":"reminder_absolute",
+        "arguments":{
+          "day_offset":"wednesday",
+          "absolute_time_hour":16,
+          "absolute_time_minute":0,
+          "date_month_day":null,
+          "date_year":null,
+          "message":"pick up the dry cleaning"
+        }
+      }
+    }
+  },
+  {
+    "input":"remind me 'dentist appointment' on 11-20 at 14:30",
+    "output":{
+      "function_call":{
+        "name":"reminder_absolute",
+        "arguments":{
+          "day_offset":null,
+          "absolute_time_hour":14,
+          "absolute_time_minute":30,
+          "date_month_day":"11-20",
+          "date_year":null,
+          "message":"dentist appointment"
+        }
+      }
+    }
+  },
+  {
+    "input":"remind me to buy flowers on May 10th at 1 PM",
+    "output":{
+      "function_call":{
+        "name":"reminder_absolute",
+        "arguments":{
+          "day_offset":null,
+          "absolute_time_hour":13,
+          "absolute_time_minute":0,
+          "date_month_day":"05-10",
+          "date_year":null,
+          "message":"buy flowers"
+        }
+      }
+    }
+  },
+  {
+    "input":"set a reminder for 6 PM today, 'check the roast'",
+    "output":{
+      "function_call":{
+        "name":"reminder_absolute",
+        "arguments":{
+          "day_offset":"today",
+          "absolute_time_hour":18,
+          "absolute_time_minute":0,
+          "date_month_day":null,
+          "date_year":null,
+          "message":"check the roast"
+        }
+      }
+    }
+  },
+  {
+    "input":"on 2027-01-15 at 11:00, remind me 'Renew passport'",
+    "output":{
+      "function_call":{
+        "name":"reminder_absolute",
+        "arguments":{
+          "day_offset":null,
+          "absolute_time_hour":11,
+          "absolute_time_minute":0,
+          "date_month_day":"01-15",
+          "date_year":2027,
+          "message":"Renew passport"
+        }
+      }
+    }
+  },
+  {
+    "input":"Note: the wifi password is 'guest123!'",
+    "output":{
+      "function_call":{
+        "name":"create_note",
+        "arguments":{
+          "text":"the wifi password is 'guest123!'"
+        }
+      }
+    }
+  },
+  {
+    "input":"remember that I loved this song",
+    "output":{
+      "function_call":{
+        "name":"create_note",
+        "arguments":{
+          "text":"I loved this song"
+        }
+      }
+    }
+  },
+  {
+    "input":"My order number is 9-8-7-6-5.",
+    "output":{
+      "function_call":{
+        "name":"create_note",
+        "arguments":{
+          "text":"My order number is 9-8-7-6-5."
+        }
+      }
+    }
+  },
+  {
+    "input":"take a note, Dr. Smith's number is 555-1234",
+    "output":{
+      "function_call":{
+        "name":"create_note",
+        "arguments":{
+          "text":"Dr. Smith's number is 555-1234"
+        }
+      }
+    }
+  },
+  {
+    "input":"remind me that I need to check the tire pressure",
+    "output":{
+      "function_call":{
+        "name":"create_note",
+        "arguments":{
+          "text":"I need to check the tire pressure"
+        }
+      }
+    }
+  },
+  {
+    "input":"Just remember this idea: an app for finding lost socks.",
+    "output":{
+      "function_call":{
+        "name":"create_note",
+        "arguments":{
+          "text":"idea: an app for finding lost socks."
+        }
+      }
+    }
+  },
+  {
+    "input":"note to self, the meeting was moved to 3",
+    "output":{
+      "function_call":{
+        "name":"create_note",
+        "arguments":{
+          "text":"the meeting was moved to 3"
+        }
+      }
+    }
+  },
+  {
+    "input":"don't forget, his birthday is on the 10th",
+    "output":{
+      "function_call":{
+        "name":"create_note",
+        "arguments":{
+          "text":"his birthday is on the 10th"
+        }
+      }
+    }
+  },
+  {
+    "input":"I need to get up at 5:15 in the morning",
+    "output":{
+      "function_call":{
+        "name":"set_alarm",
+        "arguments":{
+          "time_hours":5,
+          "time_minutes":15
+        }
+      }
+    }
+  },
+  {
+    "input":"set an alarm for 11:59 PM",
+    "output":{
+      "function_call":{
+        "name":"set_alarm",
+        "arguments":{
+          "time_hours":23,
+          "time_minutes":59
+        }
+      }
+    }
+  },
+  {
+    "input":"wake me at 9",
+    "output":{
+      "function_call":{
+        "name":"set_alarm",
+        "arguments":{
+          "time_hours":9,
+          "time_minutes":0
+        }
+      }
+    }
+  },
+  {
+    "input":"alarm for 18:20",
+    "output":{
+      "function_call":{
+        "name":"set_alarm",
+        "arguments":{
+          "time_hours":18,
+          "time_minutes":20
+        }
+      }
+    }
+  },
+  {
+    "input":"set a wake up call for 6:45 AM",
+    "output":{
+      "function_call":{
+        "name":"set_alarm",
+        "arguments":{
+          "time_hours":6,
+          "time_minutes":45
+        }
+      }
+    }
+  },
+  {
+    "input":"set a 20 minute timer",
+    "output":{
+      "function_call":{
+        "name":"set_timer",
+        "arguments":{
+          "time_hours":null,
+          "time_minutes":20,
+          "time_seconds":null
+        }
+      }
+    }
+  },
+  {
+    "input":"timer for 1 hour",
+    "output":{
+      "function_call":{
+        "name":"set_timer",
+        "arguments":{
+          "time_hours":1,
+          "time_minutes":null,
+          "time_seconds":null
+        }
+      }
+    }
+  },
+  {
+    "input":"timer for 1 minute 30 seconds",
+    "output":{
+      "function_call":{
+        "name":"set_timer",
+        "arguments":{
+          "time_hours":null,
+          "time_minutes":1,
+          "time_seconds":30
+        }
+      }
+    }
+  },
+  {
+    "input":"I need a timer for 30 seconds",
+    "output":{
+      "function_call":{
+        "name":"set_timer",
+        "arguments":{
+          "time_hours":null,
+          "time_minutes":null,
+          "time_seconds":30
+        }
+      }
+    }
+  },
+  {
+    "input":"set a timer for 2 hours 15 minutes",
+    "output":{
+      "function_call":{
+        "name":"set_timer",
+        "arguments":{
+          "time_hours":2,
+          "time_minutes":15,
+          "time_seconds":null
+        }
+      }
+    }
+  },
+  {
+    "input":"Can you set a 5 hour timer?",
+    "output":{
+      "function_call":{
+        "name":"set_timer",
+        "arguments":{
+          "time_hours":5,
+          "time_minutes":null,
+          "time_seconds":null
+        }
+      }
+    }
+  },
+  {
+    "input":"I need 25 minutes on the clock",
+    "output":{
+      "function_call":{
+        "name":"set_timer",
+        "arguments":{
+          "time_hours":null,
+          "time_minutes":25,
+          "time_seconds":null
+        }
+      }
+    }
+  },
+  {
+    "input":"timer for one hour and five minutes",
+    "output":{
+      "function_call":{
+        "name":"set_timer",
+        "arguments":{
+          "time_hours":1,
+          "time_minutes":5,
+          "time_seconds":null
+        }
+      }
+    }
+  },
+  {
+    "input":"set a timer for 2h 45m 10s",
+    "output":{
+      "function_call":{
+        "name":"set_timer",
+        "arguments":{
+          "time_hours":2,
+          "time_minutes":45,
+          "time_seconds":10
+        }
+      }
+    }
+  },
+  {
+    "input":"start a 15 second countdown",
+    "output":{
+      "function_call":{
+        "name":"set_timer",
+        "arguments":{
+          "time_hours":null,
+          "time_minutes":null,
+          "time_seconds":15
+        }
+      }
+    }
+  },
+  {
+    "input":"set a timer for 7 PM",
+    "output":{
+      "function_call":{
+        "name":"set_timer_absolute",
+        "arguments":{
+          "day_offset":"today",
+          "time_hours":19,
+          "time_minutes":0
+        }
+      }
+    }
+  },
+  {
+    "input":"I need a timer for 6:30 AM tomorrow",
+    "output":{
+      "function_call":{
+        "name":"set_timer_absolute",
+        "arguments":{
+          "day_offset":"tomorrow",
+          "time_hours":6,
+          "time_minutes":30
+        }
+      }
+    }
+  },
+  {
+    "input":"timer for noon on Sunday",
+    "output":{
+      "function_call":{
+        "name":"set_timer_absolute",
+        "arguments":{
+          "day_offset":"sunday",
+          "time_hours":12,
+          "time_minutes":0
+        }
+      }
+    }
+  },
+  {
+    "input":"set a timer for 10:00 on Friday",
+    "output":{
+      "function_call":{
+        "name":"set_timer_absolute",
+        "arguments":{
+          "day_offset":"friday",
+          "time_hours":10,
+          "time_minutes":0
+        }
+      }
+    }
+  },
+  {
+    "input":"set a timer to go off at 16:15",
+    "output":{
+      "function_call":{
+        "name":"set_timer_absolute",
+        "arguments":{
+          "day_offset":"today",
+          "time_hours":16,
+          "time_minutes":15
+        }
+      }
+    }
+  },
+  {
+    "input":"I need a timer for 2 days from now at 3 PM",
+    "output":{
+      "function_call":{
+        "name":"set_timer_absolute",
+        "arguments":{
+          "day_offset":"2",
+          "time_hours":15,
+          "time_minutes":0
+        }
+      }
+    }
+  },
+  {
+    "input":"set a timer for midnight",
+    "output":{
+      "function_call":{
+        "name":"set_timer_absolute",
+        "arguments":{
+          "day_offset":"today",
+          "time_hours":0,
+          "time_minutes":0
+        }
+      }
+    }
+  },
+  {
+    "input":"timer for 1:45 PM",
+    "output":{
+      "function_call":{
+        "name":"set_timer_absolute",
+        "arguments":{
+          "day_offset":"today",
+          "time_hours":13,
+          "time_minutes":45
+        }
+      }
+    }
+  },
+  {
+    "input":"set a timer for 8:00 AM on Monday",
+    "output":{
+      "function_call":{
+        "name":"set_timer_absolute",
+        "arguments":{
+          "day_offset":"monday",
+          "time_hours":8,
+          "time_minutes":0
+        }
+      }
+    }
+  },
+  {
+    "input":"timer for 11:30 PM tonight",
+    "output":{
+      "function_call":{
+        "name":"set_timer_absolute",
+        "arguments":{
+          "day_offset":"today",
+          "time_hours":23,
+          "time_minutes":30
+        }
+      }
+    }
+  },
+  {
+    "input":"remind me to check the mail in 1 hour",
+    "output":{
+      "function_call":{
+        "name":"create_reminder_relative",
+        "arguments":{
+          "relative_time":1,
+          "time_unit":"hours",
+          "message":"check the mail"
+        }
+      }
+    }
+  },
+  {
+    "input":"in 20 minutes, remind me 'meeting starts'",
+    "output":{
+      "function_call":{
+        "name":"create_reminder_relative",
+        "arguments":{
+          "relative_time":20,
+          "time_unit":"minutes",
+          "message":"meeting starts"
+        }
+      }
+    }
+  },
+  {
+    "input":"remind me to call the bank in 2 days",
+    "output":{
+      "function_call":{
+        "name":"create_reminder_relative",
+        "arguments":{
+          "relative_time":2,
+          "time_unit":"days",
+          "message":"call the bank"
+        }
+      }
+    }
+  },
+  {
+    "input":"in 1 week, remind me to buy plane tickets",
+    "output":{
+      "function_call":{
+        "name":"create_reminder_relative",
+        "arguments":{
+          "relative_time":1,
+          "time_unit":"weeks",
+          "message":"buy plane tickets"
+        }
+      }
+    }
+  },
+  {
+    "input":"remind me 'pizza's ready' in 5 minutes",
+    "output":{
+      "function_call":{
+        "name":"create_reminder_relative",
+        "arguments":{
+          "relative_time":5,
+          "time_unit":"minutes",
+          "message":"pizza's ready"
+        }
+      }
+    }
+  },
+  {
+    "input":"remind me to call Alex tomorrow at 10 AM",
+    "output":{
+      "function_call":{
+        "name":"reminder_absolute",
+        "arguments":{
+          "day_offset":"tomorrow",
+          "absolute_time_hour":10,
+          "absolute_time_minute":0,
+          "date_month_day":null,
+          "date_year":null,
+          "message":"call Alex"
+        }
+      }
+    }
+  },
+  {
+    "input":"set a reminder for 5:30 PM today, 'leave work'",
+    "output":{
+      "function_call":{
+        "name":"reminder_absolute",
+        "arguments":{
+          "day_offset":"today",
+          "absolute_time_hour":17,
+          "absolute_time_minute":30,
+          "date_month_day":null,
+          "date_year":null,
+          "message":"leave work"
+        }
+      }
+    }
+  },
+  {
+    "input":"on Friday at 3 PM, remind me to submit my timesheet",
+    "output":{
+      "function_call":{
+        "name":"reminder_absolute",
+        "arguments":{
+          "day_offset":"friday",
+          "absolute_time_hour":15,
+          "absolute_time_minute":0,
+          "date_month_day":null,
+          "date_year":null,
+          "message":"submit my timesheet"
+        }
+      }
+    }
+  },
+  {
+    "input":"remind me 'Happy Anniversary' on 10-25 at 8:00",
+    "output":{
+      "function_call":{
+        "name":"reminder_absolute",
+        "arguments":{
+          "day_offset":null,
+          "absolute_time_hour":8,
+          "absolute_time_minute":0,
+          "date_month_day":"10-25",
+          "date_year":null,
+          "message":"Happy Anniversary"
+        }
+      }
+    }
+  },
+  {
+    "input":"remind me 'pay rent' on March 1st at 9 AM",
+    "output":{
+      "function_call":{
+        "name":"reminder_absolute",
+        "arguments":{
+          "day_offset":null,
+          "absolute_time_hour":9,
+          "absolute_time_minute":0,
+          "date_month_day":"03-01",
+          "date_year":null,
+          "message":"pay rent"
+        }
+      }
+    }
+  },
+  {
+    "input":"on 2026-01-20 at 12:00, remind me 'Inauguration Day'",
+    "output":{
+      "function_call":{
+        "name":"reminder_absolute",
+        "arguments":{
+          "day_offset":null,
+          "absolute_time_hour":12,
+          "absolute_time_minute":0,
+          "date_month_day":"01-20",
+          "date_year":2026,
+          "message":"Inauguration Day"
+        }
+      }
+    }
+  },
+  {
+    "input":"remind me to pick up my prescription at 4:15 PM",
+    "output":{
+      "function_call":{
+        "name":"reminder_absolute",
+        "arguments":{
+          "day_offset":"today",
+          "absolute_time_hour":16,
+          "absolute_time_minute":15,
+          "date_month_day":null,
+          "date_year":null,
+          "message":"pick up my prescription"
+        }
+      }
+    }
+  },
+  {
+    "input":"set a reminder for my 'flight' on 08-15-2027 at 6:00",
+    "output":{
+      "function_call":{
+        "name":"reminder_absolute",
+        "arguments":{
+          "day_offset":null,
+          "absolute_time_hour":6,
+          "absolute_time_minute":0,
+          "date_month_day":"08-15",
+          "date_year":2027,
+          "message":"flight"
+        }
+      }
+    }
+  },
+  {
+    "input":"remind me at 11:00 on Sunday 'brunch with friends'",
+    "output":{
+      "function_call":{
+        "name":"reminder_absolute",
+        "arguments":{
+          "day_offset":"sunday",
+          "absolute_time_hour":11,
+          "absolute_time_minute":0,
+          "date_month_day":null,
+          "date_year":null,
+          "message":"brunch with friends"
+        }
+      }
+    }
+  },
+  {
+    "input":"remind me to 'check investments' on 12-31-2025 at midnight",
+    "output":{
+      "function_call":{
+        "name":"reminder_absolute",
+        "arguments":{
+          "day_offset":null,
+          "absolute_time_hour":0,
+          "absolute_time_minute":0,
+          "date_month_day":"12-31",
+          "date_year":2025,
+          "message":"check investments"
+        }
+      }
+    }
+  },
+  {
+    "input":"in 6 months, remind me to schedule a dentist appointment",
+    "output":{
+      "function_call":{
+        "name":"create_reminder_relative",
+        "arguments":{
+          "relative_time":6,
+          "time_unit":"months",
+          "message":"schedule a dentist appointment"
+        }
+      }
+    }
+  },
+  {
+    "input":"remind me 'take out bins' in 1 year",
+    "output":{
+      "function_call":{
+        "name":"create_reminder_relative",
+        "arguments":{
+          "relative_time":1,
+          "time_unit":"years",
+          "message":"take out bins"
+        }
+      }
+    }
+  }
+]
