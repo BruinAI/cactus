@@ -35,6 +35,7 @@ from tunix.generate import sampler as sampler_lib
 from tunix.models.qwen3 import model as qwen_lib
 from tunix.models.qwen3 import params as params_lib
 from tunix.sft import metrics_logger
+from tunix.sft.metrics_logger import Mode
 from tunix.sft import peft_trainer
 from tunix.sft import utils
 
@@ -702,49 +703,34 @@ def main():
     print(f"{'='*60}\n")
 
     # Extract and save final metrics for hyperparameter search
-    try:
-        # Get metrics from trainer's metrics_logger
-        final_metrics = {
-            "final_train_loss": None,
-            "final_val_loss": None,
-            "best_val_loss": None,
-            "total_steps": trainer.train_steps,
-        }
+    print("\nExtracting metrics from trainer...")
+    train_metrics = trainer.metrics_logger.get_metric_history('loss', Mode.TRAIN)
+    eval_metrics = trainer.metrics_logger.get_metric_history('loss', Mode.EVAL)
+    final_metrics = {
+        "final_train_loss": float(train_metrics[-1]),
+        "final_val_loss": float(eval_metrics[-1]),
+        "best_val_loss": float(min(eval_metrics)),
+        "total_steps": trainer.train_steps,
+    }
+    
+    # Save metrics to JSON file for hyperparameter search
+    metrics_file = os.path.join(ckpt_dir, "metrics.json")
+    with open(metrics_file, 'w') as f:
+        json.dump(final_metrics, f, indent=2)
+    print(f"\nSaved training metrics to: {metrics_file}")
 
-        # Get training loss (most recent)
-        try:
-            train_loss = trainer.metrics_logger.get_metric(trainer.metrics_prefix, "loss", "train")
-            if train_loss is not None:
-                final_metrics["final_train_loss"] = float(train_loss)
-        except Exception as e:
-            logger.debug(f"Could not get train loss: {e}")
-
-        # Get validation/eval loss
-        try:
-            eval_loss = trainer.metrics_logger.get_metric(trainer.metrics_prefix, "loss", "eval")
-            if eval_loss is not None:
-                final_metrics["final_val_loss"] = float(eval_loss)
-                # For now, use final_val_loss as best_val_loss
-                # TODO: Track all eval losses to get true minimum
-                final_metrics["best_val_loss"] = float(eval_loss)
-        except Exception as e:
-            logger.debug(f"Could not get eval loss: {e}")
-
-        # Save metrics to JSON file for hyperparameter search
-        metrics_file = os.path.join(ckpt_dir, "metrics.json")
-        with open(metrics_file, 'w') as f:
-            json.dump(final_metrics, f, indent=2)
-        print(f"Saved training metrics to: {metrics_file}")
-
-        # Print final metrics
-        if final_metrics["final_train_loss"] is not None:
-            print(f"Final training loss: {final_metrics['final_train_loss']:.4f}")
-        if final_metrics["final_val_loss"] is not None:
-            print(f"Final validation loss: {final_metrics['final_val_loss']:.4f}")
-        if final_metrics["best_val_loss"] is not None:
-            print(f"Best validation loss: {final_metrics['best_val_loss']:.4f}")
-    except Exception as e:
-        logger.warning(f"Failed to save metrics: {e}")
+    # Print final summary
+    print(f"\n{'─'*60}")
+    print("FINAL METRICS")
+    print(f"{'─'*60}")
+    if final_metrics["final_train_loss"] is not None:
+        print(f"Final training loss:    {final_metrics['final_train_loss']:.4f}")
+    if final_metrics["final_val_loss"] is not None:
+        print(f"Final validation loss:  {final_metrics['final_val_loss']:.4f}")
+    if final_metrics["best_val_loss"] is not None:
+        print(f"Best validation loss:   {final_metrics['best_val_loss']:.4f}")
+    print(f"Total steps:            {final_metrics['total_steps']}")
+    print(f"{'─'*60}")
 
     # Test trained model
     print(f"\n{'='*60}")
