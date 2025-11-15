@@ -149,11 +149,6 @@ uint32_t Model::generate(const std::vector<uint32_t>& tokens, float temperature,
         top_k = config_.default_top_k;
     }
 
-    if (config_.model_variant == Config::ModelVariant::EXTRACT ||
-        config_.model_variant == Config::ModelVariant::RAG) {
-        temperature = 0.0f;
-    }
-
     auto final_hidden = forward(tokens, true);
 
     auto* gb = static_cast<CactusGraph*>(graph_handle_);

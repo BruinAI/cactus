@@ -144,10 +144,6 @@ std::string Tokenizer::format_lfm2_style(const std::vector<ChatMessage>& message
                                          bool add_generation_prompt,
                                          const std::string& tools_json) const
 {
-    if (model_variant_ == ModelVariant::EXTRACT) {
-        return format_lfm2_extract_style(messages, add_generation_prompt);
-    }
-
     std::string result = "<|startoftext|>";
 
     std::string sys_content;
@@ -201,81 +197,6 @@ std::string Tokenizer::format_lfm2_style(const std::vector<ChatMessage>& message
         result += "<|im_start|>assistant\n";
     }
 
-    return result;
-}
-
-
-std::string Tokenizer::format_lfm2_extract_style(const std::vector<ChatMessage>& messages,
-                                                 bool add_generation_prompt) const
-{
-    std::string result = "<|startoftext|>";
-
-    std::string sys_content;
-    bool has_system_msg = false;
-    for (const auto& msg : messages) {
-        if (msg.role == "system") { sys_content = msg.content; has_system_msg = true; break; }
-    }
-
-    if (!sys_content.empty()) result += "<|im_start|>system\n" + sys_content + "<|im_end|>\n";
-
-    for (const auto& msg : messages) {
-        if (msg.role == "system" && has_system_msg) { has_system_msg = false; continue; }
-
-        result += "<|im_start|>" + msg.role + "\n";
-        const std::string content = msg.content;
-
-        if (!content.empty() && (content.front() == '[' || content.front() == '{')) {
-            size_t pos = 0;
-            while (pos < content.size()) {
-                size_t type_pos = content.find("\"type\"", pos);
-                if (type_pos == std::string::npos) break;
-                size_t colon = content.find(':', type_pos);
-                if (colon == std::string::npos) break;
-                size_t q1 = content.find('"', colon);
-                if (q1 == std::string::npos) break;
-                size_t q2 = content.find('"', q1 + 1);
-                if (q2 == std::string::npos) break;
-                std::string t = content.substr(q1 + 1, q2 - q1 - 1);
-
-                if (t == "file") {
-                    size_t path_key = content.find("\"path\"", q2);
-                    if (path_key == std::string::npos) { pos = q2 + 1; continue; }
-                    size_t path_colon = content.find(':', path_key);
-                    size_t p1 = content.find('"', path_colon);
-                    size_t p2 = content.find('"', p1 + 1);
-                    if (p1 == std::string::npos || p2 == std::string::npos) { pos = (p2 == std::string::npos) ? content.size() : p2 + 1; continue; }
-                    std::string path = content.substr(p1 + 1, p2 - p1 - 1);
-                    std::ifstream infile(path);
-                    if (infile.is_open()) {
-                        std::stringstream ss; ss << infile.rdbuf();
-                        std::string file_text = ss.str();
-                        result += "\n\n[EXTRACTED FROM "; result += path; result += "]\n"; result += file_text + "\n[END OF EXTRACTED CONTENT]\n\n";
-                    }
-                    pos = p2 + 1;
-                } else if (t == "text") {
-                    size_t text_key = content.find("\"text\"", q2);
-                    if (text_key == std::string::npos) { pos = q2 + 1; continue; }
-                    size_t text_colon = content.find(':', text_key);
-                    size_t t1 = content.find('"', text_colon);
-                    size_t t2 = content.find('"', t1 + 1);
-                    if (t1 == std::string::npos || t2 == std::string::npos) { pos = (t2 == std::string::npos) ? content.size() : t2 + 1; continue; }
-                    std::string text_val = content.substr(t1 + 1, t2 - t1 - 1);
-                    size_t esc = 0; while ((esc = text_val.find("\\n", esc)) != std::string::npos) { text_val.replace(esc, 2, "\n"); esc += 1; }
-                    esc = 0; while ((esc = text_val.find("\\\"", esc)) != std::string::npos) { text_val.replace(esc, 2, "\""); esc += 1; }
-                    result += text_val;
-                    pos = t2 + 1;
-                } else {
-                    pos = q2 + 1;
-                }
-            }
-        } else {
-            result += content;
-        }
-
-        result += "<|im_end|>\n";
-    }
-
-    if (add_generation_prompt) result += "<|im_start|>assistant\n";
     return result;
 }
 

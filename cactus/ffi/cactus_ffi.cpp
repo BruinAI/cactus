@@ -47,58 +47,32 @@ static std::vector<ChatMessage> parse_messages_json(const std::string& json) {
         size_t content_pos = json.find("\"content\"", role_end);
         if (content_pos == std::string::npos) break;
         
-        size_t after_colon = json.find(':', content_pos) + 1;
-        // skip whitespace
-        while (after_colon < json.length() && isspace((unsigned char)json[after_colon])) after_colon++;
-        if (after_colon < json.length() && json[after_colon] == '"') {
-            size_t content_start = after_colon + 1;
-            size_t content_end = content_start;
-            while (content_end < json.length()) {
-                content_end = json.find('"', content_end);
-                if (content_end == std::string::npos) break;
-                if (json[content_end - 1] != '\\') break;
-                content_end++;
-            }
-            msg.content = json.substr(content_start, content_end - content_start);
-            size_t escape_pos = 0;
-            while ((escape_pos = msg.content.find("\\n", escape_pos)) != std::string::npos) {
-                msg.content.replace(escape_pos, 2, "\n");
-                escape_pos += 1;
-            }
-            escape_pos = 0;
-            while ((escape_pos = msg.content.find("\\\"", escape_pos)) != std::string::npos) {
-                msg.content.replace(escape_pos, 2, "\"");
-                escape_pos += 1;
-            }
-        } else if (after_colon < json.length() && (json[after_colon] == '[' || json[after_colon] == '{')) {
-            char open_ch = json[after_colon];
-            char close_ch = (open_ch == '[') ? ']' : '}';
-            size_t pos2 = after_colon;
-            int depth = 0;
-            bool in_string = false;
-            while (pos2 < json.length()) {
-                char c = json[pos2];
-                if (c == '"' && json[pos2-1] != '\\') in_string = !in_string;
-                if (!in_string) {
-                    if (c == open_ch) depth++;
-                    else if (c == close_ch) {
-                        depth--;
-                        if (depth == 0) {
-                            // include full array/object
-                            msg.content = json.substr(after_colon, pos2 - after_colon + 1);
-                            break;
-                        }
-                    }
-                }
-                pos2++;
-            }
-        } else {
-            msg.content = "";
+        size_t content_start = json.find('\"', content_pos + 9) + 1;
+        size_t content_end = content_start;
+        
+        while (content_end < json.length()) {
+            content_end = json.find('\"', content_end);
+            if (content_end == std::string::npos) break;
+            if (json[content_end - 1] != '\\') break;
+            content_end++;
+        }
+        
+        msg.content = json.substr(content_start, content_end - content_start);
+        
+        size_t escape_pos = 0;
+        while ((escape_pos = msg.content.find("\\n", escape_pos)) != std::string::npos) {
+            msg.content.replace(escape_pos, 2, "\n");
+            escape_pos += 1;
+        }
+        escape_pos = 0;
+        while ((escape_pos = msg.content.find("\\\"", escape_pos)) != std::string::npos) {
+            msg.content.replace(escape_pos, 2, "\"");
+            escape_pos += 1;
         }
         
         messages.push_back(msg);
         
-        pos = json.find('{', pos + 1);
+        pos = json.find('{', content_end);
     }
     
     return messages;
@@ -341,14 +315,6 @@ int cactus_complete(
         std::vector<std::string> stop_sequences;
         parse_options_json(options_json ? options_json : "", 
                           temperature, top_p, top_k, max_tokens, stop_sequences);
-
-        try {
-            const auto& cfg = wrapper->model->get_config();
-            if (cfg.model_variant == Config::ModelVariant::EXTRACT) {
-                max_tokens = 2048;
-            }
-        } catch (...) {
-        }
         
         
         std::vector<ToolFunction> tools;
