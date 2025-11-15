@@ -7,7 +7,7 @@
 #include <vector>
 #include <sstream>
 
-const char* g_model_path = "../../weights/lfm2-1.2B";
+const char* g_model_path = "../../weights/lfm2-1.2b-rag-i8";
 const char* g_options = R"({"max_tokens": 256, "stop_sequences": ["<|im_end|>", "<end_of_turn>"]})";
 
 struct Timer {
@@ -330,6 +330,26 @@ bool test_huge_context() {
         }, nullptr, 100);
 }
 
+bool test_rag() {
+    const char* messages = R"([
+        {"role": "system", "content": "You are a helpful assistant."},
+        {"role": "user", "content": "What has Justin been doing at Cactus Candy?"}
+    ])";
+
+    std::string modelPathStr(g_model_path ? g_model_path : "");
+    if (modelPathStr.find("rag") == std::string::npos) {
+        std::cout << "⊘ SKIP │ " << std::left << std::setw(25) << "rag_preprocessing"
+                  << " │ " << "model variant is not RAG (skipping)" << "\n";
+        return true;
+    }
+
+    return run_test("RAG PREPROCESSING TEST", messages, [](int result, const StreamingData& data, const std::string&, const Metrics& m) {
+        std::cout << "RAG PREPROCESSING: total tokens=" << data.token_count << " result=" << result << "\n";
+        m.print();
+        return (result > 0) && (data.token_count > 0);
+    });
+}
+
 bool test_audio_processor() {
     std::cout << "\n╔══════════════════════════════════════════╗\n"
               << "║         Audio Processor Test             ║\n"
@@ -386,6 +406,7 @@ int main() {
     runner.run_test("tool_calls_with_multiple_tools", test_tool_call_with_multiple_tools());
     runner.run_test("embeddings", test_embeddings());
     runner.run_test("audio_processor", test_audio_processor());
+    runner.run_test("rag_preprocessing", test_rag());
     runner.run_test("huge_context", test_huge_context());
     runner.print_summary();
     return runner.all_passed() ? 0 : 1;
