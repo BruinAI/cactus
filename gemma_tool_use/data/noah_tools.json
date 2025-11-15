@@ -134,11 +134,8 @@
           }
         },
         "required":[
-          "day_offset",
           "absolute_time_hour",
           "absolute_time_minute",
-          "date_month_day",
-          "date_year",
           "message"
         ]
       }
