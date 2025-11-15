@@ -75,7 +75,7 @@ def create_lora_model(base_model, mesh, rank: int, alpha: float):
     print(f"  Alpha: {alpha}")
 
     lora_provider = qwix.LoraProvider(
-        module_path=".*q_einsum|.*kv_einsum|.*gate_proj|.*down_proj|.*up_proj",
+        module_path=".*q_einsum|.*kv_einsum|.*gate_proj|.*down_proj|.*up_proj|.*attn_vec_einsum",
         rank=rank,
         alpha=alpha,
     )
