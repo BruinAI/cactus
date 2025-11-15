@@ -7,6 +7,10 @@
 #include <cstdint>
 
 #include "../graph/graph.h"
+extern "C" {
+    #include "../../libs/stb/stb_image.h"
+    #include "../../libs/stb/stb_image_resize2.h"
+}
 
 class CactusGraph;
 
@@ -252,7 +256,7 @@ private:
 };
 
 struct KVCache {
-    static constexpr size_t DEFAULT_WINDOW_SIZE = 1024;
+    static constexpr size_t DEFAULT_WINDOW_SIZE = 512;
     static constexpr size_t DEFAULT_SINK_SIZE = 4;
 
     struct LayerCache {
@@ -347,6 +351,45 @@ protected:
 };
 
 std::unique_ptr<Model> create_model(const std::string& model_folder);
+
+class AudioProcessor {
+public:
+    struct SpectrogramConfig {
+        size_t n_fft = 400;
+        size_t hop_length = 160;
+        size_t frame_length = 400;
+        float power = 2.0f;
+        bool center = true;
+        const char* pad_mode = "reflect";
+        bool onesided = true;
+        float dither = 0.0f;
+        float mel_floor = 1e-10f;
+        const char* log_mel = nullptr;
+        float reference = 1.0f;
+        float min_value = 1e-10f;
+        bool remove_dc_offset = false;
+    };
+
+    AudioProcessor();
+    ~AudioProcessor();
+
+    void init_mel_filters(size_t num_frequency_bins, size_t num_mel_filters,
+                          float min_freq, float max_freq, size_t sampling_rate);
+
+    std::vector<float> compute_spectrogram(
+        const std::vector<float>& waveform,
+        const SpectrogramConfig& config);
+
+    const std::vector<float>& get_mel_filters() const { return mel_filters_; }
+
+    size_t get_num_mel_filters() const { return num_mel_filters_; }
+    size_t get_num_frequency_bins() const { return num_frequency_bins_; }
+
+private:
+    std::vector<float> mel_filters_;
+    size_t num_frequency_bins_;
+    size_t num_mel_filters_;
+};
 
 }
 }
