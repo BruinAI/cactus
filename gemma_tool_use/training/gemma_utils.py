@@ -165,6 +165,7 @@ def save_lora_weights(lora_model, local_model_path: str, output_dir: str, rank: 
             .replace('q_einsum', 'q_proj')
             .replace('k_einsum', 'k_proj')
             .replace('v_einsum', 'v_proj')
+            .replace('attn_vec_einsum', 'o_proj')
         )
         assert state_key in base_state
 
