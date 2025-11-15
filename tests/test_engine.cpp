@@ -7,7 +7,7 @@
 #include <vector>
 #include <sstream>
 
-const char* g_model_path = "../../weights/lfm2-350m";
+const char* g_model_path = "../../weights/lfm2-1.2B";
 const char* g_options = R"({"max_tokens": 256, "stop_sequences": ["<|im_end|>", "<end_of_turn>"]})";
 
 struct Timer {
@@ -194,6 +194,7 @@ bool test_tool_call() {
     ])";
 
     const char* tools = R"([{
+        "type": "function",
         "function": {
             "name": "get_weather",
             "description": "Get weather for a location",
@@ -211,6 +212,55 @@ bool test_tool_call() {
         [](int result, const StreamingData& data, const std::string& response, const Metrics& m) {
             bool has_function = response.find("function_call") != std::string::npos;
             bool has_tool = response.find("get_weather") != std::string::npos;
+
+            std::cout << "├─ Function call: " << (has_function ? "YES ✓" : "NO ✗") << "\n"
+                      << "├─ Correct tool: " << (has_tool ? "YES ✓" : "NO ✗") << "\n"
+                      << "├─ Total tokens: " << data.token_count << std::endl;
+            m.print();
+
+            return result > 0 && has_function && has_tool;
+        }, tools);
+}
+
+bool test_tool_call_with_multiple_tools() {
+    const char* messages = R"([
+        {"role": "system", "content": "You are a helpful assistant that can use tools."},
+        {"role": "user", "content": "Set an alarm for 10:00 AM."}
+    ])";
+
+    const char* tools = R"([{
+        "type": "function",
+        "function": {
+            "name": "get_weather",
+            "description": "Get weather for a location",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "location": {"type": "string", "description": "City, State, Country"}
+                },
+                "required": ["location"]
+            }
+        }
+    }, {
+        "type": "function",
+        "function": {
+            "name": "set_alarm",
+            "description": "Set an alarm for a given time",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "hour": {"type": "integer", "description": "Hour to set the alarm for"},
+                    "minute": {"type": "integer", "description": "Minute to set the alarm for"}
+                },
+                "required": ["hour", "minute"]
+            }
+        }
+    }])";
+
+    return run_test("MULTIPLE TOOLS TEST", messages,
+        [](int result, const StreamingData& data, const std::string& response, const Metrics& m) {
+            bool has_function = response.find("function_call") != std::string::npos;
+            bool has_tool = response.find("set_alarm") != std::string::npos;
 
             std::cout << "├─ Function call: " << (has_function ? "YES ✓" : "NO ✗") << "\n"
                       << "├─ Correct tool: " << (has_tool ? "YES ✓" : "NO ✗") << "\n"
@@ -280,11 +330,62 @@ bool test_huge_context() {
         }, nullptr, 100);
 }
 
+bool test_audio_processor() {
+    std::cout << "\n╔══════════════════════════════════════════╗\n"
+              << "║         Audio Processor Test             ║\n"
+              << "╚══════════════════════════════════════════╝\n";
+    using namespace cactus::engine;
+
+    const size_t n_fft = 400;
+    const size_t hop_length = 160;
+    const size_t sampling_rate = 16000;
+    const size_t feature_size = 80;
+    const size_t num_frequency_bins = 1 + n_fft / 2;
+
+    AudioProcessor audio_proc;
+    audio_proc.init_mel_filters(num_frequency_bins, feature_size, 0.0f, 8000.0f, sampling_rate);
+
+    const size_t n_samples = sampling_rate;
+    std::vector<float> waveform(n_samples);
+    for (size_t i = 0; i < n_samples; i++) {
+        waveform[i] = std::sin(2.0f * M_PI * 440.0f * i / sampling_rate);
+    }
+
+    AudioProcessor::SpectrogramConfig config;
+    config.n_fft = n_fft;
+    config.hop_length = hop_length;
+    config.frame_length = n_fft;
+    config.power = 2.0f;
+    config.center = true;
+    config.log_mel = "log10";
+
+    auto log_mel_spec = audio_proc.compute_spectrogram(waveform, config);
+
+    const float expected[] = {0.535175f, 0.548542f, 0.590673f, 0.633320f, 0.711979f};
+    const float tolerance = 2e-6f;
+
+    const size_t pad_length = n_fft / 2;
+    const size_t padded_length = n_samples + 2 * pad_length;
+    const size_t num_frames = 1 + (padded_length - n_fft) / hop_length;
+
+    bool passed = true;
+    for (size_t i = 0; i < 5; i++) {
+        if (std::abs(log_mel_spec[i * num_frames] - expected[i]) > tolerance) {
+            passed = false;
+            break;
+        }
+    }
+
+    return passed;
+}
+
 int main() {
     TestUtils::TestRunner runner("Engine Tests");
     runner.run_test("streaming", test_streaming());
     runner.run_test("tool_calls", test_tool_call());
+    runner.run_test("tool_calls_with_multiple_tools", test_tool_call_with_multiple_tools());
     runner.run_test("embeddings", test_embeddings());
+    runner.run_test("audio_processor", test_audio_processor());
     runner.run_test("huge_context", test_huge_context());
     runner.print_summary();
     return runner.all_passed() ? 0 : 1;
