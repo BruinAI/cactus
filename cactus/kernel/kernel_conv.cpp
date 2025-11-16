@@ -235,7 +235,7 @@ void cactus_conv1d_f32_k3(
     size_t C_in, size_t C_out,
     size_t stride
 ){
-
+    std::cout<<"Ran conv"<<std::endl;
     for (size_t n = 0; n < N; ++n) {
         const float* Xb = input  + n * (C_in * L);
         float*       Yb = output + n * (C_out * ((L + 2 - 3)/stride + 1));

@@ -16,6 +16,33 @@ struct ConvDebugNodes {
     size_t output;
 };
 
+static void debug_print_tensor_5x5(CactusGraph* gb, size_t node_id, const char* name) {
+    auto& buf = gb->get_output_buffer(node_id);
+    const std::vector<size_t>& shape = buf.shape;
+    const float* ptr = reinterpret_cast<const float*>(gb->get_output(node_id));
+
+    if (shape.size() < 2) {
+        std::cout << "(Tensor rank < 2, cannot print 5×5)" << std::endl;
+        return;
+    }
+
+    size_t rows = shape[0];
+    size_t cols = shape[1];
+
+    size_t rmax = std::min<size_t>(rows, 5);
+    size_t cmax = std::min<size_t>(cols, 5);
+
+    for (size_t r = 0; r < rmax; ++r) {
+        std::cout << "row " << r << ": ";
+        for (size_t c = 0; c < cmax; ++c) {
+            float v = ptr[r * cols + c];
+            std::cout << v << "  ";
+        }
+        std::cout << std::endl;
+    }
+    std::cout << "------------------------------------------" << std::endl;
+}
+
 WhisperModel::WhisperModel() : Model() {}
 
 WhisperModel::WhisperModel(const Config& config) : Model(config) {
@@ -29,6 +56,8 @@ WhisperModel::WhisperModel(const Config& config) : Model(config) {
 
     // Safe scaling to avoid overflow in softmax inside the ATTENTION op
     attention_scale_ = 1.0f / std::sqrt(hd);
+
+    encoder_block_out_nodes_.resize(config.num_layers, 0);
 }
 
 void WhisperModel::load_weights_to_graph(CactusGraph* gb) {
@@ -123,7 +152,7 @@ size_t WhisperModel::build_encoder_mlp(CactusGraph* gb, size_t input, uint32_t l
 
     encoder_pre_gelu = ffn1_bias;
 
-    auto ffn1_act = gb->gelu(ffn1_bias);
+    auto ffn1_act = gb->gelu_erf(ffn1_bias);
 
     encoder_post_gelu = ffn1_act;
 
@@ -134,72 +163,60 @@ size_t WhisperModel::build_encoder_mlp(CactusGraph* gb, size_t input, uint32_t l
 
 size_t WhisperModel::build_decoder_mlp(CactusGraph* gb, size_t input, uint32_t layer_idx, ComputeBackend backend) const {
     const auto& layer = weight_nodes_.layers[layer_idx];
-
     auto ffn1_weight = gb->matmul(input, layer.decoder_ffn1_weight, true, backend);
     auto ffn1_bias = gb->add(ffn1_weight, layer.decoder_ffn1_bias);
-    auto ffn1_act = gb->gelu(ffn1_bias);
+    auto ffn1_act = gb->gelu_erf(ffn1_bias);
     auto ffn2_weight = gb->matmul(ffn1_act, layer.decoder_ffn2_weight, true, backend);
     auto ffn2_bias = gb->add(ffn2_weight, layer.decoder_ffn2_bias);
     return ffn2_bias;
 }
 
-static void debug_print_tensor_5x5(CactusGraph* gb, size_t node_id, const char* name) {
-    auto& buf = gb->get_output_buffer(node_id);
-    const std::vector<size_t>& shape = buf.shape;
-    const float* ptr = reinterpret_cast<const float*>(gb->get_output(node_id));
 
-    std::cout << "---- Dump of " << name << " shape: [ ";
-    for (auto s : shape) std::cout << s << " ";
-    std::cout << "] ----" << std::endl;
-
-    if (shape.size() < 2) {
-        std::cout << "(Tensor rank < 2, cannot print 5×5)" << std::endl;
-        return;
-    }
-
-    size_t rows = shape[0];
-    size_t cols = shape[1];
-
-    size_t rmax = std::min<size_t>(rows, 5);
-    size_t cmax = std::min<size_t>(cols, 5);
-
-    for (size_t r = 0; r < rmax; ++r) {
-        std::cout << "row " << r << ": ";
-        for (size_t c = 0; c < cmax; ++c) {
-            float v = ptr[r * cols + c];
-            std::cout << v << "  ";
-        }
-        std::cout << std::endl;
-    }
-    std::cout << "------------------------------------------" << std::endl;
-}
 
 size_t WhisperModel::build_encoder_attention(CactusGraph* gb, size_t input, uint32_t layer_idx, ComputeBackend backend, bool use_cache, size_t position_offset){
     const auto& layer = weight_nodes_.layers[layer_idx];
 
+    //
+    // 1. Q from *already normalized* decoder hidden
+    //
     size_t q = gb->matmul(input, layer.decoder_encoder_attn_q_weight, true, backend);
     q = gb->add(q, layer.decoder_encoder_attn_q_bias);
 
-    // K is multiplied by encoder model output
-    size_t k = gb->matmul(weight_nodes_.encoder_output, layer.decoder_encoder_attn_k_weight, true, backend);
+    //
+    // 2. K/V from encoder output (already normalized by encoder stack)
+    //
+    size_t enc_norm = weight_nodes_.encoder_output;
 
-    // V is also multiplied by encoder model otuput
-    size_t v = gb->matmul(weight_nodes_.encoder_output, layer.decoder_encoder_attn_v_weight, true, backend);
+    // K: no bias
+    size_t k = gb->matmul(enc_norm, layer.decoder_encoder_attn_k_weight, true, backend);
+
+    // V: with bias
+    size_t v = gb->matmul(enc_norm, layer.decoder_encoder_attn_v_weight, true, backend);
     v = gb->add(v, layer.decoder_encoder_attn_v_bias);
 
+    //
+    // 3. Reshape Q/K/V
+    //
     size_t T_dec = gb->get_output_buffer(q).shape[0];
     size_t T_enc = gb->get_output_buffer(k).shape[0];
 
-    size_t num_heads = config_.attention_heads;
-    size_t head_dim  = config_.attention_head_dim;
+    size_t q_heads  = config_.attention_heads;
+    size_t kv_heads = config_.attention_kv_heads;
+    size_t head_dim = config_.attention_head_dim;
 
-    q = gb->reshape(q, {1, T_dec, num_heads, head_dim});
-    k = gb->reshape(k, {1, T_enc, num_heads, head_dim});
-    v = gb->reshape(v, {1, T_enc, num_heads, head_dim});
+    q = gb->reshape(q, {1, T_dec, q_heads,  head_dim});
+    k = gb->reshape(k, {1, T_enc, kv_heads, head_dim});
+    v = gb->reshape(v, {1, T_enc, kv_heads, head_dim});
 
-    size_t attn = gb->attention(q, k, v, attention_scale_, position_offset);
-    attn = gb->reshape(attn, {T_dec, num_heads * head_dim});
+    //
+    // 4. Cross-attention (non-causal)
+    //
+    size_t attn = gb->attention(q, k, v, attention_scale_, /*is_causal=*/false);
 
+    //
+    // 5. Output projection
+    //
+    attn = gb->reshape(attn, {T_dec, q_heads * head_dim});
     size_t out = gb->matmul(attn, layer.decoder_encoder_attn_output_weight, true, backend);
     out = gb->add(out, layer.decoder_encoder_attn_output_bias);
 
@@ -213,11 +230,11 @@ void WhisperModel::reset_graph_side_cache_nodes() {
 
 size_t WhisperModel::build_decoder_self_attention(CactusGraph* gb, size_t input, uint32_t layer_idx, ComputeBackend backend, bool use_cache, size_t position_offset){
     const auto& layer = weight_nodes_.layers[layer_idx];
-    auto q = gb->matmul(input, layer.decoder_self_attn_q_weight, true, backend);
+    auto q = gb->matmul(input, layer.decoder_self_attn_q_weight, false, backend);
 
     q = gb->add(q, layer.decoder_self_attn_q_bias);
-    auto k = gb->matmul(input, layer.decoder_self_attn_k_weight, true, backend);
-    auto v = gb->matmul(input, layer.decoder_self_attn_v_weight, true, backend);
+    auto k = gb->matmul(input, layer.decoder_self_attn_k_weight, false, backend);
+    auto v = gb->matmul(input, layer.decoder_self_attn_v_weight, false, backend);
     v = gb->add(v, layer.decoder_self_attn_v_bias);
 
     size_t seq_new   = gb->get_output_buffer(q).shape[0];
@@ -270,7 +287,7 @@ size_t WhisperModel::build_encoder_self_attention(CactusGraph* gb, size_t input,
     k = gb->reshape(k, {1, seq_len, num_heads, head_dim});
     v = gb->reshape(v, {1, seq_len, num_heads, head_dim});
 
-    auto attn = gb->attention(q, k, v, attention_scale_, position_offset);
+    auto attn = gb->attention(q, k, v, attention_scale_, false);
 
     attn = gb->reshape(attn, {seq_len, num_heads * head_dim});
 
@@ -328,10 +345,9 @@ size_t WhisperModel::build_encoder_transformer_block(
 {
     const auto& layer = weight_nodes_.layers[layer_idx];
 
-    // LN BEFORE SELF-ATTN  (correct)
     size_t ln1 = gb->layernorm(
         hidden,
-        layer.encoder_post_attn_layernorm_weight,   // self_attn_layer_norm
+        layer.encoder_post_attn_layernorm_weight,
         layer.encoder_post_attn_layernorm_bias
     );
 
@@ -341,10 +357,9 @@ size_t WhisperModel::build_encoder_transformer_block(
 
     size_t x_post_sa = gb->add(hidden, sa);
 
-    // LN BEFORE FFN  (correct)
     size_t ln2 = gb->layernorm(
         x_post_sa,
-        layer.encoder_post_ffn_layernorm_weight,    // final_layer_norm
+        layer.encoder_post_ffn_layernorm_weight,
         layer.encoder_post_ffn_layernorm_bias
     );
 
@@ -353,6 +368,14 @@ size_t WhisperModel::build_encoder_transformer_block(
     );
 
     size_t out = gb->add(x_post_sa, ffn_out);
+
+    // record block output for debugging
+    if (layer_idx < encoder_block_out_nodes_.size()) {
+        encoder_block_out_nodes_[layer_idx] = out;
+    }
+
+    if(layer_idx > encoder_block_out_nodes_.size())
+        std::cout<<"WTF"<<std::endl;
 
     return out;
 }
@@ -394,15 +417,9 @@ void WhisperModel::run_encoder(const std::vector<float>& mel_bins)
     if (!gb)
         throw std::runtime_error("Graph handle is null in run_encoder.");
 
-    // ---------------------------------------------------------------------
-    // 1. Mel input (1, 80, T)
-    // ---------------------------------------------------------------------
     size_t mel_input = gb->input({1, 80, T_mel}, Precision::FP32);
     gb->set_input(mel_input, mel_bins.data(), Precision::FP32);
 
-    // ---------------------------------------------------------------------
-    // 2. Conv1 → Conv2 → transpose (1, T, 1024)
-    // ---------------------------------------------------------------------
     size_t conv2_transposed = build_conv1d(gb, mel_input, backend);
 
     const auto& conv_shape = gb->get_output_buffer(conv2_transposed).shape;
@@ -412,9 +429,6 @@ void WhisperModel::run_encoder(const std::vector<float>& mel_bins)
     size_t T_enc = conv_shape[1];
     size_t D_enc = conv_shape[2];
 
-    // ---------------------------------------------------------------------
-    // 3. Slice positional embeddings → (T_enc, D_enc)
-    // ---------------------------------------------------------------------
     size_t pos_slice = gb->slice(
         weight_nodes_.encoder_position_embeddings,
         /*dim*/0,
@@ -422,21 +436,11 @@ void WhisperModel::run_encoder(const std::vector<float>& mel_bins)
         /*length*/T_enc
     );
 
-    // ---------------------------------------------------------------------
-    // 4. Reshape conv2_transposed to (T_enc, D_enc)
-    // ---------------------------------------------------------------------
     size_t h2d = gb->reshape(conv2_transposed, {T_enc, D_enc});
 
-    // ---------------------------------------------------------------------
-    // 5. Add positional embeddings
-    // ---------------------------------------------------------------------
     size_t h_pos = gb->add(h2d, pos_slice);
     last_enc_plus_pos_node_ = h_pos;
 
-    // ---------------------------------------------------------------------
-    // 6. LayerNorm before transformer blocks
-    //     LayerNorm runs along last dimension → EXACT match to HF
-    // ---------------------------------------------------------------------
     size_t h_norm = gb->layernorm(
         h_pos,
         weight_nodes_.encoder_norm_weight,
@@ -444,20 +448,15 @@ void WhisperModel::run_encoder(const std::vector<float>& mel_bins)
     );
     last_encoder_post_norm_node_ = h_norm;
 
-    // ---------------------------------------------------------------------
-    // 7. All encoder transformer blocks
-    // ---------------------------------------------------------------------
     size_t h = h_norm;
     for (uint32_t i = 0; i < config_.num_layers; ++i){
-        h = build_encoder_transformer_block(gb, h, i, backend, /*use_cache*/false, /*pos_offset*/0);
+        h = build_encoder_transformer_block(gb, h, i, backend, false, 0);
         if (i == 0) {
             encoder_transformer_block_0 = h;
         }
     }
+    
 
-    // ---------------------------------------------------------------------
-    // 8. Final output = (T_enc, 1024)
-    // ---------------------------------------------------------------------
     weight_nodes_.encoder_output = h;
 }
 
@@ -642,7 +641,7 @@ uint32_t WhisperModel::generate_with_audio(
         }
 
         // Now decode only the NEW tokens, with use_cache = true
-        logits_node = run_decoder_step(tokens, /*use_cache=*/false);
+        logits_node = run_decoder_step(tokens, /*use_cache=*/true);
     }
 
     auto logits_shape = gb->get_output_buffer(logits_node).shape;
@@ -662,28 +661,52 @@ uint32_t WhisperModel::generate_with_audio(
     std::cout << "==== Encoder output AFTER execute ====\n";
     debug_print_tensor_5x5(gb, weight_nodes_.encoder_output, "encoder_output");
 
-    debug_print_tensor_5x5(gb, last_conv1_node_, "conv1 (after bias)");
-    debug_print_tensor_5x5(gb, last_conv2_node_, "conv2 (after bias)");
-    debug_print_tensor_5x5(gb, last_conv2_transposed_node_, "conv2_transposed");
+//     debug_print_tensor_5x5(gb, last_conv1_node_, "conv1 (after bias)");
+//     debug_print_tensor_5x5(gb, last_conv2_node_, "conv2 (after bias)");
+//     debug_print_tensor_5x5(gb, last_conv2_transposed_node_, "conv2_transposed");
 
-    if (last_encoder_post_norm_node_ != 0) {
-        std::cout << "==== Encoder post-norm (pre blocks) ====\n";
-        debug_print_tensor_5x5(gb, last_encoder_post_norm_node_, "encoder_post_norm_cpp");
-    }
+//     if (last_encoder_post_norm_node_ != 0) {
+//         std::cout << "==== Encoder post-norm (pre blocks) ====\n";
+//         debug_print_tensor_5x5(gb, last_encoder_post_norm_node_, "encoder_post_norm_cpp");
+//     }
 
-    if (last_enc_plus_pos_node_ != 0) {
-        std::cout << "==== Encoder pre-norm (enc + pos) ====\n";
-        debug_print_tensor_5x5(gb, last_enc_plus_pos_node_, "enc_plus_pos_cpp");
-    }
+//     if (last_enc_plus_pos_node_ != 0) {
+//         std::cout << "==== Encoder pre-norm (enc + pos) ====\n";
+//         debug_print_tensor_5x5(gb, last_enc_plus_pos_node_, "enc_plus_pos_cpp");
+//     }
 
-    std::cout << "==== Encoder block 0 pre gelu ====\n";
-    debug_print_tensor_5x5(gb, encoder_pre_gelu, "ENC_FC1_pre_GELU");
+    
 
-    std::cout << "==== Encoder block 0 post gelu ====\n";
-    debug_print_tensor_5x5(gb, encoder_post_gelu, "ENC_FC1_pre_GELU");
+//     if (encoder_ln1_node_ != 0) {
+//     std::cout << "==== Encoder block 0 LN1 ====\n";
+//     debug_print_tensor_5x5(gb, encoder_ln1_node_, "enc_block0_ln1_cpp");
+//     }
+    // if (encoder_sa_out_node_ != 0) {
+    //     std::cout << "==== Encoder block 0 SA OUT ====\n";
+    //     debug_print_tensor_5x5(gb, encoder_sa_out_node_, "enc_block0_sa_out_cpp");
+    // }
+//     if (encoder_ln2_node_ != 0) {
+//         std::cout << "==== Encoder block 0 LN2 ====\n";
+//         debug_print_tensor_5x5(gb, encoder_ln2_node_, "enc_block0_ln2_cpp");
+// }
 
-    std::cout << "==== After encoder block 0 ====\n";
-    debug_print_tensor_5x5(gb, encoder_transformer_block_0, "enc_block0_cpp");
+
+//     std::cout << "==== Encoder block 0 pre gelu ====\n";
+//     debug_print_tensor_5x5(gb, encoder_pre_gelu, "ENC_FC1_pre_GELU");
+
+//     std::cout << "==== Encoder block 0 post gelu ====\n";
+//     debug_print_tensor_5x5(gb, encoder_post_gelu, "ENC_FC1_pre_GELU");
+
+    // std::cout << "==== After encoder block 0 ====\n";
+    // debug_print_tensor_5x5(gb, encoder_transformer_block_0, "enc_block0_cpp");
+
+    // if (encoder_block1_out_node_ != 0) {
+    //     std::cout << "==== Encoder block 1 OUT ====\n";
+    //     debug_print_tensor_5x5(gb, encoder_block1_out_node_, "enc_block1_cpp");
+    // }
+
+    // std::cout << "==== Encoder block 23 out ====\n";
+    // debug_print_tensor_5x5(gb, encoder_block_out_nodes_[23], "enc_block23_cpp");
 
     // On cold start, snapshot encoder output to host for reuse
     if (cold_start) {
@@ -728,3 +751,9 @@ uint32_t WhisperModel::generate_with_audio(
 
 }
 }
+
+// [[ 0.5214584  -1.215291    1.1062135  -2.1213791  -1.4152509 ]
+//  [ 0.9565482  -0.8180516   1.5638287  -1.6646358  -0.8842591 ]
+//  [ 1.0157969  -0.76226425  1.6469756  -1.5676115  -0.78760093]
+//  [ 0.58559585 -1.1586764   1.209486   -1.9644636  -1.0903969 ]
+//  [ 0.0709652  -1.6271397   0.6384663  -2.4986732  -1.5328366 ]]

@@ -7,7 +7,7 @@
 #include <cstring>
 #include <limits>
 #include <random>
-
+#include <iostream>
 
 void cactus_silu_f32(const float* input, float* output, size_t num_elements) {
     CactusThreading::parallel_for(num_elements, CactusThreading::Thresholds::SCALAR_EXPENSIVE,
@@ -267,6 +267,78 @@ void cactus_gelu_f32_erf(const float* input, float* output, size_t num_elements)
                 float x = input[i];
                 float arg = x * inv_sqrt2;
                 output[i] = 0.5f * x * (1.0f + erff(arg));
+            }
+        }
+    );
+}
+
+void cactus_gelu_f16_erf(const __fp16* input, __fp16* output, size_t num_elements)
+{
+    std::cout<<"gelu erf fp16"<<std::endl;
+    const float inv_sqrt2 = 0.70710678118654752440f;
+
+    CactusThreading::parallel_for(
+        num_elements,
+        CactusThreading::Thresholds::SCALAR_EXPENSIVE,
+        [&](size_t start_idx, size_t end_idx) {
+
+            constexpr size_t SIMD = 8;  // 8 FP16 per NEON register
+            size_t vec_end = start_idx + ((end_idx - start_idx) / SIMD) * SIMD;
+
+            float16x8_t inv_sqrt2_h = vdupq_n_f16((__fp16)inv_sqrt2);
+            float16x8_t half_h = vdupq_n_f16((__fp16)0.5f);
+            float16x8_t one_h  = vdupq_n_f16((__fp16)1.0f);
+
+            for (size_t i = start_idx; i < vec_end; i += SIMD) {
+
+                // Load FP16 → NEON
+                float16x8_t xh = vld1q_f16(&input[i]);
+
+                // Convert to FP32 for erf
+                float32x4_t x0 = vcvt_f32_f16(vget_low_f16(xh));
+                float32x4_t x1 = vcvt_f32_f16(vget_high_f16(xh));
+
+                // arg = x / sqrt(2)
+                float32x4_t arg0 = vmulq_n_f32(x0, inv_sqrt2);
+                float32x4_t arg1 = vmulq_n_f32(x1, inv_sqrt2);
+
+                // Compute erf() scalar for each lane
+                float arg0_s[4], arg1_s[4];
+                float erf0_s[4], erf1_s[4];
+                vst1q_f32(arg0_s, arg0);
+                vst1q_f32(arg1_s, arg1);
+
+                for (int j = 0; j < 4; j++) {
+                    erf0_s[j] = erff(arg0_s[j]);
+                    erf1_s[j] = erff(arg1_s[j]);
+                }
+
+                float32x4_t erf0 = vld1q_f32(erf0_s);
+                float32x4_t erf1 = vld1q_f32(erf1_s);
+
+                // gelu = 0.5 * x * (1 + erf)
+                float32x4_t t0 = vaddq_f32(vdupq_n_f32(1.0f), erf0);
+                float32x4_t t1 = vaddq_f32(vdupq_n_f32(1.0f), erf1);
+
+                float32x4_t gelu0 = vmulq_f32(vmulq_n_f32(x0, 0.5f), t0);
+                float32x4_t gelu1 = vmulq_f32(vmulq_n_f32(x1, 0.5f), t1);
+
+                // Convert FP32 → FP16
+                float16x8_t gelu_h = vcombine_f16(
+                    vcvt_f16_f32(gelu0),
+                    vcvt_f16_f32(gelu1)
+                );
+
+                // Store back
+                vst1q_f16(&output[i], gelu_h);
+            }
+
+            // ----- Scalar tail -----
+            for (size_t i = vec_end; i < end_idx; i++) {
+                float x = (float)input[i];
+                float arg = x * inv_sqrt2;
+                float res = 0.5f * x * (1.0f + erff(arg));
+                output[i] = (__fp16)res;
             }
         }
     );

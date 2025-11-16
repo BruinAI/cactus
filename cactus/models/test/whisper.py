@@ -41,13 +41,6 @@ def main():
     save(f"{OUT_DIR}/mel.npy", mel_np)
 
     # ----------------------------------------------------
-    # Decoder prompt tokens
-    # ----------------------------------------------------
-    forced_ids = processor.get_decoder_prompt_ids(language="en", task="transcribe")
-    decoder_input_ids = torch.tensor([[i[1] for i in forced_ids]], dtype=torch.int64)
-    save(f"{OUT_DIR}/decoder_input_tokens.npy", decoder_input_ids.cpu().numpy())
-
-    # ----------------------------------------------------
     # Conv1 + Conv2
     # ----------------------------------------------------
     with torch.no_grad():
@@ -57,91 +50,116 @@ def main():
     save(f"{OUT_DIR}/conv1_out.npy", conv1.cpu().numpy())
     save(f"{OUT_DIR}/conv2_out.npy", conv2.cpu().numpy())
 
-    # Transpose (Whisper does this inside HF)
-    conv2_T = conv2.transpose(1, 2)    # (1, T, 1024)
-    conv2_T_np = conv2_T[0].cpu().numpy()
-    save(f"{OUT_DIR}/conv2_T.npy", conv2_T_np)
+    conv2_T = conv2.transpose(1, 2)   # (1, T_enc, 1024)
+    x = conv2_T
 
-    T_enc = conv2_T.shape[1]
-    D = conv2_T.shape[2]
+    T_enc = x.shape[1]
+    D = x.shape[2]
 
     # ----------------------------------------------------
-    # Positional embeddings
+    # Positional embeddings + pre-LN
     # ----------------------------------------------------
-    pos_emb = model.model.encoder.embed_positions.weight[:T_enc].detach().cpu().numpy()
-    save(f"{OUT_DIR}/encoder_pos_emb.npy", pos_emb)
+    pos_emb = model.model.encoder.embed_positions.weight[:T_enc].detach()[None, :, :]
+    save(f"{OUT_DIR}/encoder_pos_emb.npy", pos_emb[0].cpu().numpy())
 
-    enc_plus_pos = conv2_T_np + pos_emb
-    save(f"{OUT_DIR}/encoder_pos_added.npy", enc_plus_pos)
+    x = x + pos_emb
+    save(f"{OUT_DIR}/encoder_pos_added.npy", x[0].cpu().numpy())
 
-    # ----------------------------------------------------
-    # Pre-transformer LayerNorm
-    # ----------------------------------------------------
     w = model.model.encoder.layer_norm.weight.detach().cpu().numpy()
     b = model.model.encoder.layer_norm.bias.detach().cpu().numpy()
 
+    enc_plus_pos = x[0].cpu().numpy()
     mean = enc_plus_pos.mean(-1, keepdims=True)
     var = enc_plus_pos.var(-1, keepdims=True)
+    ln_np = (enc_plus_pos - mean) / np.sqrt(var + 1e-5)
+    ln_np = ln_np * w + b
+    save(f"{OUT_DIR}/encoder_post_norm.npy", ln_np)
 
-    ln = (enc_plus_pos - mean) / np.sqrt(var + 1e-5)
-    ln = ln * w + b
-    save(f"{OUT_DIR}/encoder_post_norm.npy", ln)
-
-    # ----------------------------------------------------
-    # ******* 🔥 NEW: Extract encoder block 0 ********
-    # ----------------------------------------------------
-    x = torch.tensor(ln, dtype=torch.float32).unsqueeze(0)   # (1, T, 1024)
-    enc0 = model.model.encoder.layers[0]
-
-    # LN before SA
-    with torch.no_grad():
-        block0_ln1 = enc0.self_attn_layer_norm(x)        # (1, T, 1024)
-
-    save(f"{OUT_DIR}/encoder_block0_ln1.npy", block0_ln1[0].cpu().numpy())
-
-    # Self-attention
-    with torch.no_grad():
-        sa_out = enc0.self_attn(block0_ln1, attention_mask=None)[0]   # (1, T, 1024)
-
-    save(f"{OUT_DIR}/encoder_block0_sa_out.npy", sa_out[0].cpu().numpy())
-
-    # Residual add
-    x_sa = x + sa_out
-
-    # FFN
-    with torch.no_grad():
-        block0_ln2 = enc0.final_layer_norm(x_sa)
-
-    # FFN = fc2( GELU( fc1(x) ) )
-    with torch.no_grad():
-        ffn_fc1 = enc0.fc1(block0_ln2)
-        ffn_act = torch.nn.functional.gelu(ffn_fc1)
-        ffn_out = enc0.fc2(ffn_act)
-
-    # Block output: residual add
-    block0_out = x_sa + ffn_out
-    save(f"{OUT_DIR}/encoder_block0_out.npy", block0_out[0].cpu().numpy())
+    x = torch.tensor(ln_np, dtype=torch.float32).unsqueeze(0)
 
     # ----------------------------------------------------
-    # Full encoder output (after all 24 blocks)
+    # Full encoder stack (manual)
+    # ----------------------------------------------------
+    for i, enc_layer in enumerate(model.model.encoder.layers):
+        with torch.no_grad():
+            ln1 = enc_layer.self_attn_layer_norm(x)
+            sa_out = enc_layer.self_attn(ln1)[0]
+            x_sa = x + sa_out
+
+            ln2 = enc_layer.final_layer_norm(x_sa)
+            fc1 = enc_layer.fc1(ln2)
+            act = torch.nn.functional.gelu(fc1, approximate="none")
+            ffn_out = enc_layer.fc2(act)
+
+            x = x_sa + ffn_out
+
+        save(f"{OUT_DIR}/encoder_block{i}_out.npy", x[0].cpu().numpy())
+
+    final_manual = x[0].cpu().numpy()
+    save(f"{OUT_DIR}/encoder_output_manual.npy", final_manual)
+
+    # ----------------------------------------------------
+    # HF encoder output
     # ----------------------------------------------------
     with torch.no_grad():
-        final_enc = model.model.encoder(input_features=mel).last_hidden_state
+        enc_hf = model.model.encoder(mel).last_hidden_state
 
-    save(f"{OUT_DIR}/encoder_output_final.npy", final_enc.cpu().numpy())
+    final_hf = enc_hf[0].cpu().numpy()
+    save(f"{OUT_DIR}/encoder_output_hf.npy", final_hf)
 
-    # ----------------------------------------------------
-    # Logits + transcription
-    # ----------------------------------------------------
+    diff = (enc_hf - x).abs().max().item()
+    print(f"\nMax abs diff between manual and HF encoder: {diff:.6e}")
+
+    # ====================================================
+    # DECODER: actually transcribe + print tokens
+    # ====================================================
+    print("\n===== DECODER CHECK (HF) =====")
+
+    # 1) Get the forced decoder prompt IDs that Whisper uses internally
+    forced_ids = processor.get_decoder_prompt_ids(language="en", task="transcribe")
+    # forced_ids is a list of [position, token_id]; build the actual prompt sequence:
+    prompt_token_ids = [tok_id for _, tok_id in forced_ids]
+    prompt_len = len(prompt_token_ids)
+
+    print("Forced prompt token IDs:", prompt_token_ids)
+    print("Forced prompt decoded text:",
+          tokenizer.decode(prompt_token_ids, skip_special_tokens=False))
+
+    MAX_NEW = 64  # mirror your C++ autoregressive test
+
+    # 2) Generate with proper Whisper-style config: use forced_decoder_ids
     with torch.no_grad():
-        out = model(input_features=mel, decoder_input_ids=decoder_input_ids)
-        save(f"{OUT_DIR}/logits_ref.npy", out.logits.cpu().numpy())
+        gen_ids = model.generate(
+            input_features=mel,             # NOTE: use input_features for Whisper
+            forced_decoder_ids=forced_ids,  # NOT decoder_input_ids
+            max_new_tokens=MAX_NEW,
+            do_sample=False,                # greedy
+            num_beams=1,
+        )  # shape: (1, total_len)
 
-    with torch.no_grad():
-        gen = model.generate(mel, task="transcribe", language="en", max_length=128)
+    gen_ids_list = gen_ids[0].tolist()
+    print("\nAll generated token IDs:", gen_ids_list)
 
-    print("\nTRANSCRIPT:", tokenizer.decode(gen[0], skip_special_tokens=True))
-    print("\nAll reference tensors saved!")
+    # 3) Split prompt vs new tokens according to prompt_len
+    gen_prompt = gen_ids_list[:prompt_len]
+    gen_new = gen_ids_list[prompt_len:]
+
+    print("\nPrompt part (from generate):", gen_prompt)
+    print("Newly generated token IDs:  ", gen_new)
+
+    # 4) Decode:
+    # Full decoded string (good for sanity check)
+    full_text = processor.batch_decode(gen_ids, skip_special_tokens=False)[0]
+    print("\nDecoded full sequence (no special token stripping):")
+    print(full_text)
+
+    # "True" transcription: decode only new tokens, skipping special tokens
+    transcription = tokenizer.decode(gen_new, skip_special_tokens=True)
+    print("\n===== FINAL TRANSCRIPTION (new tokens only) =====")
+    print(transcription if transcription.strip() else "<EMPTY STRING>")
+    print("=================================================")
+
+    print("\n===== END DECODER CHECK =====")
 
 
 if __name__ == "__main__":

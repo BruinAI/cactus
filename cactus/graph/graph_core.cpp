@@ -346,6 +346,22 @@ void compute_node_optimized(GraphNode& node, const std::vector<std::unique_ptr<G
             }
             break;
         }
+        case OpType::GELU_ERF: {
+            const auto& input = nodes[node_index_map.at(node.input_ids[0])]->output_buffer;
+
+            if (input.precision == Precision::INT8) {
+                throw std::runtime_error("GELU erf does not support int8");
+            } else if (input.precision == Precision::FP16) {
+                cactus_gelu_f16_erf(input.data_as<__fp16>(),
+                               node.output_buffer.data_as<__fp16>(),
+                               node.output_buffer.total_size);
+            } else {
+                cactus_gelu_f32_erf(input.data_as<float>(),
+                               node.output_buffer.data_as<float>(),
+                               node.output_buffer.total_size);
+            }
+            break;
+        }
         case OpType::MATMUL:
             compute_matmul_node(node, nodes, node_index_map);
             break;

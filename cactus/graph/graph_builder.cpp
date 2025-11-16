@@ -477,6 +477,10 @@ size_t CactusGraph::gelu(size_t input) {
     return add_node(OpType::GELU, {input}, {});
 }
 
+size_t CactusGraph::gelu_erf(size_t input){
+    return add_node(OpType::GELU_ERF, {input}, {});
+}
+
 size_t CactusGraph::gather(size_t tensor, size_t indices) {
     const auto& tensor_buffer = get_output_buffer(tensor);
     const auto& idx_shape = get_output_buffer(indices).shape;

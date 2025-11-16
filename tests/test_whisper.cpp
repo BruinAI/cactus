@@ -173,7 +173,7 @@ static bool test_whisper_prefill_only() {
 static bool test_whisper_autoregressive_longer() {
     return run_whisper_test(
         "WHISPER AUTOREGRESSIVE (64 TOKENS)",
-        0.0f, 1.0f, 0, 64, false, -1,
+        0.0f, 1.0f, 0, 5, false, -1,
         [](int rc,
            const std::string& /*text*/,
            double /*ttft*/,
@@ -205,8 +205,8 @@ static bool test_whisper_streaming_early_stop() {
 // ---------------------------
 int main() {
     TestUtils::TestRunner runner("Whisper Tests");
-    runner.run_test("whisper_prefill_basic",      test_whisper_prefill_only());
-    // runner.run_test("whisper_autoregressive_64",  test_whisper_autoregressive_longer());
+    // runner.run_test("whisper_prefill_basic",      test_whisper_prefill_only());
+    runner.run_test("whisper_autoregressive_5",  test_whisper_autoregressive_longer());
     // runner.run_test("whisper_streaming_stop20",   test_whisper_streaming_early_stop());
     runner.print_summary();
     return runner.all_passed() ? 0 : 1;

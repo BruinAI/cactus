@@ -417,6 +417,13 @@ private:
     size_t encoder_transformer_block_0 = 0;
     size_t encoder_pre_gelu = 0;
     size_t encoder_post_gelu = 0;
+    size_t encoder_ln1_node_ = 0;
+    size_t encoder_sa_out_node_ = 0;
+    size_t encoder_ln2_node_ = 0;
+
+    size_t encoder_block1_out_node_ = 0;
+
+    std::vector<size_t> encoder_block_out_nodes_;
     
 
 };
