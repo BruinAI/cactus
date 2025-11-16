@@ -210,6 +210,7 @@ class HyperparameterSearch:
 
         ckpt_dir = run_dir / "checkpoints"
         ckpt_dir.mkdir(exist_ok=True)
+        ckpt_dir = ckpt_dir.absolute()
 
         # Prepare training script path
         training_script = Path(__file__).parent / "train_qwen3_tool_calling.py"
