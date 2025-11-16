@@ -516,7 +516,7 @@ def compute_test_set_perplexity(trainer, test_loader):
         total_loss += float(np.array(loss))
         eval_steps += 1
 
-        print(f"Test example {eval_steps}/{len(test_loader)}: loss={float(np.array(loss)):.4f}")
+        print(f"Test example {eval_steps}: loss={float(np.array(loss)):.4f}")
 
     # Compute average loss and perplexity
     avg_loss = total_loss / eval_steps if eval_steps > 0 else float('inf')
