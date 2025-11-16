@@ -60,7 +60,8 @@ def is_english_only(text: str) -> bool:
             latin_extended_count < 3)
 
 
-def filter_toucan_dataset(dataset, max_tools_used, max_tools_available, max_number_of_turns, english_only=True) -> Dataset:
+def filter_toucan_dataset(dataset, max_tools_used, max_tools_available, max_number_of_turns,
+                          truncate_longer_examples=True, english_only=True) -> Dataset:
     """
     Filter Toucan dataset for single-turn examples with limited tools.
 
@@ -69,30 +70,38 @@ def filter_toucan_dataset(dataset, max_tools_used, max_tools_available, max_numb
         max_tools_used: Maximum number of tools used in target (default: 2)
         max_tools_available: Maximum number of tools available in prompt (default: 3)
         max_number_of_turns: Maximum number of user turns to keep (default: 1)
+        truncate_longer_examples: If True, truncate examples exceeding max_number_of_turns.
+                                  If False, filter out those examples entirely. (default: True)
         english_only: Filter to English-only samples (default: True)
 
     Returns:
         Filtered dataset
     """
-    print(f"\nFiltering dataset (≤{max_number_of_turns} turns, ≤{max_tools_used} tools used, ≤{max_tools_available} tools available, english_only={english_only})...")
+    behavior = "truncating" if truncate_longer_examples else "filtering out"
+    print(f"\nFiltering dataset (≤{max_number_of_turns} turns [{behavior}], ≤{max_tools_used} tools used, ≤{max_tools_available} tools available, english_only={english_only})...")
 
     total = len(dataset)
 
-    def reduce_user_messages(sample):
-        """Remove all messages after max_number_of_turns user messages."""
-        messages = json.loads(sample['messages'])
-        user_message_idxs = [idx for idx, m in enumerate(messages) if m['role'] == 'user']
-        if len(user_message_idxs) <= max_number_of_turns:
+    if truncate_longer_examples:
+        # Truncate: Keep examples but cut them down to max_number_of_turns
+        def reduce_user_messages(sample):
+            """Remove all messages after max_number_of_turns user messages."""
+            messages = json.loads(sample['messages'])
+            user_message_idxs = [idx for idx, m in enumerate(messages) if m['role'] == 'user']
+            if len(user_message_idxs) <= max_number_of_turns:
+                return sample
+            cutoff_idx = user_message_idxs[max_number_of_turns]
+            sample['messages'] = json.dumps(messages[:cutoff_idx])
             return sample
-        cutoff_idx = user_message_idxs[max_number_of_turns]
-        sample['messages'] = json.dumps(messages[:cutoff_idx])
-        return sample
 
-    filtered_dataset = dataset.map(
-        reduce_user_messages,
-        num_proc=16,
-        desc=f"Reducing messages to {max_number_of_turns} user turns"
-    )
+        filtered_dataset = dataset.map(
+            reduce_user_messages,
+            num_proc=16,
+            desc=f"Truncating messages to {max_number_of_turns} user turns"
+        )
+    else:
+        # Don't truncate: We'll filter out examples with >max_number_of_turns in the filter step
+        filtered_dataset = dataset
 
     def filter_fn(sample):
         """Filter function for a single sample."""
@@ -100,6 +109,10 @@ def filter_toucan_dataset(dataset, max_tools_used, max_tools_available, max_numb
 
         user_messages = [m for m in messages if m['role'] == 'user']
         if len(user_messages) == 0:
+            return False
+
+        # If not truncating, filter out examples with too many turns
+        if not truncate_longer_examples and len(user_messages) > max_number_of_turns:
             return False
 
         num_tool_calls = sum(1 for m in messages if m['role'] == 'tool_call')
@@ -261,7 +274,8 @@ def create_tool_calling_dataset(
     max_tools_used,
     max_tools_available,
     max_number_of_turns,
-    format_function
+    format_function,
+    truncate_longer_examples=True
 ):
     """
     Create and format the tool calling dataset.
@@ -273,7 +287,10 @@ def create_tool_calling_dataset(
         num_train_epochs: Number of training epochs
         max_tools_used: Maximum number of tools used per example
         max_tools_available: Maximum number of tools available per example
+        max_number_of_turns: Maximum number of user turns to keep
         format_function: Function to format examples (takes batched examples dict)
+        truncate_longer_examples: If True, truncate examples exceeding max_number_of_turns.
+                                  If False, filter out those examples entirely. (default: True)
 
     Returns:
         Tuple of (train_loader, validation_loader, total_steps, train_dataset)
@@ -285,7 +302,13 @@ def create_tool_calling_dataset(
     dataset = load_dataset('Agent-Ark/Toucan-1.5M', 'SFT', split='train')
 
     # Filter dataset
-    filtered_dataset = filter_toucan_dataset(dataset, max_tools_used, max_tools_available, max_number_of_turns)
+    filtered_dataset = filter_toucan_dataset(
+        dataset,
+        max_tools_used,
+        max_tools_available,
+        max_number_of_turns,
+        truncate_longer_examples=truncate_longer_examples
+    )
 
     # Split into train and validation sets: 95% train, 5% validation
     split = filtered_dataset.train_test_split(test_size=0.05, seed=42)

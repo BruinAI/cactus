@@ -79,9 +79,10 @@ MESH_SHAPE = len(jax.devices()), 1  # Default to all devices in FSDP, no tensor 
 MESH_AXIS_NAMES = "fsdp", "tp"
 
 # Dataset filtering criteria (as per PLAN.md Phase 3)
-MAX_TOOLS_USED = 10
-MAX_TOOLS_AVAILABLE = 10
+MAX_TOOLS_USED = 2
+MAX_TOOLS_AVAILABLE = 3
 MAX_NUMBER_OF_TURNS = 1  # Limit on number of turns
+TRUNCATE_LONGER_EXAMPLES = False  # If True, truncate examples exceeding MAX_NUMBER_OF_TURNS; if False, filter them out entirely
 
 # Checkpoint and output directories
 CKPT_DIR = "/tmp/gemma_tool_calling_ckpts/"
@@ -308,6 +309,7 @@ def main():
         max_tools_used=MAX_TOOLS_USED,
         max_tools_available=MAX_TOOLS_AVAILABLE,
         max_number_of_turns=MAX_NUMBER_OF_TURNS,
+        truncate_longer_examples=TRUNCATE_LONGER_EXAMPLES,
         format_function=format_function
     )
 
