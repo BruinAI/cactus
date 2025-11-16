@@ -4,10 +4,12 @@
 #include <iostream>
 #include <iomanip>
 #include <cmath>
+#include <fstream>
+#include <cstdio>
 #include <vector>
 #include <sstream>
 
-const char* g_model_path = "../../weights/lfm2-1.2b-rag-i8";
+const char* g_model_path = "../../weights/lfm2-1.2B";
 const char* g_options = R"({"max_tokens": 256, "stop_sequences": ["<|im_end|>", "<end_of_turn>"]})";
 
 struct Timer {
@@ -337,17 +339,72 @@ bool test_rag() {
     ])";
 
     std::string modelPathStr(g_model_path ? g_model_path : "");
-    if (modelPathStr.find("rag") == std::string::npos) {
+
+    bool is_rag = false;
+    if (!modelPathStr.empty()) {
+        std::string config_path = modelPathStr + "/config.txt";
+        FILE* cfg = std::fopen(config_path.c_str(), "r");
+        if (cfg) {
+            char buf[4096];
+            while (std::fgets(buf, sizeof(buf), cfg)) {
+                std::string line(buf);
+                while (!line.empty() && (line.back() == '\n' || line.back() == '\r')) line.pop_back();
+                if (line.find("model_variant=") != std::string::npos) {
+                    auto pos = line.find('=');
+                    if (pos != std::string::npos) {
+                        std::string val = line.substr(pos + 1);
+                        if (val.find("rag") != std::string::npos) {
+                            is_rag = true;
+                            break;
+                        }
+                    }
+                }
+            }
+            std::fclose(cfg);
+        } else {
+            if (modelPathStr.find("rag") != std::string::npos) is_rag = true;
+        }
+    }
+
+    std::cout << "\n╔══════════════════════════════════════════╗\n"
+              << "║         RAG PREPROCESSING TEST           ║\n"
+              << "╚══════════════════════════════════════════╝\n";
+
+    if (!is_rag) {
         std::cout << "⊘ SKIP │ " << std::left << std::setw(25) << "rag_preprocessing"
                   << " │ " << "model variant is not RAG (skipping)" << "\n";
         return true;
     }
 
-    return run_test("RAG PREPROCESSING TEST", messages, [](int result, const StreamingData& data, const std::string&, const Metrics& m) {
-        std::cout << "RAG PREPROCESSING: total tokens=" << data.token_count << " result=" << result << "\n";
-        m.print();
-        return (result > 0) && (data.token_count > 0);
-    });
+    const char* corpus_dir = "../../tests/assets/rag_corpus";
+
+    cactus_model_t model = cactus_init_with_corpus(g_model_path, 2048, corpus_dir);
+    if (!model) {
+        std::cerr << "[✗] Failed to initialize RAG model with corpus dir\n";
+        return false;
+    }
+
+    StreamingData data;
+    data.model = model;
+
+    char response[4096];
+    std::cout << "Response: ";
+
+    int result = cactus_complete(model, messages, response, sizeof(response),
+                                 g_options, nullptr, stream_callback, &data);
+
+    std::cout << "\n\n[Results]\n";
+
+    Metrics metrics;
+    metrics.parse(response);
+
+    std::cout << "RAG PREPROCESSING: total tokens=" << data.token_count << " result=" << result << "\n";
+    metrics.print();
+
+    bool success = (result > 0) && (data.token_count > 0);
+
+    cactus_destroy(model);
+    return success;
 }
 
 bool test_audio_processor() {

@@ -70,6 +70,45 @@ cactus_model_t cactus_init(const char* model_path, size_t context_size) {
     }
 }
 
+cactus_model_t cactus_init_with_corpus(const char* model_path, size_t context_size, const char* corpus_dir) {
+    try {
+        auto* handle = new CactusModelHandle();
+        handle->model = create_model(model_path);
+
+        if (!handle->model) {
+            last_error_message = "Failed to create model from: " + std::string(model_path);
+            delete handle;
+            return nullptr;
+        }
+
+        if (!handle->model->init(model_path, context_size)) {
+            last_error_message = "Failed to initialize model from: " + std::string(model_path);
+            delete handle;
+            return nullptr;
+        }
+
+        if (corpus_dir != nullptr) {
+            Tokenizer* tok = handle->model->get_tokenizer();
+            if (tok) {
+                try {
+                    cactus::engine::Tokenizer* etok = static_cast<cactus::engine::Tokenizer*>(tok);
+                    etok->set_corpus_dir(std::string(corpus_dir));
+                } catch (...) {
+                    
+                }
+            }
+        }
+
+        return handle;
+    } catch (const std::exception& e) {
+        last_error_message = std::string(e.what());
+        return nullptr;
+    } catch (...) {
+        last_error_message = "Unknown error during model initialization";
+        return nullptr;
+    }
+}
+
 int cactus_complete(
     cactus_model_t model,
     const char* messages_json,

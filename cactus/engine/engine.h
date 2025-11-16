@@ -97,6 +97,8 @@ public:
 
     virtual bool load_vocabulary_with_config(const std::string& vocab_file, const std::string& merges_file, const std::string& config_file) = 0;
 
+    void set_corpus_dir(const std::string& dir) { corpus_dir_ = dir; }
+
 protected:
 
     enum class ModelType { UNKNOWN, QWEN, GEMMA, LFM2 , SMOL, BERT };
@@ -105,6 +107,7 @@ protected:
     ModelVariant model_variant_ = ModelVariant::DEFAULT;
     bool has_chat_template_ = false;
     std::string chat_template_;
+    std::string corpus_dir_;
 
     void detect_model_type(const std::string& config_path);
     std::string format_qwen_style(const std::vector<ChatMessage>& messages, bool add_generation_prompt, const std::string& tools_json) const;

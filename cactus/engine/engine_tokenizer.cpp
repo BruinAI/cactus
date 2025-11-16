@@ -173,7 +173,7 @@ std::string Tokenizer::format_lfm2_style(const std::vector<ChatMessage>& message
     }
 
     if (model_variant_ == ModelVariant::RAG) {
-        const std::string docs_path = "../../tests/assets/rag_corpus";
+        const std::string docs_path = !corpus_dir_.empty() ? corpus_dir_ : std::string("../../tests/assets/rag_corpus");
         DIR* dir = opendir(docs_path.c_str());
         if (dir) {
             struct dirent* entry;
@@ -194,7 +194,6 @@ std::string Tokenizer::format_lfm2_style(const std::vector<ChatMessage>& message
 
             int doc_idx = 1;
             for (const auto& fname : files) {
-                if (doc_idx > 1000) break;
                 std::string full = docs_path + "/" + fname;
                 std::ifstream infile(full);
                 if (!infile.is_open()) continue;
