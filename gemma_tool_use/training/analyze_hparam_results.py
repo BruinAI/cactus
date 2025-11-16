@@ -38,12 +38,16 @@ def results_to_dataframe(results: List[Dict]) -> pd.DataFrame:
     """Convert results list to pandas DataFrame."""
     rows = []
     for result in results:
-        if not result.get("success"):
-            continue  # Skip failed runs
+        # Include runs that have metrics, regardless of success status
+        # (Some runs may be marked as failed due to non-zero exit codes
+        # but still produce valid training results)
+        if "metrics" not in result or not result["metrics"]:
+            continue  # Skip runs without metrics
 
         row = {
             "run_name": result["run_name"],
-            "duration_minutes": result["duration_seconds"] / 60,
+            "duration_minutes": result.get("duration_seconds", 0) / 60,
+            "success": result.get("success", False),
         }
 
         # Add hyperparameters

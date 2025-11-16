@@ -67,20 +67,29 @@ DATASET_PATH = os.path.join(DATA_DIR, "noah_finetune_dataset.json")
 TOOLS_PATH = os.path.join(DATA_DIR, "noah_tools.json")
 
 # Training hyperparameters
-NUM_EPOCHS = 5
-LEARNING_RATE = 5e-5
+# Based on hyperparameter search results:
+# - 3 epochs: val_loss=0.0108, overfit_ratio=3.3x (RECOMMENDED for production)
+# - 5 epochs: val_loss=0.0074, overfit_ratio=26.7x (use for benchmarks only)
+#
+# 3 epochs is the sweet spot: only 32% worse validation loss but 8x less overfitting.
+# For small datasets, excessive overfitting (26.7x) means the model has memorized training
+# data and won't generalize. Use --num_epochs=5 only if maximizing benchmark scores on
+# similar data or if you have a much larger, more diverse dataset.
+NUM_EPOCHS = 3
+LEARNING_RATE = 1e-4  # 1e-4 significantly outperformed 1e-5 across all configurations
 MAX_TARGET_LENGTH = 1500  # Noah's dataset has shorter sequences
 
 # Allow max_steps override
 MAX_STEPS = None
 
-BATCH_SIZE = 8
+BATCH_SIZE = 8  # Batch size 8 performed slightly better than 16
 GRADIENT_ACCUMULATION_STEPS = 1
 EVAL_EVERY_N_STEPS = 5
 
 # LoRA hyperparameters
-RANK = 16
-ALPHA = 32.0
+# Higher rank and alpha showed consistent improvements
+RANK = 32  # Increased from 16 (32 performed better across configurations)
+ALPHA = 64.0  # Increased from 32 (64 achieved best results)
 
 # TPU/GPU mesh configuration
 MESH_SHAPE = len(jax.devices()), 1
