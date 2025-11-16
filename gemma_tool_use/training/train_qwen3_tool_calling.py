@@ -377,6 +377,168 @@ def test_model_generation(model, tokenizer, model_config, eos_tokens, tools, lab
         print(response.strip())
 
 
+def run_test_set_generation(model, tokenizer, model_config, eos_tokens, test_dataset, tools, output_file):
+    """
+    Run generation on the test set and save results to file.
+
+    Args:
+        model: The trained model
+        tokenizer: HuggingFace tokenizer
+        model_config: Model configuration
+        eos_tokens: EOS token IDs
+        test_dataset: Test dataset with 'role_messages' field
+        tools: Tool definitions
+        output_file: Path to output text file
+    """
+    print(f"\n{'='*60}")
+    print("Running Test Set Generation")
+    print(f"{'='*60}")
+
+    # Create sampler
+    sampler = sampler_lib.Sampler(
+        transformer=model,
+        tokenizer=tokenizer,
+        cache_config=sampler_lib.CacheConfig(
+            cache_size=4096,
+            num_layers=model_config.num_layers,
+            num_kv_heads=model_config.num_kv_heads,
+            head_dim=model_config.head_dim,
+        ),
+    )
+
+    results = []
+
+    for idx, example in enumerate(test_dataset):
+        role_messages = json.loads(example['role_messages'])
+
+        # Extract user input and target output for display
+        user_input = None
+        target_output = None
+
+        # The role_messages contain pre-formatted text with special tokens
+        # Extract the actual user query from the formatted text
+        for turn in role_messages:
+            if turn['role'] == 'user':
+                # Extract just the content between im_start and im_end
+                user_text = turn['text']
+                if '<|im_start|>user\n' in user_text:
+                    user_input = user_text.split('<|im_start|>user\n')[1].split('<|im_end|>')[0].strip()
+                else:
+                    user_input = user_text
+            elif turn['role'] == 'model':
+                target_output = turn['text']
+
+        if not user_input:
+            print(f"Warning: No user input found in test example {idx}")
+            continue
+
+        # Build prompt from role_messages (system + user parts)
+        # The role_messages already have the proper formatting with special tokens
+        prompt = ''
+        for turn in role_messages:
+            if turn['role'] in ['system', 'user']:
+                prompt += turn['text']
+            else:
+                break  # Stop before model response
+
+        out_data = sampler(
+            input_strings=[prompt],
+            max_generation_steps=256,
+            eos_tokens=eos_tokens,
+            top_k=1,
+            top_p=None,
+            temperature=None,
+        )
+
+        model_output = out_data.text[0].strip()
+
+        results.append({
+            'index': idx,
+            'input': user_input,
+            'target_output': target_output or "(no target)",
+            'model_output': model_output
+        })
+
+        print(f"Processed test example {idx + 1}/{len(test_dataset)}")
+
+    # Write results to file
+    with open(output_file, 'w') as f:
+        f.write("="*80 + "\n")
+        f.write("TEST SET GENERATION RESULTS\n")
+        f.write("="*80 + "\n\n")
+
+        for result in results:
+            f.write(f"{'─'*80}\n")
+            f.write(f"Test Example {result['index'] + 1}\n")
+            f.write(f"{'─'*80}\n\n")
+
+            f.write("INPUT:\n")
+            f.write(result['input'] + "\n\n")
+
+            f.write("TARGET OUTPUT:\n")
+            f.write(result['target_output'] + "\n\n")
+
+            f.write("MODEL OUTPUT:\n")
+            f.write(result['model_output'] + "\n\n")
+
+    print(f"Saved generation results to: {output_file}")
+    return results
+
+
+def compute_test_set_perplexity(trainer, test_loader):
+    """
+    Compute perplexity on the test set using tunix's built-in evaluation.
+
+    Args:
+        trainer: PeftTrainer instance
+        test_loader: DataLoader for test set
+
+    Returns:
+        dict: Perplexity metrics
+    """
+    print(f"\n{'='*60}")
+    print("Computing Test Set Perplexity")
+    print(f"{'='*60}")
+
+    # Use trainer's eval step function
+    eval_step_fn = trainer.create_eval_step_fn()
+
+    # Run evaluation loop
+    total_loss = 0.0
+    eval_steps = 0
+
+    for eval_example in test_loader:
+        # Prepare inputs (same as training)
+        loss, _ = eval_step_fn(trainer.model, eval_example)
+        loss = jax.lax.stop_gradient(loss)
+
+        # Accumulate loss
+        total_loss += float(np.array(loss))
+        eval_steps += 1
+
+        print(f"Test example {eval_steps}/{len(test_loader)}: loss={float(np.array(loss)):.4f}")
+
+    # Compute average loss and perplexity
+    avg_loss = total_loss / eval_steps if eval_steps > 0 else float('inf')
+    perplexity = np.exp(avg_loss)
+
+    metrics = {
+        'test_loss': float(avg_loss),
+        'test_perplexity': float(perplexity),
+        'test_steps': eval_steps
+    }
+
+    print(f"\n{'─'*60}")
+    print("TEST SET PERPLEXITY METRICS")
+    print(f"{'─'*60}")
+    print(f"Average loss: {avg_loss:.4f}")
+    print(f"Perplexity: {perplexity:.4f}")
+    print(f"Test steps: {eval_steps}")
+    print(f"{'─'*60}")
+
+    return metrics
+
+
 # ============================================================================
 # Argument Parsing
 # ============================================================================
@@ -578,14 +740,24 @@ def main():
 
     print(f"Successfully formatted {len(formatted_samples)} samples")
 
-    # Create HuggingFace dataset and split
-    full_dataset = Dataset.from_list(formatted_samples)
-    split = full_dataset.train_test_split(test_size=train_test_split, seed=42)
+    # Reserve first 10 items as final test set
+    test_samples = formatted_samples[:10]
+    remaining_samples = formatted_samples[10:]
+
+    print(f"Reserved {len(test_samples)} samples for final test set")
+
+    # Create HuggingFace dataset and split remaining data
+    remaining_dataset = Dataset.from_list(remaining_samples)
+    split = remaining_dataset.train_test_split(test_size=train_test_split, seed=42)
     train_dataset = split['train']
     validation_dataset = split['test']
 
+    # Create test dataset
+    test_dataset = Dataset.from_list(test_samples)
+
     print(f"Training split: {len(train_dataset)} samples")
     print(f"Validation split: {len(validation_dataset)} samples")
+    print(f"Test split: {len(test_dataset)} samples")
 
     # Show sample training examples
     show_training_examples(train_dataset, num_examples=3)
@@ -602,6 +774,16 @@ def main():
 
     validation_loader = _build_data_loader(
         data_source=validation_dataset,
+        batch_size=batch_size,
+        num_epochs=1,
+        max_seq_len=max_target_length,
+        tokenizer=tokenizer,
+        shuffle=False
+    )
+
+    # Build test loader
+    test_loader = _build_data_loader(
+        data_source=test_dataset,
         batch_size=batch_size,
         num_epochs=1,
         max_seq_len=max_target_length,
@@ -754,6 +936,29 @@ def main():
     test_model_generation(lora_model, hf_tokenizer, model_config, eos_tokens, tools,
                           label="Trained Model (After Training)")
 
+    # Run final test set evaluation
+    print(f"\n{'='*60}")
+    print("FINAL TEST SET EVALUATION")
+    print(f"{'='*60}")
+
+    # 1. Generate outputs on test set
+    test_generation_file = os.path.join(ckpt_dir, "test_set_generation.txt")
+    run_test_set_generation(
+        lora_model, hf_tokenizer, model_config, eos_tokens,
+        test_dataset, tools, test_generation_file
+    )
+
+    # 2. Compute perplexity on test set using trainer
+    test_perplexity_metrics = compute_test_set_perplexity(
+        trainer, test_loader
+    )
+
+    # Save perplexity metrics to JSON
+    test_perplexity_file = os.path.join(ckpt_dir, "test_set_perplexity.json")
+    with open(test_perplexity_file, 'w') as f:
+        json.dump(test_perplexity_metrics, f, indent=2)
+    print(f"\nSaved test perplexity metrics to: {test_perplexity_file}")
+
     # Save LoRA weights merged with base model
     saved_path = save_lora_weights(lora_model, local_model_path, lora_output_dir, rank=RANK, alpha=ALPHA)
 
@@ -762,6 +967,8 @@ def main():
     print(f"{'='*60}")
     print(f"Model saved to: {saved_path}")
     print(f"Training checkpoints: {ckpt_dir}")
+    print(f"Test generation results: {test_generation_file}")
+    print(f"Test perplexity metrics: {test_perplexity_file}")
     print(f"\nThe model is ready to use for inference!")
     print(f"Load it from: {saved_path}")
 
