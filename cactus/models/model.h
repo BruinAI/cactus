@@ -423,6 +423,11 @@ private:
 
     size_t encoder_block1_out_node_ = 0;
 
+    size_t last_dec_norm_node_ = 0;
+
+    size_t decoder_emb_pos_node_ = 0;
+    size_t decoder_block0_out_node_ = 0;
+
     std::vector<size_t> encoder_block_out_nodes_;
     
 

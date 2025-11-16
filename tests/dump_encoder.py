@@ -38,6 +38,25 @@ print("Shape:", arr.shape)
 print(arr[:5,:5])
 
 
+arr = np.load("decoder_emb_pos_ref.npy")
+
+# REMOVE batch dimension
+if arr.ndim == 3:
+    arr = arr[0]
+print("decoder_emb_pos_ref")
+print("Shape:", arr.shape)
+print(arr[:5,:5])
+
+
+arr = np.load("decoder_post_norm_ref.npy")
+
+# REMOVE batch dimension
+if arr.ndim == 3:
+    arr = arr[0]
+print("decoder_post_norm_ref")
+print("Shape:", arr.shape)
+print(arr[:5,:5])
+
 
 
 # arr = np.load("encoder_block0_post_gelu.npy")

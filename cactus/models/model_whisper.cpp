@@ -230,11 +230,11 @@ void WhisperModel::reset_graph_side_cache_nodes() {
 
 size_t WhisperModel::build_decoder_self_attention(CactusGraph* gb, size_t input, uint32_t layer_idx, ComputeBackend backend, bool use_cache, size_t position_offset){
     const auto& layer = weight_nodes_.layers[layer_idx];
-    auto q = gb->matmul(input, layer.decoder_self_attn_q_weight, false, backend);
+    auto q = gb->matmul(input, layer.decoder_self_attn_q_weight, true, backend);
 
     q = gb->add(q, layer.decoder_self_attn_q_bias);
-    auto k = gb->matmul(input, layer.decoder_self_attn_k_weight, false, backend);
-    auto v = gb->matmul(input, layer.decoder_self_attn_v_weight, false, backend);
+    auto k = gb->matmul(input, layer.decoder_self_attn_k_weight, true, backend);
+    auto v = gb->matmul(input, layer.decoder_self_attn_v_weight, true, backend);
     v = gb->add(v, layer.decoder_self_attn_v_bias);
 
     size_t seq_new   = gb->get_output_buffer(q).shape[0];
@@ -311,6 +311,8 @@ size_t WhisperModel::build_conv1d(CactusGraph* gb, size_t input, ComputeBackend 
 
     last_conv1_node_ = conv1;
 
+    conv1 = gb->gelu_erf(conv1);
+
     //
     // Conv2 (stride 2) + bias
     //
@@ -322,6 +324,8 @@ size_t WhisperModel::build_conv1d(CactusGraph* gb, size_t input, ComputeBackend 
     conv2 = gb->add(conv2, bias2);
 
     last_conv2_node_ = conv2;
+
+    conv2 = gb->gelu_erf(conv2);
 
     //
     // Transpose → NLC
@@ -441,23 +445,23 @@ void WhisperModel::run_encoder(const std::vector<float>& mel_bins)
     size_t h_pos = gb->add(h2d, pos_slice);
     last_enc_plus_pos_node_ = h_pos;
 
-    size_t h_norm = gb->layernorm(
-        h_pos,
-        weight_nodes_.encoder_norm_weight,
-        weight_nodes_.encoder_norm_bias
-    );
-    last_encoder_post_norm_node_ = h_norm;
-
-    size_t h = h_norm;
+    size_t h = h_pos;
     for (uint32_t i = 0; i < config_.num_layers; ++i){
         h = build_encoder_transformer_block(gb, h, i, backend, false, 0);
         if (i == 0) {
             encoder_transformer_block_0 = h;
         }
     }
+
+    size_t h_norm = gb->layernorm(
+        h,
+        weight_nodes_.encoder_norm_weight,
+        weight_nodes_.encoder_norm_bias
+    );
+    last_encoder_post_norm_node_ = h_norm;
     
 
-    weight_nodes_.encoder_output = h;
+    weight_nodes_.encoder_output = h_norm;
 }
 
 
@@ -751,9 +755,3 @@ uint32_t WhisperModel::generate_with_audio(
 
 }
 }
-
-// [[ 0.5214584  -1.215291    1.1062135  -2.1213791  -1.4152509 ]
-//  [ 0.9565482  -0.8180516   1.5638287  -1.6646358  -0.8842591 ]
-//  [ 1.0157969  -0.76226425  1.6469756  -1.5676115  -0.78760093]
-//  [ 0.58559585 -1.1586764   1.209486   -1.9644636  -1.0903969 ]
-//  [ 0.0709652  -1.6271397   0.6384663  -2.4986732  -1.5328366 ]]
