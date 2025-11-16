@@ -781,10 +781,10 @@ def main():
         shuffle=False
     )
 
-    # Build test loader
+    # Build test loader (use smaller batch size to avoid OOM during evaluation)
     test_loader = _build_data_loader(
         data_source=test_dataset,
-        batch_size=batch_size,
+        batch_size=1,  # Use batch size of 1 for test set to avoid OOM
         num_epochs=1,
         max_seq_len=max_target_length,
         tokenizer=tokenizer,
@@ -947,6 +947,10 @@ def main():
         lora_model, hf_tokenizer, model_config, eos_tokens,
         test_dataset, tools, test_generation_file
     )
+
+    # Clear JAX compilation cache to free memory before perplexity computation
+    print("\nClearing JAX cache to free memory...")
+    jax.clear_caches()
 
     # 2. Compute perplexity on test set using trainer
     test_perplexity_metrics = compute_test_set_perplexity(
