@@ -229,6 +229,50 @@ void cactus_gelu_int8(const int8_t* input, int8_t* output, size_t num_elements,
 }
 
 
+void cactus_gelu_f32_erf(const float* input, float* output, size_t num_elements) {
+    const float inv_sqrt2 = 0.70710678118654752440f; // 1/sqrt(2)
+
+    CactusThreading::parallel_for(
+        num_elements,
+        CactusThreading::Thresholds::SCALAR_EXPENSIVE,
+        [&](size_t start_idx, size_t end_idx) {
+
+            constexpr size_t SIMD = 4;
+            const size_t vec_end = start_idx + ((end_idx - start_idx) / SIMD) * SIMD;
+
+            const float32x4_t half = vdupq_n_f32(0.5f);
+            const float32x4_t one  = vdupq_n_f32(1.0f);
+            const float32x4_t inv_sqrt2_vec = vdupq_n_f32(inv_sqrt2);
+
+            for (size_t i = start_idx; i < vec_end; i += SIMD) {
+                float32x4_t x = vld1q_f32(&input[i]);
+                float32x4_t arg = vmulq_f32(x, inv_sqrt2_vec);
+
+                float arg_s[SIMD], erf_s[SIMD];
+                vst1q_f32(arg_s, arg);
+
+                for (int j = 0; j < SIMD; j++) {
+                    erf_s[j] = erff(arg_s[j]);
+                }
+
+                float32x4_t erf_vec = vld1q_f32(erf_s);
+
+                float32x4_t t = vaddq_f32(one, erf_vec);
+                float32x4_t gelu = vmulq_f32(vmulq_f32(half, x), t);
+
+                vst1q_f32(&output[i], gelu);
+            }
+
+            for (size_t i = vec_end; i < end_idx; i++) {
+                float x = input[i];
+                float arg = x * inv_sqrt2;
+                output[i] = 0.5f * x * (1.0f + erff(arg));
+            }
+        }
+    );
+}
+
+
 namespace CactusSoftmax {
 
 inline float32x4_t fast_exp_neon(float32x4_t x) {

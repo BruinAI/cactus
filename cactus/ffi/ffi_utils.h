@@ -492,6 +492,26 @@ inline bool load_npy_int32(const char* path,
     return true;
 }
 
+
+inline std::vector<float> load_mel_from_npy(const char* path) {
+    std::vector<float> data;
+    std::vector<size_t> shape;
+    if (!load_npy_float32(path, data, shape)) {
+        throw std::runtime_error(std::string("Failed to load mel NPY: ") + path);
+    }
+    return data;
+}
+
+inline std::vector<uint32_t> load_tokens_from_npy(const char* path) {
+    std::vector<int32_t> data_i32;
+    std::vector<size_t> shape;
+    if (!load_npy_int32(path, data_i32, shape)) {
+        throw std::runtime_error(std::string("Failed to load token NPY: ") + path);
+    }
+    std::vector<uint32_t> tokens(data_i32.begin(), data_i32.end());
+    return tokens;
+}
+
 } // namespace ffi
 } // namespace cactus
 

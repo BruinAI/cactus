@@ -334,7 +334,6 @@ size_t CactusGraph::conv1d_k3(size_t input, size_t weight, size_t stride){
     const auto& xin = get_output_buffer(input);   // [N, C_in, L]
     const auto& w   = get_output_buffer(weight);  // [C_out, C_in, 3]
 
-    // (Optional) sanity checks
     if (xin.shape.size() != 3) throw std::runtime_error("conv1d_k3 expects N,C,L");
     if (w.shape.size()   != 3) throw std::runtime_error("weight must be [C_out,C_in,3]");
     if (w.shape[1] != xin.shape[1]) throw std::runtime_error("C_in mismatch in conv1d_k3");
@@ -344,15 +343,14 @@ size_t CactusGraph::conv1d_k3(size_t input, size_t weight, size_t stride){
     const size_t C_in = xin.shape[1];
     const size_t L    = xin.shape[2];
     const size_t C_out= w.shape[0];
-    const size_t K    = w.shape[2]; // == 3
+    const size_t K    = w.shape[2];
 
-    // Match your kernel’s “same-ish” formula:
     const size_t pad = 1;
     const size_t L_out = (L + 2 * pad - K) / stride + 1;
 
     OpParams params{};
     params.stride = stride;
-    params.output_precision = xin.precision; // preserve precision
+    params.output_precision = xin.precision;
 
     std::vector<size_t> out_shape{N, C_out, L_out};
     return add_node(OpType::CONV1D_K3, {input, weight}, out_shape, params);
@@ -705,7 +703,9 @@ const BufferDesc& CactusGraph::get_output_buffer(size_t node_id) const {
 
 void CactusGraph::execute(const std::string& profile_file) {
     allocate_buffers();
-    
+    std::cout<<"buffers allocated"<<std::endl;
+
+
     bool enable_profiling = !profile_file.empty();
     std::ofstream profile_out;
     std::ostream* out = &std::cout;

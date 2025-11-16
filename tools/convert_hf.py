@@ -203,6 +203,7 @@ def convert_hf_model_weights(model, output_dir, precision='INT8', args: Optional
 
     state_dict = model.state_dict()
     config = model.config
+    print(config)
     saved_tensor_full_names = set()
     
     if args and getattr(args, 'lora_dir_path', None):

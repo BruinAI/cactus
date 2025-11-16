@@ -292,6 +292,7 @@ protected:
     size_t forward(const std::vector<float>& mel_bins, const std::vector<uint32_t>& tokens, bool use_cache = false) override;
 
     void run_encoder(const std::vector<float>& mel_bins);
+    void reset_graph_side_cache_nodes();
 
     size_t run_decoder_step(const std::vector<uint32_t>& tokens, bool use_cache);
 
@@ -307,7 +308,7 @@ protected:
                           ComputeBackend backend, bool use_cache = false, size_t position_offset = 0);
 
     size_t build_encoder_mlp(CactusGraph* gb, size_t normalized_h, uint32_t layer_idx,
-                    ComputeBackend backend) const;
+                    ComputeBackend backend);
     
     size_t build_decoder_mlp(CactusGraph* gb, size_t normalized_h, uint32_t layer_idx,
                     ComputeBackend backend) const;
@@ -405,6 +406,18 @@ private:
 
     // bool audio_encoded = false;
     bool encoder_ready_ = false;
+    size_t last_new_tokens_;
+    std::vector<float> encoder_output_host_;
+    std::vector<size_t> encoder_output_shape_;
+    size_t last_conv1_node_ = 0;
+    size_t last_conv2_node_ = 0;
+    size_t last_conv2_transposed_node_ = 0;
+    size_t last_encoder_post_norm_node_ = 0;
+    size_t last_enc_plus_pos_node_ = 0;
+    size_t encoder_transformer_block_0 = 0;
+    size_t encoder_pre_gelu = 0;
+    size_t encoder_post_gelu = 0;
+    
 
 };
 
