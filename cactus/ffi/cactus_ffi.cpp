@@ -96,14 +96,12 @@ int cactus_test_whisper_from_files_json(
         return -1;
     }
 
-    std::cout<<"Hey"<<std::endl;
+    std::cout << "Hey" << std::endl;
 
     if (!mel_file_path || !tok_file_path || !response_buffer || buffer_size == 0) {
         handle_error_response("Invalid parameters", response_buffer, buffer_size);
         return -1;
     }
-
-    
 
     try {
         auto start_time = std::chrono::high_resolution_clock::now();
@@ -111,12 +109,12 @@ int cactus_test_whisper_from_files_json(
         auto* handle = static_cast<CactusModelHandle*>(model);
         handle->should_stop = false;
 
-        std::cout<<"Trying to find files"<<std::endl;
+        std::cout << "Trying to find files" << std::endl;
 
         std::vector<float>    mel_bins  = load_mel_from_npy(mel_file_path);
         std::vector<uint32_t> tokens    = load_tokens_from_npy(tok_file_path);
 
-        std::cout<<"Found fiiles"<<std::endl;
+        std::cout << "Found fiiles" << std::endl;
 
         auto* tokenizer = handle->model->get_tokenizer();
         if (!tokenizer) {
@@ -132,6 +130,7 @@ int cactus_test_whisper_from_files_json(
         std::vector<uint32_t> generated_tokens;
         std::string final_text;
 
+        // ── FIRST STEP: use full prompt tokens ────────────────────────────────
         uint32_t next_token = handle->model->generate_with_audio(
             tokens, mel_bins,
             temperature, top_p, top_k, "profile.txt"
@@ -144,7 +143,7 @@ int cactus_test_whisper_from_files_json(
         }
 
         generated_tokens.push_back(next_token);
-        tokens.push_back(next_token);
+        tokens.push_back(next_token);   // extend full history
         completion_tokens++;
 
         if (callback) {
@@ -155,18 +154,20 @@ int cactus_test_whisper_from_files_json(
             final_text += tokenizer->decode({next_token});
         }
 
-        if (matches_stop_sequence(generated_tokens, stop_token_sequences)) {
-        } else {
+        // ── MORE TOKENS ───────────────────────────────────────────────────────
+        if (!matches_stop_sequence(generated_tokens, stop_token_sequences)) {
             for (size_t i = 1; i < max_tokens; ++i) {
                 if (handle->should_stop) break;
 
+                // KEY CHANGE: pass FULL token history, not {tokens.back()}
                 next_token = handle->model->generate_with_audio(
-                    {tokens.back()}, mel_bins,
+                    tokens,          // full decoder history
+                    mel_bins,
                     temperature, top_p, top_k, "profile.txt"
                 );
 
                 generated_tokens.push_back(next_token);
-                tokens.push_back(next_token);
+                tokens.push_back(next_token);   // grow history
                 completion_tokens++;
 
                 std::string piece = tokenizer->decode({next_token});
@@ -207,7 +208,7 @@ int cactus_test_whisper_from_files_json(
         );
 
         if (json.size() >= buffer_size) {
-            std::cout<<"Response buffer too small for Whisper output"<<std::endl;
+            std::cout << "Response buffer too small for Whisper output" << std::endl;
             handle_error_response("Response buffer too small for Whisper output",
                                   response_buffer, buffer_size);
             return -1;
@@ -229,6 +230,7 @@ int cactus_test_whisper_from_files_json(
         return -1;
     }
 }
+
 
 
 int cactus_complete(

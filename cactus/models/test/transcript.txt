@@ -1,1 +1,0 @@
- Hello, hello, hello. Just quickly testing out creating a WAV file through voice memos. The goal is to use this WAV file to test out whisper. Hopefully this will transcribe properly. That's all I can hope for. All right, here we go.
