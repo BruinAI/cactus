@@ -603,107 +603,168 @@ uint32_t WhisperModel::generate_with_audio(
         throw std::runtime_error("Mel bins cannot be empty in Whisper generate_with_audio");
 
     auto* gb = static_cast<CactusGraph*>(graph_handle_);
+    auto backend = (config_.default_backend == Config::Backend::CPU)
+        ? ComputeBackend::CPU
+        : ComputeBackend::NPU;
 
     std::cout << "[Debug] eos=" << get_tokenizer()->get_eos_token()
               << " bos=" << get_tokenizer()->get_bos_token() << std::endl;
 
-    auto backend = config_.default_backend == Config::Backend::CPU
-        ? ComputeBackend::CPU
-        : ComputeBackend::NPU;
+    //--------------------------------------------------------------------
+    // Detect whether this is the prefill call (encoder hasn't run yet)
+    //--------------------------------------------------------------------
+    bool cold_start = !encoder_ready_;
+    size_t logits_node = 0;
 
-    // ── NO CACHE MODE: always rebuild graph and ignore kv_cache_ ──
-    gb->soft_reset();
-    kv_cache_.reset();
-    kv_cache_.current_seq_len = 0;
-    reset_graph_side_cache_nodes();
-    encoder_ready_ = false;   // we won't rely on this for caching anymore
+    //--------------------------------------------------------------------
+    // Build BOS + user tokens (HF does: decoder_start_token_id=50258)
+    //--------------------------------------------------------------------
+    uint32_t bos = static_cast<uint32_t>(get_tokenizer()->get_bos_token());
 
-    // 1) Run encoder for this audio every time
-    std::cout << "[Debug] Running encoder (no-cache full pass)" << std::endl;
-    run_encoder(mel_bins);
+    std::vector<uint32_t> full_tokens;
+    full_tokens.reserve(tokens.size() + 1);
+    full_tokens.push_back(bos);
+    full_tokens.insert(full_tokens.end(), tokens.begin(), tokens.end());
 
-    // 2) Run decoder on the FULL token history (no cache)
-    std::cout << "[Debug] full_len=" << tokens.size()
-              << " use_cache=0 (no-cache mode)" << std::endl;
-
-    std::cout << "[Debug] tokens:";
-    for (auto t : tokens) std::cout << " " << t;
+    std::cout << "[Debug] full_tokens (input to decoder): ";
+    for (auto t : full_tokens) std::cout << t << " ";
     std::cout << std::endl;
 
-    size_t logits_node = run_decoder_step(tokens, /*use_cache=*/false);
+    //--------------------------------------------------------------------
+    // COLD START → full encoder run + decoder prefill
+    //--------------------------------------------------------------------
+    if (cold_start)
+    {
+        std::cout << "[Debug] Running encoder (prefill)" << std::endl;
 
+        gb->soft_reset();                     // full graph reset
+        kv_cache_.reset();                    // KV cache reset
+        kv_cache_.current_seq_len = 0;
+        reset_graph_side_cache_nodes();
+        first_decode_step_ = true;
+
+        // Run encoder ONCE
+        run_encoder(mel_bins);
+
+        // PREFILL: pass full BOS + forced prompt
+        logits_node = run_decoder_step(full_tokens, /*use_cache=*/false);
+    }
+    //--------------------------------------------------------------------
+    // WARM STEP → reuse encoder + KV cache (fast autoregressive decode)
+    //--------------------------------------------------------------------
+    else
+    {
+        std::cout << "[Debug] Warm decoder step, KV len=" 
+                  << kv_cache_.current_seq_len << std::endl;
+
+        gb->soft_reset();                 // but DO NOT rerun encoder
+        reset_graph_side_cache_nodes();
+
+        //----------------------------------------------------------------
+        // Reinject encoder output into fresh graph
+        //----------------------------------------------------------------
+        if (encoder_output_host_.empty())
+            throw std::runtime_error("Missing encoder_output_host_ in warm step!");
+
+        size_t enc_node = gb->input(encoder_output_shape_, Precision::FP32);
+        gb->set_input(enc_node, encoder_output_host_.data(), Precision::FP32);
+        weight_nodes_.encoder_output = enc_node;
+
+        //----------------------------------------------------------------
+        // Reinject KV cache tensors
+        //----------------------------------------------------------------
+        if (kv_cache_.current_seq_len > 0)
+        {
+            for (uint32_t i = 0; i < config_.num_layers; i++)
+            {
+                auto k_view = kv_cache_.get_key_view(i);
+                auto v_view = kv_cache_.get_value_view(i);
+                if (!k_view.ptr1 || !v_view.ptr1) continue;
+
+                size_t k_node = gb->input(
+                    {1, kv_cache_.current_seq_len,
+                     config_.attention_kv_heads,
+                     config_.attention_head_dim},
+                    kv_cache_.precision
+                );
+                size_t v_node = gb->input(
+                    {1, kv_cache_.current_seq_len,
+                     config_.attention_kv_heads,
+                     config_.attention_head_dim},
+                    kv_cache_.precision
+                );
+
+                gb->set_input(k_node, k_view.ptr1, kv_cache_.precision);
+                gb->set_input(v_node, v_view.ptr1, kv_cache_.precision);
+
+                cache_k_output_nodes_[i] = k_node;
+                cache_v_output_nodes_[i] = v_node;
+            }
+        }
+
+        //----------------------------------------------------------------
+        // Only decode the NEWEST user token (autoregressive)
+        //----------------------------------------------------------------
+        std::vector<uint32_t> last_token_vec = { tokens.back() };
+        logits_node = run_decoder_step(last_token_vec, /*use_cache=*/true);
+    }
+
+    //--------------------------------------------------------------------
+    // EXECUTE graph
+    //--------------------------------------------------------------------
     auto logits_shape = gb->get_output_buffer(logits_node).shape;
     std::cout << "[Debug] logits shape before execute: "
               << logits_shape[0] << " x " << logits_shape[1] << std::endl;
 
-    // IMPORTANT: Do NOT add a sample node here; we’ll do sampling manually on CPU.
+    size_t sampled_token_id = gb->sample(logits_node, temperature, top_p, top_k);
 
-    // 3) Execute graph to compute logits
-    if (!profile_file.empty()) {
-        gb->execute(profile_file);
-    } else {
-        gb->execute();
-    }
+    if (!profile_file.empty()) gb->execute(profile_file);
+    else gb->execute();
 
+    //--------------------------------------------------------------------
+    // DEBUG PRINTS
+    //--------------------------------------------------------------------
     std::cout << "==== Encoder output AFTER execute ====\n";
     debug_print_tensor_5x5(gb, weight_nodes_.encoder_output, "encoder_output");
 
-    // (We no longer snapshot encoder_output_host_ or rely on encoder_ready_ for caching.)
-
-    // ── MANUAL LOGITS PROCESSING + ARGMAX ──
-    auto logits_out_shape = gb->get_output_buffer(logits_node).shape;
-    if (logits_out_shape.size() != 2 || logits_out_shape[0] != 1) {
-        throw std::runtime_error("Expected logits to be [1, vocab_size]");
-    }
-    size_t vocab_size = logits_out_shape[1];
-
-    float* logits_ptr = reinterpret_cast<float*>(gb->get_output(logits_node));
-
-    std::cout << "[Debug] logits output shape: "
-              << logits_out_shape[0] << " x " << logits_out_shape[1] << std::endl;
-    for (size_t i = 0; i < std::min<size_t>(10, vocab_size); ++i)
-        std::cout << logits_ptr[i] << " ";
-    std::cout << std::endl;
-
-    // 1) Apply Whisper-style suppression
-    apply_whisper_logits_processors(
-        logits_ptr,
-        vocab_size,
-        suppress_tokens_,
-        begin_suppress_tokens_,
-        first_decode_step_   // member, starts true, becomes false after first call
-    );
-
-    // After first step, don't apply begin_suppress_tokens anymore
-    first_decode_step_ = false;
-
-    // 2) (Optional) temperature / top_p / top_k warping could go here
-    // For greedy decoding with temperature=1, top_p=1, top_k=0, we skip it.
-
-    // 3) Greedy argmax over processed logits
-    uint32_t sampled = 0;
+    //--------------------------------------------------------------------
+    // If first step: snapshot encoder output for warm reuse
+    //--------------------------------------------------------------------
+    if (cold_start)
     {
-        float max_val = logits_ptr[0];
-        size_t max_idx = 0;
-        for (size_t i = 1; i < vocab_size; ++i) {
-            if (logits_ptr[i] > max_val) {
-                max_val = logits_ptr[i];
-                max_idx = i;
-            }
-        }
-        sampled = static_cast<uint32_t>(max_idx);
+        auto& out_buf = gb->get_output_buffer(weight_nodes_.encoder_output);
+        size_t total = 1;
+        for (auto s : out_buf.shape) total *= s;
+
+        encoder_output_host_.resize(total);
+        std::memcpy(encoder_output_host_.data(),
+                    gb->get_output(weight_nodes_.encoder_output),
+                    total * sizeof(float));
+
+        encoder_output_shape_ = out_buf.shape;
+        encoder_ready_ = true;
     }
+
+    //--------------------------------------------------------------------
+    // POST-DECODE: update KV cache for next autoregressive call
+    //--------------------------------------------------------------------
+    std::cout << "[Debug] Updating KV cache (" << last_new_tokens_ 
+              << " new tokens)" << std::endl;
+    post_execute_updates(gb, full_tokens.size());
+    update_kv_cache(gb, last_new_tokens_);
+
+    //--------------------------------------------------------------------
+    // Read sampled token
+    //--------------------------------------------------------------------
+    auto* out_ptr = gb->get_output(sampled_token_id);
+    uint32_t sampled = *reinterpret_cast<uint32_t*>(out_ptr);
 
     std::cout << "[Debug] Returning sampled token " << sampled
-              << " (\"" << get_tokenizer()->decode({sampled}) << "\")" << std::endl;
-
-    // NOTE: no post_execute_updates, no update_kv_cache in no-cache mode
+              << " (\"" << get_tokenizer()->decode({sampled}) << "\")\n";
+    std::cout << "[Debug] KV len now = " << kv_cache_.current_seq_len << std::endl;
 
     return sampled;
 }
-
-
-
 
 
 }
