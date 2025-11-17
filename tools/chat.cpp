@@ -85,7 +85,7 @@ int main(int argc, char* argv[]) {
     const char* model_path = argv[1];
 
     std::cout << "Loading model from " << model_path << "...\n";
-    cactus_model_t model = cactus_init(model_path, 4096);
+    cactus_model_t model = cactus_init(model_path, 4096, nullptr);
 
     if (!model) {
         std::cerr << "Failed to initialize model\n";
@@ -130,14 +130,14 @@ int main(int argc, char* argv[]) {
                             + std::to_string(MAX_TOKENS)
                             + ",\"stop_sequences\":[\"<|im_end|>\",\"<end_of_turn>\"]}";
 
-        char response_buffer[RESPONSE_BUFFER_SIZE];
+        std::vector<char> response_buffer(RESPONSE_BUFFER_SIZE, 0);
 
         std::cout << "Assistant: ";
         int result = cactus_complete(
             model,
             messages_json.str().c_str(),
-            response_buffer,
-            sizeof(response_buffer),
+            response_buffer.data(),
+            response_buffer.size(),
             options.c_str(),
             nullptr,
             print_token,
@@ -146,12 +146,12 @@ int main(int argc, char* argv[]) {
         std::cout << "\n\n";
 
         if (result < 0) {
-            std::cerr << "Error: " << response_buffer << "\n\n";
+            std::cerr << "Error: " << response_buffer.data() << "\n\n";
             history.pop_back();
             continue;
         }
 
-        std::string json_str(response_buffer);
+        std::string json_str(response_buffer.data(), response_buffer.size());
         const std::string search_str = "\"response\":\"";
         size_t response_start = json_str.find(search_str);
         if (response_start != std::string::npos) {
