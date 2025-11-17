@@ -138,8 +138,8 @@ bool run_whisper_test(const char* title,
               << "├─ Prompt tokens:      " << n_prompt << "\n"
               << "├─ Completion tokens:  " << n_comp << "\n"
               << "├─ JSON size:          " << std::strlen(response) << " bytes\n"
-              << "└─ Transcript (first 200 chars): "
-              << (text.size() > 200 ? text.substr(0, 200) + "..." : text) << "\n";
+              << "└─ Transcript (first 300 chars): "
+              << (text.size() > 300 ? text.substr(0, 300) + "..." : text) << "\n";
 
     bool ok = check(rc, text, ttft_ms, tps, n_comp, use_streaming ? stream.token_count : (int)n_comp);
     std::cout << "Status: " << (ok ? "PASSED ✓" : "FAILED ✗") << "\n";
