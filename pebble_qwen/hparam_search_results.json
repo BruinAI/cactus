@@ -1,0 +1,544 @@
+[
+  {
+    "run_name": "bs8_lr1e-05_a16_r16_ep1",
+    "hyperparameters": {
+      "learning_rate": 1e-05,
+      "num_epochs": 1,
+      "batch_size": 8,
+      "lora_rank": 16,
+      "lora_alpha": 16.0
+    },
+    "start_time": "2025-11-15T22:58:02.394704",
+    "end_time": "2025-11-15T23:02:21.233890",
+    "duration_seconds": 258.839186,
+    "return_code": 1,
+    "success": false,
+    "metrics": {
+      "final_train_loss": 0.27851200103759766,
+      "final_val_loss": 0.17072591185569763,
+      "best_val_loss": 0.17072591185569763
+    },
+    "output_dir": "hparam_search_results/bs8_lr1e-05_a16_r16_ep1"
+  },
+  {
+    "run_name": "bs16_lr1e-05_a32_r16_ep1",
+    "hyperparameters": {
+      "learning_rate": 1e-05,
+      "num_epochs": 1,
+      "batch_size": 16,
+      "lora_rank": 16,
+      "lora_alpha": 32.0
+    },
+    "start_time": "2025-11-15T23:11:15.215551",
+    "end_time": "2025-11-15T23:15:35.632611",
+    "duration_seconds": 260.41706,
+    "return_code": 1,
+    "success": false,
+    "metrics": {
+      "final_train_loss": 0.152553528547287,
+      "final_val_loss": 0.1316487342119217,
+      "best_val_loss": 0.1316487342119217
+    },
+    "output_dir": "hparam_search_results/bs16_lr1e-05_a32_r16_ep1"
+  },
+  {
+    "run_name": "bs8_lr1e-05_a64_r32_ep1",
+    "hyperparameters": {
+      "learning_rate": 1e-05,
+      "num_epochs": 1,
+      "batch_size": 8,
+      "lora_rank": 32,
+      "lora_alpha": 64.0
+    },
+    "start_time": "2025-11-15T23:24:22.826483",
+    "end_time": "2025-11-15T23:28:48.137153",
+    "duration_seconds": 265.31067,
+    "return_code": 1,
+    "success": false,
+    "metrics": {
+      "final_train_loss": 0.07276825606822968,
+      "final_val_loss": 0.05364364758133888,
+      "best_val_loss": 0.05364364758133888
+    },
+    "output_dir": "hparam_search_results/bs8_lr1e-05_a64_r32_ep1"
+  },
+  {
+    "run_name": "bs16_lr1e-05_a16_r16_ep3",
+    "hyperparameters": {
+      "learning_rate": 1e-05,
+      "num_epochs": 3,
+      "batch_size": 16,
+      "lora_rank": 16,
+      "lora_alpha": 16.0
+    },
+    "start_time": "2025-11-15T23:37:45.605563",
+    "end_time": "2025-11-15T23:42:11.222672",
+    "duration_seconds": 265.617109,
+    "return_code": 1,
+    "success": false,
+    "metrics": {
+      "final_train_loss": 0.11835193634033203,
+      "final_val_loss": 0.08547873795032501,
+      "best_val_loss": 0.08547873795032501
+    },
+    "output_dir": "hparam_search_results/bs16_lr1e-05_a16_r16_ep3"
+  },
+  {
+    "run_name": "bs8_lr1e-05_a32_r32_ep3",
+    "hyperparameters": {
+      "learning_rate": 1e-05,
+      "num_epochs": 3,
+      "batch_size": 8,
+      "lora_rank": 32,
+      "lora_alpha": 32.0
+    },
+    "start_time": "2025-11-15T23:51:26.919263",
+    "end_time": "2025-11-15T23:56:01.747135",
+    "duration_seconds": 274.827872,
+    "return_code": 1,
+    "success": false,
+    "metrics": {
+      "final_train_loss": 0.06243896484375,
+      "final_val_loss": 0.03811006620526314,
+      "best_val_loss": 0.03811006620526314
+    }
+  },
+  {
+    "run_name": "bs8_lr1e-05_a64_r32_ep3",
+    "hyperparameters": {
+      "learning_rate": 1e-05,
+      "num_epochs": 3,
+      "batch_size": 8,
+      "lora_rank": 32,
+      "lora_alpha": 64.0
+    },
+    "start_time": "2025-11-16T00:00:29.505504",
+    "end_time": "2025-11-16T00:05:10.406017",
+    "duration_seconds": 280.900513,
+    "return_code": 1,
+    "success": false,
+    "metrics": {
+      "final_train_loss": 0.04036993160843849,
+      "final_val_loss": 0.02271609753370285,
+      "best_val_loss": 0.022060701623558998
+    },
+    "output_dir": "hparam_search_results/bs8_lr1e-05_a64_r32_ep3"
+  },
+  {
+    "run_name": "bs16_lr1e-05_a32_r16_ep5",
+    "hyperparameters": {
+      "learning_rate": 1e-05,
+      "num_epochs": 5,
+      "batch_size": 16,
+      "lora_rank": 16,
+      "lora_alpha": 32.0
+    },
+    "start_time": "2025-11-16T00:23:49.713676",
+    "end_time": "2025-11-16T00:28:23.257151",
+    "duration_seconds": 273.543475,
+    "return_code": 1,
+    "success": false,
+    "metrics": {
+      "final_train_loss": 0.012016992084681988,
+      "final_val_loss": 0.03728210926055908,
+      "best_val_loss": 0.03728210926055908
+    },
+    "output_dir": "hparam_search_results/bs16_lr1e-05_a32_r16_ep5"
+  },
+  {
+    "run_name": "bs16_lr1e-05_a64_r32_ep5",
+    "hyperparameters": {
+      "learning_rate": 1e-05,
+      "num_epochs": 5,
+      "batch_size": 16,
+      "lora_rank": 32,
+      "lora_alpha": 64.0
+    },
+    "start_time": "2025-11-16T00:42:35.146880",
+    "end_time": "2025-11-16T00:47:11.807128",
+    "duration_seconds": 276.660248,
+    "return_code": 1,
+    "success": false,
+    "metrics": {
+      "final_train_loss": 0.003780689090490341,
+      "final_val_loss": 0.021419566124677658,
+      "best_val_loss": 0.021419566124677658
+    },
+    "output_dir": "hparam_search_results/bs16_lr1e-05_a64_r32_ep5"
+  },
+  {
+    "run_name": "bs8_lr1e-04_a16_r16_ep1",
+    "hyperparameters": {
+      "learning_rate": 0.0001,
+      "lora_alpha": 16.0
+    },
+    "start_time": "2025-11-16T00:47:11.822319",
+    "end_time": "2025-11-16T00:51:36.467152",
+    "duration_seconds": 264.644833,
+    "return_code": 1,
+    "success": false,
+    "metrics": {
+      "final_train_loss": 0.044562410563230515,
+      "final_val_loss": 0.03078446350991726,
+      "best_val_loss": 0.03078446350991726
+    },
+    "output_dir": "hparam_search_results/bs8_lr1e-04_a16_r16_ep1"
+  },
+  {
+    "run_name": "bs16_lr1e-04_a16_r16_ep1",
+    "hyperparameters": {
+      "learning_rate": 0.0001,
+      "num_epochs": 1,
+      "batch_size": 16,
+      "lora_rank": 16,
+      "lora_alpha": 16.0
+    },
+    "start_time": "2025-11-16T00:51:36.480763",
+    "end_time": "2025-11-16T00:56:01.755958",
+    "duration_seconds": 265.275195,
+    "return_code": 1,
+    "success": false,
+    "metrics": {
+      "final_train_loss": 0.031179988756775856,
+      "final_val_loss": 0.0406496487557888,
+      "best_val_loss": 0.0406496487557888
+    },
+    "output_dir": "hparam_search_results/bs16_lr1e-04_a16_r16_ep1"
+  },
+  {
+    "run_name": "bs8_lr1e-04_a32_r16_ep1",
+    "hyperparameters": {
+      "learning_rate": 0.0001,
+      "num_epochs": 1,
+      "batch_size": 8,
+      "lora_rank": 16,
+      "lora_alpha": 32.0
+    },
+    "start_time": "2025-11-16T00:56:01.769152",
+    "end_time": "2025-11-16T01:00:30.265963",
+    "duration_seconds": 268.496811,
+    "return_code": 1,
+    "success": false,
+    "metrics": {
+      "final_train_loss": 0.06059442088007927,
+      "final_val_loss": 0.031533170491456985,
+      "best_val_loss": 0.031533170491456985
+    },
+    "output_dir": "hparam_search_results/bs8_lr1e-04_a32_r16_ep1"
+  },
+  {
+    "run_name": "bs16_lr1e-04_a32_r16_ep1",
+    "hyperparameters": {
+      "learning_rate": 0.0001,
+      "num_epochs": 1,
+      "batch_size": 16,
+      "lora_rank": 16,
+      "lora_alpha": 32.0
+    },
+    "start_time": "2025-11-16T01:00:30.279521",
+    "end_time": "2025-11-16T01:04:52.355325",
+    "duration_seconds": 262.075804,
+    "return_code": 1,
+    "success": false,
+    "metrics": {
+      "final_train_loss": 0.04050784558057785,
+      "final_val_loss": 0.031607743352651596,
+      "best_val_loss": 0.031607743352651596
+    },
+    "output_dir": "hparam_search_results/bs16_lr1e-04_a32_r16_ep1"
+  },
+  {
+    "run_name": "bs8_lr1e-04_a32_r32_ep1",
+    "hyperparameters": {
+      "learning_rate": 0.0001,
+      "num_epochs": 1,
+      "batch_size": 8,
+      "lora_rank": 32,
+      "lora_alpha": 32.0
+    },
+    "start_time": "2025-11-16T01:04:52.368598",
+    "end_time": "2025-11-16T01:09:11.096474",
+    "duration_seconds": 258.727876,
+    "return_code": 1,
+    "success": false,
+    "metrics": {
+      "final_train_loss": 0.058607134968042374,
+      "final_val_loss": 0.03148237243294716,
+      "best_val_loss": 0.03148237243294716
+    },
+    "output_dir": "hparam_search_results/bs8_lr1e-04_a32_r32_ep1"
+  },
+  {
+    "run_name": "bs16_lr1e-04_a32_r32_ep1",
+    "hyperparameters": {
+      "learning_rate": 0.0001,
+      "num_epochs": 1,
+      "batch_size": 16,
+      "lora_rank": 32,
+      "lora_alpha": 32.0
+    },
+    "start_time": "2025-11-16T01:09:11.110095",
+    "end_time": "2025-11-16T01:13:33.822436",
+    "duration_seconds": 262.712341,
+    "return_code": 1,
+    "success": false,
+    "metrics": {
+      "final_train_loss": 0.03758075088262558,
+      "final_val_loss": 0.03223031386733055,
+      "best_val_loss": 0.03223031386733055
+    },
+    "output_dir": "hparam_search_results/bs16_lr1e-04_a32_r32_ep1"
+  },
+  {
+    "run_name": "bs8_lr1e-04_a16_r16_ep3",
+    "hyperparameters": {
+      "learning_rate": 0.0001,
+      "num_epochs": 3,
+      "batch_size": 8,
+      "lora_rank": 16,
+      "lora_alpha": 16.0
+    },
+    "start_time": "2025-11-16T01:26:56.160397",
+    "end_time": "2025-11-16T01:31:21.145839",
+    "duration_seconds": 264.985442,
+    "return_code": 1,
+    "success": false,
+    "metrics": {
+      "final_train_loss": 0.01662055216729641,
+      "final_val_loss": 0.018794765695929527,
+      "best_val_loss": 0.018543880432844162
+    },
+    "output_dir": "hparam_search_results/bs16_lr1e-04_a16_r16_ep3"
+  },
+  {
+    "run_name": "bs16_lr1e-04_a32_r16_ep3",
+    "hyperparameters": {
+      "learning_rate": 0.0001,
+      "num_epochs": 3,
+      "batch_size": 16,
+      "lora_rank": 16,
+      "lora_alpha": 32.0
+    },
+    "start_time": "2025-11-16T01:35:58.570913",
+    "end_time": "2025-11-16T01:40:29.004875",
+    "duration_seconds": 270.433962,
+    "return_code": 1,
+    "success": false,
+    "metrics": {
+      "final_train_loss": 0.010166460648179054,
+      "final_val_loss": 0.014726604335010052,
+      "best_val_loss": 0.014726604335010052
+    },
+    "output_dir": "hparam_search_results/bs16_lr1e-04_a32_r16_ep3"
+  },
+  {
+    "run_name": "bs8_lr1e-04_a32_r32_ep3",
+    "hyperparameters": {
+      "learning_rate": 0.0001,
+      "num_epochs": 3,
+      "batch_size": 8,
+      "lora_rank": 32,
+      "lora_alpha": 32.0
+    },
+    "start_time": "2025-11-16T01:40:29.019021",
+    "end_time": "2025-11-16T01:45:00.462951",
+    "duration_seconds": 271.44393,
+    "return_code": 1,
+    "success": false,
+    "metrics": {
+      "final_train_loss": 0.004924236796796322,
+      "final_val_loss": 0.013392066583037376,
+      "best_val_loss": 0.01312361191958189
+    },
+    "output_dir": "hparam_search_results/bs8_lr1e-04_a32_r32_ep3"
+  },
+  {
+    "run_name": "bs16_lr1e-04_a32_r32_ep3",
+    "hyperparameters": {
+      "learning_rate": 0.0001,
+      "num_epochs": 3,
+      "batch_size": 16,
+      "lora_rank": 32,
+      "lora_alpha": 32.0
+    },
+    "start_time": "2025-11-16T01:45:00.479543",
+    "end_time": "2025-11-16T01:49:32.669528",
+    "duration_seconds": 272.189985,
+    "return_code": 1,
+    "success": false,
+    "metrics": {
+      "final_train_loss": 0.009774325415492058,
+      "final_val_loss": 0.016455743461847305,
+      "best_val_loss": 0.016455743461847305
+    },
+    "output_dir": "hparam_search_results/bs16_lr1e-04_a32_r32_ep3"
+  },
+  {
+    "run_name": "bs8_lr1e-04_a64_r32_ep3",
+    "hyperparameters": {
+      "learning_rate": 0.0001,
+      "num_epochs": 3,
+      "batch_size": 8,
+      "lora_rank": 32,
+      "lora_alpha": 64.0
+    },
+    "start_time": "2025-11-16T01:54:11.843138",
+    "end_time": "2025-11-16T01:58:42.303735",
+    "duration_seconds": 270.460597,
+    "return_code": 1,
+    "success": false,
+    "metrics": {
+      "final_train_loss": 0.0032764659263193607,
+      "final_val_loss": 0.010814180597662926,
+      "best_val_loss": 0.010814180597662926
+    },
+    "output_dir": "hparam_search_results/bs16_lr1e-04_a64_r32_ep3"
+  },
+  {
+    "run_name": "bs8_lr1e-04_a16_r16_ep5",
+    "hyperparameters": {
+      "learning_rate": 0.0001,
+      "num_epochs": 5,
+      "batch_size": 8,
+      "lora_rank": 16,
+      "lora_alpha": 16.0
+    },
+    "start_time": "2025-11-16T02:06:19.940122",
+    "end_time": "2025-11-16T02:10:54.295965",
+    "duration_seconds": 274.355843,
+    "return_code": 1,
+    "success": false,
+    "metrics": {
+      "final_train_loss": 0.002383955754339695,
+      "final_val_loss": 0.014193713665008545,
+      "best_val_loss": 0.014193713665008545
+    },
+    "output_dir": "hparam_search_results/bs16_lr1e-04_a16_r16_ep5"
+  },
+  {
+    "run_name": "bs8_lr1e-04_a32_r16_ep5",
+    "hyperparameters": {
+      "learning_rate": 0.0001,
+      "num_epochs": 5,
+      "batch_size": 8,
+      "lora_rank": 16,
+      "lora_alpha": 32.0
+    },
+    "start_time": "2025-11-16T02:10:54.311262",
+    "end_time": "2025-11-16T02:15:53.999049",
+    "duration_seconds": 299.687787,
+    "return_code": 1,
+    "success": false,
+    "metrics": {
+      "final_train_loss": 0.0003196619509253651,
+      "final_val_loss": 0.014037875458598137,
+      "best_val_loss": 0.010709276422858238
+    },
+    "output_dir": "hparam_search_results/bs8_lr1e-04_a32_r16_ep5"
+  },
+  {
+    "run_name": "bs16_lr1e-04_a32_r16_ep5",
+    "hyperparameters": {
+      "learning_rate": 0.0001,
+      "num_epochs": 5,
+      "batch_size": 16,
+      "lora_rank": 16,
+      "lora_alpha": 32.0
+    },
+    "start_time": "2025-11-16T02:15:54.016585",
+    "end_time": "2025-11-16T02:20:29.874491",
+    "duration_seconds": 275.857906,
+    "return_code": 1,
+    "success": false,
+    "metrics": {
+      "final_train_loss": 0.0014143740991130471,
+      "final_val_loss": 0.011779740452766418,
+      "best_val_loss": 0.011672274209558964
+    },
+    "output_dir": "hparam_search_results/bs16_lr1e-04_a32_r16_ep5"
+  },
+  {
+    "run_name": "bs8_lr1e-04_a32_r32_ep5",
+    "hyperparameters": {
+      "learning_rate": 0.0001,
+      "num_epochs": 5,
+      "batch_size": 8,
+      "lora_rank": 32,
+      "lora_alpha": 32.0
+    },
+    "start_time": "2025-11-16T02:20:29.889743",
+    "end_time": "2025-11-16T02:25:14.452250",
+    "duration_seconds": 284.562507,
+    "return_code": 1,
+    "success": false,
+    "metrics": {
+      "final_train_loss": 0.00029435940086841583,
+      "final_val_loss": 0.011188250966370106,
+      "best_val_loss": 0.011188250966370106
+    },
+    "output_dir": "hparam_search_results/bs8_lr1e-04_a32_r32_ep5"
+  },
+  {
+    "run_name": "bs16_lr1e-04_a32_r32_ep5",
+    "hyperparameters": {
+      "learning_rate": 0.0001,
+      "num_epochs": 5,
+      "batch_size": 16,
+      "lora_rank": 32,
+      "lora_alpha": 32.0
+    },
+    "start_time": "2025-11-16T02:25:14.469594",
+    "end_time": "2025-11-16T02:29:51.507551",
+    "duration_seconds": 277.037957,
+    "return_code": 1,
+    "success": false,
+    "metrics": {
+      "final_train_loss": 0.0016400720924139023,
+      "final_val_loss": 0.013620400801301003,
+      "best_val_loss": 0.013620400801301003
+    },
+    "output_dir": "hparam_search_results/bs16_lr1e-04_a32_r32_ep5"
+  },
+  {
+    "run_name": "bs8_lr1e-04_a64_r32_ep5",
+    "hyperparameters": {
+      "learning_rate": 0.0001,
+      "num_epochs": 5,
+      "batch_size": 8,
+      "lora_rank": 32,
+      "lora_alpha": 64.0
+    },
+    "start_time": "2025-11-16T02:29:51.522792",
+    "end_time": "2025-11-16T02:34:50.025362",
+    "duration_seconds": 298.50257,
+    "return_code": 1,
+    "success": false,
+    "metrics": {
+      "final_train_loss": 0.00034428847720846534,
+      "final_val_loss": 0.009192798286676407,
+      "best_val_loss": 0.0073656076565384865
+    },
+    "output_dir": "hparam_search_results/bs8_lr1e-04_a64_r32_ep5"
+  },
+  {
+    "run_name": "bs16_lr1e-04_a64_r32_ep5",
+    "hyperparameters": {
+      "learning_rate": 0.0001,
+      "num_epochs": 5,
+      "batch_size": 16,
+      "lora_rank": 32,
+      "lora_alpha": 64.0
+    },
+    "start_time": "2025-11-16T02:34:50.043051",
+    "end_time": "2025-11-16T02:39:29.288824",
+    "duration_seconds": 279.245773,
+    "return_code": 1,
+    "success": false,
+    "metrics": {
+      "final_train_loss": 0.0005676174769178033,
+      "final_val_loss": 0.008490480482578278,
+      "best_val_loss": 0.008490480482578278
+    },
+    "output_dir": "hparam_search_results/bs16_lr1e-04_a64_r32_ep5"
+  }
+]
