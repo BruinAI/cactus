@@ -530,7 +530,6 @@ def convert_hf_model_weights_vlm(model, output_dir, precision='INT8', args=None)
         'use_layout_tags': bool(use_layout_tags),
         'tie_word_embeddings': tie_word_embeddings
     }
-    model_config['model_variant'] = 'vlm'
 
     embed_names = ['model.embed_tokens.weight', 'embed_tokens.weight', 'embeddings.weight', 'transformer.wte.weight', 'model.text_model.embed_tokens.weight']
     for name in embed_names:

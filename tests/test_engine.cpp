@@ -69,7 +69,7 @@ bool run_test(const char* title, const char* messages, TestFunc test_logic,
               << "║" << std::setw(42) << std::left << std::string("          ") + title << "║\n"
               << "╚══════════════════════════════════════════╝\n";
 
-    cactus_model_t model = cactus_init(g_model_path, 2048);
+    cactus_model_t model = cactus_init(g_model_path, 2048, nullptr);
     if (!model) {
         std::cerr << "[✗] Failed to initialize model\n";
         return false;
@@ -117,7 +117,7 @@ bool test_streaming() {
               << "║" << std::setw(42) << std::left << "      STREAMING & FOLLOW-UP TEST" << "║\n"
               << "╚══════════════════════════════════════════╝\n";
 
-    cactus_model_t model = cactus_init(g_model_path, 2048);
+    cactus_model_t model = cactus_init(g_model_path, 2048, nullptr);
     if (!model) {
         std::cerr << "[✗] Failed to initialize model\n";
         return false;
@@ -278,7 +278,7 @@ bool test_embeddings() {
               << "║          EMBEDDINGS TEST                 ║\n"
               << "╚══════════════════════════════════════════╝\n";
 
-    cactus_model_t model = cactus_init(g_model_path, 2048);
+    cactus_model_t model = cactus_init(g_model_path, 2048, nullptr);
     if (!model) return false;
 
     const char* texts[] = {"My name is Henry Ndubuaku", "Your name is Henry Ndubuaku"};
@@ -378,7 +378,7 @@ bool test_rag() {
 
     const char* corpus_dir = "../../tests/assets/rag_corpus";
 
-    cactus_model_t model = cactus_init_with_corpus(g_model_path, 2048, corpus_dir);
+    cactus_model_t model = cactus_init(g_model_path, 2048, corpus_dir);
     if (!model) {
         std::cerr << "[✗] Failed to initialize RAG model with corpus dir\n";
         return false;
