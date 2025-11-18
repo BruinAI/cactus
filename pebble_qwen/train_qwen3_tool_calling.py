@@ -76,7 +76,7 @@ TOOLS_PATH = os.path.join(DATA_DIR, "tools.json")
 # For small datasets, excessive overfitting (26.7x) means the model has memorized training
 # data and won't generalize. Use --num_epochs=5 only if maximizing benchmark scores on
 # similar data or if you have a much larger, more diverse dataset.
-NUM_EPOCHS = 3
+NUM_EPOCHS = 1
 LEARNING_RATE = 1e-4  # 1e-4 significantly outperformed 1e-5 across all configurations
 MAX_TARGET_LENGTH = 1500  # Noah's dataset has shorter sequences
 
