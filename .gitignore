@@ -16,7 +16,4 @@ apple/build-static/
 apple/*.xcframework
 apple/libcactus.a
 *.a
-*.bin
-
-reference_code
 venv

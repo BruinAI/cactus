@@ -17,7 +17,6 @@ namespace {
     thread_local std::vector<__fp16> transpose_buffer_fp16;
     thread_local std::vector<float> transpose_buffer_fp32;
     thread_local std::vector<int8_t> quantization_buffer_int8;
-    std::mutex buffer_mutex;
     
     void ensure_transpose_buffer_int8(size_t required_size) {
         if (transpose_buffer_int8.size() < required_size) {
@@ -425,13 +424,7 @@ void compute_fused_node(GraphNode& node, const std::vector<std::unique_ptr<Graph
             
             int dst_height = static_cast<int>(node.params.dst_height);
             int dst_width = static_cast<int>(node.params.dst_width);
-            
-            float scale_h = (src_height > 1 && dst_height > 1) 
-                            ? static_cast<float>(src_height - 1) / static_cast<float>(dst_height - 1)
-                            : 0.0f;
-            float scale_w = (src_width > 1 && dst_width > 1)
-                            ? static_cast<float>(src_width - 1) / static_cast<float>(dst_width - 1)
-                            : 0.0f;
+
             std::vector<float> pos_embed_fp32(total_pos_embeds * embed_dim);
             
             if (pos_embeds_buffer.precision == Precision::INT8) {
@@ -451,42 +444,11 @@ void compute_fused_node(GraphNode& node, const std::vector<std::unique_ptr<Graph
                 std::memcpy(pos_embed_fp32.data(), pos_embed_data, total_pos_embeds * embed_dim * sizeof(float));
             }
             
-            float* output = node.output_buffer.data_as<float>();
             
-            for (int dst_y = 0; dst_y < dst_height; ++dst_y) {
-                for (int dst_x = 0; dst_x < dst_width; ++dst_x) {
-                    float src_y_float = dst_y * scale_h;
-                    float src_x_float = dst_x * scale_w;
-                    
-                    int y0 = static_cast<int>(std::floor(src_y_float));
-                    int x0 = static_cast<int>(std::floor(src_x_float));
-                    int y1 = std::min(y0 + 1, src_height - 1);
-                    int x1 = std::min(x0 + 1, src_width - 1);
-                    
-                    float dy = src_y_float - y0;
-                    float dx = src_x_float - x0;
-                    
-                    float w00 = (1.0f - dx) * (1.0f - dy);
-                    float w01 = dx * (1.0f - dy);
-                    float w10 = (1.0f - dx) * dy;
-                    float w11 = dx * dy;
-                    
-                    int idx00 = (y0 * src_width + x0) * embed_dim;
-                    int idx01 = (y0 * src_width + x1) * embed_dim;
-                    int idx10 = (y1 * src_width + x0) * embed_dim;
-                    int idx11 = (y1 * src_width + x1) * embed_dim;
-                    
-                    int out_idx = (dst_y * dst_width + dst_x) * embed_dim;
-                    
-                    for (int d = 0; d < embed_dim; ++d) {
-                        output[out_idx + d] = 
-                            pos_embed_fp32[idx00 + d] * w00 +
-                            pos_embed_fp32[idx01 + d] * w01 +
-                            pos_embed_fp32[idx10 + d] * w10 +
-                            pos_embed_fp32[idx11 + d] * w11;
-                    }
-                }
-            }
+            float* output = node.output_buffer.data_as<float>();
+            cactus_bilinear_interpolation_fp32(pos_embed_fp32.data(), output, 
+                                              src_height, src_width, embed_dim,
+                                              dst_height, dst_width);
             break;
         }
         case OpType::RMS_NORM: {
@@ -540,83 +502,6 @@ void compute_fused_node(GraphNode& node, const std::vector<std::unique_ptr<Graph
                 node.output_buffer.quantization_scale = fast_scale;
             } else {
                 throw std::runtime_error("RMS normalization only supports FP32, FP16, and INT8 precision");
-            }
-            break;
-        }
-        case OpType::LAYER_NORM: {
-            const auto& input_buffer = nodes[node_index_map.at(node.input_ids[0])]->output_buffer;
-            const auto& weight_buffer = nodes[node_index_map.at(node.input_ids[1])]->output_buffer;
-            const auto& bias_buffer = nodes[node_index_map.at(node.input_ids[2])]->output_buffer;
-            
-            if (input_buffer.shape.size() != 2) {
-                throw std::runtime_error("Layer normalization requires 2D input tensor [seq_len, hidden_dim], got " + 
-                                        std::to_string(input_buffer.shape.size()) + "D tensor");
-            }
-            
-            size_t seq_len = input_buffer.shape[0];
-            size_t hidden_dim = input_buffer.shape[1];
-            
-            if (input_buffer.precision == Precision::FP32) {
-                const float* input = input_buffer.data_as<float>();
-                const float* weight = weight_buffer.data_as<float>();
-                const float* bias = bias_buffer.data_as<float>();
-                float* output = node.output_buffer.data_as<float>();
-                float eps = node.params.epsilon;
-                
-                for (size_t i = 0; i < seq_len; ++i) {
-                    const float* row = input + i * hidden_dim;
-                    float* out = output + i * hidden_dim;
-                    
-                    float mean = 0.0f;
-                    for (size_t j = 0; j < hidden_dim; ++j) {
-                        mean += row[j];
-                    }
-                    mean /= static_cast<float>(hidden_dim);
-                    
-                    float var = 0.0f;
-                    for (size_t j = 0; j < hidden_dim; ++j) {
-                        float diff = row[j] - mean;
-                        var += diff * diff;
-                    }
-                    var /= static_cast<float>(hidden_dim);
-                    
-                    float inv_std = 1.0f / sqrtf(var + eps);
-                    for (size_t j = 0; j < hidden_dim; ++j) {
-                        out[j] = (row[j] - mean) * inv_std * weight[j] + bias[j];
-                    }
-                }
-            } else if (input_buffer.precision == Precision::FP16) {
-                const __fp16* input = input_buffer.data_as<__fp16>();
-                const __fp16* weight = weight_buffer.data_as<__fp16>();
-                const __fp16* bias = bias_buffer.data_as<__fp16>();
-                __fp16* output = node.output_buffer.data_as<__fp16>();
-                float eps = node.params.epsilon;
-                
-                for (size_t i = 0; i < seq_len; ++i) {
-                    const __fp16* row = input + i * hidden_dim;
-                    __fp16* out = output + i * hidden_dim;
-                    
-                    float mean = 0.0f;
-                    for (size_t j = 0; j < hidden_dim; ++j) {
-                        mean += static_cast<float>(row[j]);
-                    }
-                    mean /= static_cast<float>(hidden_dim);
-                    
-                    float var = 0.0f;
-                    for (size_t j = 0; j < hidden_dim; ++j) {
-                        float diff = static_cast<float>(row[j]) - mean;
-                        var += diff * diff;
-                    }
-                    var /= static_cast<float>(hidden_dim);
-                    
-                    float inv_std = 1.0f / sqrtf(var + eps);
-                    for (size_t j = 0; j < hidden_dim; ++j) {
-                        float normalized = (static_cast<float>(row[j]) - mean) * inv_std;
-                        out[j] = static_cast<__fp16>(normalized * static_cast<float>(weight[j]) + static_cast<float>(bias[j]));
-                    }
-                }
-            } else {
-                throw std::runtime_error("Layer normalization only supports FP32 and FP16 precision");
             }
             break;
         }

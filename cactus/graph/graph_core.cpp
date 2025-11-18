@@ -358,7 +358,6 @@ void compute_node_optimized(GraphNode& node, const std::vector<std::unique_ptr<G
             compute_reduce_node(node, nodes, node_index_map);
             break;
         case OpType::RMS_NORM:
-        case OpType::LAYER_NORM:
         case OpType::ROPE:
         case OpType::SOFTMAX:
         case OpType::ATTENTION:

@@ -17,7 +17,7 @@ class CactusGraph;
 namespace cactus {
 namespace engine {
 
-class Lfm2VlPreprocessor;
+class Siglip2Preprocessor;
 
 struct Config {
     uint32_t vocab_size = 151936;
@@ -57,7 +57,6 @@ struct Config {
     float image_mean = 0.5f;
     float image_std = 0.5f;
     
-    // LFM2-VL specific image processing parameters
     uint32_t downsample_factor = 2;
     uint32_t min_tiles = 2;
     uint32_t max_tiles = 10;
@@ -71,6 +70,9 @@ struct Config {
 
     enum class ModelType {QWEN = 0, GEMMA = 1, SMOL = 2, NOMIC = 3, LFM2 = 5, SIGLIP2 = 6};
     ModelType model_type = ModelType::QWEN;
+
+    enum class ModelVariant {DEFAULT = 0, VLM = 1, EXTRACT = 2, RAG = 3};
+    ModelVariant model_variant = ModelVariant::DEFAULT;
 
     enum class Activation {GELU = 0, SILU = 1};
     Activation activation = Activation::SILU;
@@ -108,8 +110,7 @@ struct MergeRule {
 struct ChatMessage {
     std::string role;
     std::string content;
-    std::string type;  // Deprecated - kept for compatibility
-    std::vector<std::string> images;  // Image paths associated with this message
+    std::vector<std::string> images;
 };
 
 class Tokenizer {
@@ -133,19 +134,22 @@ public:
     uint32_t get_image_token_id() const { return image_token_id_; }
     uint32_t get_fake_token_id() const { return fake_token_id_; }
     uint32_t get_global_img_token_id() const { return global_img_token_id_; }
-    
-    void load_special_tokens(const std::string& added_tokens_path);
 
+
+    void set_corpus_dir(const std::string& dir) { corpus_dir_ = dir; }
 
 protected:
     enum class ModelType { UNKNOWN, QWEN, GEMMA, LFM2, SMOL, BERT };
     ModelType model_type_ = ModelType::UNKNOWN;
+    enum class ModelVariant { DEFAULT, VLM, EXTRACT, RAG};
+    ModelVariant model_variant_ = ModelVariant::DEFAULT;
     bool has_chat_template_ = false;
     std::string chat_template_;
     
-    uint32_t image_token_id_ = 396;  // <image>
-    uint32_t fake_token_id_ = 49189;   // <fake_token_around_image>
-    uint32_t global_img_token_id_ = 49152;  // <global-img>
+    uint32_t image_token_id_ = 396;
+    uint32_t fake_token_id_ = 49189;
+    uint32_t global_img_token_id_ = 49152;
+    std::string corpus_dir_;
 
     void detect_model_type(const std::string& config_path);
     std::string format_qwen_style(const std::vector<ChatMessage>& messages, bool add_generation_prompt, const std::string& tools_json) const;
@@ -366,7 +370,6 @@ public:
     virtual uint32_t generate(const std::vector<uint32_t>& tokens, float temperature = -1.0f, float top_p = -1.0f,
                       size_t top_k = 0, const std::string& profile_file = "");
 
-    // Image-aware generation entrypoint. Default implementation forwards to generate()
     virtual uint32_t generate_with_images(const std::vector<uint32_t>& tokens, const std::vector<std::string>& image_paths,
                                           float temperature = -1.0f, float top_p = -1.0f,
                                           size_t top_k = 0, const std::string& profile_file = "");
@@ -406,7 +409,6 @@ protected:
     std::string model_folder_path_;
     size_t output_weight_node_id_;
 
-    // Debug node tracking
     mutable std::vector<DebugNode> debug_nodes_;
 
     void capture_debug_node(uint32_t layer_idx, const std::string& name, size_t node_id) const;
@@ -419,16 +421,7 @@ protected:
 
 std::unique_ptr<Model> create_model(const std::string& model_folder);
 
-/**
- * Lfm2VlPreprocessor: Image preprocessing for LFM2-VL Fast vision models
- * 
- * Handles complete image preprocessing pipeline:
- * - Smart resizing with min/max image tokens
- * - Optional image splitting into tiles with grid layout
- * - Optional thumbnail generation
- * - Patch extraction and padding with attention masks
- */
-class Lfm2VlPreprocessor {
+class Siglip2Preprocessor {
 public:
     struct Config {
         int patch_size = 16;
@@ -452,39 +445,38 @@ public:
     };
 
     struct PreprocessedImage {
-        std::vector<float> pixel_values;       // Shape: (seq_len, patch_size*patch_size*3)
-        std::vector<int> pixel_attention_mask; // Shape: (seq_len,)
-        std::vector<std::pair<int,int>> spatial_shapes;  // [height, width] in patches for each tile
-        std::vector<size_t> pixel_values_shape;           // Logical shape for pixel_values tensor
-        std::vector<size_t> pixel_attention_mask_shape;   // Logical shape for attention mask tensor
-        std::vector<size_t> spatial_shapes_shape;         // Logical shape for spatial_shapes tensor
-        int num_patches_height;                 // Patches per tile (for regular tiles)
-        int num_patches_width;                  // Patches per tile (for regular tiles)
-        int actual_num_patches;                 // Total actual patches (tiles + thumbnail)
-        int num_tiles;                          // Total number of tiles (including thumbnail)
-        int patch_dim;                          // Elements per patch (patch_size^2 * channels)
-        int max_patches_per_tile;               // Max padded patches per tile (including thumbnail)
-        
-        // LFM2-VL specific metadata
-        int image_rows;                         // Grid height (num tiles vertically)
-        int image_cols;                         // Grid width (num tiles horizontally)
-        int image_height;                       // Resized image height
-        int image_width;                        // Resized image width
-        int tokens_per_tile;                    // Downsampled tokens per tile (after downsampling)
-        int thumbnail_tokens;                   // Tokens in thumbnail (if enabled)
+        std::vector<float> pixel_values;       
+        std::vector<int> pixel_attention_mask; 
+        std::vector<std::pair<int,int>> spatial_shapes;  
+        std::vector<size_t> pixel_values_shape;           
+        std::vector<size_t> pixel_attention_mask_shape;   
+        std::vector<size_t> spatial_shapes_shape;         
+        int num_patches_height;                 
+        int num_patches_width;                  
+        int actual_num_patches;                 
+        int num_tiles;                          
+        int patch_dim;                          
+        int max_patches_per_tile;               
+          
+        int image_rows;                         
+        int image_cols;                         
+        int image_height;                       
+        int image_width;                        
+        int tokens_per_tile;                    
+        int thumbnail_tokens;                   
         
         ~PreprocessedImage();
     };
 
     struct SpatialShapeResult {
-        std::vector<std::pair<int, int>> shapes;  // (height, width) in patches for each tile + thumbnail
-        int grid_rows;                             // Number of rows in the tile grid
-        int grid_cols;                             // Number of columns in the tile grid
+        std::vector<std::pair<int, int>> shapes;  
+        int grid_rows;                             
+        int grid_cols;                             
     };
 
-    explicit Lfm2VlPreprocessor(const Config& config);
-    Lfm2VlPreprocessor();
-    ~Lfm2VlPreprocessor();
+    explicit Siglip2Preprocessor(const Config& config);
+    Siglip2Preprocessor();
+    ~Siglip2Preprocessor();
 
     PreprocessedImage preprocess_from_file(const std::string& image_path);
     PreprocessedImage preprocess_from_memory(const unsigned char* img_data, int width, int height, int channels);

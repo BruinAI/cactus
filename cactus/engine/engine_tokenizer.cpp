@@ -2,6 +2,7 @@
 #include <fstream>
 #include <sstream>
 #include <algorithm>
+#include <dirent.h>
 
 namespace cactus {
 namespace engine {
@@ -38,43 +39,29 @@ void Tokenizer::detect_model_type(const std::string& config_path) {
             } 
         }
     }
-    file.close();
-}
+    file.clear();
+    file.seekg(0);
 
-void Tokenizer::load_special_tokens(const std::string& added_tokens_path) {
-    std::ifstream file(added_tokens_path);
-    if (!file.is_open()) {
-        return;
-    }
+    while (std::getline(file, line)) {
+        size_t pos2 = line.find("model_variant");
+        if (pos2 != std::string::npos) {
+            std::transform(line.begin(), line.end(), line.begin(), ::tolower);
 
-    std::string content((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
-    file.close();
-
-    auto find_token_id = [&content](const std::string& token_name) -> uint32_t {
-        std::string search = "\"" + token_name + "\":";
-        size_t pos = content.find(search);
-        if (pos == std::string::npos) return 0;
-        
-        pos = content.find(':', pos) + 1;
-        while (pos < content.length() && (content[pos] == ' ' || content[pos] == '\t')) pos++;
-        
-        size_t end_pos = pos;
-        while (end_pos < content.length() && (std::isdigit(content[end_pos]) || content[end_pos] == '-')) end_pos++;
-        
-        if (end_pos > pos) {
-            return static_cast<uint32_t>(std::stoul(content.substr(pos, end_pos - pos)));
+            if (line.find("vlm") != std::string::npos) {
+                model_variant_ = ModelVariant::VLM;
+                break;
+            } else if (line.find("extract") != std::string::npos) {
+                model_variant_ = ModelVariant::EXTRACT;
+                break;
+            } else if (line.find("rag") != std::string::npos) {
+                model_variant_ = ModelVariant::RAG;
+                break;
+            } else {
+                model_variant_ = ModelVariant::DEFAULT;
+            }
         }
-        return 0;
-    };
-
-    uint32_t image_token = find_token_id("<image>");
-    if (image_token != 0) image_token_id_ = image_token;
-    
-    uint32_t fake_token = find_token_id("<fake_token_around_image>");
-    if (fake_token != 0) fake_token_id_ = fake_token;
-    
-    uint32_t global_token = find_token_id("<global-img>");
-    if (global_token != 0) global_img_token_id_ = global_token;
+    }
+    file.close();
 }
 
 std::vector<uint32_t> Tokenizer::apply_chat_template(const std::vector<ChatMessage>& messages, bool add_generation_prompt) const {
@@ -83,7 +70,6 @@ std::vector<uint32_t> Tokenizer::apply_chat_template(const std::vector<ChatMessa
 }
 
 std::string Tokenizer::format_chat_prompt(const std::vector<ChatMessage>& messages, bool add_generation_prompt, const std::string& tools_json) const {
-    // Check if any messages have images to determine if this is LFM2-VL
     bool has_images = false;
     for (const auto& msg : messages) {
         if (!msg.images.empty()) {
@@ -91,8 +77,6 @@ std::string Tokenizer::format_chat_prompt(const std::vector<ChatMessage>& messag
             break;
         }
     }
-    
-    // If LFM2 model with images, use LFM2-VL formatting
     if (model_type_ == ModelType::LFM2 && has_images) {
         return format_lfm2_vl_style(messages, add_generation_prompt, tools_json);
     }
@@ -198,6 +182,48 @@ std::string Tokenizer::format_lfm2_style(const std::vector<ChatMessage>& message
         sys_content += "{\"function_call\": {\"name\": \"function_name\", \"arguments\": {\"arg1\": \"value1\"}}}";
     }
 
+    if (model_variant_ == ModelVariant::RAG) {
+        const std::string docs_path = !corpus_dir_.empty() ? corpus_dir_ : std::string("../../tests/assets/rag_corpus");
+        DIR* dir = opendir(docs_path.c_str());
+        if (dir) {
+            struct dirent* entry;
+            std::vector<std::string> files;
+            while ((entry = readdir(dir)) != nullptr) {
+                std::string name = entry->d_name;
+                if (name.size() > 4) {
+                    std::string lower = name;
+                    std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
+                    if (lower.size() >= 4 && lower.substr(lower.size() - 4) == ".txt") {
+                        files.push_back(name);
+                    }
+                }
+            }
+            closedir(dir);
+
+            std::sort(files.begin(), files.end());
+
+            int doc_idx = 1;
+            for (const auto& fname : files) {
+                std::string full = docs_path + "/" + fname;
+                std::ifstream infile(full);
+                if (!infile.is_open()) continue;
+                std::stringstream ss; ss << infile.rdbuf();
+                std::string file_text = ss.str();
+                for (size_t i = 0; i < file_text.size(); ++i) {
+                    if (file_text[i] == '\0') file_text[i] = ' ';
+                }
+                if (!sys_content.empty()) {
+                    sys_content += "\n";
+                }
+                sys_content += "The following documents may provide you additional information to answer questions: ";
+                sys_content += "<document" + std::to_string(doc_idx) + ">";
+                sys_content += file_text;
+                sys_content += "</document" + std::to_string(doc_idx) + ">";
+                doc_idx++;
+            }
+        }
+    }
+
     if (!sys_content.empty()) {
         result += "<|im_start|>system\n";
         result += sys_content;
@@ -240,42 +266,27 @@ std::string Tokenizer::format_lfm2_vl_style(
     
     for (const auto& msg : messages) {
         result += "<|im_start|>" + msg.role + "\n";
-        
-        // Add text content first
         result += msg.content;
-        
-        // Process any images associated with this message
         for (const auto& image_path : msg.images) {
-            // Load image to get dimensions
             int width = 0, height = 0, channels = 0;
             unsigned char* img_data = stbi_load(image_path.c_str(), &width, &height, &channels, 0);
             
             if (img_data) {
-                // Use preprocessor to compute spatial shapes and grid dimensions
-                Lfm2VlPreprocessor preprocessor;
+                Siglip2Preprocessor preprocessor;
                 auto shape_result = preprocessor.compute_spatial_shapes(height, width);
-                
-                // Config values (should match model config)
                 int downsample_factor = 2;
                 bool use_thumbnail = true;
-                
-                // Get actual grid dimensions from preprocessor
                 int grid_rows = shape_result.grid_rows;
                 int grid_cols = shape_result.grid_cols;
                 int num_tiles = grid_rows * grid_cols;
-                
-                // Expand placeholder
                 result += "<|image_start|>";
                 
                 if (num_tiles > 1) {
-                    // Multiple tiles - emit row/col tokens
                     for (int tile_idx = 0; tile_idx < num_tiles; ++tile_idx) {
                         int row = tile_idx / grid_cols;
                         int col = tile_idx % grid_cols;
                         
                         result += "<|img_row_" + std::to_string(row + 1) + "_col_" + std::to_string(col + 1) + "|>";
-                        
-                        // Calculate tokens for this tile: tile_height * tile_width / downsample_factor^2
                         auto [tile_height, tile_width] = shape_result.shapes[tile_idx];
                         int tile_tokens = (tile_height * tile_width) / (downsample_factor * downsample_factor);
                         
@@ -283,8 +294,6 @@ std::string Tokenizer::format_lfm2_vl_style(
                             result += "<image>";
                         }
                     }
-                    
-                    // Add thumbnail if present
                     if (use_thumbnail && static_cast<size_t>(num_tiles) < shape_result.shapes.size()) {
                         result += "<|img_thumbnail|>";
                         
@@ -296,7 +305,6 @@ std::string Tokenizer::format_lfm2_vl_style(
                         }
                     }
                 } else if (num_tiles == 1) {
-                    // Single tile - just thumbnail
                     auto [thumb_height, thumb_width] = shape_result.shapes[0];
                     int thumbnail_tokens = (thumb_height * thumb_width) / (downsample_factor * downsample_factor);
                     
@@ -309,7 +317,6 @@ std::string Tokenizer::format_lfm2_vl_style(
                 
                 stbi_image_free(img_data);
             } else {
-                // If image fails to load, just put a placeholder
                 result += "<image>";
             }
         }

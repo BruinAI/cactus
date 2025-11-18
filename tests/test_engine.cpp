@@ -6,11 +6,13 @@
 #include <iostream>
 #include <iomanip>
 #include <cmath>
+#include <fstream>
+#include <cstdio>
 #include <vector>
 #include <sstream>
 
 
-const char* g_model_path = "../../weights/lfm2-vl-350m-i8";
+const char* g_model_path = "../../weights/lfm2-1.2B";
 
 const char* g_options = R"({
         "max_tokens": 256,
@@ -73,8 +75,8 @@ bool run_test(const char* title, const char* messages, TestFunc test_logic,
     std::cout << "\n╔══════════════════════════════════════════╗\n"
               << "║" << std::setw(42) << std::left << std::string("          ") + title << "║\n"
               << "╚══════════════════════════════════════════╝\n";
-    
-    cactus_model_t model = cactus_init(g_model_path, 2048);
+
+    cactus_model_t model = cactus_init(g_model_path, 2048, nullptr);
     if (!model) {
         std::cerr << "[✗] Failed to initialize model\n";
         return false;
@@ -122,7 +124,7 @@ bool test_streaming() {
               << "║" << std::setw(42) << std::left << "      STREAMING & FOLLOW-UP TEST" << "║\n"
               << "╚══════════════════════════════════════════╝\n";
 
-    cactus_model_t model = cactus_init(g_model_path, 2048);
+    cactus_model_t model = cactus_init(g_model_path, 2048, nullptr);
     if (!model) {
         std::cerr << "[✗] Failed to initialize model\n";
         return false;
@@ -232,9 +234,6 @@ bool test_tool_call() {
 bool test_image_input() {
     std::string model_path_str(g_model_path);
     if (model_path_str.find("vl") == std::string::npos && model_path_str.find("vl") == std::string::npos) {
-        std::cout << "\n╔══════════════════════════════════════════╗\n"
-                  << "║          IMAGE INPUT TEST (SKIPPED)      ║\n"
-                  << "╚══════════════════════════════════════════╝\n";
         std::cout << "Skipping image input test: model is not a VLM." << std::endl;
         return true;
     }
@@ -242,9 +241,6 @@ bool test_image_input() {
     std::string vision_file = model_path_str + std::string("/vision_patch_embedding.weights");
     std::ifstream vf(vision_file);
     if (!vf.good()) {
-        std::cout << "\n╔══════════════════════════════════════════╗\n"
-                  << "║          IMAGE INPUT TEST (SKIPPED)      ║\n"
-                  << "╚══════════════════════════════════════════╝\n";
         std::cout << "Skipping image input test: vision weights not found." << std::endl;
         return true;
     }
@@ -254,13 +250,13 @@ bool test_image_input() {
               << "║          IMAGE INPUT TEST                ║\n"
               << "╚══════════════════════════════════════════╝\n";
 
-    cactus_model_t model = cactus_init(g_model_path, 2048);
+    cactus_model_t model = cactus_init(g_model_path, 2048, nullptr);
     if (!model) {
         std::cerr << "Failed to initialize model for image test" << std::endl;
         return false;
     }
 
-    std::filesystem::path rel_img_path = std::filesystem::path("../../assets/test_monkey.png");
+    std::filesystem::path rel_img_path = std::filesystem::path("../../tests/assets/test_monkey.png");
     std::filesystem::path abs_img_path = std::filesystem::absolute(rel_img_path);
     std::string img_path_str = abs_img_path.string();
     std::string messages_json = "[";
@@ -349,7 +345,7 @@ bool test_embeddings() {
               << "║          EMBEDDINGS TEST                 ║\n"
               << "╚══════════════════════════════════════════╝\n";
 
-    cactus_model_t model = cactus_init(g_model_path, 2048);
+    cactus_model_t model = cactus_init(g_model_path, 2048, nullptr);
     if (!model) return false;
 
     const char* texts[] = {"My name is Henry Ndubuaku", "Your name is Henry Ndubuaku"};
@@ -401,6 +397,81 @@ bool test_huge_context() {
             std::cout << "├─ Early stop: " << (data.token_count == 100 ? "SUCCESS ✓" : "N/A") << std::endl;
             return result > 0;
         }, nullptr, 100);
+}
+
+bool test_rag() {
+    const char* messages = R"([
+        {"role": "system", "content": "You are a helpful assistant."},
+        {"role": "user", "content": "What has Justin been doing at Cactus Candy?"}
+    ])";
+
+    std::string modelPathStr(g_model_path ? g_model_path : "");
+
+    bool is_rag = false;
+    if (!modelPathStr.empty()) {
+        std::string config_path = modelPathStr + "/config.txt";
+        FILE* cfg = std::fopen(config_path.c_str(), "r");
+        if (cfg) {
+            char buf[4096];
+            while (std::fgets(buf, sizeof(buf), cfg)) {
+                std::string line(buf);
+                while (!line.empty() && (line.back() == '\n' || line.back() == '\r')) line.pop_back();
+                if (line.find("model_variant=") != std::string::npos) {
+                    auto pos = line.find('=');
+                    if (pos != std::string::npos) {
+                        std::string val = line.substr(pos + 1);
+                        if (val.find("rag") != std::string::npos) {
+                            is_rag = true;
+                            break;
+                        }
+                    }
+                }
+            }
+            std::fclose(cfg);
+        } else {
+            if (modelPathStr.find("rag") != std::string::npos) is_rag = true;
+        }
+    }
+
+    std::cout << "\n╔══════════════════════════════════════════╗\n"
+              << "║         RAG PREPROCESSING TEST           ║\n"
+              << "╚══════════════════════════════════════════╝\n";
+
+    if (!is_rag) {
+        std::cout << "⊘ SKIP │ " << std::left << std::setw(25) << "rag_preprocessing"
+                  << " │ " << "model variant is not RAG (skipping)" << "\n";
+        return true;
+    }
+
+    const char* corpus_dir = "../../tests/assets/rag_corpus";
+
+    cactus_model_t model = cactus_init(g_model_path, 2048, corpus_dir);
+    if (!model) {
+        std::cerr << "[✗] Failed to initialize RAG model with corpus dir\n";
+        return false;
+    }
+
+    StreamingData data;
+    data.model = model;
+
+    char response[4096];
+    std::cout << "Response: ";
+
+    int result = cactus_complete(model, messages, response, sizeof(response),
+                                 g_options, nullptr, stream_callback, &data);
+
+    std::cout << "\n\n[Results]\n";
+
+    Metrics metrics;
+    metrics.parse(response);
+
+    std::cout << "RAG PREPROCESSING: total tokens=" << data.token_count << " result=" << result << "\n";
+    metrics.print();
+
+    bool success = (result > 0) && (data.token_count > 0);
+
+    cactus_destroy(model);
+    return success;
 }
 
 bool test_audio_processor() {
@@ -460,6 +531,7 @@ int main() {
     runner.run_test("embeddings", test_embeddings());
     runner.run_test("image_input", test_image_input());
     runner.run_test("audio_processor", test_audio_processor());
+    runner.run_test("rag_preprocessing", test_rag());
     runner.run_test("huge_context", test_huge_context());
     runner.print_summary();
     return runner.all_passed() ? 0 : 1;

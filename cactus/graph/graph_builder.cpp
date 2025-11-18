@@ -305,11 +305,6 @@ size_t CactusGraph::rms_norm(size_t input, size_t weight, float epsilon) {
     return add_node(OpType::RMS_NORM, {input, weight}, {}, params);
 }
 
-size_t CactusGraph::layer_norm(size_t input, size_t weight, size_t bias, float epsilon) {
-    OpParams params{.epsilon = epsilon};
-    return add_node(OpType::LAYER_NORM, {input, weight, bias}, {}, params);
-}
-
 size_t CactusGraph::rope(size_t input, float theta, size_t position_offset, ComputeBackend backend) {
     OpParams params{.theta = theta, .position_offset = position_offset, .backend = backend};
     return add_node(OpType::ROPE, {input}, {}, params);
@@ -724,45 +719,28 @@ const BufferDesc& CactusGraph::get_output_buffer(size_t node_id) const {
 void CactusGraph::execute(const std::string& profile_file) {
     allocate_buffers();
 
-    auto parse_bool_env = [](const char* value) {
-        if (!value) {
-            return false;
-        }
-        std::string lowered(value);
-        std::transform(lowered.begin(), lowered.end(), lowered.begin(), [](unsigned char c) {
-            return static_cast<char>(std::tolower(c));
-        });
-        return lowered == "1" || lowered == "true" || lowered == "yes" || lowered == "on";
+    auto get_env_int = [](const char* name, int fallback) -> int {
+        const char* val = std::getenv(name);
+        return val ? std::atoi(val) : fallback;
     };
 
-    auto parse_size_t_env = [](const char* value, size_t fallback) -> size_t {
-        if (!value) {
-            return fallback;
-        }
-        char* end = nullptr;
-        unsigned long long parsed = std::strtoull(value, &end, 10);
-        if (end == value) {
-            return fallback;
-        }
-        return static_cast<size_t>(parsed);
+    auto get_env_str = [](const char* name) -> std::string {
+        const char* val = std::getenv(name);
+        return val ? std::string(val) : std::string();
     };
 
-    bool capture_to_stdout = parse_bool_env(std::getenv("CACTUS_CAPTURE_STDOUT"));
-    std::string capture_file_path;
-    if (const char* env_file = std::getenv("CACTUS_CAPTURE_FILE")) {
-        capture_file_path = env_file;
+    bool capture_to_stdout = get_env_int("CACTUS_CAPTURE_STDOUT", 0) != 0;
+    std::string capture_file_path = get_env_str("CACTUS_CAPTURE_FILE");
+    bool capture_requested = get_env_int("CACTUS_CAPTURE_ENABLE", 0) != 0;
+    
+    if (!capture_requested) {
+        capture_requested = capture_to_stdout || !capture_file_path.empty();
+    } else if (capture_file_path.empty() && !capture_to_stdout) {
+        capture_to_stdout = true;
     }
 
-    bool capture_requested = capture_to_stdout || !capture_file_path.empty();
-    if (const char* env_enable = std::getenv("CACTUS_CAPTURE_ENABLE")) {
-        capture_requested = parse_bool_env(env_enable);
-        if (capture_requested && capture_file_path.empty() && !capture_to_stdout) {
-            capture_to_stdout = true;
-        }
-    }
-
-    size_t capture_preview_count = parse_size_t_env(std::getenv("CACTUS_CAPTURE_PREVIEW_COUNT"), 8);
-    size_t capture_max_elements = parse_size_t_env(std::getenv("CACTUS_CAPTURE_MAX_ELEMENTS"), 65536);
+    size_t capture_preview_count = static_cast<size_t>(get_env_int("CACTUS_CAPTURE_PREVIEW_COUNT", 8));
+    size_t capture_max_elements = static_cast<size_t>(get_env_int("CACTUS_CAPTURE_MAX_ELEMENTS", 65536));
 
     bool enable_profiling = !profile_file.empty();
     std::ofstream profile_out;

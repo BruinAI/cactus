@@ -17,8 +17,7 @@ Lfm2VlModel::Lfm2VlModel(const Config& config)
         : Model(config),
             vision_tower_(config),
             language_model_(config) {
-    // Initialize preprocessor
-    Lfm2VlPreprocessor::Config preprocessor_config;
+    Siglip2Preprocessor::Config preprocessor_config;
     preprocessor_config.patch_size = static_cast<int>(config.vision_patch_size);
     preprocessor_config.downsample_factor = static_cast<int>(config.downsample_factor);
     preprocessor_config.min_tiles = static_cast<int>(config.min_tiles);
@@ -42,7 +41,7 @@ Lfm2VlModel::Lfm2VlModel(const Config& config)
     preprocessor_config.image_std[1] = config.image_std;
     preprocessor_config.image_std[2] = config.image_std;
     
-    preprocessor_ = Lfm2VlPreprocessor(preprocessor_config);
+    preprocessor_ = Siglip2Preprocessor(preprocessor_config);
 }
 
 bool Lfm2VlModel::init(const std::string& model_folder, size_t context_size, const std::string& system_prompt, bool do_warmup) {
@@ -133,7 +132,7 @@ size_t Lfm2VlModel::build_multimodal_projector(CactusGraph* gb, size_t image_fea
     const size_t seq_len = new_h * new_w;
     size_t flattened = gb->reshape(unshuffled, {seq_len, in_channels});
     size_t flattened_fp16 = gb->precision_cast(flattened, Precision::FP16);
-    size_t normalized = gb->layer_norm(flattened_fp16, projector_weights_.layer_norm_weight,
+    size_t normalized = gb->layernorm(flattened_fp16, projector_weights_.layer_norm_weight,
                                       projector_weights_.layer_norm_bias, config_.layer_norm_eps);
     size_t hidden = gb->matmul(normalized, projector_weights_.linear_1_weight, true, backend);
     hidden = gb->add(hidden, projector_weights_.linear_1_bias);
@@ -145,7 +144,7 @@ size_t Lfm2VlModel::build_multimodal_projector(CactusGraph* gb, size_t image_fea
 
 std::vector<Lfm2VlModel::ProjectedTileFeature> Lfm2VlModel::get_image_features(
     CactusGraph* gb,
-    const Lfm2VlPreprocessor::PreprocessedImage& preprocessed_image,
+    const Siglip2Preprocessor::PreprocessedImage& preprocessed_image,
     ComputeBackend backend) {
     
     size_t vision_output = vision_tower_.forward_vision(gb, preprocessed_image, backend);

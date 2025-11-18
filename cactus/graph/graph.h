@@ -30,7 +30,7 @@ enum class OpType {
     MATMUL, TRANSPOSE, RESHAPE, SLICE, GATHER, EMBEDDING,
     BILINEAR_INTERPOLATION,
     SUM, MEAN, VARIANCE, MIN, MAX,
-    RMS_NORM, LAYER_NORM, ROPE, SOFTMAX, ATTENTION, CONV1D_CAUSAL, CONV1D_K3,
+    RMS_NORM, ROPE, SOFTMAX, ATTENTION, CONV1D_CAUSAL, CONV1D_K3,
     SCALAR_ADD, SCALAR_SUBTRACT, SCALAR_MULTIPLY, SCALAR_DIVIDE, SCALAR_EXP, SCALAR_SQRT, SCALAR_COS, SCALAR_SIN,
     SILU, GELU,
     SAMPLE, CONCAT,
@@ -148,8 +148,8 @@ struct OpParams {
     
     size_t index_value = 0;  // For INDEX operation
     size_t num_classes = 0;  // For scatter operations
-    size_t dst_height = 0;  // For BILINEAR_INTERPOLATION operation
-    size_t dst_width = 0;   // For BILINEAR_INTERPOLATION operation
+    size_t dst_height = 0;
+    size_t dst_width = 0;   
 };
 
 struct GraphNode {
@@ -244,7 +244,6 @@ public:
     size_t layernorm(size_t input, size_t weight, size_t bias, float epsilon = 1e-5f);
     size_t topk(size_t input, size_t k);
     size_t rms_norm(size_t input, size_t weight, float epsilon = 1e-5f);
-    size_t layer_norm(size_t input, size_t weight, size_t bias, float epsilon = 1e-6f);
     size_t rope(size_t input, float theta, size_t position_offset = 0, ComputeBackend backend = ComputeBackend::CPU);
     size_t softmax(size_t input, int axis = -1);
     size_t attention(size_t query, size_t key, size_t value, float scale, bool is_causal = true, ComputeBackend backend = ComputeBackend::CPU);

@@ -46,7 +46,6 @@ inline std::vector<cactus::engine::ChatMessage> parse_messages_json(const std::s
     while (pos != std::string::npos) {
         cactus::engine::ChatMessage msg;
         
-        // Find the end of this message object
         size_t obj_start = pos;
         int brace_count = 1;
         size_t obj_end = obj_start + 1;
@@ -55,8 +54,7 @@ inline std::vector<cactus::engine::ChatMessage> parse_messages_json(const std::s
             else if (json[obj_end] == '}') brace_count--;
             obj_end++;
         }
-        
-        // Parse role
+
         size_t role_pos = json.find("\"role\"", pos);
         if (role_pos == std::string::npos || role_pos >= obj_end) break;
         
@@ -64,7 +62,6 @@ inline std::vector<cactus::engine::ChatMessage> parse_messages_json(const std::s
         size_t role_end = json.find('"', role_start);
         msg.role = json.substr(role_start, role_end - role_start);
         
-        // Parse content
         size_t content_pos = json.find("\"content\"", role_end);
         if (content_pos != std::string::npos && content_pos < obj_end) {
             size_t content_start = json.find('"', content_pos + 9) + 1;
@@ -79,7 +76,6 @@ inline std::vector<cactus::engine::ChatMessage> parse_messages_json(const std::s
             
             msg.content = json.substr(content_start, content_end - content_start);
             
-            // Unescape content
             size_t escape_pos = 0;
             while ((escape_pos = msg.content.find("\\n", escape_pos)) != std::string::npos) {
                 msg.content.replace(escape_pos, 2, "\n");
@@ -92,7 +88,6 @@ inline std::vector<cactus::engine::ChatMessage> parse_messages_json(const std::s
             }
         }
         
-        // Parse images array if present
         size_t images_pos = json.find("\"images\"", pos);
         if (images_pos != std::string::npos && images_pos < obj_end) {
             size_t array_start = json.find('[', images_pos);
@@ -110,13 +105,8 @@ inline std::vector<cactus::engine::ChatMessage> parse_messages_json(const std::s
                         
                         std::string img_path = json.substr(img_start, img_end - img_start);
                         
-                        // Convert to absolute path
-                        try {
-                            std::filesystem::path p(img_path);
-                            img_path = std::filesystem::absolute(p).string();
-                        } catch (...) {
-                            // Keep original path if conversion fails
-                        }
+                        std::filesystem::path p(img_path);
+                        img_path = std::filesystem::absolute(p).string();
                         
                         msg.images.push_back(img_path);
                         out_image_paths.push_back(img_path);
@@ -187,10 +177,10 @@ inline void parse_options_json(const std::string& json,
                                float& temperature, float& top_p, 
                                size_t& top_k, size_t& max_tokens,
                                std::vector<std::string>& stop_sequences) {
-    temperature = -1.0f; // Use model default
-    top_p = -1.0f;       // Use model default
-    top_k = 0;           // Use model default
-    max_tokens = 100;    // FFI-level default
+    temperature = -1.0f; 
+    top_p = -1.0f;       
+    top_k = 0;           
+    max_tokens = 100;    
     stop_sequences.clear();
     
     if (json.empty()) return;
