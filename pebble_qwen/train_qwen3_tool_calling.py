@@ -40,14 +40,14 @@ from tunix.sft import peft_trainer
 from tunix.sft import utils
 
 # Import dataset formatting functions
-from format_noah_dataset import (
+from pebble_qwen.data.format_dataset import (
     format_qwen3_noah_dataset,
     load_noah_tools,
     load_noah_dataset
 )
 
 # Import Qwen model utilities
-from qwen_utils import download_and_setup_model, create_lora_model, save_lora_weights
+from pebble_qwen.qwen_utils import download_and_setup_model, create_lora_model, save_lora_weights
 
 # Setup logging
 logger = logging.getLogger()
