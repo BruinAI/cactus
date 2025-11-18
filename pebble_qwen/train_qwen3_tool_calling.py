@@ -41,9 +41,9 @@ from tunix.sft import utils
 
 # Import dataset formatting functions
 from pebble_qwen.data.format_dataset import (
-    format_qwen3_noah_dataset,
-    load_noah_tools,
-    load_noah_dataset
+    format_qwen3_dataset,
+    load_tools,
+    load_dataset
 )
 
 # Import Qwen model utilities
@@ -63,8 +63,8 @@ QWEN_TOKENIZER_PATH = None  # Will be loaded from the model directory
 
 # Dataset paths
 DATA_DIR = os.path.join(os.path.dirname(__file__), "..", "data")
-DATASET_PATH = os.path.join(DATA_DIR, "noah_finetune_dataset.json")
-TOOLS_PATH = os.path.join(DATA_DIR, "noah_tools.json")
+DATASET_PATH = os.path.join(DATA_DIR, "finetune_dataset.json")
+TOOLS_PATH = os.path.join(DATA_DIR, "tools.json")
 
 # Training hyperparameters
 # Based on hyperparameter search results:
@@ -342,9 +342,9 @@ def test_model_generation(model, tokenizer, model_config, eos_tokens, tools, lab
     }
 
     # Format examples
-    formatted1 = format_qwen3_noah_dataset(sample1, tools, tokenizer)
-    formatted2 = format_qwen3_noah_dataset(sample2, tools, tokenizer)
-    formatted3 = format_qwen3_noah_dataset(sample3, tools, tokenizer)
+    formatted1 = format_qwen3_dataset(sample1, tools, tokenizer)
+    formatted2 = format_qwen3_dataset(sample2, tools, tokenizer)
+    formatted3 = format_qwen3_dataset(sample3, tools, tokenizer)
 
     if not (formatted1 and formatted2 and formatted3):
         print("Failed to format test examples")
@@ -725,8 +725,8 @@ def main():
     print(f"\n{'='*60}")
     print("Loading Noah's dataset and tools")
     print(f"{'='*60}")
-    tools = load_noah_tools(tools_path)
-    dataset_samples = load_noah_dataset(dataset_path)
+    tools = load_tools(tools_path)
+    dataset_samples = load_dataset(dataset_path)
     print(f"Loaded {len(tools)} tools")
     print(f"Loaded {len(dataset_samples)} dataset samples")
 
@@ -734,7 +734,7 @@ def main():
     print("\nFormatting examples for Qwen 3 tool calling...")
     formatted_samples = []
     for sample in dataset_samples:
-        formatted = format_qwen3_noah_dataset(sample, tools, hf_tokenizer)
+        formatted = format_qwen3_dataset(sample, tools, hf_tokenizer)
         if formatted:
             formatted_samples.append({'role_messages': json.dumps(formatted)})
 
