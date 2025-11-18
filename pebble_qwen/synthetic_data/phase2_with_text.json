@@ -1,0 +1,1064 @@
+{
+  "create_note": [
+    {
+      "text": "Brunch with marketing team next Friday at 11:30am at Cafe Nouveau. Need to confirm headcount and dietary restrictions by Wednesday.",
+      "_persona": "a person coordinating social events and meetups",
+      "_length_instruction": "Write 1-2 basic sentences"
+    },
+    {
+      "text": "Pick up dry cleaning and buy more laundry detergent before weekend",
+      "_persona": "someone managing household chores and maintenance",
+      "_length_instruction": "Write a brief message (1 short sentence)"
+    },
+    {
+      "text": "Client meeting for XYZ Corp project at 2pm - need to prepare presentation slides and review budget forecast before the call. Double-check conference line details.",
+      "_persona": "a freelancer juggling multiple projects",
+      "_length_instruction": "Write 1-2 basic sentences"
+    },
+    {
+      "text": "Meetup at Joe's Cafe 7pm",
+      "_persona": "a person coordinating social events and meetups",
+      "_length_instruction": "Write a quick note (3-5 words)"
+    },
+    {
+      "text": "Study for Econ midterm on Thursday - review Chapters 5-8 and do practice problems from textbook",
+      "_persona": "a college student tracking assignments and deadlines",
+      "_length_instruction": "Write 1-2 basic sentences"
+    },
+    {
+      "text": "Track water intake today: aiming for 8 glasses. Need to pick up more electrolyte powder after work.",
+      "_persona": "a health-conscious person tracking habits",
+      "_length_instruction": "Write 1-2 basic sentences"
+    },
+    {
+      "text": "Follow up with client Johnson about Q3 project deliverables by end of week",
+      "_persona": "a working professional organizing their day",
+      "_length_instruction": "Write a brief message (1 short sentence)"
+    },
+    {
+      "text": "Drink water, walk 10k steps today",
+      "_persona": "a health-conscious person tracking habits",
+      "_length_instruction": "Write a quick note (3-5 words)"
+    },
+    {
+      "text": "Pick up milk and bread after work today",
+      "_persona": "a casual user making quick personal notes",
+      "_length_instruction": "Write a brief message (1 short sentence)"
+    },
+    {
+      "text": "Dinner with the marketing team next Thursday at 7pm at Cafe Bella. Need to confirm final headcount with Sarah by Wednesday.",
+      "_persona": "a person coordinating social events and meetups",
+      "_length_instruction": "Write 1-2 basic sentences"
+    },
+    {
+      "text": "Pick up dry cleaning after 5pm",
+      "_persona": "a working professional organizing their day",
+      "_length_instruction": "Write a quick note (3-5 words)"
+    },
+    {
+      "text": "Study for biology exam on Friday",
+      "_persona": "a college student tracking assignments and deadlines",
+      "_length_instruction": "Write a quick note (3-5 words)"
+    },
+    {
+      "text": "Need to follow up with Alex about the Q3 marketing budget proposal by end of week. Request detailed breakdown of proposed digital ad spend.",
+      "_persona": "a working professional organizing their day",
+      "_length_instruction": "Write 1-2 basic sentences"
+    },
+    {
+      "text": "Client project deliverables due Thursday - review marketing deck and finish web design mockups before deadline",
+      "_persona": "a freelancer juggling multiple projects",
+      "_length_instruction": "Write a brief message (1 short sentence)"
+    },
+    {
+      "text": "Pick up dry cleaning after work",
+      "_persona": "a working professional organizing their day",
+      "_length_instruction": "Write a quick note (3-5 words)"
+    },
+    {
+      "text": "Prep team presentation slides for 2pm marketing strategy meeting, need to review latest analytics data before finalizing",
+      "_persona": "a working professional organizing their day",
+      "_length_instruction": "Write a brief message (1 short sentence)"
+    },
+    {
+      "text": "pick up milk, bread, and eggs after work today. don't forget to call mom this weekend",
+      "_persona": "a casual user making quick personal notes",
+      "_length_instruction": "Write 1-2 basic sentences"
+    },
+    {
+      "text": "Discuss project timeline with marketing team during 2pm meeting. Need to review Q3 strategy and align on deliverables before end of month.",
+      "_persona": "a working professional organizing their day",
+      "_length_instruction": "Write 1-2 basic sentences"
+    },
+    {
+      "text": "Schedule client meeting - WFH Thursday",
+      "_persona": "a freelancer juggling multiple projects",
+      "_length_instruction": "Write a quick note (3-5 words)"
+    },
+    {
+      "text": "Finish CS project by Friday",
+      "_persona": "a college student tracking assignments and deadlines",
+      "_length_instruction": "Write a quick note (3-5 words)"
+    },
+    {
+      "text": "Review Q2 budget presentation draft before 2pm meeting with finance team. Need to double-check revenue projections and alignment with strategic goals.",
+      "_persona": "a working professional organizing their day",
+      "_length_instruction": "Write 1-2 basic sentences"
+    },
+    {
+      "text": "Need to drink 8 glasses of water today and take my multivitamin before lunch",
+      "_persona": "a health-conscious person tracking habits",
+      "_length_instruction": "Write a brief message (1 short sentence)"
+    },
+    {
+      "text": "Pick up milk and eggs after work today",
+      "_persona": "a casual user making quick personal notes",
+      "_length_instruction": "Write a brief message (1 short sentence)"
+    },
+    {
+      "text": "Buy more laundry detergent and paper towels at the grocery store this weekend",
+      "_persona": "someone managing household chores and maintenance",
+      "_length_instruction": "Write a brief message (1 short sentence)"
+    },
+    {
+      "text": "Pick up soccer cleats and water bottles before Jake's game on Saturday at 2pm",
+      "_persona": "a busy parent managing family schedules",
+      "_length_instruction": "Write a brief message (1 short sentence)"
+    }
+  ],
+  "set_alarm": [
+    {
+      "time_hours": 13,
+      "time_minutes": 38,
+      "_persona": "a health-conscious person tracking habits",
+      "_length_instruction": "Write a quick note (3-5 words)"
+    },
+    {
+      "time_hours": 8,
+      "time_minutes": 52,
+      "_persona": "a college student tracking assignments and deadlines",
+      "_length_instruction": "Write a quick note (3-5 words)"
+    },
+    {
+      "time_hours": 15,
+      "time_minutes": 9,
+      "_persona": "a working professional organizing their day",
+      "_length_instruction": "Write 1-2 basic sentences"
+    },
+    {
+      "time_hours": 6,
+      "time_minutes": 0,
+      "_persona": "a busy parent managing family schedules",
+      "_length_instruction": "Write a brief message (1 short sentence)"
+    },
+    {
+      "time_hours": 14,
+      "time_minutes": 13,
+      "_persona": "someone managing household chores and maintenance",
+      "_length_instruction": "Write a quick note (3-5 words)"
+    },
+    {
+      "time_hours": 2,
+      "time_minutes": 2,
+      "_persona": "a casual user making quick personal notes",
+      "_length_instruction": "Write a brief message (1 short sentence)"
+    },
+    {
+      "time_hours": 5,
+      "time_minutes": 57,
+      "_persona": "a busy parent managing family schedules",
+      "_length_instruction": "Write a quick note (3-5 words)"
+    },
+    {
+      "time_hours": 23,
+      "time_minutes": 43,
+      "_persona": "a working professional organizing their day",
+      "_length_instruction": "Write a brief message (1 short sentence)"
+    },
+    {
+      "time_hours": 16,
+      "time_minutes": 51,
+      "_persona": "a freelancer juggling multiple projects",
+      "_length_instruction": "Write a quick note (3-5 words)"
+    },
+    {
+      "time_hours": 22,
+      "time_minutes": 22,
+      "_persona": "someone with a packed daily routine",
+      "_length_instruction": "Write a quick note (3-5 words)"
+    },
+    {
+      "time_hours": 23,
+      "time_minutes": 16,
+      "_persona": "someone planning personal errands and tasks",
+      "_length_instruction": "Write a quick note (3-5 words)"
+    },
+    {
+      "time_hours": 12,
+      "time_minutes": 30,
+      "_persona": "a working professional organizing their day",
+      "_length_instruction": "Write a brief message (1 short sentence)"
+    },
+    {
+      "time_hours": 8,
+      "time_minutes": 53,
+      "_persona": "a busy parent managing family schedules",
+      "_length_instruction": "Write a brief message (1 short sentence)"
+    },
+    {
+      "time_hours": 1,
+      "time_minutes": 50,
+      "_persona": "a health-conscious person tracking habits",
+      "_length_instruction": "Write a brief message (1 short sentence)"
+    },
+    {
+      "time_hours": 6,
+      "time_minutes": 14,
+      "_persona": "someone with a packed daily routine",
+      "_length_instruction": "Write 1-2 basic sentences"
+    },
+    {
+      "time_hours": 6,
+      "time_minutes": 5,
+      "_persona": "someone with a packed daily routine",
+      "_length_instruction": "Write 1-2 basic sentences"
+    },
+    {
+      "time_hours": 5,
+      "time_minutes": 3,
+      "_persona": "a casual user making quick personal notes",
+      "_length_instruction": "Write a quick note (3-5 words)"
+    },
+    {
+      "time_hours": 1,
+      "time_minutes": 23,
+      "_persona": "a freelancer juggling multiple projects",
+      "_length_instruction": "Write a brief message (1 short sentence)"
+    },
+    {
+      "time_hours": 4,
+      "time_minutes": 44,
+      "_persona": "someone with a packed daily routine",
+      "_length_instruction": "Write a quick note (3-5 words)"
+    },
+    {
+      "time_hours": 7,
+      "time_minutes": 53,
+      "_persona": "a working professional organizing their day",
+      "_length_instruction": "Write a quick note (3-5 words)"
+    },
+    {
+      "time_hours": 7,
+      "time_minutes": 17,
+      "_persona": "a freelancer juggling multiple projects",
+      "_length_instruction": "Write 1-2 basic sentences"
+    },
+    {
+      "time_hours": 7,
+      "time_minutes": 25,
+      "_persona": "someone with a packed daily routine",
+      "_length_instruction": "Write a quick note (3-5 words)"
+    },
+    {
+      "time_hours": 6,
+      "time_minutes": 5,
+      "_persona": "a working professional organizing their day",
+      "_length_instruction": "Write a brief message (1 short sentence)"
+    },
+    {
+      "time_hours": 0,
+      "time_minutes": 31,
+      "_persona": "a health-conscious person tracking habits",
+      "_length_instruction": "Write 1-2 basic sentences"
+    },
+    {
+      "time_hours": 14,
+      "time_minutes": 42,
+      "_persona": "someone planning personal errands and tasks",
+      "_length_instruction": "Write a quick note (3-5 words)"
+    }
+  ],
+  "set_timer_absolute": [
+    {
+      "day_offset": "7",
+      "time_hours": 1,
+      "time_minutes": 0,
+      "_persona": "a health-conscious person tracking habits",
+      "_length_instruction": "Write 1-2 basic sentences"
+    },
+    {
+      "day_offset": "wednesday",
+      "time_hours": 10,
+      "time_minutes": 37,
+      "_persona": "a working professional organizing their day",
+      "_length_instruction": "Write a brief message (1 short sentence)"
+    },
+    {
+      "day_offset": "3",
+      "time_hours": 7,
+      "time_minutes": 59,
+      "_persona": "a casual user making quick personal notes",
+      "_length_instruction": "Write a brief message (1 short sentence)"
+    },
+    {
+      "day_offset": "tomorrow",
+      "time_hours": 2,
+      "time_minutes": 58,
+      "_persona": "a health-conscious person tracking habits",
+      "_length_instruction": "Write a quick note (3-5 words)"
+    },
+    {
+      "day_offset": "2",
+      "time_hours": 17,
+      "time_minutes": 8,
+      "_persona": "someone managing household chores and maintenance",
+      "_length_instruction": "Write 1-2 basic sentences"
+    },
+    {
+      "day_offset": "6",
+      "time_hours": 17,
+      "time_minutes": 57,
+      "_persona": "someone managing household chores and maintenance",
+      "_length_instruction": "Write a brief message (1 short sentence)"
+    },
+    {
+      "day_offset": "thursday",
+      "time_hours": 5,
+      "time_minutes": 42,
+      "_persona": "a working professional organizing their day",
+      "_length_instruction": "Write a quick note (3-5 words)"
+    },
+    {
+      "day_offset": "wednesday",
+      "time_hours": 9,
+      "time_minutes": 5,
+      "_persona": "someone planning personal errands and tasks",
+      "_length_instruction": "Write a brief message (1 short sentence)"
+    },
+    {
+      "day_offset": "4",
+      "time_hours": 22,
+      "time_minutes": 52,
+      "_persona": "a working professional organizing their day",
+      "_length_instruction": "Write 1-2 basic sentences"
+    },
+    {
+      "day_offset": "6",
+      "time_hours": 10,
+      "time_minutes": 59,
+      "_persona": "a person coordinating social events and meetups",
+      "_length_instruction": "Write 1-2 basic sentences"
+    },
+    {
+      "day_offset": "thursday",
+      "time_hours": 15,
+      "time_minutes": 51,
+      "_persona": "a freelancer juggling multiple projects",
+      "_length_instruction": "Write 1-2 basic sentences"
+    },
+    {
+      "day_offset": "4",
+      "time_hours": 12,
+      "time_minutes": 41,
+      "_persona": "a freelancer juggling multiple projects",
+      "_length_instruction": "Write 1-2 basic sentences"
+    },
+    {
+      "day_offset": "thursday",
+      "time_hours": 22,
+      "time_minutes": 50,
+      "_persona": "a health-conscious person tracking habits",
+      "_length_instruction": "Write 1-2 basic sentences"
+    },
+    {
+      "day_offset": "thursday",
+      "time_hours": 17,
+      "time_minutes": 17,
+      "_persona": "a casual user making quick personal notes",
+      "_length_instruction": "Write a brief message (1 short sentence)"
+    },
+    {
+      "day_offset": "1",
+      "time_hours": 6,
+      "time_minutes": 35,
+      "_persona": "someone with a packed daily routine",
+      "_length_instruction": "Write a quick note (3-5 words)"
+    },
+    {
+      "day_offset": "friday",
+      "time_hours": 19,
+      "time_minutes": 58,
+      "_persona": "a casual user making quick personal notes",
+      "_length_instruction": "Write a quick note (3-5 words)"
+    },
+    {
+      "day_offset": "monday",
+      "time_hours": 5,
+      "time_minutes": 46,
+      "_persona": "a freelancer juggling multiple projects",
+      "_length_instruction": "Write 1-2 basic sentences"
+    },
+    {
+      "day_offset": "tuesday",
+      "time_hours": 13,
+      "time_minutes": 54,
+      "_persona": "a health-conscious person tracking habits",
+      "_length_instruction": "Write a quick note (3-5 words)"
+    },
+    {
+      "day_offset": "2",
+      "time_hours": 21,
+      "time_minutes": 57,
+      "_persona": "someone with a packed daily routine",
+      "_length_instruction": "Write 1-2 basic sentences"
+    },
+    {
+      "day_offset": "saturday",
+      "time_hours": 18,
+      "time_minutes": 13,
+      "_persona": "a person coordinating social events and meetups",
+      "_length_instruction": "Write a brief message (1 short sentence)"
+    },
+    {
+      "day_offset": "tomorrow",
+      "time_hours": 2,
+      "time_minutes": 36,
+      "_persona": "a working professional organizing their day",
+      "_length_instruction": "Write 1-2 basic sentences"
+    },
+    {
+      "day_offset": "1",
+      "time_hours": 17,
+      "time_minutes": 40,
+      "_persona": "a casual user making quick personal notes",
+      "_length_instruction": "Write a brief message (1 short sentence)"
+    },
+    {
+      "day_offset": "saturday",
+      "time_hours": 1,
+      "time_minutes": 54,
+      "_persona": "a college student tracking assignments and deadlines",
+      "_length_instruction": "Write a quick note (3-5 words)"
+    },
+    {
+      "day_offset": "6",
+      "time_hours": 18,
+      "time_minutes": 8,
+      "_persona": "someone with a packed daily routine",
+      "_length_instruction": "Write a quick note (3-5 words)"
+    },
+    {
+      "day_offset": "7",
+      "time_hours": 16,
+      "time_minutes": 54,
+      "_persona": "a busy parent managing family schedules",
+      "_length_instruction": "Write 1-2 basic sentences"
+    }
+  ],
+  "set_timer": [
+    {
+      "time_hours": 11,
+      "time_minutes": 44,
+      "time_seconds": 13,
+      "_persona": "a working professional organizing their day",
+      "_length_instruction": "Write a quick note (3-5 words)"
+    },
+    {
+      "time_hours": 7,
+      "time_minutes": 6,
+      "time_seconds": 58,
+      "_persona": "someone planning personal errands and tasks",
+      "_length_instruction": "Write a quick note (3-5 words)"
+    },
+    {
+      "time_hours": 18,
+      "time_minutes": 13,
+      "time_seconds": 48,
+      "_persona": "a busy parent managing family schedules",
+      "_length_instruction": "Write a quick note (3-5 words)"
+    },
+    {
+      "time_hours": 12,
+      "time_minutes": 51,
+      "time_seconds": 35,
+      "_persona": "someone with a packed daily routine",
+      "_length_instruction": "Write 1-2 basic sentences"
+    },
+    {
+      "time_hours": 8,
+      "time_minutes": 11,
+      "time_seconds": 44,
+      "_persona": "someone planning personal errands and tasks",
+      "_length_instruction": "Write 1-2 basic sentences"
+    },
+    {
+      "time_hours": 6,
+      "time_minutes": 52,
+      "time_seconds": 37,
+      "_persona": "a casual user making quick personal notes",
+      "_length_instruction": "Write a quick note (3-5 words)"
+    },
+    {
+      "time_hours": 19,
+      "time_minutes": 4,
+      "time_seconds": 48,
+      "_persona": "a college student tracking assignments and deadlines",
+      "_length_instruction": "Write a brief message (1 short sentence)"
+    },
+    {
+      "time_hours": 1,
+      "time_minutes": 23,
+      "time_seconds": 39,
+      "_persona": "a health-conscious person tracking habits",
+      "_length_instruction": "Write 1-2 basic sentences"
+    },
+    {
+      "time_hours": 12,
+      "time_minutes": 34,
+      "time_seconds": 48,
+      "_persona": "a college student tracking assignments and deadlines",
+      "_length_instruction": "Write a quick note (3-5 words)"
+    },
+    {
+      "time_hours": 4,
+      "time_minutes": 34,
+      "time_seconds": 52,
+      "_persona": "a health-conscious person tracking habits",
+      "_length_instruction": "Write a quick note (3-5 words)"
+    },
+    {
+      "time_hours": 7,
+      "time_minutes": 7,
+      "time_seconds": 59,
+      "_persona": "a busy parent managing family schedules",
+      "_length_instruction": "Write a quick note (3-5 words)"
+    },
+    {
+      "time_hours": 20,
+      "time_minutes": 31,
+      "time_seconds": 8,
+      "_persona": "a busy parent managing family schedules",
+      "_length_instruction": "Write 1-2 basic sentences"
+    },
+    {
+      "time_hours": 2,
+      "time_minutes": 16,
+      "time_seconds": 13,
+      "_persona": "someone planning personal errands and tasks",
+      "_length_instruction": "Write a brief message (1 short sentence)"
+    },
+    {
+      "time_hours": 17,
+      "time_minutes": 20,
+      "time_seconds": 39,
+      "_persona": "a working professional organizing their day",
+      "_length_instruction": "Write a brief message (1 short sentence)"
+    },
+    {
+      "time_hours": 16,
+      "time_minutes": 9,
+      "time_seconds": 58,
+      "_persona": "someone with a packed daily routine",
+      "_length_instruction": "Write 1-2 basic sentences"
+    },
+    {
+      "time_hours": 20,
+      "time_minutes": 3,
+      "time_seconds": 24,
+      "_persona": "someone with a packed daily routine",
+      "_length_instruction": "Write a brief message (1 short sentence)"
+    },
+    {
+      "time_hours": 14,
+      "time_minutes": 6,
+      "time_seconds": 38,
+      "_persona": "a college student tracking assignments and deadlines",
+      "_length_instruction": "Write a quick note (3-5 words)"
+    },
+    {
+      "time_hours": 14,
+      "time_minutes": 57,
+      "time_seconds": 57,
+      "_persona": "a working professional organizing their day",
+      "_length_instruction": "Write 1-2 basic sentences"
+    },
+    {
+      "time_hours": 6,
+      "time_minutes": 38,
+      "time_seconds": 25,
+      "_persona": "a college student tracking assignments and deadlines",
+      "_length_instruction": "Write a brief message (1 short sentence)"
+    },
+    {
+      "time_hours": 3,
+      "time_minutes": 57,
+      "time_seconds": 24,
+      "_persona": "a health-conscious person tracking habits",
+      "_length_instruction": "Write a quick note (3-5 words)"
+    },
+    {
+      "time_hours": 1,
+      "time_minutes": 46,
+      "time_seconds": 14,
+      "_persona": "someone managing household chores and maintenance",
+      "_length_instruction": "Write 1-2 basic sentences"
+    },
+    {
+      "time_hours": 8,
+      "time_minutes": 34,
+      "time_seconds": 40,
+      "_persona": "someone managing household chores and maintenance",
+      "_length_instruction": "Write a brief message (1 short sentence)"
+    },
+    {
+      "time_hours": 5,
+      "time_minutes": 43,
+      "time_seconds": 1,
+      "_persona": "a college student tracking assignments and deadlines",
+      "_length_instruction": "Write a quick note (3-5 words)"
+    },
+    {
+      "time_hours": 14,
+      "time_minutes": 57,
+      "time_seconds": 5,
+      "_persona": "someone managing household chores and maintenance",
+      "_length_instruction": "Write a brief message (1 short sentence)"
+    },
+    {
+      "time_hours": 11,
+      "time_minutes": 48,
+      "time_seconds": 32,
+      "_persona": "a freelancer juggling multiple projects",
+      "_length_instruction": "Write a brief message (1 short sentence)"
+    }
+  ],
+  "reminder_absolute": [
+    {
+      "day_offset": "6",
+      "absolute_time_hour": 8,
+      "absolute_time_minute": 38,
+      "date_month_day": "02-12",
+      "date_year": 2026,
+      "message": "Research paper draft due today - need to finish final edits on sociology capstone and submit to Professor Rodriguez before noon deadline.",
+      "_persona": "a college student tracking assignments and deadlines",
+      "_length_instruction": "Write 1-2 basic sentences"
+    },
+    {
+      "day_offset": "6",
+      "absolute_time_hour": 15,
+      "absolute_time_minute": 46,
+      "date_month_day": "11-09",
+      "date_year": 2026,
+      "message": "Pick up birthday gift for mom before her party",
+      "_persona": "a casual user making quick personal notes",
+      "_length_instruction": "Write a brief message (1 short sentence)"
+    },
+    {
+      "day_offset": "tuesday",
+      "absolute_time_hour": 17,
+      "absolute_time_minute": 51,
+      "date_month_day": "12-18",
+      "date_year": 2025,
+      "message": "Pick up quarterly project reports from accounting before leaving the office",
+      "_persona": "someone with a packed daily routine",
+      "_length_instruction": "Write a brief message (1 short sentence)"
+    },
+    {
+      "day_offset": "2",
+      "absolute_time_hour": 2,
+      "absolute_time_minute": 14,
+      "date_month_day": "07-11",
+      "date_year": 2030,
+      "message": "Pick up Alex's soccer uniform from dry cleaners before tournament weekend, and get new cleats if they still don't fit",
+      "_persona": "a busy parent managing family schedules",
+      "_length_instruction": "Write 1-2 basic sentences"
+    },
+    {
+      "day_offset": "wednesday",
+      "absolute_time_hour": 12,
+      "absolute_time_minute": 19,
+      "date_month_day": "12-08",
+      "date_year": null,
+      "message": "Pick up dry cleaning today",
+      "_persona": "someone managing household chores and maintenance",
+      "_length_instruction": "Write a quick note (3-5 words)"
+    },
+    {
+      "day_offset": "friday",
+      "absolute_time_hour": 9,
+      "absolute_time_minute": 29,
+      "date_month_day": "06-07",
+      "date_year": null,
+      "message": "Get birthday card for Mom's birthday this weekend",
+      "_persona": "a casual user making quick personal notes",
+      "_length_instruction": "Write a brief message (1 short sentence)"
+    },
+    {
+      "day_offset": "monday",
+      "absolute_time_hour": 20,
+      "absolute_time_minute": 37,
+      "date_month_day": "07-29",
+      "date_year": null,
+      "message": "Pick up dry cleaning",
+      "_persona": "a casual user making quick personal notes",
+      "_length_instruction": "Write a quick note (3-5 words)"
+    },
+    {
+      "day_offset": "thursday",
+      "absolute_time_hour": 11,
+      "absolute_time_minute": 45,
+      "date_month_day": "07-15",
+      "date_year": 2030,
+      "message": "Pick up quarterly project report draft from printing service before client meeting and file expense reimbursement for last month's conference travel",
+      "_persona": "a working professional organizing their day",
+      "_length_instruction": "Write 1-2 basic sentences"
+    },
+    {
+      "day_offset": "sunday",
+      "absolute_time_hour": 20,
+      "absolute_time_minute": 46,
+      "date_month_day": "07-17",
+      "date_year": 2026,
+      "message": "Pick up dog medication refill at downtown vet clinic before they close and confirm next month's annual check-up appointment.",
+      "_persona": "someone with a packed daily routine",
+      "_length_instruction": "Write 1-2 basic sentences"
+    },
+    {
+      "day_offset": "1",
+      "absolute_time_hour": 17,
+      "absolute_time_minute": 46,
+      "date_month_day": "08-09",
+      "date_year": null,
+      "message": "Coffee meetup with Sarah at downtown cafe",
+      "_persona": "a person coordinating social events and meetups",
+      "_length_instruction": "Write a brief message (1 short sentence)"
+    },
+    {
+      "day_offset": "2",
+      "absolute_time_hour": 19,
+      "absolute_time_minute": 45,
+      "date_month_day": "11-24",
+      "date_year": 2027,
+      "message": "Pick up Jacob soccer uniform",
+      "_persona": "a busy parent managing family schedules",
+      "_length_instruction": "Write a quick note (3-5 words)"
+    },
+    {
+      "day_offset": "3",
+      "absolute_time_hour": 10,
+      "absolute_time_minute": 17,
+      "date_month_day": "08-31",
+      "date_year": null,
+      "message": "Submit final draft of Marketing Research paper before midnight deadline",
+      "_persona": "a college student tracking assignments and deadlines",
+      "_length_instruction": "Write a brief message (1 short sentence)"
+    },
+    {
+      "day_offset": "sunday",
+      "absolute_time_hour": 3,
+      "absolute_time_minute": 16,
+      "date_month_day": "05-26",
+      "date_year": 2030,
+      "message": "Pick up dry cleaning before heading to airport for business trip",
+      "_persona": "someone with a packed daily routine",
+      "_length_instruction": "Write a brief message (1 short sentence)"
+    },
+    {
+      "day_offset": "tomorrow",
+      "absolute_time_hour": 17,
+      "absolute_time_minute": 45,
+      "date_month_day": "01-08",
+      "date_year": 2030,
+      "message": "Pick up dry cleaning before sister's wedding rehearsal",
+      "_persona": "someone planning personal errands and tasks",
+      "_length_instruction": "Write a brief message (1 short sentence)"
+    },
+    {
+      "day_offset": "thursday",
+      "absolute_time_hour": 22,
+      "absolute_time_minute": 36,
+      "date_month_day": "11-11",
+      "date_year": null,
+      "message": "Submit draft to graphic design client for website redesign project by end of week",
+      "_persona": "a freelancer juggling multiple projects",
+      "_length_instruction": "Write 1-2 basic sentences"
+    },
+    {
+      "day_offset": "saturday",
+      "absolute_time_hour": 15,
+      "absolute_time_minute": 50,
+      "date_month_day": "04-01",
+      "date_year": 2030,
+      "message": "Pick up dry cleaning before the wedding this weekend",
+      "_persona": "someone planning personal errands and tasks",
+      "_length_instruction": "Write a brief message (1 short sentence)"
+    },
+    {
+      "day_offset": "6",
+      "absolute_time_hour": 3,
+      "absolute_time_minute": 28,
+      "date_month_day": "03-12",
+      "date_year": 2026,
+      "message": "Pick up prescription refills from Walgreens pharmacy before they close and check tire pressure on the sedan afterward",
+      "_persona": "someone planning personal errands and tasks",
+      "_length_instruction": "Write 1-2 basic sentences"
+    },
+    {
+      "day_offset": null,
+      "absolute_time_hour": 15,
+      "absolute_time_minute": 48,
+      "date_month_day": "10-14",
+      "date_year": 2026,
+      "message": "Pick up dry cleaning before trip",
+      "_persona": "someone managing household chores and maintenance",
+      "_length_instruction": "Write a quick note (3-5 words)"
+    },
+    {
+      "day_offset": "7",
+      "absolute_time_hour": 22,
+      "absolute_time_minute": 23,
+      "date_month_day": "04-10",
+      "date_year": 2025,
+      "message": "Pick up dry cleaning before trip next week",
+      "_persona": "a casual user making quick personal notes",
+      "_length_instruction": "Write a brief message (1 short sentence)"
+    },
+    {
+      "day_offset": "tomorrow",
+      "absolute_time_hour": 5,
+      "absolute_time_minute": 51,
+      "date_month_day": "08-05",
+      "date_year": 2027,
+      "message": "Monthly team social planning call tomorrow morning. Need to finalize August volunteer event details and confirm restaurant reservation for team mixer.",
+      "_persona": "a person coordinating social events and meetups",
+      "_length_instruction": "Write 1-2 basic sentences"
+    },
+    {
+      "day_offset": "saturday",
+      "absolute_time_hour": 19,
+      "absolute_time_minute": 5,
+      "date_month_day": "06-28",
+      "date_year": null,
+      "message": "Meetup at Craft Beer Bar",
+      "_persona": "a person coordinating social events and meetups",
+      "_length_instruction": "Write a quick note (3-5 words)"
+    },
+    {
+      "day_offset": "monday",
+      "absolute_time_hour": 19,
+      "absolute_time_minute": 50,
+      "date_month_day": "03-30",
+      "date_year": 2026,
+      "message": "Monthly team happy hour at O'Malleys downtown. Please join us for drinks and catching up with the work crew.",
+      "_persona": "a person coordinating social events and meetups",
+      "_length_instruction": "Write 1-2 basic sentences"
+    },
+    {
+      "day_offset": "6",
+      "absolute_time_hour": 15,
+      "absolute_time_minute": 17,
+      "date_month_day": "02-15",
+      "date_year": 2027,
+      "message": "Submit final draft of Marketing Research paper on consumer behavior trends due by end of day tomorrow",
+      "_persona": "a college student tracking assignments and deadlines",
+      "_length_instruction": "Write 1-2 basic sentences"
+    },
+    {
+      "day_offset": "3",
+      "absolute_time_hour": 21,
+      "absolute_time_minute": 6,
+      "date_month_day": "06-20",
+      "date_year": null,
+      "message": "Submit quarterly sales report to finance team before end of quarter deadline. Double-check all revenue projections and expense reconciliation.",
+      "_persona": "someone with a packed daily routine",
+      "_length_instruction": "Write 1-2 basic sentences"
+    },
+    {
+      "day_offset": null,
+      "absolute_time_hour": 20,
+      "absolute_time_minute": 3,
+      "date_month_day": "10-02",
+      "date_year": 2025,
+      "message": "Submit client proposal draft",
+      "_persona": "a freelancer juggling multiple projects",
+      "_length_instruction": "Write a quick note (3-5 words)"
+    }
+  ],
+  "create_reminder_relative": [
+    {
+      "relative_time": 12,
+      "time_unit": "seconds",
+      "message": "Check oven - timer for brownies is almost up, need to take them out soon before they burn.",
+      "_persona": "someone managing household chores and maintenance",
+      "_length_instruction": "Write 1-2 basic sentences"
+    },
+    {
+      "relative_time": 6,
+      "time_unit": "months",
+      "message": "Submit draft for research methods capstone project to professor Jenkins before semester ends",
+      "_persona": "a college student tracking assignments and deadlines",
+      "_length_instruction": "Write 1-2 basic sentences"
+    },
+    {
+      "relative_time": 11,
+      "time_unit": "hours",
+      "message": "Conference call prep notes",
+      "_persona": "someone with a packed daily routine",
+      "_length_instruction": "Write a quick note (3-5 words)"
+    },
+    {
+      "relative_time": 16,
+      "time_unit": "minutes",
+      "message": "Take laundry out of the dryer so clothes don't wrinkle",
+      "_persona": "someone managing household chores and maintenance",
+      "_length_instruction": "Write 1-2 basic sentences"
+    },
+    {
+      "relative_time": 15,
+      "time_unit": "months",
+      "message": "Schedule performance review prep - update annual goals and compile team metrics before the leadership meeting",
+      "_persona": "someone with a packed daily routine",
+      "_length_instruction": "Write 1-2 basic sentences"
+    },
+    {
+      "relative_time": 15,
+      "time_unit": "hours",
+      "message": "Check if the washer load is done and move clothes to dryer before bedtime",
+      "_persona": "someone managing household chores and maintenance",
+      "_length_instruction": "Write a brief message (1 short sentence)"
+    },
+    {
+      "relative_time": 19,
+      "time_unit": "minutes",
+      "message": "Check the final draft before the team meeting starts",
+      "_persona": "a working professional organizing their day",
+      "_length_instruction": "Write a brief message (1 short sentence)"
+    },
+    {
+      "relative_time": 6,
+      "time_unit": "weeks",
+      "message": "Check client deliverables deadline",
+      "_persona": "a freelancer juggling multiple projects",
+      "_length_instruction": "Write a quick note (3-5 words)"
+    },
+    {
+      "relative_time": 14,
+      "time_unit": "months",
+      "message": "Renew professional liability insurance",
+      "_persona": "a working professional organizing their day",
+      "_length_instruction": "Write a quick note (3-5 words)"
+    },
+    {
+      "relative_time": 2,
+      "time_unit": "weeks",
+      "message": "Follow up with client project proposal",
+      "_persona": "a freelancer juggling multiple projects",
+      "_length_instruction": "Write a quick note (3-5 words)"
+    },
+    {
+      "relative_time": 3,
+      "time_unit": "minutes",
+      "message": "Take chicken out of the freezer to thaw for dinner",
+      "_persona": "someone managing household chores and maintenance",
+      "_length_instruction": "Write a brief message (1 short sentence)"
+    },
+    {
+      "relative_time": 12,
+      "time_unit": "years",
+      "message": "Start retirement savings plan",
+      "_persona": "someone with a packed daily routine",
+      "_length_instruction": "Write a quick note (3-5 words)"
+    },
+    {
+      "relative_time": 12,
+      "time_unit": "days",
+      "message": "Review quarterly sales report draft",
+      "_persona": "a working professional organizing their day",
+      "_length_instruction": "Write a quick note (3-5 words)"
+    },
+    {
+      "relative_time": 9,
+      "time_unit": "hours",
+      "message": "Time to take my daily multivitamin and do a quick stretching routine to keep my body and mind in top shape.",
+      "_persona": "a health-conscious person tracking habits",
+      "_length_instruction": "Write 1-2 basic sentences"
+    },
+    {
+      "relative_time": 4,
+      "time_unit": "weeks",
+      "message": "Renew car insurance policy",
+      "_persona": "someone planning personal errands and tasks",
+      "_length_instruction": "Write a quick note (3-5 words)"
+    },
+    {
+      "relative_time": 5,
+      "time_unit": "hours",
+      "message": "Pick up soccer jerseys for kids before practice starts",
+      "_persona": "a busy parent managing family schedules",
+      "_length_instruction": "Write a brief message (1 short sentence)"
+    },
+    {
+      "relative_time": 8,
+      "time_unit": "months",
+      "message": "Schedule annual performance review and update professional development goals for next fiscal year",
+      "_persona": "a working professional organizing their day",
+      "_length_instruction": "Write 1-2 basic sentences"
+    },
+    {
+      "relative_time": 8,
+      "time_unit": "days",
+      "message": "Pick up soccer uniforms",
+      "_persona": "a busy parent managing family schedules",
+      "_length_instruction": "Write a quick note (3-5 words)"
+    },
+    {
+      "relative_time": 9,
+      "time_unit": "hours",
+      "message": "Finish final draft for client website before client call. Need to review wireframes and finalize navigation structure.",
+      "_persona": "a freelancer juggling multiple projects",
+      "_length_instruction": "Write 1-2 basic sentences"
+    },
+    {
+      "relative_time": 16,
+      "time_unit": "months",
+      "message": "Schedule annual performance review with HR and update professional development goals for next year",
+      "_persona": "someone with a packed daily routine",
+      "_length_instruction": "Write 1-2 basic sentences"
+    },
+    {
+      "relative_time": 17,
+      "time_unit": "minutes",
+      "message": "Submit draft for research methods paper before class starts",
+      "_persona": "a college student tracking assignments and deadlines",
+      "_length_instruction": "Write a brief message (1 short sentence)"
+    },
+    {
+      "relative_time": 14,
+      "time_unit": "months",
+      "message": "Check prescription refill at doctor's office in 14 months",
+      "_persona": "a casual user making quick personal notes",
+      "_length_instruction": "Write 1-2 basic sentences"
+    },
+    {
+      "relative_time": 17,
+      "time_unit": "years",
+      "message": "Schedule annual health checkup",
+      "_persona": "a health-conscious person tracking habits",
+      "_length_instruction": "Write a quick note (3-5 words)"
+    },
+    {
+      "relative_time": 11,
+      "time_unit": "seconds",
+      "message": "Time to do a quick neck and shoulder stretch to prevent computer strain. Reset my posture and take a deep breath.",
+      "_persona": "a health-conscious person tracking habits",
+      "_length_instruction": "Write 1-2 basic sentences"
+    },
+    {
+      "relative_time": 1,
+      "time_unit": "years",
+      "message": "Schedule annual professional development workshop for team leadership training",
+      "_persona": "a working professional organizing their day",
+      "_length_instruction": "Write a brief message (1 short sentence)"
+    }
+  ]
+}
