@@ -2,7 +2,8 @@
 Synthetic data generation orchestrator.
 
 This script orchestrates the 3-phase synthetic data generation process
-by calling each phase script in sequence.
+by calling each phase script in sequence, then converts the output to
+training format.
 
 Usage:
     python3 synthetic_generation.py <samples_per_tool>
@@ -51,6 +52,16 @@ def run_all_phases(samples_per_tool: str):
         print(f"\n❌ Phase 3 failed with exit code {exit_code}")
         return exit_code
 
+    # Convert to training format
+    exit_code = run_phase(
+        "convert_to_training_format.py",
+        "phase3_final_examples.json",
+        "../data/synthetic_finetune_dataset.json"
+    )
+    if exit_code != 0:
+        print(f"\n❌ Conversion to training format failed with exit code {exit_code}")
+        return exit_code
+
     print("\n" + "="*60)
     print("✅ ALL PHASES COMPLETED SUCCESSFULLY")
     print("="*60)
@@ -58,6 +69,7 @@ def run_all_phases(samples_per_tool: str):
     print("  - phase1_sampled_params.json")
     print("  - phase2_with_text.json")
     print("  - phase3_final_examples.json")
+    print("  - ../data/synthetic_finetune_dataset.json (training format)")
     print()
 
     return 0
