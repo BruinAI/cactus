@@ -1,10 +1,10 @@
 <img src="assets/banner.jpg" alt="Logo" style="border-radius: 30px; width: 100%;">
 
-Fast, lightweight, cross-platform & energy-efficient AI inference framework for all phones, from old and budget to high-end. 
+Fast, lightweight, cross-platform & energy-efficient AI inference framework for all consumer devices. 
 
 ## Cactus Graph 
 Cactus Graph is a general numerical computing framework for implementing 
-any model, like PyTorch for phones.
+any model, like PyTorch for consumer devices.
 
 ```cpp
 #include cactus.h
@@ -64,32 +64,32 @@ Example response from Gemma3-270m-INT8
 }
 ```
 
-## CPU Performance (LFM2-1.2B-INT8) (722mb Compressed)
+## INT8 CPU Performance (LFM2-1.2B) (722mb Compressed)
 
 | Device | Prefill (toks/s) | Decode (toks/s) | Battery Drain (%/min) |
 |:-------------------------------|:--------------------:|:----------------:|:---------------------:|
 | Macbook M4 Pro                 | 590                  | 96               | -                     |
+| Mac Mini M4 Pro                | 580                  | 93               | -                     |
 | iPhone 17 Pro                  | 420                  | 81               | 0.44                  |
 | Galaxy S25 Ultra               | 336                  | 64               | 0.45                  |
 | iPhone 16 Pro                  | 334                  | 64               | -                     |
-| Nothing 3                      | 296                  | 63               | 0.44                  |
+| Nothing 3a Pro                 | 296                  | 63               | 0.44                  |
+| Macbook Pro M3                  | 462                  | 62               | -                     |
 | iPhone 15 Pro                  | 274                  | 57               | -                     |
 | iPhone 14 Pro                  | 269                  | 51               | -                     |
 | OnePlus 13 5G                  | 268                  | 51               | 0.33                  |
-| Macbook M3                     | 260                  | 50               | -                     |
+| Macbook Air M3                 | 260                  | 50               | -                     |
 | Galaxy S24 Ultra               | 240                  | 46               | 0.48                  |
 | iPhone 15                      | 241                  | 46               | -                     |
-| OnePlus Open                   | 235                  | 45               | -                     |
 | Galaxy S23                     | 233                  | 45               | -                     |
 | iPhone 13 Pro                  | 218                  | 42               | -                     |
 | OnePlus 12                     | 216                  | 42               | 0.42                  |
 | iPhone 13 mini                 | 156                  | 30               | -                     |
 | Redmi K70 Ultra                | 154                  | 30               | 0.41                  |
 | Xiaomi 13                      | 153                  | 30               | 0.50                  |
-| OnePlus 11                     | 152                  | 30               | -                     |
-| Pixel 6a                       | 95                   | 17               | 0.48                  |
-| Nothing 3a                     | 93                   | 17               | 0.48                  |
-| Raspberry Pi 5                 | 60                   | 13               | -                      |
+| Pixel 6a                       | 85                   | 13               | 0.48                  |
+| Nothing 3a                     | 83                   | 13               | 0.48                  |
+| Raspberry Pi 5                 | 50                   | 8.5              | -                     |
 
 ## Coming improvements:
 
@@ -98,16 +98,32 @@ Example response from Gemma3-270m-INT8
 - VLM and Audio models like LFM-VL, Whisper, KittenTTS, etc. 
 
 ## Using this repo
-You can run these codes directly on M-series Macbooks since they are ARM-based.
-Vanilla M3 CPU-only can run LFM2-1.2B-INT8 at 50+ toks/sec, just run the following: 
+
+If developing on a Mac:
 
 ```bash
-tests/run.sh 
+# Needs C++ & Python, then Install CMake and Python dependencies weight convertion dependencies
+brew install cmake
+pip3 install -r tools/requirements.txt
+```
+
+If developing on Windows ARM PC: 
+
+```bash
+# Needs C++, Python and MySys with Pacman, then install CMake and Python dependencies weight convertion dependencies 
+pacman -S mingw-w64-clang-aarch64-cmake mingw-w64-clang-aarch64-toolchain mingw-w64-clang-aarch64-mman-win32
+pip3 install -r tools/requirements.txt
+```
+
+Then run the tests using
+
+```bash
+tests/run.sh # tests/run.bat for Windows ARM
 ```
 
 ## Generating weights from HuggingFace 
 
-Run one of the following 
+Run one of the following and replace the weight path in `tests/test_engine.cpp`.
 
 ```bash
 # Language models (INT8)
@@ -126,7 +142,13 @@ python3 tools/convert_hf.py Qwen/Qwen3-Embedding-0.6B weights/qwen3-embed-600m/
 python3 tools/convert_hf.py nomic-ai/nomic-embed-text-v2-moe weights/nomic/ 
 ```
 
-Then replace the model path in `tests/test_engine.cpp` with your choice.
+## Playing with a model
+
+Just run 
+
+```bash
+/cli/build.sh 
+```
 
 ## Resources 
 

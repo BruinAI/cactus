@@ -44,10 +44,11 @@ Model::~Model() {
 bool Model::init(const std::string& model_folder, size_t context_size, const std::string& system_prompt, bool do_warmup) {
     if (initialized_) {
         return true;
-    }
+    }   
     auto* gb = new CactusGraph();
-    owns_graph_ = true;
     graph_handle_ = gb;
+    owns_graph_ = true;
+    embedding_file_path_ = model_folder + "/token_embeddings.weights";
     return init_internal(gb, model_folder, context_size, system_prompt, do_warmup);
 }
 
@@ -355,6 +356,14 @@ bool Config::from_json(const std::string& config_path) {
             else if (value == "smol" || value == "SMOL" || value == "Smol") model_type = ModelType::SMOL;
             else if (value == "bert" || value == "BERT") model_type = ModelType::NOMIC;
             else model_type = ModelType::QWEN;
+        }
+        else if (key == "model_variant") {
+            std::string v = value;
+            std::transform(v.begin(), v.end(), v.begin(), ::tolower);
+            if (v == "vlm") model_variant = ModelVariant::VLM;
+            else if (v == "extract") model_variant = ModelVariant::EXTRACT;
+            else if (v == "rag") model_variant = ModelVariant::RAG;
+            else model_variant = ModelVariant::DEFAULT;
         }
         else if (key == "conv_L_cache") conv_L_cache = static_cast<size_t>(std::stoul(value));
         else if (key == "layer_types") {
