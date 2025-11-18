@@ -138,7 +138,7 @@ python3 tools/convert_hf.py Qwen/Qwen3-1.7B weights/qwen3-1.7B/ # supports tool 
 python3 tools/convert_hf.py HuggingFaceTB/SmolLM2-1.7B-Instruct weights/smollm2-1.7b/ 
 
 # Vision Language models (INT8)
-python3 tools/convert_hf.py LiquidAI/LFM2-VL-450M weights/lfm2-450m-i8/
+python3 tools/convert_hf.py LiquidAI/LFM2-VL-450M weights/lfm2-vl-450m-i8/
 
 # Embedding-only models 
 python3 tools/convert_hf.py Qwen/Qwen3-Embedding-0.6B weights/qwen3-embed-600m/ 
