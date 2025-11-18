@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """
-Train Qwen 3 on tool calling using LoRA with Noah's custom dataset.
+Train Qwen 3 on tool calling using LoRA with synthetically generated dataset.
 
-This script fine-tunes Qwen 3 models for tool calling using Noah's custom dataset
-which contains examples of creating notes, setting alarms, timers, and reminders.
+This script fine-tunes Qwen 3 models for tool calling using a synthetically generated
+dataset which contains examples of creating notes, setting alarms, timers, and reminders.
+The dataset is generated using a 3-phase backwards generation pipeline with Claude API.
 
 The tool calling format uses JSON:
 - Tools provided as JSON schemas
@@ -62,8 +63,8 @@ MODEL_ID = "Qwen/Qwen3-0.6B"  # Can also use Qwen3-1.7B, Qwen3-8B, etc.
 QWEN_TOKENIZER_PATH = None  # Will be loaded from the model directory
 
 # Dataset paths
-DATA_DIR = os.path.join(os.path.dirname(__file__), "..", "data")
-DATASET_PATH = os.path.join(DATA_DIR, "finetune_dataset.json")
+DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
+DATASET_PATH = os.path.join(DATA_DIR, "synthetic_finetune_dataset.json")
 TOOLS_PATH = os.path.join(DATA_DIR, "tools.json")
 
 # Training hyperparameters
@@ -299,7 +300,7 @@ def show_training_examples(dataset, num_examples=3):
 
 def test_model_generation(model, tokenizer, model_config, eos_tokens, tools, label="Model"):
     """
-    Test the model with examples from Noah's dataset domain.
+    Test the model with examples from the synthetic dataset domain.
 
     Tests:
     1. Creating a note
@@ -685,7 +686,7 @@ def main():
     lora_output_dir = args.output_dir or f"/dev/shm/{model_id.split('/')[-1]}_tool_calling_lora"
 
     print("="*60)
-    print("Qwen 3 Tool Calling Training Script (Noah's Dataset)")
+    print("Qwen 3 Tool Calling Training Script (Synthetic Dataset)")
     print("="*60)
     print(f"Model: {model_id}")
     print(f"Dataset: {dataset_path}")
@@ -723,7 +724,7 @@ def main():
 
     # Load tools and dataset
     print(f"\n{'='*60}")
-    print("Loading Noah's dataset and tools")
+    print("Loading synthetic dataset and tools")
     print(f"{'='*60}")
     tools = load_tools(tools_path)
     dataset_samples = load_dataset(dataset_path)

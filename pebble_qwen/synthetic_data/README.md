@@ -19,7 +19,8 @@ Each phase reads from the previous phase's output file and produces its own outp
 - `phase1_sample_params.py` - Phase 1: Sample parameters
 - `phase2_generate_param_text.py` - Phase 2: Generate free-text parameter values
 - `phase3_generate_inputs.py` - Phase 3: Generate user inputs
-- `synthetic_generation.py` - Orchestrator script that runs all 3 phases sequentially
+- `convert_to_training_format.py` - Convert synthetic data to training format
+- `synthetic_generation.py` - Orchestrator script that runs all phases and converts to training format
 
 ## Prerequisites
 
@@ -54,15 +55,15 @@ python3 synthetic_generation.py [samples_per_tool]
 
 **Examples:**
 ```bash
-# Generate 10 samples per tool (default)
+# Generate 20 samples per tool
 export ANTHROPIC_API_KEY='your-key-here'
-python3 synthetic_generation.py
+python3 synthetic_generation.py 20
 
 # Generate 50 samples per tool
 python3 synthetic_generation.py 50
 ```
 
-This will run Phase 1, then Phase 2, then Phase 3 automatically. If any phase fails, the script stops.
+This will run Phase 1, Phase 2, Phase 3, then convert to training format automatically. If any phase fails, the script stops.
 
 ### Option 2: Run Phases Individually
 
@@ -163,12 +164,16 @@ python3 phase2_generate_param_text.py
 
 # Step 3: Generate user inputs (requires API key)
 python3 phase3_generate_inputs.py
+
+# Step 4: Convert to training format
+python3 convert_to_training_format.py phase3_final_examples.json ../data/synthetic_finetune_dataset.json
 ```
 
 This will produce:
 - `phase1_sampled_params.json` - 120 parameter sets (20 × 6 tools)
 - `phase2_with_text.json` - 120 parameter sets with generated text
-- `phase3_final_examples.json` - 120 complete training examples
+- `phase3_final_examples.json` - 120 complete examples
+- `../data/synthetic_finetune_dataset.json` - Training format dataset
 
 ## Output Format
 
@@ -206,7 +211,7 @@ This will produce:
 }
 ```
 
-### Phase 3 Output (Final)
+### Phase 3 Output
 ```json
 [
   {
@@ -222,6 +227,35 @@ This will produce:
     "tool_name": "create_note",
     "parameters": {
       "text": "Buy groceries on the way home"
+    }
+  }
+]
+```
+
+### Training Format Output (Final)
+```json
+[
+  {
+    "input": "Set an alarm for 9:30 AM",
+    "output": {
+      "function_call": {
+        "name": "set_alarm",
+        "arguments": {
+          "time_hours": 9,
+          "time_minutes": 30
+        }
+      }
+    }
+  },
+  {
+    "input": "Remind me to buy groceries on the way home",
+    "output": {
+      "function_call": {
+        "name": "create_note",
+        "arguments": {
+          "text": "Buy groceries on the way home"
+        }
+      }
     }
   }
 ]
