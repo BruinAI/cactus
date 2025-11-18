@@ -134,8 +134,6 @@ public:
     uint32_t get_image_token_id() const { return image_token_id_; }
     uint32_t get_fake_token_id() const { return fake_token_id_; }
     uint32_t get_global_img_token_id() const { return global_img_token_id_; }
-    
-    void load_special_tokens(const std::string& added_tokens_path);
 
 
     void set_corpus_dir(const std::string& dir) { corpus_dir_ = dir; }

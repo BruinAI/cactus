@@ -106,13 +106,6 @@ bool Model::init_internal(CactusGraph* gb, const std::string& model_folder, size
         return false;
     }
 
-    std::string added_tokens_file = model_folder + "/added_tokens.json";
-    std::ifstream added_tokens_check(added_tokens_file);
-    if (added_tokens_check.good()) {
-        added_tokens_check.close();
-        tokenizer_->load_special_tokens(added_tokens_file);
-    }
-
     embedding_file_path_ = model_folder + "/token_embeddings.weights";
     load_weights_to_graph(gb);
     
