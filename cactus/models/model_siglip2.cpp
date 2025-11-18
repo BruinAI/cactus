@@ -207,12 +207,12 @@ size_t Siglip2VisionModel::build_vision_transformer_layer(CactusGraph* gb, size_
     const auto& layer = vision_weight_nodes_.vision_layers[layer_idx];
     
     size_t residual = hidden_states;
-    size_t normalized = gb->layer_norm(hidden_states, layer.layer_norm1_weight, 
+    size_t normalized = gb->layernorm(hidden_states, layer.layer_norm1_weight, 
                                       layer.layer_norm1_bias, config_.layer_norm_eps);
     size_t attn_output = build_vision_attention(gb, normalized, layer_idx, backend);
     hidden_states = gb->add(residual, attn_output);
     residual = hidden_states;
-    normalized = gb->layer_norm(hidden_states, layer.layer_norm2_weight, 
+    normalized = gb->layernorm(hidden_states, layer.layer_norm2_weight, 
                                layer.layer_norm2_bias, config_.layer_norm_eps);
     size_t mlp_output = build_vision_mlp(gb, normalized, layer_idx, backend);
     hidden_states = gb->add(residual, mlp_output);
@@ -246,7 +246,7 @@ size_t Siglip2VisionModel::forward_vision(
             
         }
 
-        hidden_states = gb->layer_norm(hidden_states,
+        hidden_states = gb->layernorm(hidden_states,
                                        vision_weight_nodes_.post_layernorm_weight,
                                        vision_weight_nodes_.post_layernorm_bias,
                                        config_.layer_norm_eps);

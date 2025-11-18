@@ -132,7 +132,7 @@ size_t Lfm2VlModel::build_multimodal_projector(CactusGraph* gb, size_t image_fea
     const size_t seq_len = new_h * new_w;
     size_t flattened = gb->reshape(unshuffled, {seq_len, in_channels});
     size_t flattened_fp16 = gb->precision_cast(flattened, Precision::FP16);
-    size_t normalized = gb->layer_norm(flattened_fp16, projector_weights_.layer_norm_weight,
+    size_t normalized = gb->layernorm(flattened_fp16, projector_weights_.layer_norm_weight,
                                       projector_weights_.layer_norm_bias, config_.layer_norm_eps);
     size_t hidden = gb->matmul(normalized, projector_weights_.linear_1_weight, true, backend);
     hidden = gb->add(hidden, projector_weights_.linear_1_bias);
