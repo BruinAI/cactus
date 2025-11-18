@@ -212,13 +212,12 @@ class HyperparameterSearch:
         ckpt_dir.mkdir(exist_ok=True)
         ckpt_dir = ckpt_dir.absolute()
 
-        # Prepare training script path
-        training_script = Path(__file__).parent / "train_qwen3_tool_calling.py"
-
         # Build command with hyperparameters
+        # Use python -m to run as module (required for imports to work)
         cmd = [
             sys.executable,
-            str(training_script),
+            "-m",
+            "pebble_qwen.train_qwen3_tool_calling",
             "--learning_rate", str(hparams.get("learning_rate", 5e-5)),
             "--num_epochs", str(hparams.get("num_epochs", 5)),
             "--lora_rank", str(hparams.get("lora_rank", 16)),
