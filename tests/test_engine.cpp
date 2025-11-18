@@ -234,9 +234,6 @@ bool test_tool_call() {
 bool test_image_input() {
     std::string model_path_str(g_model_path);
     if (model_path_str.find("vl") == std::string::npos && model_path_str.find("vl") == std::string::npos) {
-        std::cout << "\n╔══════════════════════════════════════════╗\n"
-                  << "║          IMAGE INPUT TEST (SKIPPED)      ║\n"
-                  << "╚══════════════════════════════════════════╝\n";
         std::cout << "Skipping image input test: model is not a VLM." << std::endl;
         return true;
     }
@@ -244,9 +241,6 @@ bool test_image_input() {
     std::string vision_file = model_path_str + std::string("/vision_patch_embedding.weights");
     std::ifstream vf(vision_file);
     if (!vf.good()) {
-        std::cout << "\n╔══════════════════════════════════════════╗\n"
-                  << "║          IMAGE INPUT TEST (SKIPPED)      ║\n"
-                  << "╚══════════════════════════════════════════╝\n";
         std::cout << "Skipping image input test: vision weights not found." << std::endl;
         return true;
     }
@@ -256,13 +250,13 @@ bool test_image_input() {
               << "║          IMAGE INPUT TEST                ║\n"
               << "╚══════════════════════════════════════════╝\n";
 
-    cactus_model_t model = cactus_init(g_model_path, 2048);
+    cactus_model_t model = cactus_init(g_model_path, 2048, nullptr);
     if (!model) {
         std::cerr << "Failed to initialize model for image test" << std::endl;
         return false;
     }
 
-    std::filesystem::path rel_img_path = std::filesystem::path("../../assets/test_monkey.png");
+    std::filesystem::path rel_img_path = std::filesystem::path("../../tests/assets/test_monkey.png");
     std::filesystem::path abs_img_path = std::filesystem::absolute(rel_img_path);
     std::string img_path_str = abs_img_path.string();
     std::string messages_json = "[";
