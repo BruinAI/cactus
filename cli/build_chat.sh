@@ -16,31 +16,18 @@ if [ ! -d "$WEIGHTS_DIR" ] || [ ! -f "$WEIGHTS_DIR/config.txt" ]; then
     echo "============================================="
     cd "$PROJECT_ROOT"
     if command -v python3 &> /dev/null; then
-        # Create temporary venv for conversion
-        TEMP_VENV=$(mktemp -d -t cactus-convert-temp-venv)
-        echo "Creating temporary venv at $TEMP_VENV..."
-
-        # Trap to ensure cleanup on exit (success or failure)
-        trap "rm -rf '$TEMP_VENV'" EXIT
-
-        if python3 -m venv "$TEMP_VENV"; then
-            echo "Installing dependencies..."
-            if "$TEMP_VENV/bin/pip" install --quiet numpy torch transformers; then
-                echo "Running: convert_hf.py LiquidAI/LFM2-1.2B weights/lfm2-1.2B/ --precision INT8"
-                if "$TEMP_VENV/bin/python" tools/convert_hf.py LiquidAI/LFM2-1.2B weights/lfm2-1.2B/ --precision INT8; then
-                    echo "Successfully generated weights"
-                else
-                    echo "Warning: Failed to generate weights. Tests may fail."
-                    echo "Please run manually: python3 tools/convert_hf.py LiquidAI/LFM2-1.2B weights/lfm2-1.2B/ --precision INT8"
-                fi
-            else
-                echo "Warning: Failed to install dependencies."
-                echo "Please run manually: python3 tools/convert_hf.py LiquidAI/LFM2-1.2B weights/lfm2-1.2B/ --precision INT8"
-            fi
+        echo "Running: python3 tools/convert_hf.py LiquidAI/LFM2-1.2B weights/lfm2-1.2B/ --precision INT8"
+        if ! python3 -c "import numpy, torch, transformers" 2>/dev/null; then
+            echo "Warning: Required Python packages not found. Make sure to set up your env in accordance with the README."
+            exit 1
+        fi
+        if python3 tools/convert_hf.py LiquidAI/LFM2-1.2B weights/lfm2-1.2B/ --precision INT8; then
+            echo "Successfully generated Weights"
         else
-            echo "Warning: Failed to create venv."
+            echo "Warning: Failed to generate Weights. Tests may fail."
             echo "Please run manually: python3 tools/convert_hf.py LiquidAI/LFM2-1.2B weights/lfm2-1.2B/ --precision INT8"
         fi
+
     else
         echo "Warning: Python3 not found. Cannot generate weights automatically."
         echo "Please run manually: python3 tools/convert_hf.py LiquidAI/LFM2-1.2B weights/lfm2-1.2B/ --precision INT8"
