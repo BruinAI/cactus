@@ -105,9 +105,10 @@ def phase2_generate_free_text(
         # Build prompts for generating free-text values
         requests = []
         for params in sampled_params:
-            # Extract persona and length instruction (sampled in Phase 1)
+            # Extract persona, length instruction, and tone style (sampled in Phase 1)
             persona = params.get("_persona", "a casual user")
             length_instruction = params.get("_length_instruction", "Write a brief message")
+            tone_style = params.get("_tone_style", "casual")
 
             # Build context about the tool call (exclude metadata fields)
             context_parts = []
@@ -117,8 +118,8 @@ def phase2_generate_free_text(
 
             context = "\n".join(context_parts) if context_parts else "  (no other parameters)"
 
-            # Build system prompt with persona
-            system_prompt = f"You are {persona}. Generate a realistic message they would write."
+            # Build system prompt with persona and tone
+            system_prompt = f"You are {persona}. Generate a realistic message they would write using a {tone_style} tone/language style."
 
             # Build user prompt
             user_prompt = f"""Generate a message for this tool call parameter:
@@ -133,6 +134,7 @@ Context:
 {context}
 
 {length_instruction} that is natural and realistic for this persona.
+Use a {tone_style} tone/language style.
 Write ONLY the text value for the "{free_text_param_name}" parameter. Do not use emojis.
 Return ONLY the text value, nothing else."""
 
