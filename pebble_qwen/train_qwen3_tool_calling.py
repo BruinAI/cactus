@@ -77,15 +77,15 @@ TOOLS_PATH = os.path.join(DATA_DIR, "tools.json")
 # data and won't generalize. Use --num_epochs=5 only if maximizing benchmark scores on
 # similar data or if you have a much larger, more diverse dataset.
 NUM_EPOCHS = 1
-LEARNING_RATE = 1e-4  # 1e-4 significantly outperformed 1e-5 across all configurations
-MAX_TARGET_LENGTH = 1500  # Noah's dataset has shorter sequences
+LEARNING_RATE = 3e-4  # 1e-4 significantly outperformed 1e-5 across all configurations
+MAX_TARGET_LENGTH = 1500
 
 # Allow max_steps override
 MAX_STEPS = None
 
 BATCH_SIZE = 8  # Batch size 8 performed slightly better than 16
 GRADIENT_ACCUMULATION_STEPS = 1
-EVAL_EVERY_N_STEPS = 5
+EVAL_EVERY_N_STEPS = 10
 
 # LoRA hyperparameters
 # Higher rank and alpha showed consistent improvements
@@ -97,7 +97,7 @@ MESH_SHAPE = len(jax.devices()), 1
 MESH_AXIS_NAMES = "fsdp", "tp"
 
 # Train/validation split
-TRAIN_TEST_SPLIT = 1/6
+TRAIN_TEST_SPLIT = 1/10
 
 # Checkpoint and output directories
 CKPT_DIR = "/tmp/qwen_tool_calling_ckpts/"

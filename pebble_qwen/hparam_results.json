@@ -1,0 +1,194 @@
+[
+  {
+    "run_name": "bs8_lr1e-05_a16_r16",
+    "hyperparameters": {
+      "learning_rate": 1e-05,
+      "batch_size": 8,
+      "lora_rank": 16,
+      "lora_alpha": 16.0
+    },
+    "start_time": "2025-11-18T07:07:29.130528",
+    "end_time": "2025-11-18T07:15:59.077173",
+    "duration_seconds": 509.946645,
+    "return_code": 0,
+    "success": true,
+    "metrics": {
+      "final_train_loss": 0.49292269349098206,
+      "final_val_loss": 0.543006420135498,
+      "best_val_loss": 0.543006420135498
+    },
+    "output_dir": "hparam_search_results/bs8_lr1e-05_a16_r16"
+  },
+  {
+    "run_name": "bs8_lr1e-05_a32_r16",
+    "hyperparameters": {
+      "learning_rate": 1e-05,
+      "batch_size": 8,
+      "lora_rank": 16,
+      "lora_alpha": 32.0
+    },
+    "start_time": "2025-11-18T07:22:54.344970",
+    "end_time": "2025-11-18T07:31:36.807358",
+    "duration_seconds": 522.462388,
+    "return_code": 0,
+    "success": true,
+    "metrics": {
+      "final_train_loss": 0.42195719480514526,
+      "final_val_loss": 0.48456618189811707,
+      "best_val_loss": 0.48456618189811707
+    },
+    "output_dir": "hparam_search_results/bs8_lr1e-05_a32_r16"
+  },
+  {
+    "run_name": "bs16_lr1e-05_a32_r16",
+    "hyperparameters": {
+      "learning_rate": 1e-05,
+      "batch_size": 16,
+      "lora_rank": 16,
+      "lora_alpha": 32.0
+    },
+    "start_time": "2025-11-18T07:47:11.326440",
+    "end_time": "2025-11-18T07:54:15.109683",
+    "duration_seconds": 423.783243,
+    "return_code": 0,
+    "success": true,
+    "metrics": {
+      "final_train_loss": 0.5630596876144409,
+      "final_val_loss": 0.5312103629112244,
+      "best_val_loss": 0.5312103629112244
+    },
+    "output_dir": "hparam_search_results/bs16_lr1e-05_a32_r32"
+  },
+  {
+    "run_name": "bs8_lr1e-05_a64_r32",
+    "hyperparameters": {
+      "learning_rate": 1e-05,
+      "batch_size": 8,
+      "lora_rank": 32,
+      "lora_alpha": 64.0
+    },
+    "start_time": "2025-11-18T07:54:15.122046",
+    "end_time": "2025-11-18T08:02:53.883634",
+    "duration_seconds": 518.761588,
+    "return_code": 0,
+    "success": true,
+    "metrics": {
+      "final_train_loss": 0.3726157546043396,
+      "final_val_loss": 0.34809231758117676,
+      "best_val_loss": 0.34809231758117676
+    },
+    "output_dir": "hparam_search_results/bs8_lr1e-04_a32_r16"
+  },
+  {
+    "run_name": "bs16_lr1e-04_a32_r16",
+    "hyperparameters": {
+      "learning_rate": 0.0001,
+      "batch_size": 16,
+      "lora_rank": 16,
+      "lora_alpha": 32.0
+    },
+    "start_time": "2025-11-18T08:34:08.574839",
+    "end_time": "2025-11-18T08:41:13.408450",
+    "duration_seconds": 424.833611,
+    "return_code": 0,
+    "success": true,
+    "metrics": {
+      "final_train_loss": 0.4111173748970032,
+      "final_val_loss": 0.37540608644485474,
+      "best_val_loss": 0.37540608644485474
+    },
+    "output_dir": "hparam_search_results/bs16_lr1e-04_a32_r16"
+  },
+  {
+    "run_name": "bs16_lr1e-04_a64_r32",
+    "hyperparameters": {
+      "learning_rate": 0.0001,
+      "batch_size": 16,
+      "lora_rank": 32,
+      "lora_alpha": 64.0
+    },
+    "start_time": "2025-11-18T09:05:34.111623",
+    "end_time": "2025-11-18T09:12:41.497589",
+    "duration_seconds": 427.385966,
+    "return_code": 0,
+    "success": true,
+    "metrics": {
+      "final_train_loss": 0.38725510239601135,
+      "final_val_loss": 0.35268595814704895,
+      "best_val_loss": 0.35268595814704895
+    },
+    "output_dir": "hparam_search_results/bs16_lr1e-04_a64_r32"
+  },
+  {
+    "run_name": "bs8_lr3e-04_a16_r16",
+    "hyperparameters": {
+      "learning_rate": 0.0003,
+      "batch_size": 8,
+      "lora_rank": 16,
+      "lora_alpha": 16.0
+    },
+    "start_time": "2025-11-18T09:12:41.510310",
+    "end_time": "2025-11-18T09:21:12.768014",
+
+  },
+  {
+    "run_name": "bs16_lr3e-04_a32_r32",
+    "hyperparameters": {
+      "learning_rate": 0.0003,
+      "batch_size": 16,
+      "lora_rank": 32,
+      "lora_alpha": 32.0
+    },
+    "start_time": "2025-11-18T09:52:34.249852",
+    "end_time": "2025-11-18T09:59:42.746434",
+    "duration_seconds": 428.496582,
+    "return_code": 0,
+    "success": true,
+    "metrics": {
+      "final_train_loss": 0.37733206152915955,
+      "final_val_loss": 0.3428524434566498,
+      "best_val_loss": 0.3428524434566498
+    },
+    "output_dir": "hparam_search_results/bs16_lr3e-04_a32_r32"
+  },
+  {
+    "run_name": "bs8_lr3e-04_a64_r32",
+    "hyperparameters": {
+      "learning_rate": 0.0003,
+      "batch_size": 8,
+      "lora_rank": 32,
+      "lora_alpha": 64.0
+    },
+    "start_time": "2025-11-18T09:59:42.759066",
+
+    "duration_seconds": 518.172683,
+    "return_code": 0,
+    "success": true,
+    "metrics": {
+      "final_train_loss": 0.258090078830719,
+      "final_val_loss": 0.31846699118614197,
+      "best_val_loss": 0.31846699118614197
+    },
+    "output_dir": "hparam_search_results/bs8_lr3e-04_a64_r32"
+  },
+  {
+    "run_name": "bs16_lr3e-04_a64_r32",
+    "hyperparameters": {
+      "learning_rate": 0.0003,
+      "batch_size": 16,
+      "lora_rank": 32,
+      "lora_alpha": 64.0
+    },
+    "start_time": "2025-11-18T10:08:20.947208",
+    "end_time": "2025-11-18T10:15:29.243014",
+    "duration_seconds": 428.295806,
+    "return_code": 0,
+    "success": true,
+    "metrics": {
+      "final_train_loss": 0.3804568350315094,
+      "final_val_loss": 0.33522066473960876,
+      "best_val_loss": 0.33522066473960876
+    },
+    "output_dir": "hparam_search_results/bs16_lr3e-04_a64_r32"
+  }
+]
