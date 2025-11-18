@@ -238,6 +238,11 @@ class HyperparameterSearch:
         with open(cmd_file, 'w') as f:
             f.write(" ".join(cmd))
 
+        # Determine the correct working directory (parent of pebble_qwen/)
+        # Need to run from parent directory so pebble_qwen package can be imported
+        script_dir = Path(__file__).parent
+        parent_dir = script_dir.parent
+
         # Run training
         start_time = datetime.now()
         log_file = run_dir / "training.log"
@@ -249,7 +254,8 @@ class HyperparameterSearch:
                     stdout=subprocess.PIPE,
                     stderr=subprocess.STDOUT,
                     text=True,
-                    bufsize=1
+                    bufsize=1,
+                    cwd=str(parent_dir)  # Run from parent directory
                 )
 
                 # Stream output to both file and console
