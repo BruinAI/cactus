@@ -10,19 +10,19 @@
 namespace cactus {
 namespace engine {
 
-Lfm2VlPreprocessor::PreprocessedImage::~PreprocessedImage() {
+Siglip2Preprocessor::PreprocessedImage::~PreprocessedImage() {
     pixel_values.clear();
     pixel_attention_mask.clear();
 }
 
-Lfm2VlPreprocessor::Lfm2VlPreprocessor(const Config& config)
+Siglip2Preprocessor::Siglip2Preprocessor(const Config& config)
     : config_(config) {}
 
-Lfm2VlPreprocessor::Lfm2VlPreprocessor() : config_() {}
+Siglip2Preprocessor::Siglip2Preprocessor() : config_() {}
 
-Lfm2VlPreprocessor::~Lfm2VlPreprocessor() = default;
+Siglip2Preprocessor::~Siglip2Preprocessor() = default;
 
-int Lfm2VlPreprocessor::round_by_factor(int number, int factor) {
+int Siglip2Preprocessor::round_by_factor(int number, int factor) {
     if (factor == 0) {
         return number;
     }
@@ -32,7 +32,7 @@ int Lfm2VlPreprocessor::round_by_factor(int number, int factor) {
     return static_cast<int>(rounded * factor);
 }
 
-std::pair<int,int> Lfm2VlPreprocessor::smart_resize(int height, int width) {
+std::pair<int,int> Siglip2Preprocessor::smart_resize(int height, int width) {
     const int total_factor = config_.patch_size * config_.downsample_factor;
     const int64_t min_pixels = static_cast<int64_t>(config_.min_image_tokens) *
                                config_.patch_size * config_.patch_size *
@@ -65,7 +65,7 @@ std::pair<int,int> Lfm2VlPreprocessor::smart_resize(int height, int width) {
 }
 
 
-bool Lfm2VlPreprocessor::is_image_too_large(int height, int width) {
+bool Siglip2Preprocessor::is_image_too_large(int height, int width) {
     const int total_factor = config_.patch_size * config_.downsample_factor;
     const int h_bar = std::max(config_.patch_size, round_by_factor(height, total_factor));
     const int w_bar = std::max(config_.patch_size, round_by_factor(width, total_factor));
@@ -82,7 +82,7 @@ bool Lfm2VlPreprocessor::is_image_too_large(int height, int width) {
 }
 
 
-std::pair<int, int> Lfm2VlPreprocessor::find_closest_aspect_ratio(float aspect_ratio, int width, int height) {
+std::pair<int, int> Siglip2Preprocessor::find_closest_aspect_ratio(float aspect_ratio, int width, int height) {
     float best_ratio_diff = std::numeric_limits<float>::infinity();
     std::pair<int, int> best_ratio = {1, 1};
     int area = width * height;
@@ -124,7 +124,7 @@ std::pair<int, int> Lfm2VlPreprocessor::find_closest_aspect_ratio(float aspect_r
     return best_ratio;
 }
 
-std::pair<int,int> Lfm2VlPreprocessor::get_grid_layout(int height, int width) {
+std::pair<int,int> Siglip2Preprocessor::get_grid_layout(int height, int width) {
     float aspect_ratio = (float)width / (float)height;
     auto [grid_width, grid_height] = find_closest_aspect_ratio(aspect_ratio, width, height);
 
@@ -134,7 +134,7 @@ std::pair<int,int> Lfm2VlPreprocessor::get_grid_layout(int height, int width) {
     return {target_width, target_height};
 }
 
-Lfm2VlPreprocessor::SpatialShapeResult Lfm2VlPreprocessor::compute_spatial_shapes(int height, int width) {
+Siglip2Preprocessor::SpatialShapeResult Siglip2Preprocessor::compute_spatial_shapes(int height, int width) {
     if (height <= 0 || width <= 0) {
         throw std::runtime_error("Image dimensions must be positive");
     }
@@ -200,7 +200,7 @@ Lfm2VlPreprocessor::SpatialShapeResult Lfm2VlPreprocessor::compute_spatial_shape
 }
 
 
-Lfm2VlPreprocessor::PreprocessedImage Lfm2VlPreprocessor::preprocess_from_file(const std::string& image_path) {
+Siglip2Preprocessor::PreprocessedImage Siglip2Preprocessor::preprocess_from_file(const std::string& image_path) {
     int width, height, channels;
     unsigned char* img_data = stbi_load(image_path.c_str(), &width, &height, &channels, 0);
     
@@ -215,7 +215,7 @@ Lfm2VlPreprocessor::PreprocessedImage Lfm2VlPreprocessor::preprocess_from_file(c
     return result;
 }
 
-Lfm2VlPreprocessor::PreprocessedImage Lfm2VlPreprocessor::preprocess_from_memory(
+Siglip2Preprocessor::PreprocessedImage Siglip2Preprocessor::preprocess_from_memory(
     const unsigned char* img_data, int width, int height, int channels) {
     if (!img_data) {
         throw std::runtime_error("Invalid image data pointer");
@@ -385,7 +385,7 @@ Lfm2VlPreprocessor::PreprocessedImage Lfm2VlPreprocessor::preprocess_from_memory
     return result;
 }
 
-std::vector<unsigned char> Lfm2VlPreprocessor::convert_to_rgb(
+std::vector<unsigned char> Siglip2Preprocessor::convert_to_rgb(
     const unsigned char* img_data, int width, int height, int channels) {
     
     std::vector<unsigned char> rgb_data(width * height * 3);
@@ -415,7 +415,7 @@ std::vector<unsigned char> Lfm2VlPreprocessor::convert_to_rgb(
     return rgb_data;
 }
 
-std::vector<float> Lfm2VlPreprocessor::resize_image(
+std::vector<float> Siglip2Preprocessor::resize_image(
     const unsigned char* img_data, int src_width, int src_height,
     int dst_width, int dst_height, int channels) {
     
@@ -445,7 +445,7 @@ std::vector<float> Lfm2VlPreprocessor::resize_image(
     return resized_data;
 }
 
-std::vector<float> Lfm2VlPreprocessor::normalize_image(
+std::vector<float> Siglip2Preprocessor::normalize_image(
     const float* img_data, int width, int height, int channels) {
     
     size_t total_pixels = width * height * channels;
@@ -472,7 +472,7 @@ std::vector<float> Lfm2VlPreprocessor::normalize_image(
     return normalized;
 }
 
-std::vector<std::vector<float>> Lfm2VlPreprocessor::convert_image_to_patches(
+std::vector<std::vector<float>> Siglip2Preprocessor::convert_image_to_patches(
     const std::vector<float>& image, int width, int height, int channels, int patch_size) {
     
     int num_patches_height = height / patch_size;
@@ -504,7 +504,7 @@ std::vector<std::vector<float>> Lfm2VlPreprocessor::convert_image_to_patches(
     return patches;
 }
 
-Lfm2VlPreprocessor::PreprocessedImage Lfm2VlPreprocessor::pad_patches(
+Siglip2Preprocessor::PreprocessedImage Siglip2Preprocessor::pad_patches(
     const std::vector<std::vector<float>>& tile_patches,
     const std::vector<std::pair<int,int>>& spatial_shapes,
     int patch_dim,

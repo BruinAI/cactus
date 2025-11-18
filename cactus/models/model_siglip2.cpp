@@ -14,7 +14,7 @@ Siglip2VisionModel::Siglip2VisionModel() : Model() {
 }
 
 Siglip2VisionModel::Siglip2VisionModel(const Config& cfg) : Model(cfg) {
-    Lfm2VlPreprocessor::Config preprocessor_config;
+    Siglip2Preprocessor::Config preprocessor_config;
     preprocessor_config.patch_size = static_cast<int>(config_.vision_patch_size);
     preprocessor_config.downsample_factor = static_cast<int>(config_.downsample_factor);
     preprocessor_config.min_tiles = static_cast<int>(config_.min_tiles);
@@ -38,7 +38,7 @@ Siglip2VisionModel::Siglip2VisionModel(const Config& cfg) : Model(cfg) {
     preprocessor_config.image_std[1] = config_.image_std;
     preprocessor_config.image_std[2] = config_.image_std;
     
-    preprocessor_ = Lfm2VlPreprocessor(preprocessor_config);
+    preprocessor_ = Siglip2Preprocessor(preprocessor_config);
     
 }
 
@@ -81,7 +81,7 @@ void Siglip2VisionModel::load_weights_to_graph(CactusGraph* gb) {
 
 Siglip2VisionModel::VisionEmbeddingResult Siglip2VisionModel::build_vision_embeddings(
     CactusGraph* gb,
-    const Lfm2VlPreprocessor::PreprocessedImage& preprocessed_image,
+    const Siglip2Preprocessor::PreprocessedImage& preprocessed_image,
     ComputeBackend backend) {
     const int num_tiles = preprocessed_image.num_tiles;
     const int max_patches = preprocessed_image.max_patches_per_tile;
@@ -221,7 +221,7 @@ size_t Siglip2VisionModel::build_vision_transformer_layer(CactusGraph* gb, size_
 
 size_t Siglip2VisionModel::forward_vision(
     CactusGraph* gb,
-    const Lfm2VlPreprocessor::PreprocessedImage& preprocessed_image,
+    const Siglip2Preprocessor::PreprocessedImage& preprocessed_image,
     ComputeBackend backend) {
     auto embedding_result = build_vision_embeddings(gb, preprocessed_image, backend);
     auto concat_nodes = [&](const std::vector<size_t>& nodes) {
@@ -262,7 +262,7 @@ size_t Siglip2VisionModel::forward_vision(
     return combined_output;
 }
 
-size_t Siglip2VisionModel::forward_vision(const Lfm2VlPreprocessor::PreprocessedImage& preprocessed_image) {
+size_t Siglip2VisionModel::forward_vision(const Siglip2Preprocessor::PreprocessedImage& preprocessed_image) {
     if (!initialized_ || !graph_handle_) {
         throw std::runtime_error("Model not initialized - call init() first");
     }
@@ -278,11 +278,11 @@ std::vector<float> Siglip2VisionModel::get_image_features(const std::string& ima
     return get_image_features(preprocessed);
 }
 
-size_t Siglip2VisionModel::get_image_features_node(const Lfm2VlPreprocessor::PreprocessedImage& preprocessed_image) {
+size_t Siglip2VisionModel::get_image_features_node(const Siglip2Preprocessor::PreprocessedImage& preprocessed_image) {
     return forward_vision(preprocessed_image);
 }
 
-std::vector<float> Siglip2VisionModel::get_image_features(const Lfm2VlPreprocessor::PreprocessedImage& preprocessed_image) {
+std::vector<float> Siglip2VisionModel::get_image_features(const Siglip2Preprocessor::PreprocessedImage& preprocessed_image) {
     size_t last_hidden_state = forward_vision(preprocessed_image);
     
     auto* gb = static_cast<CactusGraph*>(graph_handle_);

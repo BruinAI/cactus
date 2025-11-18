@@ -148,8 +148,8 @@ struct OpParams {
     
     size_t index_value = 0;  // For INDEX operation
     size_t num_classes = 0;  // For scatter operations
-    size_t dst_height = 0;  // For BILINEAR_INTERPOLATION operation
-    size_t dst_width = 0;   // For BILINEAR_INTERPOLATION operation
+    size_t dst_height = 0;
+    size_t dst_width = 0;   
 };
 
 struct GraphNode {

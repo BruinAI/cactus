@@ -106,7 +106,6 @@ std::vector<uint32_t> Tokenizer::apply_chat_template(const std::vector<ChatMessa
 }
 
 std::string Tokenizer::format_chat_prompt(const std::vector<ChatMessage>& messages, bool add_generation_prompt, const std::string& tools_json) const {
-    // Check if any messages have images to determine if this is LFM2-VL
     bool has_images = false;
     for (const auto& msg : messages) {
         if (!msg.images.empty()) {
@@ -114,8 +113,6 @@ std::string Tokenizer::format_chat_prompt(const std::vector<ChatMessage>& messag
             break;
         }
     }
-    
-    // If LFM2 model with images, use LFM2-VL formatting
     if (model_type_ == ModelType::LFM2 && has_images) {
         return format_lfm2_vl_style(messages, add_generation_prompt, tools_json);
     }
@@ -305,42 +302,27 @@ std::string Tokenizer::format_lfm2_vl_style(
     
     for (const auto& msg : messages) {
         result += "<|im_start|>" + msg.role + "\n";
-        
-        // Add text content first
         result += msg.content;
-        
-        // Process any images associated with this message
         for (const auto& image_path : msg.images) {
-            // Load image to get dimensions
             int width = 0, height = 0, channels = 0;
             unsigned char* img_data = stbi_load(image_path.c_str(), &width, &height, &channels, 0);
             
             if (img_data) {
-                // Use preprocessor to compute spatial shapes and grid dimensions
-                Lfm2VlPreprocessor preprocessor;
+                Siglip2Preprocessor preprocessor;
                 auto shape_result = preprocessor.compute_spatial_shapes(height, width);
-                
-                // Config values (should match model config)
                 int downsample_factor = 2;
                 bool use_thumbnail = true;
-                
-                // Get actual grid dimensions from preprocessor
                 int grid_rows = shape_result.grid_rows;
                 int grid_cols = shape_result.grid_cols;
                 int num_tiles = grid_rows * grid_cols;
-                
-                // Expand placeholder
                 result += "<|image_start|>";
                 
                 if (num_tiles > 1) {
-                    // Multiple tiles - emit row/col tokens
                     for (int tile_idx = 0; tile_idx < num_tiles; ++tile_idx) {
                         int row = tile_idx / grid_cols;
                         int col = tile_idx % grid_cols;
                         
                         result += "<|img_row_" + std::to_string(row + 1) + "_col_" + std::to_string(col + 1) + "|>";
-                        
-                        // Calculate tokens for this tile: tile_height * tile_width / downsample_factor^2
                         auto [tile_height, tile_width] = shape_result.shapes[tile_idx];
                         int tile_tokens = (tile_height * tile_width) / (downsample_factor * downsample_factor);
                         
@@ -348,8 +330,6 @@ std::string Tokenizer::format_lfm2_vl_style(
                             result += "<image>";
                         }
                     }
-                    
-                    // Add thumbnail if present
                     if (use_thumbnail && static_cast<size_t>(num_tiles) < shape_result.shapes.size()) {
                         result += "<|img_thumbnail|>";
                         
@@ -361,7 +341,6 @@ std::string Tokenizer::format_lfm2_vl_style(
                         }
                     }
                 } else if (num_tiles == 1) {
-                    // Single tile - just thumbnail
                     auto [thumb_height, thumb_width] = shape_result.shapes[0];
                     int thumbnail_tokens = (thumb_height * thumb_width) / (downsample_factor * downsample_factor);
                     
@@ -374,7 +353,6 @@ std::string Tokenizer::format_lfm2_vl_style(
                 
                 stbi_image_free(img_data);
             } else {
-                // If image fails to load, just put a placeholder
                 result += "<image>";
             }
         }

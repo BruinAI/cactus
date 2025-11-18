@@ -139,7 +139,7 @@ protected:
 
 
 class Siglip2VisionModel : public Model {
-    friend class Lfm2VlModel;  // Allow LFM2-VL to access protected members
+    friend class Lfm2VlModel;  
     
 public:
     struct VisionEmbeddingResult {
@@ -150,30 +150,19 @@ public:
     Siglip2VisionModel();
     explicit Siglip2VisionModel(const Config& cfg);
     ~Siglip2VisionModel() override = default;
-
-    // Process preprocessed image patches through vision encoder
-    // This overload uses the model's own graph (for standalone usage)
-    virtual size_t forward_vision(const Lfm2VlPreprocessor::PreprocessedImage& preprocessed_image);
-    
-    // This overload accepts an external graph pointer (for integration with larger models)
+    virtual size_t forward_vision(const Siglip2Preprocessor::PreprocessedImage& preprocessed_image);
     virtual size_t forward_vision(CactusGraph* gb, 
-                         const Lfm2VlPreprocessor::PreprocessedImage& preprocessed_image,
+                         const Siglip2Preprocessor::PreprocessedImage& preprocessed_image,
                          ComputeBackend backend);
-    
-    // Get vision features (pooled output) for an image
     std::vector<float> get_image_features(const std::string& image_path);
-    std::vector<float> get_image_features(const Lfm2VlPreprocessor::PreprocessedImage& preprocessed_image);
-    
-    // Get the output node ID for image features (for composing with other models)
-    size_t get_image_features_node(const Lfm2VlPreprocessor::PreprocessedImage& preprocessed_image);
-    
-    // Get the preprocessor instance (for testing/standalone usage)
-    Lfm2VlPreprocessor& get_preprocessor() { return preprocessor_; }
-    const Lfm2VlPreprocessor& get_preprocessor() const { return preprocessor_; }
+    std::vector<float> get_image_features(const Siglip2Preprocessor::PreprocessedImage& preprocessed_image);
+    size_t get_image_features_node(const Siglip2Preprocessor::PreprocessedImage& preprocessed_image);
+    Siglip2Preprocessor& get_preprocessor() { return preprocessor_; }
+    const Siglip2Preprocessor& get_preprocessor() const { return preprocessor_; }
 
 protected:
     VisionEmbeddingResult build_vision_embeddings(CactusGraph* gb,
-                                                  const Lfm2VlPreprocessor::PreprocessedImage& preprocessed_image,
+                                                  const Siglip2Preprocessor::PreprocessedImage& preprocessed_image,
                                                   ComputeBackend backend);
     
     size_t build_vision_transformer_layer(CactusGraph* gb, size_t hidden_states, uint32_t layer_idx,
@@ -187,8 +176,6 @@ protected:
 
     void load_weights_to_graph(CactusGraph* gb) override;
     size_t forward(const std::vector<uint32_t>& tokens, bool use_cache = false) override;
-    
-    // Stub implementations for Model pure virtual methods (not used for vision-only model)
     size_t build_attention(CactusGraph* gb, size_t normalized_input, uint32_t layer_idx,
                           ComputeBackend backend, bool use_cache = false, size_t position_offset = 0) override;
     size_t build_mlp(CactusGraph* gb, size_t normalized_h, uint32_t layer_idx,
@@ -198,21 +185,13 @@ protected:
 
 protected:
     struct VisionWeightNodeIDs {
-        // Patch embedding
         size_t patch_embedding_weight;
         size_t patch_embedding_bias;
-        
-        // Position embedding
         size_t position_embedding;
-        
-        // Post layer norm
         size_t post_layernorm_weight;
         size_t post_layernorm_bias;
-        
-        // Note: Pooling head not used (vision_use_head: false in LFM2-VL)
 
         struct VisionLayerWeights {
-            // Self attention
             size_t attn_q_weight;
             size_t attn_k_weight;
             size_t attn_v_weight;
@@ -221,14 +200,10 @@ protected:
             size_t attn_k_bias;
             size_t attn_v_bias;
             size_t attn_output_bias;
-            
-            // Layer norms
             size_t layer_norm1_weight;
             size_t layer_norm1_bias;
             size_t layer_norm2_weight;
             size_t layer_norm2_bias;
-            
-            // MLP
             size_t mlp_fc1_weight;
             size_t mlp_fc1_bias;
             size_t mlp_fc2_weight;
@@ -238,12 +213,12 @@ protected:
         std::vector<VisionLayerWeights> vision_layers;
     } vision_weight_nodes_;
     
-    Lfm2VlPreprocessor preprocessor_;
+    Siglip2Preprocessor preprocessor_;
 };
 
 
 class LFM2Model : public Model {
-    friend class Lfm2VlModel;  // Allow LFM2-VL to access protected members
+    friend class Lfm2VlModel;  
     
 public:
     LFM2Model();
@@ -384,8 +359,6 @@ public:
     ~Lfm2VlModel() override = default;
 
     bool init(const std::string& model_folder, size_t context_size, const std::string& system_prompt = "", bool do_warmup = true) override;
-
-    // Main forward pass for vision-language model
     size_t forward(const std::vector<uint32_t>& tokens, bool use_cache = false) override;
 
     uint32_t generate(const std::vector<uint32_t>& tokens,
@@ -393,8 +366,6 @@ public:
                       float top_p = -1.0f,
                       size_t top_k = 0,
                       const std::string& profile_file = "") override;
-    
-    // Vision-language forward with image input
     uint32_t generate_with_images(
         const std::vector<uint32_t>& tokens,
         const std::vector<std::string>& image_paths,
@@ -406,7 +377,6 @@ public:
     void reset_cache() override;
 
 protected:
-    // Stub implementations for Model pure virtual methods
     size_t build_attention(CactusGraph*, size_t, uint32_t, ComputeBackend, bool, size_t) override;
     size_t build_mlp(CactusGraph*, size_t, uint32_t, ComputeBackend) const override;
     size_t build_transformer_block(CactusGraph*, size_t, uint32_t, ComputeBackend, bool, size_t) override;
@@ -433,11 +403,9 @@ private:
         size_t final_hidden_node;
         size_t seq_len;
     };
-
-    // Get image features from vision tower and apply projection
     std::vector<ProjectedTileFeature> get_image_features(
         CactusGraph* gb,
-        const Lfm2VlPreprocessor::PreprocessedImage& preprocessed_image,
+        const Siglip2Preprocessor::PreprocessedImage& preprocessed_image,
         ComputeBackend backend);
 
     ForwardImageResult forward_images(
@@ -446,31 +414,21 @@ private:
         const std::vector<std::string>& image_paths,
         ComputeBackend backend,
         bool use_cache);
-    
-    // Multimodal projector components
     size_t build_multimodal_projector(
         CactusGraph* gb,
         size_t image_features,
         size_t tile_h,
         size_t tile_w,
         ComputeBackend backend);
-    
-    // Pixel unshuffle operation
     size_t pixel_unshuffle(CactusGraph* gb, size_t hidden_states, size_t height, size_t width, size_t channels);
-    
-    // Merge image embeddings into text embeddings
     MergedEmbeddingResult merge_image_text_embeddings(
         CactusGraph* gb,
         const std::vector<uint32_t>& tokens,
         const std::vector<std::vector<ProjectedTileFeature>>& image_embedding_nodes,
         std::vector<TextEmbeddingInput>& text_embedding_inputs);
-
-    // Sub-models
     Siglip2VisionModel vision_tower_;
     LFM2Model language_model_;
-    Lfm2VlPreprocessor preprocessor_;
-    
-    // Multimodal projector weights
+    Siglip2Preprocessor preprocessor_;
     struct ProjectorWeights {
         size_t layer_norm_weight;
         size_t layer_norm_bias;
