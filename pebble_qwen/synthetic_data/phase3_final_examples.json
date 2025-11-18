@@ -1,197 +1,197 @@
 [
   {
-    "user_input": "Hey, can you help me jot down some details about our upcoming marketing team brunch? We're meeting next Friday at 11:30 at Cafe Nouveau, and I need to get the headcount and dietary needs sorted out by Wednesday.",
+    "user_input": "Ugh, can you help me remember to grab my performance review paperwork before my HR meeting this afternoon?",
     "tool_name": "create_note",
     "parameters": {
-      "text": "Brunch with marketing team next Friday at 11:30am at Cafe Nouveau. Need to confirm headcount and dietary restrictions by Wednesday."
+      "text": "Meeting with HR at 3pm - bring performance review docs from last quarter"
     }
   },
   {
-    "user_input": "Hey, can you help me jot down a quick reminder about some weekend errands I need to take care of?",
+    "user_input": "Gotta remember to stop by the grocery store later - need to grab some essentials for the kitchen.",
     "tool_name": "create_note",
     "parameters": {
-      "text": "Pick up dry cleaning and buy more laundry detergent before weekend"
+      "text": "Pick up milk, eggs, and bread at the store after work. Maybe grab some snacks too."
     }
   },
   {
-    "user_input": "Hey, I've got that important XYZ Corp client meeting at 2 today and I need to make sure I remember all the prep work before the call.",
+    "user_input": "Gotta rem2 grab stuff from cleaners + groceries - txt me a quick note?",
     "tool_name": "create_note",
     "parameters": {
-      "text": "Client meeting for XYZ Corp project at 2pm - need to prepare presentation slides and review budget forecast before the call. Double-check conference line details."
+      "text": "plz pick up dry cleaning, milk, eggs b4 5pm"
     }
   },
   {
-    "user_input": "Can you help me remember my friend meetup at Joe's Cafe tonight at 7?",
+    "user_input": "note 2 self - hydration goals 4 2mrw. need 2 track water intake b4 evening meal",
     "tool_name": "create_note",
     "parameters": {
-      "text": "Meetup at Joe's Cafe 7pm"
+      "text": "need 2 drink more h2o tmrw. aim 4 8 glasses b4 dinner"
     }
   },
   {
-    "user_input": "Hey, can you help me remember to study for my Economics midterm this Thursday? I need to review Chapters 5 through 8 and do some practice problems from the textbook.",
+    "user_input": "rmdr 2 get dry cleaning closed @ 5 + need milk when i'm out running errands 2day",
     "tool_name": "create_note",
     "parameters": {
-      "text": "Study for Econ midterm on Thursday - review Chapters 5-8 and do practice problems from textbook"
+      "text": "pick up dry cleaning b4 5pm + grab milk @ grocery store when out"
     }
   },
   {
-    "user_input": "Hey, can you help me jot down a quick reminder about my water goal for today and that I need to grab some electrolyte powder?",
+    "user_input": "I need to jot down some key points about our Q3 marketing strategy review before I forget - can you help me create a quick note about the project timeline and coordination needed?",
     "tool_name": "create_note",
     "parameters": {
-      "text": "Track water intake today: aiming for 8 glasses. Need to pick up more electrolyte powder after work."
+      "text": "Project timeline for Q3 marketing strategy review - key deliverables due by end of month, need to coordinate with team leads before final presentation to executive board."
     }
   },
   {
-    "user_input": "I need to make sure I remember to check in with Johnson about the Q3 project status this week.",
+    "user_input": "Hey, can you help me jot down a quick reminder about my client meeting later? Need to make sure I've got the web design project details sorted.",
     "tool_name": "create_note",
     "parameters": {
-      "text": "Follow up with client Johnson about Q3 project deliverables by end of week"
+      "text": "Meeting with client for web design project at 2pm - confirm details and mockup timeline"
     }
   },
   {
-    "user_input": "Hey, can you help me jot down a quick health reminder for myself today?",
+    "user_input": "Hey, can you help me jot down a quick reminder about getting my Psych textbooks and checking the paper deadline?",
     "tool_name": "create_note",
     "parameters": {
-      "text": "Drink water, walk 10k steps today"
+      "text": "Gotta remember to pick up books for Psych 101 from the campus bookstore before Thursday's class. Also need to double-check the syllabus for that research paper deadline."
     }
   },
   {
-    "user_input": "Hey, can you help me jot down a quick reminder to grab some essentials on my way home from the office?",
+    "user_input": "I want to make a quick note about my HR meeting today so I don't forget the key details.",
     "tool_name": "create_note",
     "parameters": {
-      "text": "Pick up milk and bread after work today"
+      "text": "Meeting with HR at 2pm to discuss performance review and potential promotion opportunities"
     }
   },
   {
-    "user_input": "Hey, can you help me jot down a quick note about our upcoming marketing team dinner? I want to make sure I remember all the details.",
+    "user_input": "Oh, I need to remember to grab my clothes from the cleaners before they close.",
     "tool_name": "create_note",
     "parameters": {
-      "text": "Dinner with the marketing team next Thursday at 7pm at Cafe Bella. Need to confirm final headcount with Sarah by Wednesday."
+      "text": "Pick up dry cleaning today"
     }
   },
   {
-    "user_input": "I need to remember to get my suit from the cleaners later today after work.",
+    "user_input": "Yo, can you help me remember to swing by the cleaners and snag the kids' soccer jerseys before their afternoon practice?",
     "tool_name": "create_note",
     "parameters": {
-      "text": "Pick up dry cleaning after 5pm"
+      "text": "Grab soccer uniforms from cleaners by 4pm before practice"
     }
   },
   {
-    "user_input": "Hey, I need to jot down a quick reminder about my upcoming biology test.",
+    "user_input": "yo, remind me to grab my clothes from the cleaners in the morning",
     "tool_name": "create_note",
     "parameters": {
-      "text": "Study for biology exam on Friday"
+      "text": "gotta pick up dry cleaning tmrw"
     }
   },
   {
-    "user_input": "I need to create a reminder to touch base with Alex about our Q3 marketing budget before the week is out. Can you help me jot that down?",
+    "user_input": "gonna need 2 rmember marketing mtg prep tmrw - can u help me jot that dwn?",
     "tool_name": "create_note",
     "parameters": {
-      "text": "Need to follow up with Alex about the Q3 marketing budget proposal by end of week. Request detailed breakdown of proposed digital ad spend."
+      "text": "mtg w/ marketing team @ 2pm tmrw, need 2 prep slides"
     }
   },
   {
-    "user_input": "I need to jot down some important tasks for my client work this week - can you help me make a quick note?",
+    "user_input": "quick reminder 2 prep client deck b4 2pm mtg",
     "tool_name": "create_note",
     "parameters": {
-      "text": "Client project deliverables due Thursday - review marketing deck and finish web design mockups before deadline"
+      "text": "mtg w/ client @ 2pm, prep deck"
     }
   },
   {
-    "user_input": "I need to remember to grab my suits from the cleaners before heading home tonight.",
+    "user_input": "I need to remember to get my suit cleaned before the client meeting tomorrow.",
     "tool_name": "create_note",
     "parameters": {
-      "text": "Pick up dry cleaning after work"
+      "text": "Pick up dry cleaning this afternoon"
     }
   },
   {
-    "user_input": "I need to make sure I'm prepared for the marketing meeting later. Can you help me create a quick note to remind me about the presentation slides?",
+    "user_input": "I need to make sure I book my annual health screening and check in on my diet and fitness metrics for this quarter. Can you help me create a reminder for that?",
     "tool_name": "create_note",
     "parameters": {
-      "text": "Prep team presentation slides for 2pm marketing strategy meeting, need to review latest analytics data before finalizing"
+      "text": "Schedule quarterly wellness checkup and review nutrition tracking progress"
     }
   },
   {
-    "user_input": "Hey, can you help me jot down a quick reminder about some stuff I need to do after work?",
+    "user_input": "Oh, can you help me jot down something I need to remember for tomorrow? I've gotta pick up my dry cleaning and don't want to forget to grab some milk while I'm out.",
     "tool_name": "create_note",
     "parameters": {
-      "text": "pick up milk, bread, and eggs after work today. don't forget to call mom this weekend"
+      "text": "Pick up dry cleaning and grab milk on the way home from work tomorrow morning."
     }
   },
   {
-    "user_input": "I need to make sure I remember to talk about the Q3 strategy with marketing during our 2pm catch-up today. Can you help me jot that down?",
+    "user_input": "I want to save my notes from today's quarterly team strategy session - can you help me document that?",
     "tool_name": "create_note",
     "parameters": {
-      "text": "Discuss project timeline with marketing team during 2pm meeting. Need to review Q3 strategy and align on deliverables before end of month."
+      "text": "Quarterly team strategy meeting notes"
     }
   },
   {
-    "user_input": "I need to jot down a quick reminder about my upcoming client meeting this Thursday, which I'll be doing from home.",
+    "user_input": "Bruh, remind me about that design gig I gotta crush later at the downtown cafe",
     "tool_name": "create_note",
     "parameters": {
-      "text": "Schedule client meeting - WFH Thursday"
+      "text": "yo, gotta hustle and meet my graphic design deadline by 5pm at the coffee shop downtown"
     }
   },
   {
-    "user_input": "I need to remind myself about my computer science project deadline this week.",
+    "user_input": "I need to track my action items for our upcoming quarterly team offsite. Can you help me create a reminder to finalize the agenda and key planning details by mid-March?",
     "tool_name": "create_note",
     "parameters": {
-      "text": "Finish CS project by Friday"
+      "text": "Coordinate team offsite meeting agenda for next quarter by 3/15. Review proposed locations, budget, and team-building activities."
     }
   },
   {
-    "user_input": "I need to make sure I'm fully prepared for the finance team meeting at 2pm. Can you help me create a quick note to review the Q2 budget presentation draft?",
+    "user_input": "I want to jot down some key points for our upcoming team social mixer planning meeting this Thursday. Can you help me create a quick note with the main discussion items?",
     "tool_name": "create_note",
     "parameters": {
-      "text": "Review Q2 budget presentation draft before 2pm meeting with finance team. Need to double-check revenue projections and alignment with strategic goals."
+      "text": "Team Social Mixer Planning - Key Discussion Points and Action Items for September Event Coordination Meeting on Thursday at 2 PM"
     }
   },
   {
-    "user_input": "Hey, can you help me jot down a quick health reminder about staying hydrated and taking my vitamins?",
+    "user_input": "I need to remember to pick up some greens for my smoothie after hitting the gym later.",
     "tool_name": "create_note",
     "parameters": {
-      "text": "Need to drink 8 glasses of water today and take my multivitamin before lunch"
+      "text": "Grab spinach and kale for green smoothie at Whole Foods after workout today"
     }
   },
   {
-    "user_input": "Hey, can you help me jot down a quick reminder to grab some groceries after I finish work?",
+    "user_input": "gotta rmb 2 deal w/ that sink leak b4 sat. might need help if my diy skills fail 🔧",
     "tool_name": "create_note",
     "parameters": {
-      "text": "Pick up milk and eggs after work today"
+      "text": "plz fix leaky sink b4 weekend. need wrench & call plumber if cant do self"
     }
   },
   {
-    "user_input": "Hey, can you help me jot down a quick reminder for my weekend shopping list? I'm running low on household supplies.",
+    "user_input": "Hey, can you help me jot down something before I forget? I need to make sure I schedule my annual physical and grab some multivitamins this weekend.",
     "tool_name": "create_note",
     "parameters": {
-      "text": "Buy more laundry detergent and paper towels at the grocery store this weekend"
+      "text": "Reminder to schedule my annual physical checkup next week and pick up multivitamins at the health store on Saturday morning."
     }
   },
   {
-    "user_input": "Hey, can you help me remember to grab the soccer gear for Jake's weekend game? I always forget something important.",
+    "user_input": "Oh, I need to remember to grab my suits from the cleaners and ship out that return package this afternoon before the post office closes.",
     "tool_name": "create_note",
     "parameters": {
-      "text": "Pick up soccer cleats and water bottles before Jake's game on Saturday at 2pm"
+      "text": "Pick up dry cleaning and drop off package at UPS before 5pm today"
     }
   },
   {
-    "user_input": "Hey, I want to set an alarm for my midday check-in and habit tracking. Could you help me set it for 1:38 PM?",
+    "user_input": "Hey, can you set my alarm for 3:31 this afternoon? I've got a crucial meeting prep session I can't miss.",
     "tool_name": "set_alarm",
     "parameters": {
-      "time_hours": 13,
-      "time_minutes": 38
+      "time_hours": 15,
+      "time_minutes": 31
     }
   },
   {
-    "user_input": "Hey, can you set an alarm for when I need to start working on my morning study session? Make it for 8:52 and include a quick reminder note about checking my assignment deadlines.",
+    "user_input": "I need to set an alarm for my early morning conference call. Could you help me wake up at 3:50 AM?",
     "tool_name": "set_alarm",
     "parameters": {
-      "time_hours": 8,
-      "time_minutes": 52
+      "time_hours": 3,
+      "time_minutes": 50
     }
   },
   {
-    "user_input": "I need to set an alarm for 3:09 PM to make sure I don't forget my team meeting this afternoon.",
+    "user_input": "alarm @ 3:09 pm for gym sess",
     "tool_name": "set_alarm",
     "parameters": {
       "time_hours": 15,
@@ -199,1154 +199,1154 @@
     }
   },
   {
-    "user_input": "I need to set an early alarm for the kids' school drop-off tomorrow morning. Can you help me get up at 6 AM?",
+    "user_input": "Yo, can you set my alarm for 9:52 tonight? Gotta make sure I'm up early for that crazy work meeting tomorrow.",
     "tool_name": "set_alarm",
     "parameters": {
-      "time_hours": 6,
-      "time_minutes": 0
-    }
-  },
-  {
-    "user_input": "Could you help me set an alarm for 2:13 PM to remind me to start my laundry and check on the weekend cleaning schedule?",
-    "tool_name": "set_alarm",
-    "parameters": {
-      "time_hours": 14,
-      "time_minutes": 13
-    }
-  },
-  {
-    "user_input": "Hey, could you set an alarm for 2:02 AM for me? Just want a quick reminder for something.",
-    "tool_name": "set_alarm",
-    "parameters": {
-      "time_hours": 2,
-      "time_minutes": 2
-    }
-  },
-  {
-    "user_input": "I need to set an early alarm tomorrow for my kid's soccer practice. Can you help me set it for 5:57 AM and jot down a quick reminder?",
-    "tool_name": "set_alarm",
-    "parameters": {
-      "time_hours": 5,
-      "time_minutes": 57
-    }
-  },
-  {
-    "user_input": "Hey, I want to set an alarm for 11:43 PM tonight to help me plan out my tasks for tomorrow morning. Can you do that and maybe add a quick productivity reminder?",
-    "tool_name": "set_alarm",
-    "parameters": {
-      "time_hours": 23,
-      "time_minutes": 43
-    }
-  },
-  {
-    "user_input": "Hey, I need an alarm at 4:51 PM to remind me to jot down a quick project status for my freelance work.",
-    "tool_name": "set_alarm",
-    "parameters": {
-      "time_hours": 16,
-      "time_minutes": 51
-    }
-  },
-  {
-    "user_input": "I've got a crazy day tomorrow, can you set an alarm for 10:22 PM and remind me to jot down a quick task note?",
-    "tool_name": "set_alarm",
-    "parameters": {
-      "time_hours": 22,
-      "time_minutes": 22
-    }
-  },
-  {
-    "user_input": "I want to set an alarm for tonight at 11:16 PM to remind me to pack my work bag for tomorrow.",
-    "tool_name": "set_alarm",
-    "parameters": {
-      "time_hours": 23,
-      "time_minutes": 16
-    }
-  },
-  {
-    "user_input": "I want to set a lunch break alarm for 12:30 PM, just a quick reminder to take a pause and recharge.",
-    "tool_name": "set_alarm",
-    "parameters": {
-      "time_hours": 12,
-      "time_minutes": 30
-    }
-  },
-  {
-    "user_input": "I need to set my morning alarm for 8:53. Can you help me do that, keeping in mind I'm trying to coordinate my kids' school and morning routine?",
-    "tool_name": "set_alarm",
-    "parameters": {
-      "time_hours": 8,
-      "time_minutes": 53
-    }
-  },
-  {
-    "user_input": "I want to set a morning meditation alarm for 1:50 AM to help me track my wellness routine. Can you help me create a brief reminder for that time?",
-    "tool_name": "set_alarm",
-    "parameters": {
-      "time_hours": 1,
-      "time_minutes": 50
-    }
-  },
-  {
-    "user_input": "I need to set an early alarm for my morning workout routine. Can you help me schedule it for 6:14 AM?",
-    "tool_name": "set_alarm",
-    "parameters": {
-      "time_hours": 6,
-      "time_minutes": 14
-    }
-  },
-  {
-    "user_input": "I need to set an alarm for 6:05 AM tomorrow. I'm super busy this week and want to make sure I get up early to tackle my packed schedule.",
-    "tool_name": "set_alarm",
-    "parameters": {
-      "time_hours": 6,
-      "time_minutes": 5
-    }
-  },
-  {
-    "user_input": "Hey, can you set my alarm for 5:03 AM? I want a quick reminder note when it goes off.",
-    "tool_name": "set_alarm",
-    "parameters": {
-      "time_hours": 5,
-      "time_minutes": 3
-    }
-  },
-  {
-    "user_input": "Hey, I need to set an alarm for super early tomorrow to catch up on some work deadlines. Can you help me set it for 1:23 AM? I'm a freelancer with tons of projects, so keep the alarm message short and sweet.",
-    "tool_name": "set_alarm",
-    "parameters": {
-      "time_hours": 1,
-      "time_minutes": 23
-    }
-  },
-  {
-    "user_input": "I need to set an early alarm for my morning workout - can you help me get up at 4:44 AM? I'm super busy this week and want a quick motivational reminder.",
-    "tool_name": "set_alarm",
-    "parameters": {
-      "time_hours": 4,
-      "time_minutes": 44
-    }
-  },
-  {
-    "user_input": "I need to set an early alarm for my morning meeting prep, around quarter to eight. Could you help me plan that with a short reminder note?",
-    "tool_name": "set_alarm",
-    "parameters": {
-      "time_hours": 7,
-      "time_minutes": 53
-    }
-  },
-  {
-    "user_input": "I need to wake up early to start on those client projects. Can you set an alarm for 7:17 AM and maybe add a quick reminder note for my morning work session?",
-    "tool_name": "set_alarm",
-    "parameters": {
-      "time_hours": 7,
-      "time_minutes": 17
-    }
-  },
-  {
-    "user_input": "Hey, I need to set an early alarm for my morning meeting. Could you help me create a quick reminder for 7:25 AM that won't take up too much mental space?",
-    "tool_name": "set_alarm",
-    "parameters": {
-      "time_hours": 7,
-      "time_minutes": 25
-    }
-  },
-  {
-    "user_input": "I need to set an early alarm for my morning workout tomorrow. Can you help me set it for 6:05 AM, with a quick motivational note to get me started?",
-    "tool_name": "set_alarm",
-    "parameters": {
-      "time_hours": 6,
-      "time_minutes": 5
-    }
-  },
-  {
-    "user_input": "I want to set an early morning alarm to track my sleep routine and wake up at 12:31 AM to review my health journal.",
-    "tool_name": "set_alarm",
-    "parameters": {
-      "time_hours": 0,
-      "time_minutes": 31
-    }
-  },
-  {
-    "user_input": "Hey, can you set an alarm for 2:42 PM while I'm running some errands today? Just put a quick reminder note on it.",
-    "tool_name": "set_alarm",
-    "parameters": {
-      "time_hours": 14,
-      "time_minutes": 42
-    }
-  },
-  {
-    "user_input": "I want to set a reminder for next week at 1 AM to log my wellness tracking progress. Can you help me schedule that?",
-    "tool_name": "set_timer_absolute",
-    "parameters": {
-      "day_offset": "7",
-      "time_hours": 1,
-      "time_minutes": 0
-    }
-  },
-  {
-    "user_input": "Hey, I want to set a reminder for my team sync meeting next Wednesday at 10:37 AM. Could you help me schedule that?",
-    "tool_name": "set_timer_absolute",
-    "parameters": {
-      "day_offset": "wednesday",
-      "time_hours": 10,
-      "time_minutes": 37
-    }
-  },
-  {
-    "user_input": "Hey, can you set a timer for when I'll be free to pick up my package? It'll be in 3 days, early morning around 7:59 AM.",
-    "tool_name": "set_timer_absolute",
-    "parameters": {
-      "day_offset": "3",
-      "time_hours": 7,
-      "time_minutes": 59
-    }
-  },
-  {
-    "user_input": "I want to set a timer for early tomorrow morning to jot down my wellness goals before I get too busy with the day.",
-    "tool_name": "set_timer_absolute",
-    "parameters": {
-      "day_offset": "tomorrow",
-      "time_hours": 2,
-      "time_minutes": 58
-    }
-  },
-  {
-    "user_input": "I need to set a timer for the dryer load on Wednesday evening at 5:08 PM so I don't forget to fold the clothes.",
-    "tool_name": "set_timer_absolute",
-    "parameters": {
-      "day_offset": "2",
-      "time_hours": 17,
-      "time_minutes": 8
-    }
-  },
-  {
-    "user_input": "Can you set a reminder for next Wednesday at 5:57 PM to check the air filters and schedule HVAC maintenance?",
-    "tool_name": "set_timer_absolute",
-    "parameters": {
-      "day_offset": "6",
-      "time_hours": 17,
-      "time_minutes": 57
-    }
-  },
-  {
-    "user_input": "I want to set an early morning reminder for my project proposal review on Thursday. Can you help me schedule a quick note at 5:42 AM?",
-    "tool_name": "set_timer_absolute",
-    "parameters": {
-      "day_offset": "thursday",
-      "time_hours": 5,
-      "time_minutes": 42
-    }
-  },
-  {
-    "user_input": "Could you help me set a reminder for my dentist appointment next Wednesday morning at 9:05? I want to make sure I'm prepared.",
-    "tool_name": "set_timer_absolute",
-    "parameters": {
-      "day_offset": "wednesday",
-      "time_hours": 9,
-      "time_minutes": 5
-    }
-  },
-  {
-    "user_input": "I want to set a reminder for a late work project follow-up next Wednesday at 10:52 PM.",
-    "tool_name": "set_timer_absolute",
-    "parameters": {
-      "day_offset": "4",
-      "time_hours": 22,
+      "time_hours": 21,
       "time_minutes": 52
     }
   },
   {
-    "user_input": "I want to set a reminder for our group dinner next week. Can you help me schedule it for next Wednesday at 10:59 AM?",
-    "tool_name": "set_timer_absolute",
+    "user_input": "Yo, can you set my alarm for 8 tonight? Gotta make sure I'm up for that thing.",
+    "tool_name": "set_alarm",
     "parameters": {
-      "day_offset": "6",
-      "time_hours": 10,
-      "time_minutes": 59
+      "time_hours": 20,
+      "time_minutes": 0
     }
   },
   {
-    "user_input": "Hey, can you set a timer for this Thursday at 3:51 PM? I'm working on some freelance stuff and want to make sure I take a break at the right time.",
-    "tool_name": "set_timer_absolute",
+    "user_input": "Hey, I need to wake up super early tomorrow for that client meeting - can you set my alarm for 4:36?",
+    "tool_name": "set_alarm",
     "parameters": {
-      "day_offset": "thursday",
+      "time_hours": 4,
+      "time_minutes": 36
+    }
+  },
+  {
+    "user_input": "Hey, can you set my alarm for 3:54 pm so I don't miss my workout class?",
+    "tool_name": "set_alarm",
+    "parameters": {
       "time_hours": 15,
-      "time_minutes": 51
+      "time_minutes": 54
     }
   },
   {
-    "user_input": "Hey, can you set a timer for next Wednesday at 12:41 PM to remind me to draft a quick project status update? I'm trying to stay on top of my client work.",
-    "tool_name": "set_timer_absolute",
+    "user_input": "Yo, I gotta set an alarm for 7:39 tonight so I don't miss my dinner plans with the squad.",
+    "tool_name": "set_alarm",
     "parameters": {
-      "day_offset": "4",
+      "time_hours": 19,
+      "time_minutes": 39
+    }
+  },
+  {
+    "user_input": "I'll need to set a reminder for my lunch meeting at 12:57 today.",
+    "tool_name": "set_alarm",
+    "parameters": {
       "time_hours": 12,
-      "time_minutes": 41
+      "time_minutes": 57
     }
   },
   {
-    "user_input": "I want to set a habit tracker reminder for my evening routine on Thursday at 10:50 PM. Can you help me schedule that?",
-    "tool_name": "set_timer_absolute",
+    "user_input": "Hey, can you set an alarm for me around 3:03 in the afternoon? I don't want to miss my meeting.",
+    "tool_name": "set_alarm",
     "parameters": {
-      "day_offset": "thursday",
-      "time_hours": 22,
+      "time_hours": 15,
+      "time_minutes": 3
+    }
+  },
+  {
+    "user_input": "alarm 4 tmrw - 7:40am b4 kids wake up",
+    "tool_name": "set_alarm",
+    "parameters": {
+      "time_hours": 7,
+      "time_minutes": 40
+    }
+  },
+  {
+    "user_input": "set alarm 4 lunch break @ 1:50 pm plz",
+    "tool_name": "set_alarm",
+    "parameters": {
+      "time_hours": 13,
       "time_minutes": 50
     }
   },
   {
-    "user_input": "Hey, can you set a timer for next Thursday at 5:17 PM? Just want a quick note reminder.",
-    "tool_name": "set_timer_absolute",
+    "user_input": "Can you set an alarm for 3:22 PM so I don't miss my quarterly team strategy meeting?",
+    "tool_name": "set_alarm",
     "parameters": {
-      "day_offset": "thursday",
-      "time_hours": 17,
-      "time_minutes": 17
+      "time_hours": 15,
+      "time_minutes": 22
     }
   },
   {
-    "user_input": "Can you set an early morning timer for tomorrow at 6:35 AM? I want a quick reminder note since my day is super packed.",
-    "tool_name": "set_timer_absolute",
+    "user_input": "Could you set an alarm for 8:29 PM tonight? I want to make sure I'm prepared for my evening conference call.",
+    "tool_name": "set_alarm",
     "parameters": {
-      "day_offset": "1",
-      "time_hours": 6,
-      "time_minutes": 35
+      "time_hours": 20,
+      "time_minutes": 29
     }
   },
   {
-    "user_input": "Hey, can you set a reminder for Friday evening around 8 PM for me to jot down some quick thoughts?",
-    "tool_name": "set_timer_absolute",
+    "user_input": "I need to wake up early to review my research paper before my 8 AM presentation. Can you set my alarm for 4:14 AM?",
+    "tool_name": "set_alarm",
     "parameters": {
-      "day_offset": "friday",
-      "time_hours": 19,
+      "time_hours": 4,
+      "time_minutes": 14
+    }
+  },
+  {
+    "user_input": "I need to set an early alarm for my client meeting prep tomorrow - can you help me set it for 4:58 AM?",
+    "tool_name": "set_alarm",
+    "parameters": {
+      "time_hours": 4,
       "time_minutes": 58
     }
   },
   {
-    "user_input": "I need to set an early morning reminder for my client work on Monday. Can you help me schedule a timer for 5:46 AM?",
-    "tool_name": "set_timer_absolute",
+    "user_input": "Hey, can you set my alarm for 10:58 tomorrow morning? I've got that early meeting and don't want to oversleep.",
+    "tool_name": "set_alarm",
     "parameters": {
-      "day_offset": "monday",
-      "time_hours": 5,
-      "time_minutes": 46
+      "time_hours": 10,
+      "time_minutes": 58
     }
   },
   {
-    "user_input": "Hey, I want to set a reminder for my midday meal tracking on Tuesday at 1:54 PM - just a quick note to keep me on my wellness routine.",
+    "user_input": "set alarm 4 bed @ 11:35 pm pls",
+    "tool_name": "set_alarm",
+    "parameters": {
+      "time_hours": 23,
+      "time_minutes": 35
+    }
+  },
+  {
+    "user_input": "I want to set an alarm for 9:47 PM tonight so I don't miss my evening meditation session.",
+    "tool_name": "set_alarm",
+    "parameters": {
+      "time_hours": 21,
+      "time_minutes": 47
+    }
+  },
+  {
+    "user_input": "alarm @ 5:32 tmrw, need 2 b up early 4 work mtg",
+    "tool_name": "set_alarm",
+    "parameters": {
+      "time_hours": 5,
+      "time_minutes": 32
+    }
+  },
+  {
+    "user_input": "Can you set my alarm for early tomorrow morning? I need to wake up at 6:13.",
+    "tool_name": "set_alarm",
+    "parameters": {
+      "time_hours": 6,
+      "time_minutes": 13
+    }
+  },
+  {
+    "user_input": "I need to set an alarm for my early morning conference call. Could you please set the alarm for 2:26 AM?",
+    "tool_name": "set_alarm",
+    "parameters": {
+      "time_hours": 2,
+      "time_minutes": 26
+    }
+  },
+  {
+    "user_input": "Hey, could you set an alarm for me at 5:03 pm? I need to make sure I don't forget my evening meeting.",
+    "tool_name": "set_alarm",
+    "parameters": {
+      "time_hours": 17,
+      "time_minutes": 3
+    }
+  },
+  {
+    "user_input": "I need to set my morning alarm for 7:11 AM to make sure I wake up in time for my early conference call.",
+    "tool_name": "set_alarm",
+    "parameters": {
+      "time_hours": 7,
+      "time_minutes": 11
+    }
+  },
+  {
+    "user_input": "I need to set a wake-up alarm for my morning routine research work at 11:04 AM.",
+    "tool_name": "set_alarm",
+    "parameters": {
+      "time_hours": 11,
+      "time_minutes": 4
+    }
+  },
+  {
+    "user_input": "Yo, can you set a timer for super early Wednesday morning, like right after midnight? I wanna make sure I wake up for that thing.",
     "tool_name": "set_timer_absolute",
     "parameters": {
-      "day_offset": "tuesday",
+      "day_offset": "wednesday",
+      "time_hours": 0,
+      "time_minutes": 7
+    }
+  },
+  {
+    "user_input": "rem 2 set timer 4 thurs @ 1:54pm, need 2 pick up kids frm practice",
+    "tool_name": "set_timer_absolute",
+    "parameters": {
+      "day_offset": "thursday",
       "time_hours": 13,
       "time_minutes": 54
     }
   },
   {
-    "user_input": "I need to set a timer for the evening in two days, right before my late night work session. Can you help me schedule that for 9:57 PM?",
+    "user_input": "Hey, I need to set a reminder for my client meeting early next Monday morning around 1:30 AM. Can you help me schedule that?",
     "tool_name": "set_timer_absolute",
     "parameters": {
-      "day_offset": "2",
-      "time_hours": 21,
-      "time_minutes": 57
-    }
-  },
-  {
-    "user_input": "Hey, can you set a reminder for the weekend pub meetup at 6:13 PM on Saturday? Just want to make sure I have everything planned out in advance.",
-    "tool_name": "set_timer_absolute",
-    "parameters": {
-      "day_offset": "saturday",
-      "time_hours": 18,
-      "time_minutes": 13
-    }
-  },
-  {
-    "user_input": "I need to set a reminder for my early morning project prep. Could you help me schedule a timer for 2:36 AM tomorrow?",
-    "tool_name": "set_timer_absolute",
-    "parameters": {
-      "day_offset": "tomorrow",
-      "time_hours": 2,
+      "day_offset": "monday",
+      "time_hours": 1,
       "time_minutes": 36
     }
   },
   {
-    "user_input": "Hey, can you set a timer for tomorrow at 5:40 PM to remind me about something quick?",
-    "tool_name": "set_timer_absolute",
-    "parameters": {
-      "day_offset": "1",
-      "time_hours": 17,
-      "time_minutes": 40
-    }
-  },
-  {
-    "user_input": "Hey, I need to set a reminder for my research paper draft early Saturday morning - can you help me set an alarm for 1:54 AM so I don't oversleep?",
-    "tool_name": "set_timer_absolute",
-    "parameters": {
-      "day_offset": "saturday",
-      "time_hours": 1,
-      "time_minutes": 54
-    }
-  },
-  {
-    "user_input": "Hey, I need to set a reminder for a meeting next Wednesday evening at 6:08 PM. Can you help me draft a quick note to myself?",
-    "tool_name": "set_timer_absolute",
-    "parameters": {
-      "day_offset": "6",
-      "time_hours": 18,
-      "time_minutes": 8
-    }
-  },
-  {
-    "user_input": "Hey, can you set a reminder for soccer practice next week? I want to make sure I don't forget, so schedule it for 4:54 PM on the day seven days from now.",
+    "user_input": "Remind me to check my meditation progress a week from now at 8:03 PM",
     "tool_name": "set_timer_absolute",
     "parameters": {
       "day_offset": "7",
-      "time_hours": 16,
-      "time_minutes": 54
+      "time_hours": 20,
+      "time_minutes": 3
     }
   },
   {
-    "user_input": "Can you set a timer for 11 hours, 44 minutes, and 13 seconds? I want to jot down a quick reminder for my work project.",
-    "tool_name": "set_timer",
+    "user_input": "yo, set a reminder for 6 days from now at like 11:33 pm for something important 👀",
+    "tool_name": "set_timer_absolute",
     "parameters": {
-      "time_hours": 11,
-      "time_minutes": 44,
-      "time_seconds": 13
+      "day_offset": "6",
+      "time_hours": 23,
+      "time_minutes": 33
     }
   },
   {
-    "user_input": "I want to set a reminder for some errands later today. Can you help me create a 7-hour timer with a quick note prompt?",
-    "tool_name": "set_timer",
+    "user_input": "Yo, can you set a reminder for my stats group project deadline? Need an alarm for Saturday at like 2:45 AM so I don't miss the submission.",
+    "tool_name": "set_timer_absolute",
     "parameters": {
-      "time_hours": 7,
-      "time_minutes": 6,
-      "time_seconds": 58
+      "day_offset": "saturday",
+      "time_hours": 2,
+      "time_minutes": 45
     }
   },
   {
-    "user_input": "Can you set a timer for 6:13 pm so I can remember to start dinner prep without getting distracted? Maybe add a quick note reminder for me.",
-    "tool_name": "set_timer",
+    "user_input": "I want to set a reminder for my Monday morning team meeting. Can you schedule a timer for 9:31 AM next Monday?",
+    "tool_name": "set_timer_absolute",
     "parameters": {
+      "day_offset": "monday",
+      "time_hours": 9,
+      "time_minutes": 31
+    }
+  },
+  {
+    "user_input": "remind me 5 days from now @ 6:16 pm 2 pick up dry cleaning",
+    "tool_name": "set_timer_absolute",
+    "parameters": {
+      "day_offset": "5",
       "time_hours": 18,
-      "time_minutes": 13,
-      "time_seconds": 48
+      "time_minutes": 16
     }
   },
   {
-    "user_input": "I need a timer set for my lunch break. It's going to be exactly 12 hours, 51 minutes, and 35 seconds from now - just enough time to manage my packed schedule.",
-    "tool_name": "set_timer",
+    "user_input": "remind me 2 days from now @ 5:48pm to pick up dry cleaning",
+    "tool_name": "set_timer_absolute",
     "parameters": {
-      "time_hours": 12,
-      "time_minutes": 51,
-      "time_seconds": 35
+      "day_offset": "2",
+      "time_hours": 17,
+      "time_minutes": 48
     }
   },
   {
-    "user_input": "I need an 8-hour timer for my batch cooking project today. Can you set that up for me with 11 minutes and 44 seconds added?",
-    "tool_name": "set_timer",
+    "user_input": "Hey, can you help me set a timer for next Wednesday at 1 AM? I need to wake up early for that client meeting.",
+    "tool_name": "set_timer_absolute",
     "parameters": {
-      "time_hours": 8,
-      "time_minutes": 11,
-      "time_seconds": 44
-    }
-  },
-  {
-    "user_input": "I'm setting a timer for when I need to check on something in about 6 and a half hours - can you help me jot down a quick reminder?",
-    "tool_name": "set_timer",
-    "parameters": {
-      "time_hours": 6,
-      "time_minutes": 52,
-      "time_seconds": 37
-    }
-  },
-  {
-    "user_input": "Set a timer for my research paper draft - I need 19 hours and 4 minutes to get this done, with a quick reminder note.",
-    "tool_name": "set_timer",
-    "parameters": {
-      "time_hours": 19,
-      "time_minutes": 4,
-      "time_seconds": 48
-    }
-  },
-  {
-    "user_input": "I want to do a meditation timer for my mindfulness practice. Can you set a timer for one hour, 23 minutes, and 39 seconds?",
-    "tool_name": "set_timer",
-    "parameters": {
+      "day_offset": "wednesday",
       "time_hours": 1,
-      "time_minutes": 23,
-      "time_seconds": 39
+      "time_minutes": 0
     }
   },
   {
-    "user_input": "I need a timer to help me track my research paper deadline - set it for 12 hours, 34 minutes, and 48 seconds, with a quick reminder note.",
-    "tool_name": "set_timer",
+    "user_input": "I need to set a reminder for my fitness tracking check-in tomorrow at 3:53 PM, can you help me schedule that?",
+    "tool_name": "set_timer_absolute",
     "parameters": {
-      "time_hours": 12,
-      "time_minutes": 34,
-      "time_seconds": 48
+      "day_offset": "1",
+      "time_hours": 15,
+      "time_minutes": 53
     }
   },
   {
-    "user_input": "I want to track my evening meditation habit. Can you set a timer for 4 hours and 34 minutes from now, with a quick note reminder?",
+    "user_input": "I need to set a reminder for my team meeting next Sunday morning at 9:24 AM. Could you help me schedule that?",
+    "tool_name": "set_timer_absolute",
+    "parameters": {
+      "day_offset": "sunday",
+      "time_hours": 9,
+      "time_minutes": 24
+    }
+  },
+  {
+    "user_input": "Yo, can you set a reminder for Sunday noon-ish to catch the game? Like right around 12:41 would be perfect.",
+    "tool_name": "set_timer_absolute",
+    "parameters": {
+      "day_offset": "sunday",
+      "time_hours": 12,
+      "time_minutes": 41
+    }
+  },
+  {
+    "user_input": "I need to set a reminder for my project status report, which is due in three days at 8:18 PM.",
+    "tool_name": "set_timer_absolute",
+    "parameters": {
+      "day_offset": "3",
+      "time_hours": 20,
+      "time_minutes": 18
+    }
+  },
+  {
+    "user_input": "I need a reminder for my term paper draft Sunday night right before midnight. Can you set that up?",
+    "tool_name": "set_timer_absolute",
+    "parameters": {
+      "day_offset": "sunday",
+      "time_hours": 0,
+      "time_minutes": 45
+    }
+  },
+  {
+    "user_input": "Yo, can you set a timer for next Wednesday at 9:01 PM for that thing I gotta remember?",
+    "tool_name": "set_timer_absolute",
+    "parameters": {
+      "day_offset": "6",
+      "time_hours": 21,
+      "time_minutes": 1
+    }
+  },
+  {
+    "user_input": "I need to set a timer for soccer practice next Tuesday at 8:48 PM to remind me to pick up the kids.",
+    "tool_name": "set_timer_absolute",
+    "parameters": {
+      "day_offset": "tuesday",
+      "time_hours": 20,
+      "time_minutes": 48
+    }
+  },
+  {
+    "user_input": "Set a reminder for my morning meeting tomorrow at 7:17 AM, please.",
+    "tool_name": "set_timer_absolute",
+    "parameters": {
+      "day_offset": "tomorrow",
+      "time_hours": 7,
+      "time_minutes": 17
+    }
+  },
+  {
+    "user_input": "Can you set a timer for Wednesday at 3:50 PM for my dentist appointment reminder?",
+    "tool_name": "set_timer_absolute",
+    "parameters": {
+      "day_offset": "3",
+      "time_hours": 15,
+      "time_minutes": 50
+    }
+  },
+  {
+    "user_input": "Remind me to check in on that project proposal exactly one week from now at 11:36 PM.",
+    "tool_name": "set_timer_absolute",
+    "parameters": {
+      "day_offset": "7",
+      "time_hours": 23,
+      "time_minutes": 36
+    }
+  },
+  {
+    "user_input": "remind me 2 days from now @ 3:22pm abt client mtg prep",
+    "tool_name": "set_timer_absolute",
+    "parameters": {
+      "day_offset": "2",
+      "time_hours": 15,
+      "time_minutes": 22
+    }
+  },
+  {
+    "user_input": "Hey, can you set a timer for Monday night right before midnight? I want to make sure I wake up early for that important meeting.",
+    "tool_name": "set_timer_absolute",
+    "parameters": {
+      "day_offset": "monday",
+      "time_hours": 23,
+      "time_minutes": 51
+    }
+  },
+  {
+    "user_input": "timer friday @ 11:12 rmdr 4 mtg prep",
+    "tool_name": "set_timer_absolute",
+    "parameters": {
+      "day_offset": "friday",
+      "time_hours": 11,
+      "time_minutes": 12
+    }
+  },
+  {
+    "user_input": "Yo, can you set a timer for 3:52 PM today so I don't forget to pull the lasagna out of the oven?",
+    "tool_name": "set_timer_absolute",
+    "parameters": {
+      "day_offset": "today",
+      "time_hours": 15,
+      "time_minutes": 52
+    }
+  },
+  {
+    "user_input": "Yo, set a reminder for me two days from now at like 9:01 AM - gotta nail that project deadline!",
+    "tool_name": "set_timer_absolute",
+    "parameters": {
+      "day_offset": "2",
+      "time_hours": 9,
+      "time_minutes": 1
+    }
+  },
+  {
+    "user_input": "Can you set a timer for my research paper? I need 4 hours, 54 minutes, and 46 seconds to get this draft done without distractions.",
     "tool_name": "set_timer",
     "parameters": {
       "time_hours": 4,
-      "time_minutes": 34,
-      "time_seconds": 52
+      "time_minutes": 54,
+      "time_seconds": 46
     }
   },
   {
-    "user_input": "Could you set a timer for my daughter's soccer practice? I need to jot down a quick reminder for her coach, so give me just under 8 hours to do it.",
+    "user_input": "Need timer 4 prez prep - 15h 31m 10s tops, gonna nail this presentation",
     "tool_name": "set_timer",
     "parameters": {
-      "time_hours": 7,
-      "time_minutes": 7,
-      "time_seconds": 59
-    }
-  },
-  {
-    "user_input": "Hey, I need to set a timer for when I'm making a big family lasagna tonight. Can you help me time it so it'll be ready around 8:30 PM?",
-    "tool_name": "set_timer",
-    "parameters": {
-      "time_hours": 20,
+      "time_hours": 15,
       "time_minutes": 31,
-      "time_seconds": 8
+      "time_seconds": 10
     }
   },
   {
-    "user_input": "I want to set a timer for my laundry and errands. Could you help me set a timer for 2 hours and 16 minutes?",
+    "user_input": "yo set a timer for 4 and a half hours for my study sesh - need to focus without checking the clock every 5 mins lol",
     "tool_name": "set_timer",
     "parameters": {
-      "time_hours": 2,
-      "time_minutes": 16,
-      "time_seconds": 13
-    }
-  },
-  {
-    "user_input": "I want to set a timer for my afternoon productivity block - can you help me set it for 5:20 PM?",
-    "tool_name": "set_timer",
-    "parameters": {
-      "time_hours": 17,
-      "time_minutes": 20,
-      "time_seconds": 39
-    }
-  },
-  {
-    "user_input": "I need a timer set for 16 hours and about 10 minutes from now - it's for tracking a big project deadline I've got coming up.",
-    "tool_name": "set_timer",
-    "parameters": {
-      "time_hours": 16,
-      "time_minutes": 9,
-      "time_seconds": 58
-    }
-  },
-  {
-    "user_input": "Hey, I need to set a timer for my late-night project planning session. Can you help me track 20 hours, 3 minutes, and 24 seconds for a quick task reminder?",
-    "tool_name": "set_timer",
-    "parameters": {
-      "time_hours": 20,
-      "time_minutes": 3,
-      "time_seconds": 24
-    }
-  },
-  {
-    "user_input": "Hey, can you set a timer for my research paper deadline? I need 14 hours and 6 minutes from now, with a quick reminder note.",
-    "tool_name": "set_timer",
-    "parameters": {
-      "time_hours": 14,
-      "time_minutes": 6,
-      "time_seconds": 38
-    }
-  },
-  {
-    "user_input": "I need a timer set for my project report presentation. Can you help me time it for exactly 14 hours, 57 minutes, and 57 seconds?",
-    "tool_name": "set_timer",
-    "parameters": {
-      "time_hours": 14,
-      "time_minutes": 57,
-      "time_seconds": 57
-    }
-  },
-  {
-    "user_input": "Hey, I need a timer set for my research paper deadline - it's in about 6 hours and 38 minutes, and I want a quick reminder to stay on track.",
-    "tool_name": "set_timer",
-    "parameters": {
-      "time_hours": 6,
-      "time_minutes": 38,
-      "time_seconds": 25
-    }
-  },
-  {
-    "user_input": "Hey, I want to set a timer for my meditation and workout tracking. Can you set it for just under 4 hours from now?",
-    "tool_name": "set_timer",
-    "parameters": {
-      "time_hours": 3,
-      "time_minutes": 57,
-      "time_seconds": 24
-    }
-  },
-  {
-    "user_input": "I want to remind myself to swap the laundry in about an hour and a half. Can you set a timer for that?",
-    "tool_name": "set_timer",
-    "parameters": {
-      "time_hours": 1,
+      "time_hours": 4,
       "time_minutes": 46,
       "time_seconds": 14
     }
   },
   {
-    "user_input": "Could you set a timer for 8 hours, 34 minutes, and 40 seconds to remind me to check on the laundry and start dinner prep later?",
+    "user_input": "Hey, I've got a long conference call starting at noon and I want to make sure I wrap everything up before it begins - can you set a timer for 11 and a half minutes?",
     "tool_name": "set_timer",
     "parameters": {
-      "time_hours": 8,
-      "time_minutes": 34,
-      "time_seconds": 40
+      "time_hours": 11,
+      "time_minutes": 30,
+      "time_seconds": 4
     }
   },
   {
-    "user_input": "I need a timer to remind me to start my research paper draft - can you set it for about 5 and a half hours from now with a quick note prompt?",
+    "user_input": "Yo, I gotta set a timer for my research paper - gonna lock in 7 hours and 12 minutes, plus an extra 20 seconds for good luck 💪🏼📚",
     "tool_name": "set_timer",
     "parameters": {
-      "time_hours": 5,
-      "time_minutes": 43,
+      "time_hours": 7,
+      "time_minutes": 12,
+      "time_seconds": 20
+    }
+  },
+  {
+    "user_input": "Can you set a timer for 15 hours, 36 minutes, and 49 seconds? I need to track a long project deadline.",
+    "tool_name": "set_timer",
+    "parameters": {
+      "time_hours": 15,
+      "time_minutes": 36,
+      "time_seconds": 49
+    }
+  },
+  {
+    "user_input": "need timer 4 big project - 10hr 48min 1sec countdown plz",
+    "tool_name": "set_timer",
+    "parameters": {
+      "time_hours": 10,
+      "time_minutes": 48,
       "time_seconds": 1
     }
   },
   {
-    "user_input": "Can you set a timer for me to remind me to take the laundry out of the dryer? I need about 14 hours and 57 minutes from now.",
+    "user_input": "need 8hr 6min 20sec timer b4 big mtg - start now plz",
+    "tool_name": "set_timer",
+    "parameters": {
+      "time_hours": 8,
+      "time_minutes": 6,
+      "time_seconds": 20
+    }
+  },
+  {
+    "user_input": "need 2 set timer 4 research paper - 57 min go",
+    "tool_name": "set_timer",
+    "parameters": {
+      "time_hours": 0,
+      "time_minutes": 57,
+      "time_seconds": 0
+    }
+  },
+  {
+    "user_input": "gotta bake bread 4 hrs n 36 min + 27 secs. timer plz",
+    "tool_name": "set_timer",
+    "parameters": {
+      "time_hours": 4,
+      "time_minutes": 36,
+      "time_seconds": 27
+    }
+  },
+  {
+    "user_input": "Yo, I gotta crush this massive client project - set me a timer for 10 and a half hours, gonna be a marathon work session!",
+    "tool_name": "set_timer",
+    "parameters": {
+      "time_hours": 10,
+      "time_minutes": 20,
+      "time_seconds": 15
+    }
+  },
+  {
+    "user_input": "Yo, set a timer for when my big presentation prep wraps up - that's about 18 hours, 3 minutes, and 26 seconds from now. Gotta keep myself on track!",
+    "tool_name": "set_timer",
+    "parameters": {
+      "time_hours": 18,
+      "time_minutes": 3,
+      "time_seconds": 26
+    }
+  },
+  {
+    "user_input": "timer 4 big project - want it @ 10h 2m 13s plz",
+    "tool_name": "set_timer",
+    "parameters": {
+      "time_hours": 10,
+      "time_minutes": 2,
+      "time_seconds": 13
+    }
+  },
+  {
+    "user_input": "Yo, I'm bout to start my meal prep marathon - set me a timer for 3 and a half hours so I don't burn everything to a crisp!",
+    "tool_name": "set_timer",
+    "parameters": {
+      "time_hours": 3,
+      "time_minutes": 32,
+      "time_seconds": 12
+    }
+  },
+  {
+    "user_input": "I need to set a timer for my research project presentation prep - want to make sure I dedicate precisely 18 hours, 3 minutes, and 34 seconds to getting everything polished before the deadline.",
+    "tool_name": "set_timer",
+    "parameters": {
+      "time_hours": 18,
+      "time_minutes": 3,
+      "time_seconds": 34
+    }
+  },
+  {
+    "user_input": "Yo, can you set a timer for my casserole? I gotta let this bad boy bake for like 14 hours, 34 mins, and 29 secs.",
     "tool_name": "set_timer",
     "parameters": {
       "time_hours": 14,
-      "time_minutes": 57,
-      "time_seconds": 5
+      "time_minutes": 34,
+      "time_seconds": 29
     }
   },
   {
-    "user_input": "Hey, I need to set a timer for my focused work sprint. Could you help me block out almost 12 hours for a deep work session, and maybe add a quick note reminder for myself?",
+    "user_input": "Yo, I need a timer set for my slow-cooker meal - it's gonna need like 4 and a half hours to get perfect. Can you help me out?",
     "tool_name": "set_timer",
     "parameters": {
-      "time_hours": 11,
-      "time_minutes": 48,
-      "time_seconds": 32
+      "time_hours": 4,
+      "time_minutes": 29,
+      "time_seconds": 18
     }
   },
   {
-    "user_input": "Hey, can you set a reminder for my sociology paper deadline on February 12th, 2026? I need to make sure I submit the final draft to Professor Rodriguez by 8:38 AM, about a week before the actual due date.",
-    "tool_name": "reminder_absolute",
+    "user_input": "I need to set a timer for the client presentation prep - want to make sure I stay on track and have exactly 2 hours and 17 minutes with a 51-second buffer.",
+    "tool_name": "set_timer",
     "parameters": {
-      "day_offset": "6",
-      "absolute_time_hour": 8,
-      "absolute_time_minute": 38,
-      "date_month_day": "02-12",
-      "date_year": 2026,
-      "message": "Research paper draft due today - need to finish final edits on sociology capstone and submit to Professor Rodriguez before noon deadline."
+      "time_hours": 2,
+      "time_minutes": 17,
+      "time_seconds": 51
     }
   },
   {
-    "user_input": "I need to set a reminder to get my mom's birthday present on September 11th, 2026 at 3:46 PM, about a week before her party.",
-    "tool_name": "reminder_absolute",
+    "user_input": "I want to set a timer for my evening meditation and workout cool-down routine - can you start a timer for 18 hours, 53 minutes, and 58 seconds?",
+    "tool_name": "set_timer",
     "parameters": {
-      "day_offset": "6",
-      "absolute_time_hour": 15,
-      "absolute_time_minute": 46,
-      "date_month_day": "11-09",
-      "date_year": 2026,
-      "message": "Pick up birthday gift for mom before her party"
+      "time_hours": 18,
+      "time_minutes": 53,
+      "time_seconds": 58
     }
   },
   {
-    "user_input": "Hey, I need a reminder set for Tuesday, December 18th at 5:51 PM in 2025 to grab those quarterly accounting reports before I head out of the office.",
+    "user_input": "Yo, set a timer for my study sesh - gimme 20 mins and 6 secs to crush this research paper before I lose focus!",
+    "tool_name": "set_timer",
+    "parameters": {
+      "time_hours": 0,
+      "time_minutes": 20,
+      "time_seconds": 6
+    }
+  },
+  {
+    "user_input": "Bruh, gimme a timer for my group project - I've got 12 hours, 39 mins, and 7 secs before this massive deadline hits 💀",
+    "tool_name": "set_timer",
+    "parameters": {
+      "time_hours": 12,
+      "time_minutes": 39,
+      "time_seconds": 7
+    }
+  },
+  {
+    "user_input": "Hey Siri, can you set a timer for 38 minutes and 42 seconds? I'm doing laundry and want to make sure I don't forget about it.",
+    "tool_name": "set_timer",
+    "parameters": {
+      "time_hours": 0,
+      "time_minutes": 38,
+      "time_seconds": 42
+    }
+  },
+  {
+    "user_input": "Hey, can you set a timer for just before midnight? I've got some bread in the oven that needs to bake for exactly 23 hours, 28 minutes, and 53 seconds.",
+    "tool_name": "set_timer",
+    "parameters": {
+      "time_hours": 23,
+      "time_minutes": 28,
+      "time_seconds": 53
+    }
+  },
+  {
+    "user_input": "Yo, I gotta set a timer for my slow cooker - it needs to run for 8 hours, 17 mins, and 42 secs before dinner's ready. Can you help me out?",
+    "tool_name": "set_timer",
+    "parameters": {
+      "time_hours": 8,
+      "time_minutes": 17,
+      "time_seconds": 42
+    }
+  },
+  {
+    "user_input": "Hey Alexa, can you set a timer for my slow cooker roast? I'm planning to have dinner ready around 6 hours and 55 minutes from now, so set it for 6 hours and 55 minutes with an extra 18 seconds to be precise.",
+    "tool_name": "set_timer",
+    "parameters": {
+      "time_hours": 6,
+      "time_minutes": 55,
+      "time_seconds": 18
+    }
+  },
+  {
+    "user_input": "Yo, set me a reminder on May 22nd, 2025 at 10:02 PM - I'm running to Whole Foods for some health food haul before they shut down!",
     "tool_name": "reminder_absolute",
     "parameters": {
-      "day_offset": "tuesday",
-      "absolute_time_hour": 17,
-      "absolute_time_minute": 51,
-      "date_month_day": "12-18",
+      "day_offset": "3",
+      "absolute_time_hour": 22,
+      "absolute_time_minute": 2,
+      "date_month_day": "05-22",
       "date_year": 2025,
-      "message": "Pick up quarterly project reports from accounting before leaving the office"
+      "message": "Yo, gotta hit up Whole Foods for that organic kale and those probiotic supplements before they close!"
     }
   },
   {
-    "user_input": "Hey, can you help me set a reminder for July 11th, 2030 at 2:14 AM? I need to remember to pick up Alex's soccer stuff before the tournament and check if he needs new cleats.",
+    "user_input": "Hey, can you set a reminder for me on July 26th at 9:09 PM in 2025? I've got to remember to pick up Sophie's soccer uniform from the dry cleaners before her big tournament weekend.",
+    "tool_name": "reminder_absolute",
+    "parameters": {
+      "day_offset": "6",
+      "absolute_time_hour": 21,
+      "absolute_time_minute": 9,
+      "date_month_day": "07-26",
+      "date_year": 2025,
+      "message": "Pick up Sophie's soccer uniform from dry cleaners before tournament weekend. Need it pressed and ready to go by Friday morning."
+    }
+  },
+  {
+    "user_input": "Bruh, lemme set a reminder a week after Christmas in 2026 at like 2:30 AM to scope out some fire post-holiday clearance deals for the fam's gifts!",
+    "tool_name": "reminder_absolute",
+    "parameters": {
+      "day_offset": "7",
+      "absolute_time_hour": 2,
+      "absolute_time_minute": 36,
+      "date_month_day": "12-26",
+      "date_year": 2026,
+      "message": "yo gotta grab some extra holiday gifts for the fam before christmas runs out - gonna hit up those post-holiday sales and snag some sick deals"
+    }
+  },
+  {
+    "user_input": "Hey, remind me to pick up milk and eggs next weekend, specifically on Jan 21st at 9:29 PM in 2025 - I always forget when I'm out and about.",
+    "tool_name": "reminder_absolute",
+    "parameters": {
+      "day_offset": "7",
+      "absolute_time_hour": 21,
+      "absolute_time_minute": 29,
+      "date_month_day": "01-21",
+      "date_year": 2025,
+      "message": "Grab milk and eggs when I pass the grocery store this weekend, almost out of both"
+    }
+  },
+  {
+    "user_input": "Yo, remind me to hit up the grocery store early on July 12th at 11:42 next year for my fam's big game night - gotta make sure we're stocked up on snacks!",
+    "tool_name": "reminder_absolute",
+    "parameters": {
+      "day_offset": "saturday",
+      "absolute_time_hour": 11,
+      "absolute_time_minute": 42,
+      "date_month_day": "07-12",
+      "date_year": 2025,
+      "message": "yo gotta grab fresh groceries before the fam comes over for game night"
+    }
+  },
+  {
+    "user_input": "set rmdr 4 grocery run oct 1st @ 10:39am nxt yr. gotta grab essntls b4 big boss mtg",
+    "tool_name": "reminder_absolute",
+    "parameters": {
+      "day_offset": "tomorrow",
+      "absolute_time_hour": 10,
+      "absolute_time_minute": 39,
+      "date_month_day": "10-01",
+      "date_year": 2025,
+      "message": "Pick up groc b4 mtg w boss. Need milk, bread, + snacks 4 week"
+    }
+  },
+  {
+    "user_input": "Yo, remind me to snag some extra milk on Dec 7th at 9:30 PM in 2026 - always running out and it's such a pain when I'm tryna make my morning coffee!",
+    "tool_name": "reminder_absolute",
+    "parameters": {
+      "day_offset": "7",
+      "absolute_time_hour": 21,
+      "absolute_time_minute": 34,
+      "date_month_day": "07-12",
+      "date_year": 2026,
+      "message": "yo gotta grab some extra milk for the week, running low in the fridge and dont want to be caught empty-handed again"
+    }
+  },
+  {
+    "user_input": "Rem 4 milk run on 6/15/25, set @ 1:35am, 2 days b4 - need 2 grab b4 Jake's soccer game",
     "tool_name": "reminder_absolute",
     "parameters": {
       "day_offset": "2",
-      "absolute_time_hour": 2,
-      "absolute_time_minute": 14,
-      "date_month_day": "07-11",
-      "date_year": 2030,
-      "message": "Pick up Alex's soccer uniform from dry cleaners before tournament weekend, and get new cleats if they still don't fit"
+      "absolute_time_hour": 1,
+      "absolute_time_minute": 35,
+      "date_month_day": "06-15",
+      "date_year": 2025,
+      "message": "milk low @ store, pick up b4 soccer practice"
     }
   },
   {
-    "user_input": "Hey, I need a reminder on August 12th at 12:19 PM to grab my dry cleaning this Wednesday.",
+    "user_input": "rem tmrw @ 9:07pm - dec 6, 2026, multivitamins b4 workout ✅",
     "tool_name": "reminder_absolute",
     "parameters": {
-      "day_offset": "wednesday",
-      "absolute_time_hour": 12,
-      "absolute_time_minute": 19,
-      "date_month_day": "12-08",
+      "day_offset": "tomorrow",
+      "absolute_time_hour": 21,
+      "absolute_time_minute": 7,
+      "date_month_day": "12-06",
+      "date_year": 2026,
+      "message": "grab multivitamins 4 gym"
+    }
+  },
+  {
+    "user_input": "Remind me to grab my dry cleaning on Tuesday the 19th at 2:15 pm next month.",
+    "tool_name": "reminder_absolute",
+    "parameters": {
+      "day_offset": "tuesday",
+      "absolute_time_hour": 14,
+      "absolute_time_minute": 15,
+      "date_month_day": "11-19",
       "date_year": null,
       "message": "Pick up dry cleaning today"
     }
   },
   {
-    "user_input": "Hey, can you remind me to get a birthday card for Mom on Friday morning around 9:30, specifically for June 7th?",
+    "user_input": "Hey, can you set a reminder for me to grab the client proposal draft on the last Tuesday of May 2026 at 11:19 AM?",
     "tool_name": "reminder_absolute",
     "parameters": {
-      "day_offset": "friday",
-      "absolute_time_hour": 9,
-      "absolute_time_minute": 29,
-      "date_month_day": "06-07",
-      "date_year": null,
-      "message": "Get birthday card for Mom's birthday this weekend"
-    }
-  },
-  {
-    "user_input": "Hey, I need to remember to grab my dry cleaning next Monday at 8:37 PM on July 29th.",
-    "tool_name": "reminder_absolute",
-    "parameters": {
-      "day_offset": "monday",
-      "absolute_time_hour": 20,
-      "absolute_time_minute": 37,
-      "date_month_day": "07-29",
-      "date_year": null,
-      "message": "Pick up dry cleaning"
-    }
-  },
-  {
-    "user_input": "Hey, I need a reminder set for Thursday, July 15th at 11:45 AM in 2030. It's about picking up the quarterly project report draft from the print shop before my client meeting and making sure I submit my conference travel expense reimbursement.",
-    "tool_name": "reminder_absolute",
-    "parameters": {
-      "day_offset": "thursday",
+      "day_offset": "tuesday",
       "absolute_time_hour": 11,
-      "absolute_time_minute": 45,
-      "date_month_day": "07-15",
-      "date_year": 2030,
-      "message": "Pick up quarterly project report draft from printing service before client meeting and file expense reimbursement for last month's conference travel"
+      "absolute_time_minute": 19,
+      "date_month_day": "05-31",
+      "date_year": 2026,
+      "message": "Pick up client proposal draft"
     }
   },
   {
-    "user_input": "Hey, I need a reminder for my dog's meds on July 17th, 2026 at 8:46 PM. Can you set that up for me so I don't forget to pick up the refill and schedule the next check-up?",
+    "user_input": "I need a reminder set for July 24th, 2026 at 10:58 AM, five days out, to pick up Emily's orthodontist paperwork from her dental office before her afternoon appointment.",
     "tool_name": "reminder_absolute",
     "parameters": {
-      "day_offset": "sunday",
-      "absolute_time_hour": 20,
-      "absolute_time_minute": 46,
-      "date_month_day": "07-17",
+      "day_offset": "5",
+      "absolute_time_hour": 10,
+      "absolute_time_minute": 58,
+      "date_month_day": "07-24",
       "date_year": 2026,
-      "message": "Pick up dog medication refill at downtown vet clinic before they close and confirm next month's annual check-up appointment."
+      "message": "Pick up Emily's orthodontist records and insurance forms from the pediatric dental office before her afternoon appointment."
     }
   },
   {
-    "user_input": "Hey, can you set a reminder for my coffee meetup with Sarah? It's tomorrow at 5:46 PM on September 8th at the downtown cafe.",
+    "user_input": "I need to set a reminder to pick up Jake's soccer team uniform from the dry cleaners on November 27th, 2030 at 12:07 PM - can you help me schedule that a day in advance?",
     "tool_name": "reminder_absolute",
     "parameters": {
       "day_offset": "1",
-      "absolute_time_hour": 17,
-      "absolute_time_minute": 46,
-      "date_month_day": "08-09",
-      "date_year": null,
-      "message": "Coffee meetup with Sarah at downtown cafe"
+      "absolute_time_hour": 12,
+      "absolute_time_minute": 7,
+      "date_month_day": "11-27",
+      "date_year": 2030,
+      "message": "Pick up soccer uniform dry cleaning"
     }
   },
   {
-    "user_input": "Hey, can you set a reminder for November 24th in 2027 at 7:45 PM, two days in advance, to grab Jacob's soccer uniform?",
+    "user_input": "Yo, remind me to hit the grocery store for smoothie supplies on May 19th around 7:54 PM - I need to stock up before things get hectic!",
     "tool_name": "reminder_absolute",
     "parameters": {
       "day_offset": "2",
       "absolute_time_hour": 19,
-      "absolute_time_minute": 45,
-      "date_month_day": "11-24",
-      "date_year": 2027,
-      "message": "Pick up Jacob soccer uniform"
-    }
-  },
-  {
-    "user_input": "Hey, I need a reminder set for August 31st at 10:17 AM to help me remember to turn in my Marketing Research paper draft three days before the final deadline.",
-    "tool_name": "reminder_absolute",
-    "parameters": {
-      "day_offset": "3",
-      "absolute_time_hour": 10,
-      "absolute_time_minute": 17,
-      "date_month_day": "08-31",
+      "absolute_time_minute": 54,
+      "date_month_day": "05-19",
       "date_year": null,
-      "message": "Submit final draft of Marketing Research paper before midnight deadline"
+      "message": "Gotta grab more almond milk and some spinach for smoothies before the week gets crazy - health goals are real!"
     }
   },
   {
-    "user_input": "Hey, I need a reminder for my dry cleaning pickup on May 26th, 2030, at 3:16 AM on a Sunday - it's crucial I get this done before my business trip.",
+    "user_input": "Hey, can you set a reminder for the Martinez Design Studio web proposal? I need to have the final draft and wireframes ready by 9:19 PM on May 25th, 2026, which is a Friday before their meeting.",
     "tool_name": "reminder_absolute",
     "parameters": {
-      "day_offset": "sunday",
-      "absolute_time_hour": 3,
-      "absolute_time_minute": 16,
-      "date_month_day": "05-26",
-      "date_year": 2030,
-      "message": "Pick up dry cleaning before heading to airport for business trip"
-    }
-  },
-  {
-    "user_input": "Hey, I need a reminder to pick up my dry cleaning the day before my sister's wedding rehearsal. Can you set that for 5:45 PM on August 1st, 2030?",
-    "tool_name": "reminder_absolute",
-    "parameters": {
-      "day_offset": "tomorrow",
-      "absolute_time_hour": 17,
-      "absolute_time_minute": 45,
-      "date_month_day": "01-08",
-      "date_year": 2030,
-      "message": "Pick up dry cleaning before sister's wedding rehearsal"
-    }
-  },
-  {
-    "user_input": "Hey, I need a reminder set for this year's Veterans Day at 10:36 PM. Could you help me create a deadline alert for my graphic design client's website project draft?",
-    "tool_name": "reminder_absolute",
-    "parameters": {
-      "day_offset": "thursday",
-      "absolute_time_hour": 22,
-      "absolute_time_minute": 36,
-      "date_month_day": "11-11",
-      "date_year": null,
-      "message": "Submit draft to graphic design client for website redesign project by end of week"
-    }
-  },
-  {
-    "user_input": "I need to set a reminder for picking up my dry cleaning on the Saturday before the wedding. Can you help me schedule that for 3:50 PM on April 1st, 2030?",
-    "tool_name": "reminder_absolute",
-    "parameters": {
-      "day_offset": "saturday",
-      "absolute_time_hour": 15,
-      "absolute_time_minute": 50,
-      "date_month_day": "04-01",
-      "date_year": 2030,
-      "message": "Pick up dry cleaning before the wedding this weekend"
-    }
-  },
-  {
-    "user_input": "I need to set a reminder for my prescription pickup on March 12th, 2026. Can you help me schedule it for 3:28 AM, about a week in advance, and include a note to check my car's tires?",
-    "tool_name": "reminder_absolute",
-    "parameters": {
-      "day_offset": "6",
-      "absolute_time_hour": 3,
-      "absolute_time_minute": 28,
-      "date_month_day": "03-12",
+      "day_offset": "friday",
+      "absolute_time_hour": 21,
+      "absolute_time_minute": 19,
+      "date_month_day": "05-25",
       "date_year": 2026,
-      "message": "Pick up prescription refills from Walgreens pharmacy before they close and check tire pressure on the sedan afterward"
+      "message": "Finish client proposal for web design project before Friday's meeting - need to review wireframes and send final draft to Martinez Design Studio."
     }
   },
   {
-    "user_input": "Hey, I need to set a reminder for my dry cleaning pickup on October 14th, 2026, at 3:48 PM before I head out on my trip. Can you help me with that?",
+    "user_input": "Hey, can you set a reminder for my big web design project draft? I need it scheduled for October 2nd, 2025 at 7:12 AM, and give me a 5-day heads up.",
     "tool_name": "reminder_absolute",
     "parameters": {
-      "day_offset": null,
-      "absolute_time_hour": 15,
-      "absolute_time_minute": 48,
-      "date_month_day": "10-14",
-      "date_year": 2026,
-      "message": "Pick up dry cleaning before trip"
+      "day_offset": "5",
+      "absolute_time_hour": 7,
+      "absolute_time_minute": 12,
+      "date_month_day": "10-02",
+      "date_year": 2025,
+      "message": "Finish client website draft"
     }
   },
   {
-    "user_input": "Remind me to grab my dry cleaning on October 4th at 10:23 PM in 2025, a week before my trip.",
+    "user_input": "I need to set a reminder to pick up the sports physicals forms on May 2nd, 2026, four days before the deadline at 2:10 PM.",
+    "tool_name": "reminder_absolute",
+    "parameters": {
+      "day_offset": "4",
+      "absolute_time_hour": 14,
+      "absolute_time_minute": 10,
+      "date_month_day": "05-02",
+      "date_year": 2026,
+      "message": "Pick up sports physicals forms"
+    }
+  },
+  {
+    "user_input": "Yo, need a reminder in a week on June 23rd at 1:33 PM in 2025 to hit up the electronics store for that sick new laptop charger I'm dying to cop!",
     "tool_name": "reminder_absolute",
     "parameters": {
       "day_offset": "7",
-      "absolute_time_hour": 22,
-      "absolute_time_minute": 23,
-      "date_month_day": "04-10",
+      "absolute_time_hour": 13,
+      "absolute_time_minute": 33,
+      "date_month_day": "06-23",
       "date_year": 2025,
-      "message": "Pick up dry cleaning before trip next week"
+      "message": "Yo, gotta swing by the store and grab that fancy new laptop charger I've been eyeing!"
     }
   },
   {
-    "user_input": "Hey, can you set a reminder for tomorrow at 5:51 AM on August 5th, 2027, for our monthly team social planning meeting? We need to finalize the August volunteer event and confirm the team mixer restaurant reservation.",
+    "user_input": "Hey, can you set a reminder for me to grab dog food on February 24th at 8 PM in 2026? I want to make sure I don't forget.",
     "tool_name": "reminder_absolute",
     "parameters": {
-      "day_offset": "tomorrow",
-      "absolute_time_hour": 5,
-      "absolute_time_minute": 51,
-      "date_month_day": "08-05",
-      "date_year": 2027,
-      "message": "Monthly team social planning call tomorrow morning. Need to finalize August volunteer event details and confirm restaurant reservation for team mixer."
+      "day_offset": "1",
+      "absolute_time_hour": 20,
+      "absolute_time_minute": 0,
+      "date_month_day": "02-24",
+      "date_year": 2026,
+      "message": "Pick up dog food tomorrow"
     }
   },
   {
-    "user_input": "Hey, can you set a reminder for the beer meetup on the 28th of June at 7:05 PM? We're meeting at the Craft Beer Bar this Saturday.",
-    "tool_name": "reminder_absolute",
-    "parameters": {
-      "day_offset": "saturday",
-      "absolute_time_hour": 19,
-      "absolute_time_minute": 5,
-      "date_month_day": "06-28",
-      "date_year": null,
-      "message": "Meetup at Craft Beer Bar"
-    }
-  },
-  {
-    "user_input": "Hey, can you set a reminder for our team's monthly happy hour? It's on Monday, March 30th, 2026 at 7:50 PM at O'Malleys downtown. Make sure it's a quick note about getting together for drinks and catching up.",
+    "user_input": "rmdr on 12/26/27 @ 1:44pm - need 2 buy groceries b4 big client meeting, dont 4get!",
     "tool_name": "reminder_absolute",
     "parameters": {
       "day_offset": "monday",
-      "absolute_time_hour": 19,
-      "absolute_time_minute": 50,
-      "date_month_day": "03-30",
-      "date_year": 2026,
-      "message": "Monthly team happy hour at O'Malleys downtown. Please join us for drinks and catching up with the work crew."
+      "absolute_time_hour": 13,
+      "absolute_time_minute": 44,
+      "date_month_day": "12-26",
+      "date_year": 2027,
+      "message": "buy groc b4 client mtg"
     }
   },
   {
-    "user_input": "Hey, I need a reminder set for my Marketing Research paper deadline. Can you help me remember to submit the final draft on February 15th, 2027 at 3:17 PM, about a week before the actual due date?",
+    "user_input": "Hey Siri, can you set a reminder for me to grab Jack's soccer uniforms from the dry cleaners on Monday, April 16th at 8:07 PM in 2027? Don't want to forget before his big tournament.",
     "tool_name": "reminder_absolute",
     "parameters": {
-      "day_offset": "6",
-      "absolute_time_hour": 15,
-      "absolute_time_minute": 17,
-      "date_month_day": "02-15",
+      "day_offset": "monday",
+      "absolute_time_hour": 20,
+      "absolute_time_minute": 7,
+      "date_month_day": "04-16",
       "date_year": 2027,
-      "message": "Submit final draft of Marketing Research paper on consumer behavior trends due by end of day tomorrow"
+      "message": "Pick up soccer uniforms from dry cleaners before Jack's tournament this weekend"
     }
   },
   {
-    "user_input": "Hey, I need a reminder set for June 20th at 9:06 PM to make sure I get the quarterly sales report to finance before the deadline. Can you help me create an alert a few days ahead?",
+    "user_input": "Yo, can you remind me to swing by the store super early in two days - Aug 28th at like 5:51 AM? Gotta stock up on some essentials before the crew wakes up and we're outta milk and eggs.",
+    "tool_name": "reminder_absolute",
+    "parameters": {
+      "day_offset": "2",
+      "absolute_time_hour": 5,
+      "absolute_time_minute": 51,
+      "date_month_day": "08-28",
+      "date_year": null,
+      "message": "Gotta grab milk and eggs before the fam runs out - hit the grocery store after my early morning workout"
+    }
+  },
+  {
+    "user_input": "Yo, remind me on Sept 17th at 9:12 PM to hit up downtown for some drinks with the squad!",
     "tool_name": "reminder_absolute",
     "parameters": {
       "day_offset": "3",
       "absolute_time_hour": 21,
-      "absolute_time_minute": 6,
-      "date_month_day": "06-20",
+      "absolute_time_minute": 12,
+      "date_month_day": "09-17",
       "date_year": null,
-      "message": "Submit quarterly sales report to finance team before end of quarter deadline. Double-check all revenue projections and expense reconciliation."
+      "message": "yo grab drinks downtown"
     }
   },
   {
-    "user_input": "Hey, I need a reminder to submit my client proposal draft on February 10th, 2025 at 8:03 PM - could you help me set that up?",
+    "user_input": "Hey, can you set a reminder for me on July 1st, 2025 at 12:13 AM about Jake's parent-teacher thing? I want to remember to print his science project report beforehand.",
     "tool_name": "reminder_absolute",
     "parameters": {
-      "day_offset": null,
-      "absolute_time_hour": 20,
-      "absolute_time_minute": 3,
-      "date_month_day": "10-02",
+      "day_offset": "friday",
+      "absolute_time_hour": 0,
+      "absolute_time_minute": 13,
+      "date_month_day": "07-01",
       "date_year": 2025,
-      "message": "Submit client proposal draft"
+      "message": "Parent-teacher conference at 6pm - need to print out Jake's science project report before heading to school"
     }
   },
   {
-    "user_input": "Hey, can you set a quick reminder in 12 seconds to check on my brownies in the oven so they don't burn?",
-    "tool_name": "create_reminder_relative",
+    "user_input": "rmdr on 8/21/26 @ 4:04am - need 2 grab milk b4 wknd at grocery store",
+    "tool_name": "reminder_absolute",
     "parameters": {
-      "relative_time": 12,
-      "time_unit": "seconds",
-      "message": "Check oven - timer for brownies is almost up, need to take them out soon before they burn."
+      "day_offset": "saturday",
+      "absolute_time_hour": 4,
+      "absolute_time_minute": 4,
+      "date_month_day": "08-21",
+      "date_year": 2026,
+      "message": "buy milk @ store bfr wknd"
     }
   },
   {
-    "user_input": "Hey, can you set a reminder for my capstone draft? I need to make sure I submit it to Professor Jenkins well before the semester is over, so maybe remind me in 6 months.",
-    "tool_name": "create_reminder_relative",
-    "parameters": {
-      "relative_time": 6,
-      "time_unit": "months",
-      "message": "Submit draft for research methods capstone project to professor Jenkins before semester ends"
-    }
-  },
-  {
-    "user_input": "Hey, I need a reminder for my conference call prep notes tomorrow morning. Can you set that up for me in 11 hours?",
-    "tool_name": "create_reminder_relative",
-    "parameters": {
-      "relative_time": 11,
-      "time_unit": "hours",
-      "message": "Conference call prep notes"
-    }
-  },
-  {
-    "user_input": "Hey, can you set a timer for 16 minutes from now to remind me to grab my laundry out of the dryer? I want to make sure I get it out before the clothes start getting wrinkly.",
-    "tool_name": "create_reminder_relative",
-    "parameters": {
-      "relative_time": 16,
-      "time_unit": "minutes",
-      "message": "Take laundry out of the dryer so clothes don't wrinkle"
-    }
-  },
-  {
-    "user_input": "Hey, can you set a reminder for my annual performance review prep? I need to start working on this well in advance, so maybe set it for about 15 months from now to give me plenty of time to update my goals and compile team metrics before the leadership meeting.",
+    "user_input": "Yo, I keep forgetting to change these air filters. Remind me to grab new ones in like two weeks so this place doesn't turn into a dust bowl.",
     "tool_name": "create_reminder_relative",
     "parameters": {
       "relative_time": 15,
+      "time_unit": "days",
+      "message": "Gotta swap out those old air filters before the house gets dusty AF"
+    }
+  },
+  {
+    "user_input": "I need a long-term reminder to start preparing for next year's performance reviews and strategic planning. Can you set a reminder for 13 months from now to kick off my annual documentation and review prep?",
+    "tool_name": "create_reminder_relative",
+    "parameters": {
+      "relative_time": 13,
       "time_unit": "months",
-      "message": "Schedule performance review prep - update annual goals and compile team metrics before the leadership meeting"
+      "message": "Schedule performance review preparation and update quarterly strategy documents before team leadership meeting next month."
     }
   },
   {
-    "user_input": "I need a reminder in 15 hours to check on my laundry so I don't forget to transfer the clothes from the washer to the dryer tonight.",
-    "tool_name": "create_reminder_relative",
-    "parameters": {
-      "relative_time": 15,
-      "time_unit": "hours",
-      "message": "Check if the washer load is done and move clothes to dryer before bedtime"
-    }
-  },
-  {
-    "user_input": "Remind me to review the draft in about 19 minutes before my team meeting starts.",
-    "tool_name": "create_reminder_relative",
-    "parameters": {
-      "relative_time": 19,
-      "time_unit": "minutes",
-      "message": "Check the final draft before the team meeting starts"
-    }
-  },
-  {
-    "user_input": "I need a reminder in 6 weeks to review my upcoming client project deadlines.",
-    "tool_name": "create_reminder_relative",
-    "parameters": {
-      "relative_time": 6,
-      "time_unit": "weeks",
-      "message": "Check client deliverables deadline"
-    }
-  },
-  {
-    "user_input": "Hey, I want to set a reminder for my professional liability insurance renewal, which I think is due in about 14 months from now.",
-    "tool_name": "create_reminder_relative",
-    "parameters": {
-      "relative_time": 14,
-      "time_unit": "months",
-      "message": "Renew professional liability insurance"
-    }
-  },
-  {
-    "user_input": "Remind me to follow up on that client proposal in two weeks from now—I want to make sure I don't let this slip through the cracks with all my current projects.",
-    "tool_name": "create_reminder_relative",
-    "parameters": {
-      "relative_time": 2,
-      "time_unit": "weeks",
-      "message": "Follow up with client project proposal"
-    }
-  },
-  {
-    "user_input": "Remind me to take the chicken out of the freezer in 3 minutes so it can start thawing for dinner.",
+    "user_input": "Bruh, remind me to book my dentist appt in 3 days before I totally forget about it again 🙄",
     "tool_name": "create_reminder_relative",
     "parameters": {
       "relative_time": 3,
-      "time_unit": "minutes",
-      "message": "Take chicken out of the freezer to thaw for dinner"
-    }
-  },
-  {
-    "user_input": "I should really set a long-term reminder to think about my retirement savings, maybe something that won't get lost in my crazy schedule but nudges me in a few years.",
-    "tool_name": "create_reminder_relative",
-    "parameters": {
-      "relative_time": 12,
-      "time_unit": "years",
-      "message": "Start retirement savings plan"
-    }
-  },
-  {
-    "user_input": "Remind me to review the sales report draft in 12 days, just a quick note to myself.",
-    "tool_name": "create_reminder_relative",
-    "parameters": {
-      "relative_time": 12,
       "time_unit": "days",
-      "message": "Review quarterly sales report draft"
+      "message": "Yo, gotta schedule that dentist checkup ASAP!"
     }
   },
   {
-    "user_input": "Set a reminder for when I wake up tomorrow to take my vitamins and do some stretches - probably around 9 hours from now.",
-    "tool_name": "create_reminder_relative",
-    "parameters": {
-      "relative_time": 9,
-      "time_unit": "hours",
-      "message": "Time to take my daily multivitamin and do a quick stretching routine to keep my body and mind in top shape."
-    }
-  },
-  {
-    "user_input": "Remind me to check on my car insurance renewal in a month or so, just a quick heads up to make sure it doesn't slip my mind.",
+    "user_input": "I want to set a reminder in 4 hours to follow up on my prescription medication refill and check in with my pharmacy.",
     "tool_name": "create_reminder_relative",
     "parameters": {
       "relative_time": 4,
-      "time_unit": "weeks",
-      "message": "Renew car insurance policy"
+      "time_unit": "hours",
+      "message": "Schedule medication refill for ongoing health management - check prescription status and contact pharmacy if needed."
     }
   },
   {
-    "user_input": "I need to set a reminder for picking up the kids' soccer jerseys later today, about 5 hours from now.",
+    "user_input": "rmdr - 15 min b4 client mtg. need 2 sync w team real quick",
+    "tool_name": "create_reminder_relative",
+    "parameters": {
+      "relative_time": 15,
+      "time_unit": "minutes",
+      "message": "quick team mtg prep b4 client call"
+    }
+  },
+  {
+    "user_input": "Rmdr 4 soccer sign-ups - need 2 set alarm 19wks out so we dnt miss reg deadline",
+    "tool_name": "create_reminder_relative",
+    "parameters": {
+      "relative_time": 19,
+      "time_unit": "weeks",
+      "message": "Check kid soccer reg deadline b4 spot fills up"
+    }
+  },
+  {
+    "user_input": "gotta rmmbr 2 chk my phd loan stuff b4 next big life milestone. set rmdr 4 7 yrs out when i'll prob b more settled",
+    "tool_name": "create_reminder_relative",
+    "parameters": {
+      "relative_time": 7,
+      "time_unit": "years",
+      "message": "chk phd loan repymnt sched b4 next yr. need 2 plan fin sittn"
+    }
+  },
+  {
+    "user_input": "need rmdr 2 call client in 11 min b4 mtg",
+    "tool_name": "create_reminder_relative",
+    "parameters": {
+      "relative_time": 11,
+      "time_unit": "minutes",
+      "message": "call client b4 mtg"
+    }
+  },
+  {
+    "user_input": "Yo, remind me to chug some H2O in like 16 secs - my hydration game needs a quick boost!",
+    "tool_name": "create_reminder_relative",
+    "parameters": {
+      "relative_time": 16,
+      "time_unit": "seconds",
+      "message": "Quick water break, gotta hydrate!"
+    }
+  },
+  {
+    "user_input": "Bruh, remind me in 11 to grab the drinks real quick before everyone shows up at the kickback!",
+    "tool_name": "create_reminder_relative",
+    "parameters": {
+      "relative_time": 11,
+      "time_unit": "minutes",
+      "message": "Yo, heads up - gotta bounce and grab those drinks for the kickback!"
+    }
+  },
+  {
+    "user_input": "rmdr 2 pick up pkg in 5 days b4 weekend",
     "tool_name": "create_reminder_relative",
     "parameters": {
       "relative_time": 5,
-      "time_unit": "hours",
-      "message": "Pick up soccer jerseys for kids before practice starts"
+      "time_unit": "days",
+      "message": "pick up pkg frm post office b4 wknd"
     }
   },
   {
-    "user_input": "I want to set a reminder for my performance review and goal planning about 8 months from now, when we'll be closer to the next fiscal year.",
+    "user_input": "Gonna need a heads up to pull out the frozen pizza in an hour so it can start thawing for dinner tonight.",
     "tool_name": "create_reminder_relative",
     "parameters": {
-      "relative_time": 8,
-      "time_unit": "months",
-      "message": "Schedule annual performance review and update professional development goals for next fiscal year"
+      "relative_time": 1,
+      "time_unit": "hours",
+      "message": "Take pizza out of the freezer to thaw for dinner"
     }
   },
   {
-    "user_input": "Hey, I need a reminder to grab the kids' soccer uniforms in about a week - can you help me set that up?",
+    "user_input": "hey, set rmdr 4 milk in 9 mins b4 i 4get",
+    "tool_name": "create_reminder_relative",
+    "parameters": {
+      "relative_time": 9,
+      "time_unit": "minutes",
+      "message": "rmb milk b4 work runs out"
+    }
+  },
+  {
+    "user_input": "I need a quick reminder in one minute to review the meeting agenda before our team sync.",
+    "tool_name": "create_reminder_relative",
+    "parameters": {
+      "relative_time": 1,
+      "time_unit": "seconds",
+      "message": "Please review the draft meeting agenda before our team sync in one minute."
+    }
+  },
+  {
+    "user_input": "I need a reminder set for 15 days from now to review our project milestones and prepare the status report before our upcoming team meeting.",
+    "tool_name": "create_reminder_relative",
+    "parameters": {
+      "relative_time": 15,
+      "time_unit": "days",
+      "message": "Review project milestone deliverables and update project status report before the team meeting next week"
+    }
+  },
+  {
+    "user_input": "gotta rmb 2 renew home insurance b4 it expires - set rmdr for 3 yrs from now plz",
+    "tool_name": "create_reminder_relative",
+    "parameters": {
+      "relative_time": 3,
+      "time_unit": "years",
+      "message": "renew home insurance policy"
+    }
+  },
+  {
+    "user_input": "Yo, set me a reminder for a month from now to look into my car insurance renewal - totally gonna forget otherwise 😅",
+    "tool_name": "create_reminder_relative",
+    "parameters": {
+      "relative_time": 1,
+      "time_unit": "months",
+      "message": "Check car insurance deadline"
+    }
+  },
+  {
+    "user_input": "Gotta make sure I review that proposal draft well before tomorrow's team meeting. Remind me in 14 hours so I can polish it up.",
+    "tool_name": "create_reminder_relative",
+    "parameters": {
+      "relative_time": 14,
+      "time_unit": "hours",
+      "message": "Check project proposal draft before team meeting tomorrow"
+    }
+  },
+  {
+    "user_input": "Yo, can you set a reminder for our squad meetup in a couple days? Gotta make sure we're all on the same page for the weekend plans!",
+    "tool_name": "create_reminder_relative",
+    "parameters": {
+      "relative_time": 2,
+      "time_unit": "days",
+      "message": "Yo, heads up about that group hangout we gotta prep for this weekend!"
+    }
+  },
+  {
+    "user_input": "Oops, almost forgot! Remind me to grab the cookies in 5 seconds so they don't get crispy.",
+    "tool_name": "create_reminder_relative",
+    "parameters": {
+      "relative_time": 5,
+      "time_unit": "seconds",
+      "message": "Take cookies out of the oven before they burn"
+    }
+  },
+  {
+    "user_input": "Yo, set me a reminder for two weeks from now about that project proposal - wanna make sure I'm on top of my game before the client meeting.",
+    "tool_name": "create_reminder_relative",
+    "parameters": {
+      "relative_time": 13,
+      "time_unit": "days",
+      "message": "Gotta follow up on that project proposal before it slips my mind - gonna need a heads up in like two weeks to get my ducks in a row and make sure everything's tight for the client meeting."
+    }
+  },
+  {
+    "user_input": "Ugh, I keep forgetting to call the dentist about Jake's follow-up. Remind me in a week to take care of scheduling before they give away his appointment slot.",
     "tool_name": "create_reminder_relative",
     "parameters": {
       "relative_time": 8,
       "time_unit": "days",
-      "message": "Pick up soccer uniforms"
+      "message": "Dentist follow-up appointment for Jake - need to call and confirm details before next week's slot gets canceled."
     }
   },
   {
-    "user_input": "Hey, I need a reminder set for 9 hours from now to wrap up this website draft before my client call - want to make sure I review those wireframes and nail down the site navigation.",
+    "user_input": "Yo, remind me to hit up the store for movie snacks like 10 hours from now, so I don't forget!",
     "tool_name": "create_reminder_relative",
     "parameters": {
-      "relative_time": 9,
+      "relative_time": 10,
       "time_unit": "hours",
-      "message": "Finish final draft for client website before client call. Need to review wireframes and finalize navigation structure."
+      "message": "grab snacks for movie night"
     }
   },
   {
-    "user_input": "I'm thinking about my career growth and want to set a reminder for my performance review. Can you help me create a reminder for 16 months from now to schedule my annual review and plan my professional development goals?",
+    "user_input": "Hey, I want to set a long-term reminder for Tyler's college prep. Can you help me create a reminder 19 years from now to review his high school graduation checklist and college application timeline?",
     "tool_name": "create_reminder_relative",
     "parameters": {
-      "relative_time": 16,
-      "time_unit": "months",
-      "message": "Schedule annual performance review with HR and update professional development goals for next year"
-    }
-  },
-  {
-    "user_input": "I need a reminder in 17 minutes to submit my research methods paper draft before class.",
-    "tool_name": "create_reminder_relative",
-    "parameters": {
-      "relative_time": 17,
-      "time_unit": "minutes",
-      "message": "Submit draft for research methods paper before class starts"
-    }
-  },
-  {
-    "user_input": "Hey, can you set a reminder for me to check my prescription refill with my doctor in 14 months? Want to make sure I stay on top of it.",
-    "tool_name": "create_reminder_relative",
-    "parameters": {
-      "relative_time": 14,
-      "time_unit": "months",
-      "message": "Check prescription refill at doctor's office in 14 months"
-    }
-  },
-  {
-    "user_input": "I want to set a long-term reminder to make sure I get my health screenings on track for when I turn 45 - can you help me create a reminder for checking up on preventive care in 17 years?",
-    "tool_name": "create_reminder_relative",
-    "parameters": {
-      "relative_time": 17,
+      "relative_time": 19,
       "time_unit": "years",
-      "message": "Schedule annual health checkup"
+      "message": "Review high school graduation preparation checklist and confirm college application deadlines with Tyler"
     }
   },
   {
-    "user_input": "Hey, can you set a quick reminder in about 10 seconds to help me do a stretch and check my posture? I want to make sure I'm taking care of my body while working.",
-    "tool_name": "create_reminder_relative",
-    "parameters": {
-      "relative_time": 11,
-      "time_unit": "seconds",
-      "message": "Time to do a quick neck and shoulder stretch to prevent computer strain. Reset my posture and take a deep breath."
-    }
-  },
-  {
-    "user_input": "I want to set a reminder for planning next year's leadership training workshop, so I don't forget to schedule it well in advance.",
+    "user_input": "remind me 2 do psych hw in an hr - dont want 2 4get outline b4 deadline!!",
     "tool_name": "create_reminder_relative",
     "parameters": {
       "relative_time": 1,
-      "time_unit": "years",
-      "message": "Schedule annual professional development workshop for team leadership training"
+      "time_unit": "hours",
+      "message": "psych hw due @ midnight - finish outline b4 then!!"
     }
   }
 ]

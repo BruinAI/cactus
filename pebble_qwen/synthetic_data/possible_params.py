@@ -31,6 +31,14 @@ LENGTH_INSTRUCTIONS = [
     "Write 1-2 basic sentences",
 ]
 
+# Language/tone variations for instruction diversity
+TONE_STYLES = [
+    "professional",
+    "casual",
+    "slang",
+    "abbreviated - minimal/skipped words (like a text message)",
+]
+
 
 def _generate_valid_dates() -> list[str]:
     """
@@ -203,7 +211,7 @@ def sample_tool_parameters(
 
     For discrete parameters, randomly selects from possible values.
     For free-text parameters, returns the string "free-text" as a placeholder.
-    Also includes "_persona" and "_length_instruction" metadata for text generation.
+    Also includes "_persona", "_length_instruction", and "_tone_style" metadata for text generation.
 
     Args:
         tool_name: The name of the tool to sample parameters for
@@ -214,7 +222,7 @@ def sample_tool_parameters(
     Returns:
         Dictionary mapping parameter names to sampled values.
         Free-text parameters will have the value "free-text".
-        Also includes "_persona" and "_length_instruction" keys for generation metadata.
+        Also includes "_persona", "_length_instruction", and "_tone_style" keys for generation metadata.
 
     Raises:
         ValueError: If tool_name is not found in possible_params
@@ -222,10 +230,10 @@ def sample_tool_parameters(
 
     Example:
         >>> sample_tool_parameters("set_alarm", seed=42)
-        {'time_hours': 15, 'time_minutes': 32, '_persona': '...', '_length_instruction': '...'}
+        {'time_hours': 15, 'time_minutes': 32, '_persona': '...', '_length_instruction': '...', '_tone_style': '...'}
 
         >>> sample_tool_parameters("create_note")
-        {'text': 'free-text', '_persona': '...', '_length_instruction': '...'}
+        {'text': 'free-text', '_persona': '...', '_length_instruction': '...', '_tone_style': '...'}
 
         >>> # reminder_absolute will always have valid date constraints
         >>> params = sample_tool_parameters("reminder_absolute")
@@ -248,9 +256,10 @@ def sample_tool_parameters(
                 # Randomly select from discrete values
                 sampled_params[param_name] = random.choice(param_values)
 
-        # Add generation metadata (persona and length)
+        # Add generation metadata (persona, length, and tone)
         sampled_params["_persona"] = random.choice(PERSONAS)
         sampled_params["_length_instruction"] = random.choice(LENGTH_INSTRUCTIONS)
+        sampled_params["_tone_style"] = random.choice(TONE_STYLES)
 
         # Check if validation is needed and passes
         if not validate or validate_tool_parameters(tool_name, sampled_params):

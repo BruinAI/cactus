@@ -93,6 +93,7 @@ python3 phase1_sample_params.py 10 my_samples.json
 - Dictionary mapping tool names to lists of sampled parameters
 - Discrete values are randomly selected
 - Free-text parameters have `"free-text"` placeholder
+- Includes metadata: `_persona`, `_length_instruction`, and `_tone_style` for text generation diversity
 
 ### Phase 2: Generate Free-Text Values
 
@@ -183,12 +184,18 @@ This will produce:
   "set_alarm": [
     {
       "time_hours": 9,
-      "time_minutes": 30
+      "time_minutes": 30,
+      "_persona": "a working professional organizing their day",
+      "_length_instruction": "Write a brief message (1 short sentence)",
+      "_tone_style": "professional"
     }
   ],
   "create_note": [
     {
-      "text": "free-text"
+      "text": "free-text",
+      "_persona": "a busy parent managing family schedules",
+      "_length_instruction": "Write a quick note (3-5 words)",
+      "_tone_style": "casual"
     }
   ]
 }
@@ -200,12 +207,18 @@ This will produce:
   "set_alarm": [
     {
       "time_hours": 9,
-      "time_minutes": 30
+      "time_minutes": 30,
+      "_persona": "a working professional organizing their day",
+      "_length_instruction": "Write a brief message (1 short sentence)",
+      "_tone_style": "professional"
     }
   ],
   "create_note": [
     {
-      "text": "Buy groceries on the way home"
+      "text": "groceries milk bread",
+      "_persona": "a busy parent managing family schedules",
+      "_length_instruction": "Write a quick note (3-5 words)",
+      "_tone_style": "casual"
     }
   ]
 }
@@ -286,11 +299,39 @@ The validation function automatically filters out invalid combinations during Ph
 
 The validation uses a retry mechanism (up to 100 attempts) to keep sampling until valid parameters are found.
 
+## Text Generation Diversity Features
+
+The pipeline includes multiple layers of variation to ensure diverse training data:
+
+### Persona Variation
+Each sample is assigned a random persona that influences the style and content:
+- "a busy parent managing family schedules"
+- "a college student tracking assignments and deadlines"
+- "a working professional organizing their day"
+- "a freelancer juggling multiple projects"
+- "someone planning personal errands and tasks"
+- And more...
+
+### Length Variation
+Samples vary in length based on random instructions:
+- "Write a quick note (3-5 words)"
+- "Write a brief message (1 short sentence)"
+- "Write 1-2 basic sentences"
+
+### Tone/Language Style Variation
+Samples use different communication styles:
+- **Professional**: Formal business language
+- **Casual**: Relaxed, everyday conversation
+- **Slang**: Informal, colloquial expressions
+- **Abbreviated - minimal words**: Short, concise phrasing
+
+These variations are sampled in Phase 1 as metadata fields (`_persona`, `_length_instruction`, `_tone_style`) and applied during text generation in Phases 2 and 3.
+
 ## Advantages of This Approach
 
 1. **Backwards Generation**: Start with parameters, work backwards to user input
-2. **Diversity**: Random sampling ensures parameter variety
-3. **Realism**: Claude generates natural, varied text
+2. **Diversity**: Random sampling ensures parameter variety with multi-dimensional variation (persona, length, tone)
+3. **Realism**: Claude generates natural, varied text matching specific personas and styles
 4. **Modularity**: Each phase is independent and can be re-run
 5. **Efficiency**: Parallel API calls for speed
 6. **Checkpointing**: Save results after each phase

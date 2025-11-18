@@ -91,8 +91,16 @@ def phase3_generate_user_inputs(
         # Build prompts for generating user inputs
         requests = []
         for params in params_list:
-            # Format the tool call
-            tool_call_str = f"{tool_name}({', '.join(f'{k}={repr(v)}' for k, v in params.items())})"
+            # Extract metadata for tone guidance (if available)
+            persona = params.get("_persona", "a casual user")
+            tone_style = params.get("_tone_style", "casual")
+
+            # Format the tool call (excluding metadata fields)
+            clean_params = {k: v for k, v in params.items() if not k.startswith("_")}
+            tool_call_str = f"{tool_name}({', '.join(f'{k}={repr(v)}' for k, v in clean_params.items())})"
+
+            # Build system prompt with persona and tone
+            system_prompt = f"You are {persona}. Generate a realistic message they would say using a {tone_style} tone/language style."
 
             prompt = f"""Generate a natural user input that would result in this exact tool call.
 
@@ -103,10 +111,11 @@ Target tool call:
 {tool_call_str}
 
 Parameters:
-{json.dumps(params, indent=2)}
+{json.dumps(clean_params, indent=2)}
 
 Generate a natural, conversational user message that would lead to exactly this tool call.
 - Be creative and varied in phrasing
+- Use a {tone_style} tone/language style
 - Use natural language (not robotic or templated)
 - Keep it concise (1-2 sentences)
 - Make it sound like something a real user would say
@@ -116,6 +125,7 @@ Return ONLY the user input text, nothing else:"""
 
             requests.append({
                 "messages": [{"role": "user", "content": prompt}],
+                "system": system_prompt,
                 "max_tokens": 150,
                 "temperature": 1.0
             })
