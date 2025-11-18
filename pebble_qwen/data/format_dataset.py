@@ -27,7 +27,7 @@ import json
 from typing import Dict, List, Any, Optional
 
 
-def format_qwen3_noah_dataset(
+def format_qwen3_dataset(
     sample: Dict[str, Any],
     tools: List[Dict[str, Any]],
     tokenizer
@@ -133,7 +133,7 @@ def format_qwen3_noah_dataset(
     return [system_message, user_message, model_message]
 
 
-def load_noah_tools(tools_path: str) -> List[Dict[str, Any]]:
+def load_tools(tools_path: str) -> List[Dict[str, Any]]:
     """
     Load Noah's tools from JSON file.
 
@@ -148,7 +148,7 @@ def load_noah_tools(tools_path: str) -> List[Dict[str, Any]]:
     return tools
 
 
-def load_noah_dataset(dataset_path: str) -> List[Dict[str, Any]]:
+def load_dataset(dataset_path: str) -> List[Dict[str, Any]]:
     """
     Load Noah's dataset from JSON file.
 
