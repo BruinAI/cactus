@@ -141,9 +141,10 @@ python3 tools/convert_hf.py HuggingFaceTB/SmolLM2-1.7B-Instruct weights/smollm2-
 python3 tools/convert_hf.py LiquidAI/LFM2-VL-450M weights/lfm2-vl-450m/
 python3 tools/convert_hf.py LiquidAI/LFM2-VL-1.6B weights/lfm2-vl-1.6b/
 
-# Embedding-only models 
+# Embedding & RAG models 
 python3 tools/convert_hf.py Qwen/Qwen3-Embedding-0.6B weights/qwen3-embed-600m/ 
 python3 tools/convert_hf.py nomic-ai/nomic-embed-text-v2-moe weights/nomic/ 
+python3 tools/convert_hf.py LiquidAI/LFM2-1.2B-RAG weights/lfm2-1.2B # init with corpus directly
 ```
 
 ## Playing with a model
