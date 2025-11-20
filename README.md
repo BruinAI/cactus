@@ -127,22 +127,22 @@ Run one of the following and replace the weight path in `tests/test_engine.cpp`.
 
 ```bash
 # Language models (INT8)
-python3 tools/convert_hf.py google/gemma-3-270m-it weights/gemma3-270m/
+python3 tools/convert_hf.py google/gemma-3-270m-it weights/gemma-3-270m-it/
 python3 tools/convert_hf.py LiquidAI/LFM2-350M weights/lfm2-350m/  # supports tool call
-python3 tools/convert_hf.py HuggingFaceTB/SmolLM2-360m-Instruct weights/smollm2-360m/ 
-python3 tools/convert_hf.py Qwen/Qwen3-0.6B weights/qwen3-600m/  # supports tool call
+python3 tools/convert_hf.py HuggingFaceTB/SmolLM2-360m-Instruct weights/smollm2-360m-instruct/ 
+python3 tools/convert_hf.py Qwen/Qwen3-0.6B weights/qwen3-0.6b/  # supports tool call
 python3 tools/convert_hf.py LiquidAI/LFM2-700M weights/lfm2-700m/ # supports tool call
-python3 tools/convert_hf.py google/gemma-3-1b-it weights/gemma3-1b/  
+python3 tools/convert_hf.py google/gemma-3-1b-it weights/gemma-3-1b-it/  
 python3 tools/convert_hf.py LiquidAI/LFM2-1.2B weights/lfm2-1.2B/ # supports tool call
 python3 tools/convert_hf.py Qwen/Qwen3-1.7B weights/qwen3-1.7B/ # supports tool call
-python3 tools/convert_hf.py HuggingFaceTB/SmolLM2-1.7B-Instruct weights/smollm2-1.7b/ 
+python3 tools/convert_hf.py HuggingFaceTB/SmolLM2-1.7B-Instruct weights/smollm2-1.7b-instruct/ 
 
 # Vision Language models (INT8)
 python3 tools/convert_hf.py LiquidAI/LFM2-VL-450M weights/lfm2-vl-450m/
 python3 tools/convert_hf.py LiquidAI/LFM2-VL-1.6B weights/lfm2-vl-1.6b/
 
 # Embedding-only models 
-python3 tools/convert_hf.py Qwen/Qwen3-Embedding-0.6B weights/qwen3-embed-600m/ 
+python3 tools/convert_hf.py Qwen/Qwen3-Embedding-0.6B weights/qwen3-embed-0.6b/ 
 python3 tools/convert_hf.py nomic-ai/nomic-embed-text-v2-moe weights/nomic/ 
 ```
 

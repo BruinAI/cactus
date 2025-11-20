@@ -51,7 +51,7 @@ get_model_dir_name() {
     local model_name=$(echo "$model_id" | cut -d'/' -f2)
 
     # Convert to lowercase and clean up
-    model_name=$(echo "$model_name" | tr '[:upper:]' '[:lower:]' | sed 's/-it$//')
+    model_name=$(echo "$model_name" | tr '[:upper:]' '[:lower:]')
 
     echo "$model_name"
 }
