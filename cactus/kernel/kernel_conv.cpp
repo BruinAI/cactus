@@ -473,47 +473,73 @@ void cactus_conv1d_f16_k3(
 void cactus_bilinear_interpolation_fp32(const float* input, float* output, size_t src_height, size_t src_width, size_t embed_dim,
                                         size_t dst_height, size_t dst_width)
 {
-            
-    float scale_h = (src_height > 1 && dst_height > 1) 
+    float scale_h = (src_height > 1 && dst_height > 1)
                     ? static_cast<float>(src_height - 1) / static_cast<float>(dst_height - 1)
                     : 0.0f;
     float scale_w = (src_width > 1 && dst_width > 1)
                     ? static_cast<float>(src_width - 1) / static_cast<float>(dst_width - 1)
-                            : 0.0f;
-            
-    for (int dst_y = 0; dst_y < dst_height; ++dst_y) {
-        for (int dst_x = 0; dst_x < dst_width; ++dst_x) {
-            float src_y_float = dst_y * scale_h;
-            float src_x_float = dst_x * scale_w;
-            
-            int y0 = static_cast<int>(std::floor(src_y_float));
-            int x0 = static_cast<int>(std::floor(src_x_float));
-            
-            int y1 = ((y0 + 1) < src_height) ? (y0 + 1) : (src_height - 1);
-            int x1 = ((x0 + 1) < src_width) ? (x0 + 1) : (src_width - 1);
+                    : 0.0f;
 
-            float dy = src_y_float - y0;
-            float dx = src_x_float - x0;
-            
-            float w00 = (1.0f - dx) * (1.0f - dy);
-            float w01 = dx * (1.0f - dy);
-            float w10 = (1.0f - dx) * dy;
-            float w11 = dx * dy;
-            
-            int idx00 = (y0 * src_width + x0) * embed_dim;
-            int idx01 = (y0 * src_width + x1) * embed_dim;
-            int idx10 = (y1 * src_width + x0) * embed_dim;
-            int idx11 = (y1 * src_width + x1) * embed_dim;
-            
-            int out_idx = (dst_y * dst_width + dst_x) * embed_dim;
-            
-            for (int d = 0; d < embed_dim; ++d) {
-                output[out_idx + d] = 
-                    input[idx00 + d] * w00 +
-                    input[idx01 + d] * w01 +
-                    input[idx10 + d] * w10 +
-                    input[idx11 + d] * w11;
+    const size_t total_pixels = dst_height * dst_width;
+
+    CactusThreading::parallel_for(total_pixels, CactusThreading::Thresholds::SCALAR_EXPENSIVE,
+        [&](size_t start_idx, size_t end_idx) {
+            for (size_t pixel_idx = start_idx; pixel_idx < end_idx; ++pixel_idx) {
+                const size_t dst_y = pixel_idx / dst_width;
+                const size_t dst_x = pixel_idx % dst_width;
+
+                float src_y_float = dst_y * scale_h;
+                float src_x_float = dst_x * scale_w;
+
+                int y0 = static_cast<int>(std::floor(src_y_float));
+                int x0 = static_cast<int>(std::floor(src_x_float));
+
+                int y1 = ((y0 + 1) < static_cast<int>(src_height)) ? (y0 + 1) : (static_cast<int>(src_height) - 1);
+                int x1 = ((x0 + 1) < static_cast<int>(src_width)) ? (x0 + 1) : (static_cast<int>(src_width) - 1);
+
+                float dy = src_y_float - y0;
+                float dx = src_x_float - x0;
+
+                float w00 = (1.0f - dx) * (1.0f - dy);
+                float w01 = dx * (1.0f - dy);
+                float w10 = (1.0f - dx) * dy;
+                float w11 = dx * dy;
+
+                int idx00 = (y0 * src_width + x0) * embed_dim;
+                int idx01 = (y0 * src_width + x1) * embed_dim;
+                int idx10 = (y1 * src_width + x0) * embed_dim;
+                int idx11 = (y1 * src_width + x1) * embed_dim;
+
+                int out_idx = pixel_idx * embed_dim;
+
+                size_t d = 0;
+
+                for (; d + 3 < embed_dim; d += 4) {
+                    float32x4_t v00 = vld1q_f32(&input[idx00 + d]);
+                    float32x4_t v01 = vld1q_f32(&input[idx01 + d]);
+                    float32x4_t v10 = vld1q_f32(&input[idx10 + d]);
+                    float32x4_t v11 = vld1q_f32(&input[idx11 + d]);
+
+                    float32x4_t w00_vec = vdupq_n_f32(w00);
+                    float32x4_t w01_vec = vdupq_n_f32(w01);
+                    float32x4_t w10_vec = vdupq_n_f32(w10);
+                    float32x4_t w11_vec = vdupq_n_f32(w11);
+
+                    float32x4_t result = vmulq_f32(v00, w00_vec);
+                    result = vmlaq_f32(result, v01, w01_vec);
+                    result = vmlaq_f32(result, v10, w10_vec);
+                    result = vmlaq_f32(result, v11, w11_vec);
+
+                    vst1q_f32(&output[out_idx + d], result);
+                }
+
+                for (; d < embed_dim; ++d) {
+                    output[out_idx + d] =
+                        input[idx00 + d] * w00 +
+                        input[idx01 + d] * w01 +
+                        input[idx10 + d] * w10 +
+                        input[idx11 + d] * w11;
+                }
             }
-        }
-    }
+        });
 }

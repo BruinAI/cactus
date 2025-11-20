@@ -10,7 +10,6 @@ from typing import Optional
 try:
     from transformers import AutoTokenizer, AutoModelForCausalLM, AutoProcessor, AutoModelForImageTextToText, AutoModel, AutoConfig, Lfm2VlForConditionalGeneration
     import torch
-    # Note: for SmolVLM, we also need Pillow + num2words + torchvision
 except ImportError:
     print("Please install required packages: pip install torch transformers")
     sys.exit(1)
@@ -67,7 +66,18 @@ def save_tensor_with_header(tensor, output_path, precision='FP32', transpose=Fal
     
     if precision == 'INT8':
         filename = output_path.name
-        if any(x in filename for x in ['norm', 'bias', 'vision']) or (model_type == 'bert' and 'embedding' in filename):
+        skip_int8 = False
+        if 'norm' in filename or 'bias' in filename:
+            skip_int8 = True
+        elif 'vision' in filename:
+            if not any(x in filename for x in ['_fc1.weights', '_fc2.weights',
+                                                 '_self_attn_q.weights', '_self_attn_k.weights',
+                                                 '_self_attn_v.weights', '_self_attn_out.weights']):
+                skip_int8 = True
+        elif model_type == 'bert' and 'embedding' in filename:
+            skip_int8 = True
+
+        if skip_int8:
             # print(f"Skipping INT8 quantization for {filename}, using FP16 instead.")
             precision = 'FP16'
     

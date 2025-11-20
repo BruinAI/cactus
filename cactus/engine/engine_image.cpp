@@ -9,6 +9,7 @@
 #define STBI_NO_TGA
 
 #include "engine.h"
+#include "../kernel/kernel_utils.h"
 #include <algorithm>
 #include <cmath>
 #include <cstring>
@@ -457,34 +458,74 @@ std::vector<float> Siglip2Preprocessor::resize_image(
 
 std::vector<float> Siglip2Preprocessor::normalize_image(
     const float* img_data, int width, int height, int channels) {
-    
-    size_t total_pixels = width * height * channels;
-    std::vector<float> normalized(total_pixels);
 
-    for (size_t i = 0; i < width * height; ++i) {
+    size_t total_pixels = width * height;
+    size_t total_elements = total_pixels * channels;
+    std::vector<float> normalized(total_elements);
+
+    float scale_factors[4] = {config_.rescale_factor, config_.rescale_factor,
+                              config_.rescale_factor, config_.rescale_factor};
+    float mean_values[4] = {0, 0, 0, 0};
+    float std_inv[4] = {1.0f, 1.0f, 1.0f, 1.0f};
+
+    if (config_.do_normalize && channels <= 4) {
         for (int c = 0; c < channels; ++c) {
-            size_t idx = i * channels + c;
-            float pixel = img_data[idx];
-            
-            if (config_.do_rescale) {
-                pixel *= config_.rescale_factor;
-            }
-            
-            if (config_.do_normalize) {
-                pixel = (pixel - config_.image_mean[c]) / config_.image_std[c];
-            }
-            
-            normalized[idx] = pixel;
+            mean_values[c] = config_.image_mean[c];
+            std_inv[c] = 1.0f / config_.image_std[c];
         }
     }
-    
+
+    CactusThreading::parallel_for(total_pixels, CactusThreading::Thresholds::SCALAR_BASIC,
+        [&](size_t start_idx, size_t end_idx) {
+            if (channels == 3 && config_.do_rescale && config_.do_normalize) {
+                float32x4_t scale_vec = vld1q_f32(scale_factors);
+                float32x4_t mean_vec = vld1q_f32(mean_values);
+                float32x4_t std_inv_vec = vld1q_f32(std_inv);
+
+                for (size_t i = start_idx; i < end_idx; ++i) {
+                    size_t idx = i * 3;
+
+                    float pixels[4] = {img_data[idx], img_data[idx + 1],
+                                       img_data[idx + 2], 0};
+                    float32x4_t pixel_vec = vld1q_f32(pixels);
+
+                    pixel_vec = vmulq_f32(pixel_vec, scale_vec);
+
+                    pixel_vec = vsubq_f32(pixel_vec, mean_vec);
+                    pixel_vec = vmulq_f32(pixel_vec, std_inv_vec);
+
+                    float results[4];
+                    vst1q_f32(results, pixel_vec);
+                    normalized[idx] = results[0];
+                    normalized[idx + 1] = results[1];
+                    normalized[idx + 2] = results[2];
+                }
+            } else {
+                for (size_t i = start_idx; i < end_idx; ++i) {
+                    for (int c = 0; c < channels; ++c) {
+                        size_t idx = i * channels + c;
+                        float pixel = img_data[idx];
+
+                        if (config_.do_rescale) {
+                            pixel *= config_.rescale_factor;
+                        }
+
+                        if (config_.do_normalize) {
+                            pixel = (pixel - config_.image_mean[c]) / config_.image_std[c];
+                        }
+
+                        normalized[idx] = pixel;
+                    }
+                }
+            }
+        });
 
     return normalized;
 }
 
 std::vector<std::vector<float>> Siglip2Preprocessor::convert_image_to_patches(
     const std::vector<float>& image, int width, int height, int channels, int patch_size) {
-    
+
     int num_patches_height = height / patch_size;
     int num_patches_width = width / patch_size;
     int num_patches = num_patches_height * num_patches_width;
@@ -492,24 +533,45 @@ std::vector<std::vector<float>> Siglip2Preprocessor::convert_image_to_patches(
 
     std::vector<std::vector<float>> patches(num_patches, std::vector<float>(patch_elements));
 
-    for (int ph = 0; ph < num_patches_height; ++ph) {
-        for (int pw = 0; pw < num_patches_width; ++pw) {
-            int patch_idx = ph * num_patches_width + pw;
-            
-            for (int y = 0; y < patch_size; ++y) {
-                for (int x = 0; x < patch_size; ++x) {
-                    int img_y = ph * patch_size + y;
-                    int img_x = pw * patch_size + x;
-                    int img_idx = (img_y * width + img_x) * channels;
-                    int patch_offset = (y * patch_size + x) * channels;
-                    
-                    for (int c = 0; c < channels; ++c) {
-                        patches[patch_idx][patch_offset + c] = image[img_idx + c];
+    CactusThreading::parallel_for(num_patches, CactusThreading::Thresholds::SCALAR_BASIC,
+        [&](size_t start_idx, size_t end_idx) {
+            for (size_t patch_idx = start_idx; patch_idx < end_idx; ++patch_idx) {
+                int ph = patch_idx / num_patches_width;
+                int pw = patch_idx % num_patches_width;
+
+                float* patch_data = patches[patch_idx].data();
+
+                if (channels == 3) {
+                    for (int y = 0; y < patch_size; ++y) {
+                        int img_y = ph * patch_size + y;
+                        const float* img_row = image.data() + img_y * width * channels + pw * patch_size * channels;
+                        float* patch_row = patch_data + y * patch_size * channels;
+
+                        size_t copy_size = patch_size * channels;
+                        std::memcpy(patch_row, img_row, copy_size * sizeof(float));
+                    }
+                } else {
+                    for (int y = 0; y < patch_size; ++y) {
+                        for (int x = 0; x < patch_size; ++x) {
+                            int img_y = ph * patch_size + y;
+                            int img_x = pw * patch_size + x;
+                            int img_idx = (img_y * width + img_x) * channels;
+                            int patch_offset = (y * patch_size + x) * channels;
+
+                            if (channels >= 4) {
+                                std::memcpy(&patch_data[patch_offset],
+                                           &image[img_idx],
+                                           channels * sizeof(float));
+                            } else {
+                                for (int c = 0; c < channels; ++c) {
+                                    patch_data[patch_offset + c] = image[img_idx + c];
+                                }
+                            }
+                        }
                     }
                 }
             }
-        }
-    }
+        });
 
     return patches;
 }
