@@ -5,11 +5,10 @@ setlocal enabledelayedexpansion
 set "DEFAULT_MODEL_ID=LiquidAI/LFM2-1.2B"
 
 :: Get script directory and project root
-set "SCRIPT_DIR=%~dp0"
-set "SCRIPT_DIR=%SCRIPT_DIR:~0,-1%"
-for %%i in ("%SCRIPT_DIR%") do set "PROJECT_ROOT=%%~dpi"
+set "PROJECT_ROOT=%~dp0"
 set "PROJECT_ROOT=%PROJECT_ROOT:~0,-1%"
-set "BUILD_DIR=%SCRIPT_DIR%\build"
+set "CLI_DIR=%PROJECT_ROOT%\cli"
+set "BUILD_DIR=%CLI_DIR%\build"
 
 :: Check for command argument
 if "%~1"=="" (
@@ -155,7 +154,7 @@ echo Compiling chat.cpp...
 :: Use g++ on Windows (MinGW or similar)
 g++ -std=c++17 -O3 ^
     -I"%PROJECT_ROOT%" ^
-    "%SCRIPT_DIR%\chat.cpp" ^
+    "%CLI_DIR%\chat.cpp" ^
     "%PROJECT_ROOT%\cactus\build\libcactus.a" ^
     -o chat.exe ^
     -pthread
