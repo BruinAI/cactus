@@ -111,14 +111,27 @@ std::string Tokenizer::format_qwen_style(const std::vector<ChatMessage>& message
             }
         }
 
-        result += "You have access to the following tools:\n";
-        result += "[\n";
+        // Add tools in Qwen3 format from tokenizer_config.json's jinja
+        result += "# Tools\n\n";
+        result += "You may call one or more functions to assist with the user query.\n\n";
+        result += "You are provided with function signatures within <tools></tools> XML tags:\n";
+        result += "<tools>\n";
         result += tools_json;
-        result += "\n]\n\n";
-        result += "When you need to call a tool, respond with a JSON object in this exact format:\n";
-        result += "{\"function_call\": {\"name\": \"function_name\", \"arguments\": {\"arg1\": \"value1\"}}}\n";
-        result += "You can call multiple tools by using multiple function_call JSON objects.";
+        result += "\n</tools>\n\n";
+        result += "For each function call, return a json object with function name and arguments within <tool_call></tool_call> XML tags:\n";
+        result += "<tool_call>\n";
+        result += "{\"name\": <function-name>, \"arguments\": <args-json-object>}\n";
+        result += "</tool_call>";
         result += "<|im_end|>\n";
+
+        // result += "You have access to the following tools:\n";
+        // result += "[\n";
+        // result += tools_json;
+        // result += "\n]\n\n";
+        // result += "When you need to call a tool, respond with a JSON object in this exact format:\n";
+        // result += "{\"function_call\": {\"name\": \"function_name\", \"arguments\": {\"arg1\": \"value1\"}}}\n";
+        // result += "You can call multiple tools by using multiple function_call JSON objects.";
+        // result += "<|im_end|>\n";
 
         for (const auto& msg : messages) {
             if (msg.role == "system" && has_system_msg) {
@@ -127,6 +140,12 @@ std::string Tokenizer::format_qwen_style(const std::vector<ChatMessage>& message
                 result += "<|im_start|>user\n" + msg.content + "<|im_end|>\n";
             } else if (msg.role == "assistant") {
                 result += "<|im_start|>assistant\n" + msg.content + "<|im_end|>\n";
+            } else if (msg.role == "tool") {
+                result += "<|im_start|>user\n";
+                result += "<tool_response>\n";
+                result += msg.content;
+                result += "\n</tool_response>";
+                result += "<|im_end|>\n";
             }
         }
     } else {
@@ -143,7 +162,7 @@ std::string Tokenizer::format_qwen_style(const std::vector<ChatMessage>& message
 
     if (add_generation_prompt) {
         if (!tools_json.empty()) {
-            result += "<|im_start|>assistant\n<think>\n</think>\n\n";
+            result += "<|im_start|>assistant\n<think>\n\n</think>\n\n";
         } else {
             result += "<|im_start|>assistant\n";
         }
