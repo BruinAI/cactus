@@ -21,3 +21,6 @@ venv
 .env
 pyproject.toml
 uv.lock
+.python-version
+wandb
+profile.txt

@@ -77,7 +77,7 @@ TOOLS_PATH = os.path.join(DATA_DIR, "tools.json")
 # data and won't generalize. Use --num_epochs=5 only if maximizing benchmark scores on
 # similar data or if you have a much larger, more diverse dataset.
 NUM_EPOCHS = 1
-LEARNING_RATE = 3e-4  # 1e-4 significantly outperformed 1e-5 across all configurations
+LEARNING_RATE = 1e-4
 MAX_TARGET_LENGTH = 1500
 
 # Allow max_steps override
@@ -89,15 +89,17 @@ EVAL_EVERY_N_STEPS = 10
 
 # LoRA hyperparameters
 # Higher rank and alpha showed consistent improvements
-RANK = 32  # Increased from 16 (32 performed better across configurations)
-ALPHA = 64.0  # Increased from 32 (64 achieved best results)
+RANK = 16
+ALPHA = 32.0
+
+WEIGHT_DECAY = 0.01
 
 # TPU/GPU mesh configuration
 MESH_SHAPE = len(jax.devices()), 1
 MESH_AXIS_NAMES = "fsdp", "tp"
 
 # Train/validation split
-TRAIN_TEST_SPLIT = 1/10
+TRAIN_TEST_SPLIT = 0
 
 # Checkpoint and output directories
 CKPT_DIR = "/tmp/qwen_tool_calling_ckpts/"
@@ -615,6 +617,12 @@ def parse_args():
         default=ALPHA,
         help=f"LoRA alpha (default: {ALPHA})"
     )
+    parser.add_argument(
+        "--weight_decay",
+        type=float,
+        default=WEIGHT_DECAY,
+        help=f"Weight decay (L2 regularization) (default: {WEIGHT_DECAY})"
+    )
 
     # Dataset arguments
     parser.add_argument(
@@ -679,6 +687,7 @@ def main():
     eval_every_n_steps = args.eval_every_n_steps
     lora_rank = args.lora_rank
     lora_alpha = args.lora_alpha
+    weight_decay = args.weight_decay
     dataset_path = args.dataset_path
     tools_path = args.tools_path
     train_test_split = args.train_test_split
@@ -694,6 +703,7 @@ def main():
     print(f"Global batch size: {batch_size}")
     print(f"Epochs: {num_epochs}")
     print(f"Learning rate: {learning_rate}")
+    print(f"Weight decay (L2 reg): {weight_decay}")
     print(f"LoRA rank: {lora_rank}, alpha: {lora_alpha}")
     print(f"Max sequence length: {max_target_length}")
     print(f"Devices: {len(jax.devices())} x {jax.devices()[0].platform}")
@@ -749,9 +759,13 @@ def main():
 
     # Create HuggingFace dataset and split remaining data
     remaining_dataset = Dataset.from_list(remaining_samples)
-    split = remaining_dataset.train_test_split(test_size=train_test_split, seed=42)
-    train_dataset = split['train']
-    validation_dataset = split['test']
+    if train_test_split == 0:
+        train_dataset = remaining_dataset
+        validation_dataset = None
+    else:
+        split = remaining_dataset.train_test_split(test_size=train_test_split, seed=42)
+        train_dataset = split['train']
+        validation_dataset = split['test']
 
     # Create test dataset
     test_dataset = Dataset.from_list(test_samples)
@@ -773,14 +787,17 @@ def main():
         shuffle=True
     )
 
-    validation_loader = _build_data_loader(
-        data_source=validation_dataset,
-        batch_size=batch_size,
-        num_epochs=1,
-        max_seq_len=max_target_length,
-        tokenizer=tokenizer,
-        shuffle=False
-    )
+    if validation_dataset is not None:
+        validation_loader = _build_data_loader(
+            data_source=validation_dataset,
+            batch_size=batch_size,
+            num_epochs=1,
+            max_seq_len=max_target_length,
+            tokenizer=tokenizer,
+            shuffle=False
+        )
+    else:
+        validation_loader = None
 
     # Build test loader (use smaller batch size to avoid OOM during evaluation)
     test_loader = _build_data_loader(
@@ -871,9 +888,10 @@ def main():
     )
 
     print(f"Learning rate schedule: warmup for {warmup_steps} steps, then cosine decay")
+    print(f"Weight decay: {weight_decay} (L2 regularization)")
 
     optimizer = optax.MultiSteps(
-        optax.adamw(learning_rate=lr_schedule),
+        optax.adamw(learning_rate=lr_schedule, weight_decay=weight_decay),
         every_k_schedule=gradient_accumulation_steps
     )
 

@@ -41,6 +41,7 @@ set(COMMON_SOURCES
     ${MODEL_SOURCES}
 )
 
+# Static library for tests
 add_library(cactus STATIC ${COMMON_SOURCES})
 target_compile_definitions(cactus PUBLIC PLATFORM_CPU_ONLY=1)
 
@@ -53,6 +54,26 @@ target_include_directories(cactus PUBLIC
     models
 )
 
+# Shared library for Python bindings
+add_library(cactus_shared SHARED ${COMMON_SOURCES})
+target_compile_definitions(cactus_shared PUBLIC PLATFORM_CPU_ONLY=1)
+
+target_include_directories(cactus_shared PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    engine
+    graph
+    kernel
+    ffi
+    models
+)
+
+# Output the shared library with standard naming
+set_target_properties(cactus_shared PROPERTIES
+    OUTPUT_NAME cactus
+    VERSION 1.0.0
+    SOVERSION 1
+)
+
 # suppress warnings from stb_image
 target_include_directories(cactus SYSTEM PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/ffi
@@ -60,8 +81,10 @@ target_include_directories(cactus SYSTEM PUBLIC
 
 if(CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang" OR CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
     target_compile_options(cactus PRIVATE -Wno-c99-extensions)
+    target_compile_options(cactus_shared PRIVATE -Wno-c99-extensions)
 elseif(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     target_compile_options(cactus PRIVATE -Wno-pedantic)
+    target_compile_options(cactus_shared PRIVATE -Wno-pedantic)
 endif()
 
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
