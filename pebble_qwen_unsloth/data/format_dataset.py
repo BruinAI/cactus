@@ -25,6 +25,21 @@ minimal post-processing to remove extra newlines.
 
 import json
 from typing import Dict, List, Any, Optional
+from unittest import result
+
+
+USE_OUR_FORMAT = True
+OUR_TOOL_SYSTEM_PROMPT = """<|im_start|>system
+{system_content}
+
+You have access to the following tools:
+[
+{json_tools}
+]
+
+When you need to call a tool, respond with a JSON object in this exact format:
+{{\"function_call\": {{\"name\": \"function_name\", \"arguments\": {{\"arg1\": \"value1\"}}}}}}
+You can call multiple tools by using multiple function_call JSON objects."""
 
 
 def format_qwen3_dataset(
@@ -87,20 +102,22 @@ For each function call, return a json object with function name and arguments wi
 <tool_call>
 {"name": <function-name>, "arguments": <args-json-object>}
 </tool_call><|im_end|>"""
-    # The tokenizer template will add the tools section after the system content
+
+    if USE_OUR_FORMAT:
+        tool_call_dict = {"role": "assistant", "content": json.dumps({"function_call": function_call})}
+    else:
+        tool_call_dict = {
+            "role": "assistant",
+            "content": "",
+            "tool_calls": [{
+                    "name": function_call['name'],
+                    "arguments": function_call['arguments'],
+            }]
+        }
     messages = [
         {"role": "system", "content": system_prompt_addition},
         {"role": "user", "content": user_input},
-        {
-            "role": "assistant",
-            "content": "",
-            "tool_calls": [
-                {
-                    "name": function_call['name'],
-                    "arguments": function_call['arguments']
-                }
-            ]
-        }
+        tool_call_dict,
     ]
 
     # Apply chat template
@@ -119,7 +136,15 @@ For each function call, return a json object with function name and arguments wi
     if formatted_text.endswith('\n'):
         formatted_text = formatted_text[:-1]
 
-    # Note: Qwen3's <think> tags are kept in the output for chain-of-thought reasoning
+    if USE_OUR_FORMAT:
+        end_of_system_prompt = formatted_text.find("<|im_end|>")
+        if end_of_system_prompt == -1:
+            raise ValueError("The main prompt should contain <|im_end|> tag.")
+        formatted_system_prompt = OUR_TOOL_SYSTEM_PROMPT.format(
+            system_content=system_prompt_addition,
+            json_tools='\n'.join([json.dumps(tool) for tool in tools])
+        )   
+        formatted_text = formatted_system_prompt + formatted_text[end_of_system_prompt:]
 
     # ========================================================================
     # Split formatted text by role for proper loss masking during training
