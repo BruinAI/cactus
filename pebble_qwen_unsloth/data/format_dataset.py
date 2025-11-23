@@ -30,7 +30,8 @@ from typing import Dict, List, Any, Optional
 def format_qwen3_dataset(
     sample: Dict[str, Any],
     tools: List[Dict[str, Any]],
-    tokenizer
+    tokenizer,
+    system_prompt_addition: str = "You are a helpful personal assistant. When the user asks you to perform an action like setting a timer, creating a reminder, or taking a note, you must call the appropriate tool. Always use tools to complete tasks rather than just acknowledging the request."
 ) -> Optional[List[Dict[str, str]]]:
     """
     Format a Noah dataset sample into Qwen 3 tool calling format following BFCL conventions.
@@ -44,6 +45,7 @@ def format_qwen3_dataset(
         sample: A Noah dataset sample with 'input' and 'output' fields
         tools: List of available tools
         tokenizer: HuggingFace tokenizer with apply_chat_template support
+        system_prompt_addition: Additional instruction to prepend to the system prompt
 
     Returns:
         List of role messages with 'role' and 'text' keys, or None if formatting fails
@@ -87,6 +89,7 @@ For each function call, return a json object with function name and arguments wi
 </tool_call><|im_end|>"""
     # The tokenizer template will add the tools section after the system content
     messages = [
+        {"role": "system", "content": system_prompt_addition},
         {"role": "user", "content": user_input},
         {
             "role": "assistant",
