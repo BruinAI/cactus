@@ -274,7 +274,6 @@ void cactus_gelu_f32_erf(const float* input, float* output, size_t num_elements)
 
 void cactus_gelu_f16_erf(const __fp16* input, __fp16* output, size_t num_elements)
 {
-    std::cout<<"gelu erf fp16"<<std::endl;
     const float inv_sqrt2 = 0.70710678118654752440f;
 
     CactusThreading::parallel_for(

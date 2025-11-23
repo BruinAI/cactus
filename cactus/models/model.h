@@ -429,6 +429,8 @@ private:
     size_t decoder_block0_out_node_ = 0;
 
     std::vector<size_t> encoder_block_out_nodes_;
+    std::vector<uint8_t> encoder_output_bytes_;
+    Precision encoder_output_precision_ = Precision::FP32;
 
     std::vector<size_t> suppress_tokens_ = {
     1,

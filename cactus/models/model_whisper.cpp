@@ -38,32 +38,32 @@ static void apply_whisper_logits_processors(
     }
 }
 
-static void debug_print_tensor_5x5(CactusGraph* gb, size_t node_id, const char* name) {
-    auto& buf = gb->get_output_buffer(node_id);
-    const std::vector<size_t>& shape = buf.shape;
-    const float* ptr = reinterpret_cast<const float*>(gb->get_output(node_id));
+// static void debug_print_tensor_5x5(CactusGraph* gb, size_t node_id, const char* name) {
+//     auto& buf = gb->get_output_buffer(node_id);
+//     const std::vector<size_t>& shape = buf.shape;
+//     const float* ptr = reinterpret_cast<const float*>(gb->get_output(node_id));
 
-    if (shape.size() < 2) {
-        std::cout << "(Tensor rank < 2, cannot print 5×5)" << std::endl;
-        return;
-    }
+//     if (shape.size() < 2) {
+//         std::cout << "(Tensor rank < 2, cannot print 5×5)" << std::endl;
+//         return;
+//     }
 
-    size_t rows = shape[0];
-    size_t cols = shape[1];
+//     size_t rows = shape[0];
+//     size_t cols = shape[1];
 
-    size_t rmax = std::min<size_t>(rows, 5);
-    size_t cmax = std::min<size_t>(cols, 5);
+//     size_t rmax = std::min<size_t>(rows, 5);
+//     size_t cmax = std::min<size_t>(cols, 5);
 
-    for (size_t r = 0; r < rmax; ++r) {
-        std::cout << "row " << r << ": ";
-        for (size_t c = 0; c < cmax; ++c) {
-            float v = ptr[r * cols + c];
-            std::cout << v << "  ";
-        }
-        std::cout << std::endl;
-    }
-    std::cout << "------------------------------------------" << std::endl;
-}
+//     for (size_t r = 0; r < rmax; ++r) {
+//         std::cout << "row " << r << ": ";
+//         for (size_t c = 0; c < cmax; ++c) {
+//             float v = ptr[r * cols + c];
+//             std::cout << v << "  ";
+//         }
+//         std::cout << std::endl;
+//     }
+//     std::cout << "------------------------------------------" << std::endl;
+// }
 
 WhisperModel::WhisperModel() : Model() {}
 
@@ -232,37 +232,82 @@ void WhisperModel::reset_graph_side_cache_nodes() {
 
 size_t WhisperModel::build_decoder_self_attention(CactusGraph* gb, size_t input, uint32_t layer_idx, ComputeBackend backend, bool use_cache, size_t position_offset){
     const auto& layer = weight_nodes_.layers[layer_idx];
-    auto q = gb->matmul(input, layer.decoder_self_attn_q_weight, true, backend);
 
+    // 1. Standard Q/K/V projections for the *new* tokens
+    auto q = gb->matmul(input, layer.decoder_self_attn_q_weight, true, backend);
     q = gb->add(q, layer.decoder_self_attn_q_bias);
+
     auto k = gb->matmul(input, layer.decoder_self_attn_k_weight, true, backend);
     auto v = gb->matmul(input, layer.decoder_self_attn_v_weight, true, backend);
     v = gb->add(v, layer.decoder_self_attn_v_bias);
 
-    size_t seq_new   = gb->get_output_buffer(q).shape[0];
-    size_t num_heads = config_.attention_heads;
-    size_t head_dim  = config_.attention_head_dim;
-    q = gb->reshape(q, {1, seq_new, num_heads, head_dim});
-    k = gb->reshape(k, {1, seq_new, num_heads, head_dim});
-    v = gb->reshape(v, {1, seq_new, num_heads, head_dim});
-
-    size_t final_k = k;
-    size_t final_v = v;
-
-    if (use_cache && kv_cache_.current_seq_len > 0 && cache_k_output_nodes_[layer_idx] != 0 && cache_v_output_nodes_[layer_idx] != 0) {
-        if (cache_k_output_nodes_[layer_idx] != 0 && cache_v_output_nodes_[layer_idx] != 0) {
-            final_k = gb->concat(cache_k_output_nodes_[layer_idx], k, 1);
-            final_v = gb->concat(cache_v_output_nodes_[layer_idx], v, 1);
-        } else {
-            std::cerr << "[Warning] Missing cache nodes for layer " << layer_idx << ", skipping concat." << std::endl;
-        }
+    const auto& q_shape = gb->get_output_buffer(q).shape;
+    if (q_shape.size() != 2) {
+        throw std::runtime_error("decoder self-attn: q must be [T_new, D]");
     }
 
-    cache_k_output_nodes_[layer_idx] = final_k;
-    cache_v_output_nodes_[layer_idx] = final_v;
+    size_t seq_new      = q_shape[0];
+    size_t num_heads    = config_.attention_heads;
+    size_t head_dim     = config_.attention_head_dim;
+    size_t num_kv_heads = config_.attention_kv_heads;
 
-    auto attn_out_4d = gb->attention(q, final_k, final_v, attention_scale_, position_offset);
-    auto attn_out = gb->reshape(attn_out_4d, {seq_new, num_heads * head_dim});
+    // 2D -> 4D for attention op
+    auto q_4d = gb->reshape(q, {1, seq_new,       num_heads,    head_dim});
+    auto k_4d = gb->reshape(k, {1, seq_new,       num_kv_heads, head_dim});
+    auto v_4d = gb->reshape(v, {1, seq_new,       num_kv_heads, head_dim});
+
+    size_t final_k = k_4d;
+    size_t final_v = v_4d;
+
+    // 2. If caching, pull previous K/V from kv_cache_ (Qwen-style)
+    if (use_cache && !kv_cache_.is_empty()) {
+        auto k_view = kv_cache_.get_key_view(layer_idx);
+        auto v_view = kv_cache_.get_value_view(layer_idx);
+
+        if (!k_view.ptr1 || !v_view.ptr1) {
+            throw std::runtime_error("KV cache view is empty but kv_cache_.is_empty()==false");
+        }
+
+        size_t cache_len = kv_cache_.current_seq_len;
+
+        size_t cache_k_node = gb->input(
+            {1, cache_len, num_kv_heads, head_dim},
+            kv_cache_.precision
+        );
+        size_t cache_v_node = gb->input(
+            {1, cache_len, num_kv_heads, head_dim},
+            kv_cache_.precision
+        );
+
+        // If ring-buffer is contiguous, just use ptr1; otherwise use the helper
+        if (k_view.ptr2 == nullptr && v_view.ptr2 == nullptr) {
+            gb->set_input(cache_k_node, k_view.ptr1, kv_cache_.precision);
+            gb->set_input(cache_v_node, v_view.ptr1, kv_cache_.precision);
+        } else {
+            gb->set_input(cache_k_node, kv_cache_.get_key_ptr(layer_idx), kv_cache_.precision);
+            gb->set_input(cache_v_node, kv_cache_.get_value_ptr(layer_idx), kv_cache_.precision);
+        }
+
+        // Append new tokens on the right
+        final_k = gb->concat(cache_k_node, k_4d, 1);
+        final_v = gb->concat(cache_v_node, v_4d, 1);
+    }
+
+    // 3. Always remember where K/V live in this graph so update_kv_cache can copy them
+    if (use_cache) {
+        // When use_cache==true, final_k/final_v include the *full* sequence (old+new)
+        cache_k_output_nodes_[layer_idx] = final_k;
+        cache_v_output_nodes_[layer_idx] = final_v;
+    } else {
+        // First pass (no cache yet) – we only have new tokens
+        cache_k_output_nodes_[layer_idx] = k_4d;
+        cache_v_output_nodes_[layer_idx] = v_4d;
+    }
+
+    // 4. Actual attention
+    auto attn_out_4d = gb->attention(q_4d, final_k, final_v, attention_scale_, position_offset);
+    auto attn_out    = gb->reshape(attn_out_4d, {seq_new, num_heads * head_dim});
+
     auto output = gb->matmul(attn_out, layer.decoder_self_attn_output_weight, true, backend);
     output = gb->add(output, layer.decoder_self_attn_output_bias);
     return output;
@@ -312,7 +357,6 @@ size_t WhisperModel::build_conv1d(CactusGraph* gb, size_t input, ComputeBackend 
     conv1 = gb->gelu_erf(conv1);
 
     size_t conv2 = gb->conv1d_k3(conv1, weight_nodes_.encoder_conv2_weight, 2);
-
     auto bias2_shape = gb->get_output_buffer(weight_nodes_.encoder_conv2_bias).shape;
     size_t C2 = bias2_shape[0];
     size_t bias2 = gb->reshape(weight_nodes_.encoder_conv2_bias, {1, C2, 1});
@@ -322,14 +366,19 @@ size_t WhisperModel::build_conv1d(CactusGraph* gb, size_t input, ComputeBackend 
 
     conv2 = gb->gelu_erf(conv2);
 
-    size_t conv2_transposed = gb->transpose(conv2, ComputeBackend::CPU);
-    last_conv2_transposed_node_ = conv2_transposed;
+    const auto& buf = gb->get_output_buffer(conv2);
+
+    size_t conv2_transposed;
+    if (buf.precision == Precision::FP16) {
+        size_t conv2_f32 = gb->precision_cast(conv2, Precision::FP32);
+        size_t conv2_T_f32 = gb->transpose(conv2_f32, ComputeBackend::CPU);
+        conv2_transposed = gb->precision_cast(conv2_T_f32, Precision::FP16);
+    } else {
+        conv2_transposed = gb->transpose(conv2, ComputeBackend::CPU);
+    }
 
     return conv2_transposed;
 }
-
-
-
 
 size_t WhisperModel::build_encoder_transformer_block(
     CactusGraph* gb,
@@ -408,12 +457,35 @@ void WhisperModel::run_encoder(const std::vector<float>& mel_bins)
         ? ComputeBackend::CPU
         : ComputeBackend::NPU;
 
+
     auto* gb = static_cast<CactusGraph*>(graph_handle_);
     if (!gb)
         throw std::runtime_error("Graph handle is null in run_encoder.");
 
-    size_t mel_input = gb->input({1, 80, T_mel}, Precision::FP32);
-    gb->set_input(mel_input, mel_bins.data(), Precision::FP32);
+    Precision act_precision;
+    switch (config_.precision) {
+        case Config::Precision::INT8:  act_precision = Precision::INT8;  break;
+        case Config::Precision::FP16:  act_precision = Precision::FP16;  break;
+        case Config::Precision::FP32:
+        default:                       act_precision = Precision::FP32;  break;
+    }
+
+    size_t mel_input = 0;
+
+    if (act_precision == Precision::FP16) {
+        // Explicitly convert mel bins to fp16 so we don't mis-copy.
+        std::vector<__fp16> mel_bins_f16(mel_bins.size());
+        for (size_t i = 0; i < mel_bins.size(); ++i) {
+            mel_bins_f16[i] = (__fp16)mel_bins[i];
+        }
+
+        mel_input = gb->input({1, 80, T_mel}, Precision::FP16);
+        gb->set_input(mel_input, mel_bins_f16.data(), Precision::FP16);
+    } else {
+        // FP32 / INT8 path: keep as before (or add INT8 quantization if you have it).
+        mel_input = gb->input({1, 80, T_mel}, Precision::FP32);
+        gb->set_input(mel_input, mel_bins.data(), Precision::FP32);
+    }
 
     size_t conv2_transposed = build_conv1d(gb, mel_input, backend);
 
@@ -571,10 +643,6 @@ uint32_t WhisperModel::generate_with_audio(
     full_tokens.push_back(bos);
     full_tokens.insert(full_tokens.end(), tokens.begin(), tokens.end());
 
-    std::cout << "[Debug] full_tokens (input to decoder): ";
-    for (auto t : full_tokens) std::cout << t << " ";
-    std::cout << std::endl;
-
     if (cold_start)
     {
         std::cout << "[Debug] Running encoder (prefill)" << std::endl;
@@ -589,81 +657,69 @@ uint32_t WhisperModel::generate_with_audio(
 
     else
     {
-        std::cout << "[Debug] Warm decoder step, KV len=" 
-                  << kv_cache_.current_seq_len << std::endl;
+        std::cout << "[Debug] Warm decoder step, KV len="
+              << kv_cache_.current_seq_len << std::endl;
 
-        gb->soft_reset();  
+        gb->soft_reset();
         reset_graph_side_cache_nodes();
 
         if (encoder_output_host_.empty())
             throw std::runtime_error("Missing encoder_output_host_ in warm step!");
 
-        size_t enc_node = gb->input(encoder_output_shape_, Precision::FP32);
-        gb->set_input(enc_node, encoder_output_host_.data(), Precision::FP32);
+        size_t enc_node = gb->input(encoder_output_shape_, encoder_output_precision_);
+        gb->set_input(enc_node, encoder_output_host_.data(), encoder_output_precision_);
         weight_nodes_.encoder_output = enc_node;
 
-        if (kv_cache_.current_seq_len > 0)
-        {
-            for (uint32_t i = 0; i < config_.num_layers; i++)
-            {
-                auto k_view = kv_cache_.get_key_view(i);
-                auto v_view = kv_cache_.get_value_view(i);
-                if (!k_view.ptr1 || !v_view.ptr1) continue;
-
-                size_t k_node = gb->input(
-                    {1, kv_cache_.current_seq_len,
-                     config_.attention_kv_heads,
-                     config_.attention_head_dim},
-                    kv_cache_.precision
-                );
-                size_t v_node = gb->input(
-                    {1, kv_cache_.current_seq_len,
-                     config_.attention_kv_heads,
-                     config_.attention_head_dim},
-                    kv_cache_.precision
-                );
-
-                gb->set_input(k_node, k_view.ptr1, kv_cache_.precision);
-                gb->set_input(v_node, v_view.ptr1, kv_cache_.precision);
-
-                cache_k_output_nodes_[i] = k_node;
-                cache_v_output_nodes_[i] = v_node;
-            }
-        }
+        // No manual K/V upload here – build_decoder_self_attention will pull from kv_cache_ directly
 
         std::vector<uint32_t> last_token_vec = { tokens.back() };
         logits_node = run_decoder_step(last_token_vec, true);
     }
-
-    auto logits_shape = gb->get_output_buffer(logits_node).shape;
-    std::cout << "[Debug] logits shape before execute: "
-              << logits_shape[0] << " x " << logits_shape[1] << std::endl;
-
+    auto& logits_buf = gb->get_output_buffer(logits_node);
+    std::cout << "[Debug] logits precision = " 
+            << static_cast<int>(logits_buf.precision) << std::endl;
+    std::cout << "[Debug] logits shape dims = ";
+    for (auto d : logits_buf.shape) std::cout << d << " ";
+    std::cout << std::endl;
     size_t sampled_token_id = gb->sample(logits_node, temperature, top_p, top_k);
 
     if (!profile_file.empty()) gb->execute(profile_file);
     else gb->execute();
 
-    std::cout << "==== Encoder output AFTER execute ====\n";
-    debug_print_tensor_5x5(gb, weight_nodes_.encoder_output, "encoder_output");
-
     if (cold_start)
     {
         auto& out_buf = gb->get_output_buffer(weight_nodes_.encoder_output);
-        size_t total = 1;
-        for (auto s : out_buf.shape) total *= s;
 
-        encoder_output_host_.resize(total);
-        std::memcpy(encoder_output_host_.data(),
-                    gb->get_output(weight_nodes_.encoder_output),
-                    total * sizeof(float));
+        // Record shape & precision for the warm step
+        encoder_output_shape_      = out_buf.shape;
+        encoder_output_precision_  = out_buf.precision;
 
-        encoder_output_shape_ = out_buf.shape;
+        size_t total_elems = 1;
+        for (auto s : out_buf.shape)
+            total_elems *= s;
+
+        // Determine element size based on precision
+        size_t elem_size = 0;
+        switch (out_buf.precision) {
+            case Precision::FP32: elem_size = sizeof(float);    break;
+            case Precision::FP16: elem_size = sizeof(uint16_t); break;
+            case Precision::INT8: elem_size = sizeof(int8_t);   break;
+            default:
+                throw std::runtime_error("Unsupported encoder_output precision in WhisperModel");
+        }
+
+        const size_t total_bytes = total_elems * elem_size;
+
+        encoder_output_host_.resize(total_bytes);
+        std::memcpy(
+            encoder_output_host_.data(),
+            gb->get_output(weight_nodes_.encoder_output),
+            total_bytes
+        );
+
         encoder_ready_ = true;
     }
 
-    std::cout << "[Debug] Updating KV cache (" << last_new_tokens_ 
-              << " new tokens)" << std::endl;
     post_execute_updates(gb, full_tokens.size());
     update_kv_cache(gb, last_new_tokens_);
 
@@ -672,7 +728,6 @@ uint32_t WhisperModel::generate_with_audio(
 
     std::cout << "[Debug] Returning sampled token " << sampled
               << " (\"" << get_tokenizer()->decode({sampled}) << "\")\n";
-    std::cout << "[Debug] KV len now = " << kv_cache_.current_seq_len << std::endl;
 
     return sampled;
 }

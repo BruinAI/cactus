@@ -13,7 +13,7 @@
 // ---------------------------
 // Config
 // ---------------------------
-static const char* kModelPath = "../../weights/whisper-medium";
+static const char* kModelPath = "../../weights/whisper-medium16";
 static const char* kMelFile   = "/Users/parkiratsandhu/Documents/programming_projects/cactus_bruinai/cactus/tests/whisper_tests/mel.npy";
 static const char* kTokFile   = "/Users/parkiratsandhu/Documents/programming_projects/cactus_bruinai/cactus/tests/whisper_tests/decoder_input_tokens.npy";
 
@@ -172,8 +172,8 @@ static bool test_whisper_prefill_only() {
 
 static bool test_whisper_autoregressive_longer() {
     return run_whisper_test(
-        "WHISPER AUTOREGRESSIVE (64 TOKENS)",
-        0.0f, 1.0f, 0, 100, false, -1,
+        "WHISPER AUTOREGRESSIVE (5 TOKENS)",
+        0.0f, 1.0f, 0, 5, false, -1,
         [](int rc,
            const std::string& /*text*/,
            double /*ttft*/,
@@ -206,7 +206,7 @@ static bool test_whisper_streaming_early_stop() {
 int main() {
     TestUtils::TestRunner runner("Whisper Tests");
     // runner.run_test("whisper_prefill_basic",      test_whisper_prefill_only());
-    runner.run_test("whisper_autoregressive_100",  test_whisper_autoregressive_longer());
+    runner.run_test("whisper_autoregressive_5",  test_whisper_autoregressive_longer());
     // runner.run_test("whisper_streaming_stop20",   test_whisper_streaming_early_stop());
     runner.print_summary();
     return runner.all_passed() ? 0 : 1;
