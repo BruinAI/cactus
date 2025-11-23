@@ -675,14 +675,8 @@ uint32_t WhisperModel::generate_with_audio(
         std::vector<uint32_t> last_token_vec = { tokens.back() };
         logits_node = run_decoder_step(last_token_vec, true);
     }
-    auto& logits_buf = gb->get_output_buffer(logits_node);
-    std::cout << "[Debug] logits precision = " 
-            << static_cast<int>(logits_buf.precision) << std::endl;
-    std::cout << "[Debug] logits shape dims = ";
-    for (auto d : logits_buf.shape) std::cout << d << " ";
-    std::cout << std::endl;
+    
     size_t sampled_token_id = gb->sample(logits_node, temperature, top_p, top_k);
-
     if (!profile_file.empty()) gb->execute(profile_file);
     else gb->execute();
 
@@ -690,7 +684,6 @@ uint32_t WhisperModel::generate_with_audio(
     {
         auto& out_buf = gb->get_output_buffer(weight_nodes_.encoder_output);
 
-        // Record shape & precision for the warm step
         encoder_output_shape_      = out_buf.shape;
         encoder_output_precision_  = out_buf.precision;
 
@@ -698,7 +691,6 @@ uint32_t WhisperModel::generate_with_audio(
         for (auto s : out_buf.shape)
             total_elems *= s;
 
-        // Determine element size based on precision
         size_t elem_size = 0;
         switch (out_buf.precision) {
             case Precision::FP32: elem_size = sizeof(float);    break;
