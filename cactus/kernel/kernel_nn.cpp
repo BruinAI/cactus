@@ -228,6 +228,104 @@ void cactus_gelu_int8(const int8_t* input, int8_t* output, size_t num_elements,
         });
 }
 
+void cactus_sigmoid_f32(const float* input, float* output, size_t num_elements) {
+    CactusThreading::parallel_for(num_elements, CactusThreading::Thresholds::SCALAR_EXPENSIVE,
+        [&](size_t start_idx, size_t end_idx) {
+            constexpr size_t SIMD_WIDTH = 4;
+            const size_t vectorized_end = start_idx + ((end_idx - start_idx) / SIMD_WIDTH) * SIMD_WIDTH;
+
+            const float32x4_t one = vdupq_n_f32(1.0f);
+
+            for (size_t i = start_idx; i < vectorized_end; i += SIMD_WIDTH) {
+                float32x4_t x = vld1q_f32(&input[i]);
+                float32x4_t neg_x = vnegq_f32(x);
+
+                float neg_vals[4];
+                float exp_vals_arr[4];
+
+                vst1q_f32(neg_vals, neg_x);
+                for (int j = 0; j < 4; ++j) {
+                    exp_vals_arr[j] = expf(neg_vals[j]);
+                }
+
+                float32x4_t exp_vec = vld1q_f32(exp_vals_arr);
+                float32x4_t one_plus_exp = vaddq_f32(one, exp_vec);
+                float32x4_t sigmoid = vdivq_f32(one, one_plus_exp);
+
+                vst1q_f32(&output[i], sigmoid);
+            }
+
+            for (size_t i = vectorized_end; i < end_idx; ++i) {
+                float x = input[i];
+                output[i] = 1.0f / (1.0f + expf(-x));
+            }
+        });
+}
+
+void cactus_sigmoid_f16(const __fp16* input, __fp16* output, size_t num_elements) {
+    CactusThreading::parallel_for(num_elements, CactusThreading::Thresholds::SCALAR_EXPENSIVE,
+        [&](size_t start_idx, size_t end_idx) {
+            constexpr size_t SIMD_WIDTH = 8;
+            const size_t vectorized_end = start_idx + ((end_idx - start_idx) / SIMD_WIDTH) * SIMD_WIDTH;
+
+            for (size_t i = start_idx; i < vectorized_end; i += SIMD_WIDTH) {
+                float16x8_t x_f16 = vld1q_f16(&input[i]);
+
+                float32x4_t x_low  = vcvt_f32_f16(vget_low_f16(x_f16));
+                float32x4_t x_high = vcvt_f32_f16(vget_high_f16(x_f16));
+
+                float32x4_t neg_x_low  = vnegq_f32(x_low);
+                float32x4_t neg_x_high = vnegq_f32(x_high);
+
+                float exp_vals[8];
+                vst1q_f32(&exp_vals[0], neg_x_low);
+                vst1q_f32(&exp_vals[4], neg_x_high);
+
+                for (int j = 0; j < 8; ++j) {
+                    exp_vals[j] = expf(exp_vals[j]);
+                }
+
+                float32x4_t exp_low  = vld1q_f32(&exp_vals[0]);
+                float32x4_t exp_high = vld1q_f32(&exp_vals[4]);
+
+                float32x4_t one_f32 = vdupq_n_f32(1.0f);
+                float32x4_t one_plus_exp_low  = vaddq_f32(one_f32, exp_low);
+                float32x4_t one_plus_exp_high = vaddq_f32(one_f32, exp_high);
+
+                float32x4_t sigmoid_low  = vdivq_f32(one_f32, one_plus_exp_low);
+                float32x4_t sigmoid_high = vdivq_f32(one_f32, one_plus_exp_high);
+
+                float16x4_t sigmoid_low_f16  = vcvt_f16_f32(sigmoid_low);
+                float16x4_t sigmoid_high_f16 = vcvt_f16_f32(sigmoid_high);
+                float16x8_t sigmoid_f16 = vcombine_f16(sigmoid_low_f16, sigmoid_high_f16);
+
+                vst1q_f16(&output[i], sigmoid_f16);
+            }
+
+            for (size_t i = vectorized_end; i < end_idx; ++i) {
+                float x = static_cast<float>(input[i]);
+                float sigmoid = 1.0f / (1.0f + expf(-x));
+                output[i] = static_cast<__fp16>(sigmoid);
+            }
+        });
+}
+
+void cactus_sigmoid_int8(const int8_t* input, int8_t* output, size_t num_elements,
+                         float input_scale, float output_scale) {
+    CactusThreading::parallel_for(num_elements, CactusThreading::Thresholds::SCALAR_EXPENSIVE,
+        [&](size_t start_idx, size_t end_idx) {
+            for (size_t i = start_idx; i < end_idx; ++i) {
+                float x = input[i] * input_scale;
+                float sigmoid = 1.0f / (1.0f + expf(-x));
+                float scaled = sigmoid / output_scale;
+
+                float clamped = std::max(-128.0f, std::min(127.0f, roundf(scaled)));
+                output[i] = static_cast<int8_t>(clamped);
+            }
+        });
+}
+
+
 
 namespace CactusSoftmax {
 

@@ -1,0 +1,6 @@
+1. No support for dynamically calculated shape reshapes
+2. No support for 0 dimensions
+3. No support for dynamically calculated Unsqueeze axes
+4. For now no support for INT8 min and max operations
+5. splits is always an attribute, always static, never a runtime tensor
+6. No support for slice with more than one axis

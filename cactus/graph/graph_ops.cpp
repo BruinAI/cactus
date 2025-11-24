@@ -1129,6 +1129,143 @@ void compute_layernorm_node(GraphNode& node, const std::vector<std::unique_ptr<G
     }
 }
 
+void compute_batchnorm_node(GraphNode& node,
+                            const std::vector<std::unique_ptr<GraphNode>>& nodes,
+                            const std::unordered_map<size_t, size_t>& node_index_map) {
+    // Inputs: x, gamma, beta, running_mean, running_var
+    const auto& input_buffer    = nodes.at(node_index_map.at(node.input_ids[0]))->output_buffer;
+    const auto& weight_buffer   = nodes.at(node_index_map.at(node.input_ids[1]))->output_buffer; // gamma
+    const auto& bias_buffer     = nodes.at(node_index_map.at(node.input_ids[2]))->output_buffer; // beta
+    const auto& mean_buffer     = nodes.at(node_index_map.at(node.input_ids[3]))->output_buffer; // running_mean
+    const auto& variance_buffer = nodes.at(node_index_map.at(node.input_ids[4]))->output_buffer; // running_var
+
+    float epsilon = node.params.epsilon;
+
+    if (input_buffer.shape.empty()) {
+        throw std::runtime_error("BatchNorm requires non-empty input tensor");
+    }
+
+    size_t feature_size = input_buffer.shape.back();
+    size_t total_size   = input_buffer.total_size;
+    size_t batch_size   = total_size / feature_size;
+
+    if (weight_buffer.total_size   != feature_size ||
+        bias_buffer.total_size     != feature_size ||
+        mean_buffer.total_size     != feature_size ||
+        variance_buffer.total_size != feature_size) {
+        throw std::runtime_error("BatchNorm parameter sizes must match feature dimension");
+    }
+
+    // ----- Convert input to float -----
+    std::vector<float> input_float(total_size);
+    if (input_buffer.precision == Precision::INT8) {
+        throw std::runtime_error("BatchNorm currently does not support INT8 input");
+    } else if (input_buffer.precision == Precision::FP16) {
+        const __fp16* input_fp16 = input_buffer.data_as<__fp16>();
+        for (size_t i = 0; i < total_size; ++i) {
+            input_float[i] = static_cast<float>(input_fp16[i]);
+        }
+    } else {
+        std::memcpy(input_float.data(), input_buffer.data_as<float>(),
+                    total_size * sizeof(float));
+    }
+
+    // ----- Convert gamma (weight) to float -----
+    std::vector<float> weight_float(feature_size);
+    if (weight_buffer.precision == Precision::INT8) {
+        throw std::runtime_error("BatchNorm currently does not support INT8 weight");
+    } else if (weight_buffer.precision == Precision::FP16) {
+        const __fp16* w_fp16 = weight_buffer.data_as<__fp16>();
+        for (size_t i = 0; i < feature_size; ++i) {
+            weight_float[i] = static_cast<float>(w_fp16[i]);
+        }
+    } else {
+        std::memcpy(weight_float.data(), weight_buffer.data_as<float>(),
+                    feature_size * sizeof(float));
+    }
+
+    // ----- Convert beta (bias) to float -----
+    std::vector<float> bias_float(feature_size);
+    if (bias_buffer.precision == Precision::INT8) {
+        throw std::runtime_error("BatchNorm currently does not support INT8 bias");
+    } else if (bias_buffer.precision == Precision::FP16) {
+        const __fp16* b_fp16 = bias_buffer.data_as<__fp16>();
+        for (size_t i = 0; i < feature_size; ++i) {
+            bias_float[i] = static_cast<float>(b_fp16[i]);
+        }
+    } else {
+        std::memcpy(bias_float.data(), bias_buffer.data_as<float>(),
+                    feature_size * sizeof(float));
+    }
+
+    // ----- Convert running mean to float -----
+    std::vector<float> mean_float(feature_size);
+    if (mean_buffer.precision == Precision::INT8) {
+        throw std::runtime_error("BatchNorm currently does not support INT8 running mean");
+    } else if (mean_buffer.precision == Precision::FP16) {
+        const __fp16* m_fp16 = mean_buffer.data_as<__fp16>();
+        for (size_t i = 0; i < feature_size; ++i) {
+            mean_float[i] = static_cast<float>(m_fp16[i]);
+        }
+    } else {
+        std::memcpy(mean_float.data(), mean_buffer.data_as<float>(),
+                    feature_size * sizeof(float));
+    }
+
+    // ----- Convert running variance to float -----
+    std::vector<float> var_float(feature_size);
+    if (variance_buffer.precision == Precision::INT8) {
+        throw std::runtime_error("BatchNorm currently does not support INT8 running variance");
+    } else if (variance_buffer.precision == Precision::FP16) {
+        const __fp16* v_fp16 = variance_buffer.data_as<__fp16>();
+        for (size_t i = 0; i < feature_size; ++i) {
+            var_float[i] = static_cast<float>(v_fp16[i]);
+        }
+    } else {
+        std::memcpy(var_float.data(), variance_buffer.data_as<float>(),
+                    feature_size * sizeof(float));
+    }
+
+    // ----- Precompute scale and shift -----
+    std::vector<float> scale(feature_size);
+    std::vector<float> shift(feature_size);
+
+    for (size_t f = 0; f < feature_size; ++f) {
+        float inv_std = 1.0f / std::sqrt(var_float[f] + epsilon);
+        float s       = weight_float[f] * inv_std;
+        float t       = bias_float[f] - mean_float[f] * s;
+
+        scale[f] = s;
+        shift[f] = t;
+    }
+
+    // ----- Apply BN in parallel: y = x * scale[f] + shift[f] -----
+    std::vector<float> output_float(total_size);
+
+    CactusThreading::parallel_for(total_size, CactusThreading::Thresholds::ELEMENT_WISE,
+        [&](size_t start_idx, size_t end_idx) {
+            for (size_t idx = start_idx; idx < end_idx; ++idx) {
+                size_t f = idx % feature_size;
+                output_float[idx] = input_float[idx] * scale[f] + shift[f];
+            }
+        });
+
+    // ----- Write back to output buffer -----
+    if (node.output_buffer.precision == Precision::INT8) {
+        throw std::runtime_error("BatchNorm currently does not support INT8 output");
+    } else if (node.output_buffer.precision == Precision::FP16) {
+        __fp16* out_fp16 = node.output_buffer.data_as<__fp16>();
+        for (size_t i = 0; i < total_size; ++i) {
+            out_fp16[i] = static_cast<__fp16>(output_float[i]);
+        }
+    } else {
+        std::memcpy(node.output_buffer.data_as<float>(),
+                    output_float.data(),
+                    total_size * sizeof(float));
+    }
+}
+
+
 void compute_index_node(GraphNode& node, const std::vector<std::unique_ptr<GraphNode>>& nodes, const std::unordered_map<size_t, size_t>& node_index_map) {
     const auto& input_buffer = nodes[node_index_map.at(node.input_ids[0])]->output_buffer;
     const auto& input_shape = input_buffer.shape;

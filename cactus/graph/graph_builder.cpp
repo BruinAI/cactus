@@ -107,6 +107,24 @@ size_t CactusGraph::divide(size_t input1, size_t input2) {
     return add_node(OpType::DIVIDE, {input1, input2}, broadcast_info.output_shape, params);
 }
 
+size_t CactusGraph::elem_wise_max(size_t input1, size_t input2) {
+    const auto& lhs_buffer = get_output_buffer(input1);
+    const auto& rhs_buffer = get_output_buffer(input2);
+    
+    BroadcastInfo broadcast_info = BroadcastInfo::compute(lhs_buffer.shape, rhs_buffer.shape);
+    OpParams params{.broadcast_info = broadcast_info};
+    return add_node(OpType::ELEM_WISE_MAX, {input1, input2}, broadcast_info.output_shape, params);
+}
+
+size_t CactusGraph::elem_wise_min(size_t input1, size_t input2) {
+    const auto& lhs_buffer = get_output_buffer(input1);
+    const auto& rhs_buffer = get_output_buffer(input2);
+    
+    BroadcastInfo broadcast_info = BroadcastInfo::compute(lhs_buffer.shape, rhs_buffer.shape);
+    OpParams params{.broadcast_info = broadcast_info};
+    return add_node(OpType::ELEM_WISE_MIN, {input1, input2}, broadcast_info.output_shape, params);
+}
+
 
 size_t CactusGraph::matmul(size_t input1, size_t input2, bool pretransposed_rhs, ComputeBackend backend) {
     const auto& lhs_buffer = get_output_buffer(input1);
@@ -334,6 +352,11 @@ size_t CactusGraph::layernorm(size_t input, size_t weight, size_t bias, float ep
     return add_node(OpType::LAYERNORM, {input, weight, bias}, {}, params);
 }
 
+size_t CactusGraph::batchnorm(size_t input, size_t weight, size_t bias, size_t mean, size_t variance, float epsilon) {
+    OpParams params{.epsilon = epsilon};
+    return add_node(OpType::BATCHNORM, {input, weight, bias, mean, variance}, {}, params);
+}
+
 size_t CactusGraph::attention(size_t query, size_t key, size_t value, float scale, bool is_causal, ComputeBackend backend) {
     OpParams params{.scale = scale, .is_causal = is_causal, .backend = backend};
     return add_node(OpType::ATTENTION, {query, key, value}, {}, params);
@@ -478,6 +501,10 @@ size_t CactusGraph::silu(size_t input) {
 
 size_t CactusGraph::gelu(size_t input) {
     return add_node(OpType::GELU, {input}, {});
+}
+
+size_t CactusGraph::sigmoid(size_t input) {
+    return add_node(OpType::SIGMOID, {input}, {});
 }
 
 size_t CactusGraph::gather(size_t tensor, size_t indices) {

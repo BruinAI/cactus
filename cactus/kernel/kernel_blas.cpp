@@ -198,6 +198,45 @@ void cactus_divide_f32(const float* a, const float* b, float* output, size_t num
         });
 }
 
+void cactus_elemwise_max_f32(const float* a, const float* b, float* output, size_t num_elements) {
+    CactusThreading::parallel_for(num_elements, CactusThreading::Thresholds::ELEMENT_WISE,
+        [&](size_t start_idx, size_t end_idx) {
+            constexpr size_t SIMD_WIDTH = 4;
+            const size_t vectorized_end = start_idx + ((end_idx - start_idx) / SIMD_WIDTH) * SIMD_WIDTH;
+
+            for (size_t i = start_idx; i < vectorized_end; i += SIMD_WIDTH) {
+                float32x4_t a_vec = vld1q_f32(&a[i]);
+                float32x4_t b_vec = vld1q_f32(&b[i]);
+                float32x4_t result_vec = vmaxq_f32(a_vec, b_vec);
+                vst1q_f32(&output[i], result_vec);
+            }
+
+            for (size_t i = vectorized_end; i < end_idx; ++i) {
+                output[i] = (a[i] > b[i]) ? a[i] : b[i];
+            }
+        });
+}
+
+void cactus_elemwise_min_f32(const float* a, const float* b, float* output, size_t num_elements) {
+    CactusThreading::parallel_for(num_elements, CactusThreading::Thresholds::ELEMENT_WISE,
+        [&](size_t start_idx, size_t end_idx) {
+            constexpr size_t SIMD_WIDTH = 4;
+            const size_t vectorized_end = start_idx + ((end_idx - start_idx) / SIMD_WIDTH) * SIMD_WIDTH;
+
+            for (size_t i = start_idx; i < vectorized_end; i += SIMD_WIDTH) {
+                float32x4_t a_vec = vld1q_f32(&a[i]);
+                float32x4_t b_vec = vld1q_f32(&b[i]);
+                float32x4_t result_vec = vminq_f32(a_vec, b_vec);
+                vst1q_f32(&output[i], result_vec);
+            }
+
+            for (size_t i = vectorized_end; i < end_idx; ++i) {
+                output[i] = (a[i] < b[i]) ? a[i] : b[i];
+            }
+        });
+}
+
+
 void cactus_add_broadcast_int8(const int8_t* a, const int8_t* b, int8_t* output,
                               const size_t* a_strides, const size_t* b_strides,
                               const size_t* output_shape, size_t ndim) {
@@ -364,6 +403,47 @@ void cactus_divide_broadcast_f32(const float* a, const float* b, float* output,
 }
 
 
+void cactus_elemwise_max_broadcast_f32(const float* a, const float* b, float* output,
+                                        const size_t* a_strides, const size_t* b_strides,
+                                        const size_t* output_shape, size_t ndim) {
+    size_t total_elements = 1;
+    for (size_t i = 0; i < ndim; ++i) {
+        total_elements *= output_shape[i];
+    }
+
+    std::vector<size_t> coords(ndim, 0);
+
+    for (size_t linear_idx = 0; linear_idx < total_elements; ++linear_idx) {
+        size_t a_idx = compute_linear_index(coords.data(), a_strides, ndim);
+        size_t b_idx = compute_linear_index(coords.data(), b_strides, ndim);
+
+        output[linear_idx] = (a[a_idx] > b[b_idx]) ? a[a_idx] : b[b_idx];
+
+        increment_coords(coords.data(), output_shape, ndim);
+    }
+}
+
+void cactus_elemwise_min_broadcast_f32(const float* a, const float* b, float* output,
+                                        const size_t* a_strides, const size_t* b_strides,
+                                        const size_t* output_shape, size_t ndim) {
+    size_t total_elements = 1;
+    for (size_t i = 0; i < ndim; ++i) {
+        total_elements *= output_shape[i];
+    }
+
+    std::vector<size_t> coords(ndim, 0);
+
+    for (size_t linear_idx = 0; linear_idx < total_elements; ++linear_idx) {
+        size_t a_idx = compute_linear_index(coords.data(), a_strides, ndim);
+        size_t b_idx = compute_linear_index(coords.data(), b_strides, ndim);
+
+        output[linear_idx] = (a[a_idx] < b[b_idx]) ? a[a_idx] : b[b_idx];
+
+        increment_coords(coords.data(), output_shape, ndim);
+    }
+}
+
+
 void cactus_add_f16(const __fp16* a, const __fp16* b, __fp16* output, size_t num_elements) {
     CactusThreading::parallel_for(num_elements, CactusThreading::Thresholds::ELEMENT_WISE,
         [&](size_t start_idx, size_t end_idx) {
@@ -480,6 +560,45 @@ void cactus_divide_f16(const __fp16* a, const __fp16* b, __fp16* output, size_t 
         });
 }
 
+void cactus_elemwise_max_f16(const __fp16* a, const __fp16* b, __fp16* output, size_t num_elements) {
+    CactusThreading::parallel_for(num_elements, CactusThreading::Thresholds::ELEMENT_WISE,
+        [&](size_t start_idx, size_t end_idx) {
+            constexpr size_t SIMD_WIDTH = 8;
+            const size_t vectorized_end = start_idx + ((end_idx - start_idx) / SIMD_WIDTH) * SIMD_WIDTH;
+
+            for (size_t i = start_idx; i < vectorized_end; i += SIMD_WIDTH) {
+                float16x8_t a_vec = vld1q_f16(&a[i]);
+                float16x8_t b_vec = vld1q_f16(&b[i]);
+                float16x8_t result_vec = vmaxq_f16(a_vec, b_vec);
+                vst1q_f16(&output[i], result_vec);
+            }
+
+            for (size_t i = vectorized_end; i < end_idx; ++i) {
+                output[i] = (a[i] > b[i]) ? a[i] : b[i];
+            }
+        });
+}
+
+void cactus_elemwise_min_f16(const __fp16* a, const __fp16* b, __fp16* output, size_t num_elements) {
+    CactusThreading::parallel_for(num_elements, CactusThreading::Thresholds::ELEMENT_WISE,
+        [&](size_t start_idx, size_t end_idx) {
+            constexpr size_t SIMD_WIDTH = 8;
+            const size_t vectorized_end = start_idx + ((end_idx - start_idx) / SIMD_WIDTH) * SIMD_WIDTH;
+
+            for (size_t i = start_idx; i < vectorized_end; i += SIMD_WIDTH) {
+                float16x8_t a_vec = vld1q_f16(&a[i]);
+                float16x8_t b_vec = vld1q_f16(&b[i]);
+                float16x8_t result_vec = vminq_f16(a_vec, b_vec);
+                vst1q_f16(&output[i], result_vec);
+            }
+
+            for (size_t i = vectorized_end; i < end_idx; ++i) {
+                output[i] = (a[i] < b[i]) ? a[i] : b[i];
+            }
+        });
+}
+
+
 void cactus_add_broadcast_f16(const __fp16* a, const __fp16* b, __fp16* output,
                               const size_t* a_strides, const size_t* b_strides,
                               const size_t* output_shape, size_t ndim) {
@@ -562,6 +681,47 @@ void cactus_divide_broadcast_f16(const __fp16* a, const __fp16* b, __fp16* outpu
         increment_coords(coords.data(), output_shape, ndim);
     }
 }
+
+void cactus_elemwise_max_broadcast_f16(const __fp16* a, const __fp16* b, __fp16* output,
+                                        const size_t* a_strides, const size_t* b_strides,
+                                        const size_t* output_shape, size_t ndim) {
+    size_t total_elements = 1;
+    for (size_t i = 0; i < ndim; ++i) {
+        total_elements *= output_shape[i];
+    }
+
+    std::vector<size_t> coords(ndim, 0);
+
+    for (size_t linear_idx = 0; linear_idx < total_elements; ++linear_idx) {
+        size_t a_idx = compute_linear_index(coords.data(), a_strides, ndim);
+        size_t b_idx = compute_linear_index(coords.data(), b_strides, ndim);
+
+        output[linear_idx] = (a[a_idx] > b[b_idx]) ? a[a_idx] : b[b_idx];
+
+        increment_coords(coords.data(), output_shape, ndim);
+    }
+}
+
+void cactus_elemwise_min_broadcast_f16(const __fp16* a, const __fp16* b, __fp16* output,
+                                        const size_t* a_strides, const size_t* b_strides,
+                                        const size_t* output_shape, size_t ndim) {
+    size_t total_elements = 1;
+    for (size_t i = 0; i < ndim; ++i) {
+        total_elements *= output_shape[i];
+    }
+
+    std::vector<size_t> coords(ndim, 0);
+
+    for (size_t linear_idx = 0; linear_idx < total_elements; ++linear_idx) {
+        size_t a_idx = compute_linear_index(coords.data(), a_strides, ndim);
+        size_t b_idx = compute_linear_index(coords.data(), b_strides, ndim);
+
+        output[linear_idx] = (a[a_idx] < b[b_idx]) ? a[a_idx] : b[b_idx];
+
+        increment_coords(coords.data(), output_shape, ndim);
+    }
+}
+
 
 void cactus_transpose_f32(const float* source, float* destination, const size_t* shape, const size_t* permutation, size_t ndim, size_t start_idx, size_t end_idx) {
     if (ndim == 2 && permutation[0] == 1 && permutation[1] == 0) {

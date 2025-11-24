@@ -1,0 +1,406 @@
+Processing model: yolo11n.onnx
+Processing model: yolo11n-seg.onnx
+Processing model: yolo11n-pose.onnx
+Processing model: yolo11n-obb.onnx
+Processing model: yolo11n-cls.onnx
+Processing model: yolov11.onnx
+
+================================================================================
+JOINT NODE SIGNATURES ACROSS MODELS
+================================================================================
+
+================================================================================
+OpType      : Add
+# Inputs    : 2
+# Outputs   : 1
+Attr names  : []
+Total nodes : 90
+Models      :
+  - yolo11n-cls.onnx
+  - yolo11n-obb.onnx
+  - yolo11n-pose.onnx
+  - yolo11n-seg.onnx
+  - yolo11n.onnx
+  - yolov11.onnx
+
+================================================================================
+OpType      : BatchNormalization
+# Inputs    : 5
+# Outputs   : 1
+Attr names  : ['epsilon', 'momentum']
+Total nodes : 81
+Models      :
+  - yolov11.onnx
+
+================================================================================
+OpType      : Concat
+# Inputs    : 2
+# Outputs   : 1
+Attr names  : ['axis']
+Total nodes : 64
+Models      :
+  - yolo11n-cls.onnx
+  - yolo11n-obb.onnx
+  - yolo11n-pose.onnx
+  - yolo11n-seg.onnx
+  - yolo11n.onnx
+  - yolov11.onnx
+
+================================================================================
+OpType      : Concat
+# Inputs    : 3
+# Outputs   : 1
+Attr names  : ['axis']
+Total nodes : 58
+Models      :
+  - yolo11n-cls.onnx
+  - yolo11n-obb.onnx
+  - yolo11n-pose.onnx
+  - yolo11n-seg.onnx
+  - yolo11n.onnx
+  - yolov11.onnx
+
+================================================================================
+OpType      : Concat
+# Inputs    : 4
+# Outputs   : 1
+Attr names  : ['axis']
+Total nodes : 6
+Models      :
+  - yolo11n-obb.onnx
+  - yolo11n-pose.onnx
+  - yolo11n-seg.onnx
+  - yolo11n.onnx
+  - yolov11.onnx
+
+================================================================================
+OpType      : Conv
+# Inputs    : 2
+# Outputs   : 1
+Attr names  : ['dilations', 'group', 'kernel_shape', 'pads', 'strides']
+Total nodes : 4
+Models      :
+  - yolo11n-obb.onnx
+  - yolo11n-pose.onnx
+  - yolo11n-seg.onnx
+  - yolo11n.onnx
+
+================================================================================
+OpType      : Conv
+# Inputs    : 3
+# Outputs   : 1
+Attr names  : ['auto_pad', 'dilations', 'group', 'pads', 'strides']
+Total nodes : 89
+Models      :
+  - yolov11.onnx
+
+================================================================================
+OpType      : Conv
+# Inputs    : 3
+# Outputs   : 1
+Attr names  : ['dilations', 'group', 'kernel_shape', 'pads', 'strides']
+Total nodes : 417
+Models      :
+  - yolo11n-cls.onnx
+  - yolo11n-obb.onnx
+  - yolo11n-pose.onnx
+  - yolo11n-seg.onnx
+  - yolo11n.onnx
+
+================================================================================
+OpType      : ConvTranspose
+# Inputs    : 3
+# Outputs   : 1
+Attr names  : ['dilations', 'group', 'kernel_shape', 'pads', 'strides']
+Total nodes : 1
+Models      :
+  - yolo11n-seg.onnx
+
+================================================================================
+OpType      : Cos
+# Inputs    : 1
+# Outputs   : 1
+Attr names  : []
+Total nodes : 1
+Models      :
+  - yolo11n-obb.onnx
+
+================================================================================
+OpType      : Div
+# Inputs    : 2
+# Outputs   : 1
+Attr names  : []
+Total nodes : 4
+Models      :
+  - yolo11n-obb.onnx
+  - yolo11n-pose.onnx
+  - yolo11n-seg.onnx
+  - yolo11n.onnx
+
+================================================================================
+OpType      : Flatten
+# Inputs    : 1
+# Outputs   : 1
+Attr names  : ['axis']
+Total nodes : 1
+Models      :
+  - yolo11n-cls.onnx
+
+================================================================================
+OpType      : Gather
+# Inputs    : 2
+# Outputs   : 1
+Attr names  : ['axis']
+Total nodes : 4
+Models      :
+  - yolov11.onnx
+
+================================================================================
+OpType      : Gemm
+# Inputs    : 3
+# Outputs   : 1
+Attr names  : ['alpha', 'beta', 'transB']
+Total nodes : 1
+Models      :
+  - yolo11n-cls.onnx
+
+================================================================================
+OpType      : GlobalAveragePool
+# Inputs    : 1
+# Outputs   : 1
+Attr names  : []
+Total nodes : 1
+Models      :
+  - yolo11n-cls.onnx
+
+================================================================================
+OpType      : MatMul
+# Inputs    : 2
+# Outputs   : 1
+Attr names  : []
+Total nodes : 12
+Models      :
+  - yolo11n-cls.onnx
+  - yolo11n-obb.onnx
+  - yolo11n-pose.onnx
+  - yolo11n-seg.onnx
+  - yolo11n.onnx
+  - yolov11.onnx
+
+================================================================================
+OpType      : Max
+# Inputs    : 2
+# Outputs   : 1
+Attr names  : []
+Total nodes : 2
+Models      :
+  - yolov11.onnx
+
+================================================================================
+OpType      : MaxPool
+# Inputs    : 1
+# Outputs   : 1
+Attr names  : ['auto_pad', 'ceil_mode', 'dilations', 'kernel_shape', 'pads', 'storage_order', 'strides']
+Total nodes : 3
+Models      :
+  - yolov11.onnx
+
+================================================================================
+OpType      : MaxPool
+# Inputs    : 1
+# Outputs   : 1
+Attr names  : ['ceil_mode', 'dilations', 'kernel_shape', 'pads', 'strides']
+Total nodes : 12
+Models      :
+  - yolo11n-obb.onnx
+  - yolo11n-pose.onnx
+  - yolo11n-seg.onnx
+  - yolo11n.onnx
+
+================================================================================
+OpType      : Min
+# Inputs    : 2
+# Outputs   : 1
+Attr names  : []
+Total nodes : 2
+Models      :
+  - yolov11.onnx
+
+================================================================================
+OpType      : Mul
+# Inputs    : 2
+# Outputs   : 1
+Attr names  : []
+Total nodes : 459
+Models      :
+  - yolo11n-cls.onnx
+  - yolo11n-obb.onnx
+  - yolo11n-pose.onnx
+  - yolo11n-seg.onnx
+  - yolo11n.onnx
+  - yolov11.onnx
+
+================================================================================
+OpType      : Reshape
+# Inputs    : 2
+# Outputs   : 1
+Attr names  : ['allowzero']
+Total nodes : 58
+Models      :
+  - yolo11n-cls.onnx
+  - yolo11n-obb.onnx
+  - yolo11n-pose.onnx
+  - yolo11n-seg.onnx
+  - yolo11n.onnx
+  - yolov11.onnx
+
+================================================================================
+OpType      : Resize
+# Inputs    : 3
+# Outputs   : 1
+Attr names  : ['antialias', 'coordinate_transformation_mode', 'cubic_coeff_a', 'exclude_outside', 'extrapolation_value', 'keep_aspect_ratio_policy', 'mode', 'nearest_mode']
+Total nodes : 2
+Models      :
+  - yolov11.onnx
+
+================================================================================
+OpType      : Resize
+# Inputs    : 3
+# Outputs   : 1
+Attr names  : ['coordinate_transformation_mode', 'cubic_coeff_a', 'mode', 'nearest_mode']
+Total nodes : 8
+Models      :
+  - yolo11n-obb.onnx
+  - yolo11n-pose.onnx
+  - yolo11n-seg.onnx
+  - yolo11n.onnx
+
+================================================================================
+OpType      : Sigmoid
+# Inputs    : 1
+# Outputs   : 1
+Attr names  : []
+Total nodes : 447
+Models      :
+  - yolo11n-cls.onnx
+  - yolo11n-obb.onnx
+  - yolo11n-pose.onnx
+  - yolo11n-seg.onnx
+  - yolo11n.onnx
+  - yolov11.onnx
+
+================================================================================
+OpType      : Sin
+# Inputs    : 1
+# Outputs   : 1
+Attr names  : []
+Total nodes : 1
+Models      :
+  - yolo11n-obb.onnx
+
+================================================================================
+OpType      : Slice
+# Inputs    : 4
+# Outputs   : 1
+Attr names  : []
+Total nodes : 6
+Models      :
+  - yolo11n-pose.onnx
+  - yolo11n-seg.onnx
+  - yolo11n.onnx
+
+================================================================================
+OpType      : Slice
+# Inputs    : 5
+# Outputs   : 1
+Attr names  : []
+Total nodes : 2
+Models      :
+  - yolo11n-pose.onnx
+
+================================================================================
+OpType      : Softmax
+# Inputs    : 1
+# Outputs   : 1
+Attr names  : ['axis']
+Total nodes : 11
+Models      :
+  - yolo11n-cls.onnx
+  - yolo11n-obb.onnx
+  - yolo11n-pose.onnx
+  - yolo11n-seg.onnx
+  - yolo11n.onnx
+  - yolov11.onnx
+
+================================================================================
+OpType      : Split
+# Inputs    : 1
+# Outputs   : 2
+Attr names  : ['axis', 'num_outputs']
+Total nodes : 9
+Models      :
+  - yolov11.onnx
+
+================================================================================
+OpType      : Split
+# Inputs    : 2
+# Outputs   : 2
+Attr names  : ['axis']
+Total nodes : 48
+Models      :
+  - yolo11n-cls.onnx
+  - yolo11n-obb.onnx
+  - yolo11n-pose.onnx
+  - yolo11n-seg.onnx
+  - yolo11n.onnx
+  - yolov11.onnx
+
+================================================================================
+OpType      : Split
+# Inputs    : 2
+# Outputs   : 3
+Attr names  : ['axis']
+Total nodes : 6
+Models      :
+  - yolo11n-cls.onnx
+  - yolo11n-obb.onnx
+  - yolo11n-pose.onnx
+  - yolo11n-seg.onnx
+  - yolo11n.onnx
+  - yolov11.onnx
+
+================================================================================
+OpType      : Sub
+# Inputs    : 2
+# Outputs   : 1
+Attr names  : []
+Total nodes : 10
+Models      :
+  - yolo11n-obb.onnx
+  - yolo11n-pose.onnx
+  - yolo11n-seg.onnx
+  - yolo11n.onnx
+  - yolov11.onnx
+
+================================================================================
+OpType      : Transpose
+# Inputs    : 1
+# Outputs   : 1
+Attr names  : ['perm']
+Total nodes : 22
+Models      :
+  - yolo11n-cls.onnx
+  - yolo11n-obb.onnx
+  - yolo11n-pose.onnx
+  - yolo11n-seg.onnx
+  - yolo11n.onnx
+  - yolov11.onnx
+
+================================================================================
+OpType      : Unsqueeze
+# Inputs    : 2
+# Outputs   : 1
+Attr names  : []
+Total nodes : 8
+Models      :
+  - yolov11.onnx

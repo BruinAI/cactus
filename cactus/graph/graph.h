@@ -30,12 +30,13 @@ enum class OpType {
     MATMUL, TRANSPOSE, RESHAPE, SLICE, GATHER, EMBEDDING,
     BILINEAR_INTERPOLATION,
     SUM, MEAN, VARIANCE, MIN, MAX,
+    ELEM_WISE_MIN, ELEM_WISE_MAX,
     RMS_NORM, ROPE, SOFTMAX, ATTENTION, CONV1D_CAUSAL, CONV1D_K3,
     SCALAR_ADD, SCALAR_SUBTRACT, SCALAR_MULTIPLY, SCALAR_DIVIDE, SCALAR_EXP, SCALAR_SQRT, SCALAR_COS, SCALAR_SIN,
-    SILU, GELU,
+    SILU, GELU, SIGMOID,
     SAMPLE, CONCAT,
     SCATTER_TOPK,
-    TOPK, LAYERNORM,
+    TOPK, LAYERNORM, BATCHNORM,
     INDEX,
 };
 
@@ -179,6 +180,7 @@ void compute_sample_node(GraphNode& node, const std::vector<std::unique_ptr<Grap
 void compute_scatter_topk_node(GraphNode& node, const std::vector<std::unique_ptr<GraphNode>>& nodes, const std::unordered_map<size_t, size_t>& node_index_map);
 void compute_topk_node(GraphNode& node, const std::vector<std::unique_ptr<GraphNode>>& nodes, const std::unordered_map<size_t, size_t>& node_index_map);
 void compute_layernorm_node(GraphNode& node, const std::vector<std::unique_ptr<GraphNode>>& nodes, const std::unordered_map<size_t, size_t>& node_index_map);
+void compute_batchnorm_node(GraphNode& node, const std::vector<std::unique_ptr<GraphNode>>& nodes, const std::unordered_map<size_t, size_t>& node_index_map);
 void compute_index_node(GraphNode& node, const std::vector<std::unique_ptr<GraphNode>>& nodes, const std::unordered_map<size_t, size_t>& node_index_map);
 
 namespace ValidationUtils {
@@ -219,6 +221,7 @@ public:
     
     size_t silu(size_t input);
     size_t gelu(size_t input);
+    size_t sigmoid(size_t input);
     
     size_t matmul(size_t input1, size_t input2, bool pretransposed_rhs = false, ComputeBackend backend = ComputeBackend::CPU);
     size_t transpose(size_t input, ComputeBackend backend = ComputeBackend::CPU);
@@ -232,6 +235,9 @@ public:
     size_t variance(size_t input, int axis);
     size_t min(size_t input, int axis);
     size_t max(size_t input, int axis);
+
+    size_t elem_wise_min(size_t input1, size_t input2);
+    size_t elem_wise_max(size_t input1, size_t input2);
     
     size_t gather(size_t embeddings, size_t indices);
     size_t mmap_embeddings(const std::string& filename);
@@ -243,6 +249,7 @@ public:
     size_t bilinear_interpolation(size_t pos_embeds, size_t dst_height, size_t dst_width);
 
     size_t layernorm(size_t input, size_t weight, size_t bias, float epsilon = 1e-5f);
+    size_t batchnorm(size_t input, size_t weight, size_t bias, size_t mean, size_t variance, float epsilon = 1e-5f);
     size_t topk(size_t input, size_t k);
     size_t rms_norm(size_t input, size_t weight, float epsilon = 1e-5f);
     size_t rope(size_t input, float theta, size_t position_offset = 0, ComputeBackend backend = ComputeBackend::CPU);
