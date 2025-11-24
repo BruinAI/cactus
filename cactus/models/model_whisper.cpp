@@ -51,6 +51,11 @@ WhisperModel::WhisperModel(const Config& config) : Model(config) {
     attention_scale_ = 1.0f / std::sqrt(hd);
 
     encoder_block_out_nodes_.resize(config.num_layers, 0);
+
+    // Encoder cross-attention K/V cache
+    encoder_k_nodes_.assign(config.num_layers, 0);
+    encoder_v_nodes_.assign(config.num_layers, 0);
+
 }
 
 void WhisperModel::load_weights_to_graph(CactusGraph* gb) {
@@ -167,29 +172,62 @@ size_t WhisperModel::build_decoder_mlp(CactusGraph* gb, size_t input, uint32_t l
 
 
 size_t WhisperModel::build_encoder_attention(CactusGraph* gb, size_t input, uint32_t layer_idx, ComputeBackend backend, bool use_cache, size_t position_offset){
+
     const auto& layer = weight_nodes_.layers[layer_idx];
 
     size_t q = gb->matmul(input, layer.decoder_encoder_attn_q_weight, true, backend);
     q = gb->add(q, layer.decoder_encoder_attn_q_bias);
 
-    size_t enc_norm = weight_nodes_.encoder_output;
+    const auto& q_buf   = gb->get_output_buffer(q);
+    if (q_buf.shape.size() != 2) {
+        throw std::runtime_error("encoder cross-attn: q must be [T_dec, D]");
+    }
 
-    size_t k = gb->matmul(enc_norm, layer.decoder_encoder_attn_k_weight, true, backend);
-
-    size_t v = gb->matmul(enc_norm, layer.decoder_encoder_attn_v_weight, true, backend);
-    v = gb->add(v, layer.decoder_encoder_attn_v_bias);
-
-    size_t T_dec = gb->get_output_buffer(q).shape[0];
-    size_t T_enc = gb->get_output_buffer(k).shape[0];
-
-    size_t q_heads  = config_.attention_heads;
+    size_t T_dec   = q_buf.shape[0];
+    size_t q_heads = config_.attention_heads;
     size_t kv_heads = config_.attention_kv_heads;
     size_t head_dim = config_.attention_head_dim;
 
-    q = gb->reshape(q, {1, T_dec, q_heads,  head_dim});
-    k = gb->reshape(k, {1, T_enc, kv_heads, head_dim});
-    v = gb->reshape(v, {1, T_enc, kv_heads, head_dim});
-    size_t attn = gb->attention(q, k, v, attention_scale_, /*is_causal=*/false);
+    q = gb->reshape(q, {1, T_dec, q_heads, head_dim});
+
+    size_t k_4d = 0;
+    size_t v_4d = 0;
+
+    if (use_cache && encoder_kv_ready_) {
+        const auto& k_shape = encoder_k_shape_[layer_idx];
+        const auto& v_shape = encoder_v_shape_[layer_idx];
+
+        size_t cache_k_node = gb->input(k_shape, encoder_kv_precision_);
+        size_t cache_v_node = gb->input(v_shape, encoder_kv_precision_);
+
+        gb->set_input(cache_k_node, encoder_k_host_[layer_idx].data(), encoder_kv_precision_);
+        gb->set_input(cache_v_node, encoder_v_host_[layer_idx].data(), encoder_kv_precision_);
+
+        k_4d = cache_k_node;
+        v_4d = cache_v_node;
+    } else {
+        size_t enc_norm = weight_nodes_.encoder_output;
+
+        size_t k = gb->matmul(enc_norm, layer.decoder_encoder_attn_k_weight, true, backend);
+        size_t v = gb->matmul(enc_norm, layer.decoder_encoder_attn_v_weight, true, backend);
+        v = gb->add(v, layer.decoder_encoder_attn_v_bias);
+
+        const auto& k_buf = gb->get_output_buffer(k);
+        if (k_buf.shape.size() != 2) {
+            throw std::runtime_error("encoder cross-attn: k must be [T_enc, D]");
+        }
+        size_t T_enc = k_buf.shape[0];
+
+        k_4d = gb->reshape(k, {1, T_enc, kv_heads, head_dim});
+        v_4d = gb->reshape(v, {1, T_enc, kv_heads, head_dim});
+
+        if (!encoder_kv_ready_) {
+            encoder_k_nodes_[layer_idx] = k_4d;
+            encoder_v_nodes_[layer_idx] = v_4d;
+        }
+    }
+
+    size_t attn = gb->attention(q, k_4d, v_4d, attention_scale_, false);
 
     attn = gb->reshape(attn, {T_dec, q_heads * head_dim});
     size_t out = gb->matmul(attn, layer.decoder_encoder_attn_output_weight, true, backend);
@@ -443,7 +481,6 @@ void WhisperModel::run_encoder(const std::vector<float>& mel_bins)
     size_t mel_input = 0;
 
     if (act_precision == Precision::FP16) {
-        // Explicitly convert mel bins to fp16 so we don't mis-copy.
         std::vector<__fp16> mel_bins_f16(mel_bins.size());
         for (size_t i = 0; i < mel_bins.size(); ++i) {
             mel_bins_f16[i] = (__fp16)mel_bins[i];
@@ -452,7 +489,6 @@ void WhisperModel::run_encoder(const std::vector<float>& mel_bins)
         mel_input = gb->input({1, 80, T_mel}, Precision::FP16);
         gb->set_input(mel_input, mel_bins_f16.data(), Precision::FP16);
     } else {
-        // FP32 / INT8 path: keep as before (or add INT8 quantization if you have it).
         mel_input = gb->input({1, 80, T_mel}, Precision::FP32);
         gb->set_input(mel_input, mel_bins.data(), Precision::FP32);
     }
@@ -539,17 +575,13 @@ size_t WhisperModel::run_decoder_step(const std::vector<uint32_t>& tokens, bool 
         weight_nodes_.decoder_norm_bias
     );
 
-        // Only keep the last token if requested
     size_t logits_input = dec_norm;
     if (last_token_only) {
-        // new_tokens is at least 1
         size_t row_index = new_tokens - 1;
         logits_input = gb->slice(logits_input, 0, row_index, 1); 
-        // shape becomes [1, D]
     }
 
     auto w_shape = gb->get_output_buffer(output_weight_node_id_).shape;
-    // (optional debug: log shapes here if you want)
 
     size_t logits = gb->matmul(logits_input, output_weight_node_id_, true, backend);
 
@@ -615,6 +647,15 @@ uint32_t WhisperModel::generate_with_audio(
         kv_cache_.reset();
         kv_cache_.current_seq_len = 0;
         reset_graph_side_cache_nodes();
+
+        encoder_kv_ready_ = false;
+        encoder_k_nodes_.assign(config_.num_layers, 0);
+        encoder_v_nodes_.assign(config_.num_layers, 0);
+        encoder_k_host_.clear();
+        encoder_v_host_.clear();
+        encoder_k_shape_.clear();
+        encoder_v_shape_.clear();
+
         first_decode_step_ = true;
         run_encoder(mel_bins);
         logits_node = run_decoder_step(full_tokens, false, false);
@@ -669,8 +710,65 @@ uint32_t WhisperModel::generate_with_audio(
             total_bytes
         );
 
+        // --- NEW: capture encoder K/V per layer ---
+        {
+            if (config_.num_layers == 0) {
+                throw std::runtime_error("WhisperModel: num_layers is zero?");
+            }
+
+            auto& k0_buf = gb->get_output_buffer(encoder_k_nodes_[0]);
+            encoder_kv_precision_ = k0_buf.precision;
+
+            encoder_k_host_.resize(config_.num_layers);
+            encoder_v_host_.resize(config_.num_layers);
+            encoder_k_shape_.resize(config_.num_layers);
+            encoder_v_shape_.resize(config_.num_layers);
+
+            size_t kv_elem_size = 0;
+            switch (encoder_kv_precision_) {
+                case Precision::FP32: kv_elem_size = sizeof(float);    break;
+                case Precision::FP16: kv_elem_size = sizeof(uint16_t); break;
+                case Precision::INT8: kv_elem_size = sizeof(int8_t);   break;
+                default:
+                    throw std::runtime_error("Unsupported encoder K/V precision in WhisperModel");
+            }
+
+            for (uint32_t i = 0; i < config_.num_layers; ++i) {
+                size_t k_node = encoder_k_nodes_[i];
+                size_t v_node = encoder_v_nodes_[i];
+
+                auto& k_buf = gb->get_output_buffer(k_node);
+                auto& v_buf = gb->get_output_buffer(v_node);
+
+                encoder_k_shape_[i] = k_buf.shape;
+                encoder_v_shape_[i] = v_buf.shape;
+
+                size_t k_elems = 1;
+                for (auto s : k_buf.shape) k_elems *= s;
+                size_t v_elems = 1;
+                for (auto s : v_buf.shape) v_elems *= s;
+
+                encoder_k_host_[i].resize(k_elems * kv_elem_size);
+                encoder_v_host_[i].resize(v_elems * kv_elem_size);
+
+                std::memcpy(
+                    encoder_k_host_[i].data(),
+                    gb->get_output(k_node),
+                    k_elems * kv_elem_size
+                );
+                std::memcpy(
+                    encoder_v_host_[i].data(),
+                    gb->get_output(v_node),
+                    v_elems * kv_elem_size
+                );
+            }
+
+            encoder_kv_ready_ = true;
+        }
+
         encoder_ready_ = true;
     }
+
 
     post_execute_updates(gb, full_tokens.size());
     update_kv_cache(gb, last_new_tokens_);

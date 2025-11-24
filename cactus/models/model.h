@@ -529,6 +529,17 @@ private:
     };
 
     bool first_decode_step_ = true;
+
+    // ===== Encoder cross-attention K/V cache (per layer) =====
+    std::vector<size_t> encoder_k_nodes_;   // graph node ids for K (cold pass only)
+    std::vector<size_t> encoder_v_nodes_;   // graph node ids for V (cold pass only)
+
+    std::vector<std::vector<uint8_t>> encoder_k_host_;   // raw bytes per layer
+    std::vector<std::vector<uint8_t>> encoder_v_host_;
+    std::vector<std::vector<size_t>>  encoder_k_shape_;  // shape per layer, e.g. {1, T_enc, kv_heads, head_dim}
+    std::vector<std::vector<size_t>>  encoder_v_shape_;
+    Precision encoder_kv_precision_ = Precision::FP32;
+    bool encoder_kv_ready_ = false;
     
 
 };
