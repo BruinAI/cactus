@@ -176,6 +176,12 @@ void cactus_gelu_int8(const int8_t* input, int8_t* output, size_t num_elements,
 
 void cactus_gelu_f32_erf(const float* input, float* output, size_t num_elements);
 void cactus_gelu_f16_erf(const __fp16* input, __fp16* output, size_t num_elements);
+void cactus_gelu_int8_erf(
+    const int8_t* input,
+    int8_t* output,
+    size_t num_elements,
+    float scale_in,
+    float scale_out);
 
                       
 void cactus_attention_int8(const int8_t* queries, const int8_t* keys, const int8_t* values, int8_t* output,

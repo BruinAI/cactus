@@ -13,7 +13,7 @@
 // ---------------------------
 // Config
 // ---------------------------
-static const char* kModelPath = "../../weights/whisper-medium";
+static const char* kModelPath = "../../weights/whisper-medium16";
 static const char* kMelFile   = "/Users/parkiratsandhu/Documents/programming_projects/cactus_bruinai/cactus/tests/whisper_tests/mel.npy";
 static const char* kTokFile   = "/Users/parkiratsandhu/Documents/programming_projects/cactus_bruinai/cactus/tests/whisper_tests/decoder_input_tokens.npy";
 
@@ -173,7 +173,7 @@ static bool test_whisper_prefill_only() {
 static bool test_whisper_autoregressive_longer() {
     return run_whisper_test(
         "WHISPER AUTOREGRESSIVE (100 TOKENS)",
-        0.0f, 1.0f, 0, 100, false, -1,
+        0.0f, 0.0f, 0, 100, false, -1,
         [](int rc,
            const std::string& /*text*/,
            double /*ttft*/,

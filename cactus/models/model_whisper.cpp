@@ -356,7 +356,15 @@ size_t WhisperModel::build_encoder_self_attention(CactusGraph* gb, size_t input,
 
 size_t WhisperModel::build_conv1d(CactusGraph* gb, size_t input, ComputeBackend backend)
 {
-    size_t conv1 = gb->conv1d_k3(input, weight_nodes_.encoder_conv1_weight, 1);
+    size_t conv_input = input;
+    const auto& xbuf = gb->get_output_buffer(input);
+
+    if (xbuf.precision == Precision::INT8) {
+        // Upcast activations to FP16 just for the conv
+        conv_input = gb->precision_cast(input, Precision::FP16);
+    }
+
+    size_t conv1 = gb->conv1d_k3(conv_input, weight_nodes_.encoder_conv1_weight, 1);
 
     auto bias1_shape = gb->get_output_buffer(weight_nodes_.encoder_conv1_bias).shape;
     size_t C1 = bias1_shape[0];
@@ -488,7 +496,19 @@ void WhisperModel::run_encoder(const std::vector<float>& mel_bins)
 
         mel_input = gb->input({1, 80, T_mel}, Precision::FP16);
         gb->set_input(mel_input, mel_bins_f16.data(), Precision::FP16);
-    } else {
+    }
+
+    else if (act_precision == Precision::INT8) {
+        std::vector<int8_t> mel_bins_i8(mel_bins.size());
+        for (size_t i = 0; i < mel_bins.size(); ++i) {
+            mel_bins_i8[i] = static_cast<int8_t>(mel_bins[i]);
+        }
+
+        mel_input = gb->input({1, 80, T_mel}, Precision::INT8);
+        gb->set_input(mel_input, mel_bins_i8.data(), Precision::INT8);
+    }
+    
+    else {
         mel_input = gb->input({1, 80, T_mel}, Precision::FP32);
         gb->set_input(mel_input, mel_bins.data(), Precision::FP32);
     }
@@ -505,6 +525,13 @@ void WhisperModel::run_encoder(const std::vector<float>& mel_bins)
     size_t pos_slice = gb->slice(weight_nodes_.encoder_position_embeddings, 0, 0, T_enc);
 
     size_t h2d = gb->reshape(conv2_transposed, {T_enc, D_enc});
+
+    auto& h2d_buf = gb->get_output_buffer(h2d);
+    auto& pos_buf = gb->get_output_buffer(pos_slice);
+
+    if (pos_buf.precision != h2d_buf.precision) {
+        pos_slice = gb->precision_cast(pos_slice, h2d_buf.precision);
+    }
 
     size_t h_pos = gb->add(h2d, pos_slice);
     last_enc_plus_pos_node_ = h_pos;
@@ -556,7 +583,18 @@ size_t WhisperModel::run_decoder_step(const std::vector<uint32_t>& tokens, bool 
 
     size_t position_offset = kv_cache_.current_seq_len;
     size_t dec_pos = gb->slice(weight_nodes_.decoder_position_embeddings_weight,0,position_offset,new_tokens);
-    dec_hidden = gb->add(dec_hidden, dec_pos);
+
+    {
+        const auto& h_buf   = gb->get_output_buffer(dec_hidden);
+        const auto& pos_buf = gb->get_output_buffer(dec_pos);
+
+        size_t pos_node_for_add = dec_pos;
+        if (pos_buf.precision != h_buf.precision) {
+            pos_node_for_add = gb->precision_cast(dec_pos, h_buf.precision);
+        }
+
+        dec_hidden = gb->add(dec_hidden, pos_node_for_add);
+    }
 
     for (uint32_t layer_idx = 0; layer_idx < config_.num_layers; ++layer_idx) {
         dec_hidden = build_decoder_transformer_block(
@@ -710,7 +748,6 @@ uint32_t WhisperModel::generate_with_audio(
             total_bytes
         );
 
-        // --- NEW: capture encoder K/V per layer ---
         {
             if (config_.num_layers == 0) {
                 throw std::runtime_error("WhisperModel: num_layers is zero?");
