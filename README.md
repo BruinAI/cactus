@@ -1,10 +1,10 @@
 <img src="assets/banner.jpg" alt="Logo" style="border-radius: 30px; width: 100%;">
 
-Fast, lightweight, cross-platform & energy-efficient AI inference framework for all phones, from old and budget to high-end. 
+Fast, lightweight, cross-platform & energy-efficient AI inference framework for small consumer devices. 
 
 ## Cactus Graph 
 Cactus Graph is a general numerical computing framework for implementing 
-any model, like PyTorch for phones.
+any model, like PyTorch for consumer devices.
 
 ```cpp
 #include cactus.h
@@ -64,35 +64,32 @@ Example response from Gemma3-270m-INT8
 }
 ```
 
-## Performance (Qwen-0.6B-INT8-CPU)
+## INT8 CPU Performance (LFM2-1.2B) (722mb Compressed)
 
-| Device | Prefill-1k (toks/s) | Decode (toks/s) | Battery Drain (%/min) |
+| Device | Prefill (toks/s) | Decode (toks/s) | Battery Drain (%/min) |
 |:-------------------------------|:--------------------:|:----------------:|:---------------------:|
-| iPhone 17 Pro                  | 420                  | 75               | 0.44                  |
-| Galaxy S25 Ultra               | 336                  | 60               | 0.45                  |
-| iPhone 16 Pro                  | 334                  | 60               | -                     |
-| Nothing 3                      | 296                  | 53               | 0.44                  |
-| iPhone 15 Pro                  | 274                  | 49               | -                     |
-| iPhone 14 Pro                  | 269                  | 48               | -                     |
-| OnePlus 13 5G                  | 268                  | 48               | 0.33                  |
-| Galaxy S24 Ultra               | 240                  | 43               | 0.48                  |
-| iPhone 15                      | 241                  | 43               | -                     |
-| OnePlus Open                   | 235                  | 42               | -                     |
-| Galaxy S23                     | 233                  | 42               | -                     |
-| iPhone 13 Pro                  | 218                  | 39               | -                     |
-| OnePlus 12                     | 216                  | 39               | 0.42                  |
-| iPhone 13 mini                 | 156                  | 28               | -                     |
-| Redmi K70 Ultra                | 154                  | 28               | 0.41                  |
-| Xiaomi 13                      | 153                  | 28               | 0.50                  |
-| OnePlus 11                     | 152                  | 28               | -                     |
-| Pixel 6a                       | 95                   | 17               | 0.48                  |
-| Nothing 3a                     | 93                   | 17               | 0.48                  |
-
-## Performance notes
-
-- These were collated from real-world runs, not controlled tests.
-- Apple Intelligence drains 0.6 percent/min on iPhone 16 Pro Max
-- Compressed file size is only 394mb (900mb+ in Executorch/GGUF)
+| Macbook M4 Pro                 | 590                  | 96               | -                     |
+| Mac Mini M4 Pro                | 580                  | 93               | -                     |
+| iPhone 17 Pro                  | 420                  | 81               | 0.44                  |
+| Galaxy S25 Ultra               | 336                  | 64               | 0.45                  |
+| iPhone 16 Pro                  | 334                  | 64               | -                     |
+| Nothing 3a Pro                 | 296                  | 63               | 0.44                  |
+| Macbook Pro M3                 | 462                  | 62               | -                     |
+| iPhone 15 Pro                  | 274                  | 57               | -                     |
+| iPhone 14 Pro                  | 269                  | 51               | -                     |
+| OnePlus 13 5G                  | 268                  | 51               | 0.33                  |
+| Macbook Air M3                 | 260                  | 50               | -                     |
+| Galaxy S24 Ultra               | 240                  | 46               | 0.48                  |
+| iPhone 15                      | 241                  | 46               | -                     |
+| Galaxy S23                     | 233                  | 45               | -                     |
+| iPhone 13 Pro                  | 218                  | 42               | -                     |
+| OnePlus 12                     | 216                  | 42               | 0.42                  |
+| iPhone 13 mini                 | 156                  | 30               | -                     |
+| Redmi K70 Ultra                | 154                  | 30               | 0.41                  |
+| Xiaomi 13                      | 153                  | 30               | 0.50                  |
+| Pixel 6a                       | 85                   | 13               | 0.48                  |
+| Nothing 3a                     | 83                   | 13               | 0.48                  |
+| Raspberry Pi 5                 | 50                   | 8.5              | -                     |
 
 ## Coming improvements:
 
@@ -100,36 +97,63 @@ Example response from Gemma3-270m-INT8
 - NPUs to improve energy-efficiency and prefill speed up to 11x
 - VLM and Audio models like LFM-VL, Whisper, KittenTTS, etc. 
 
-## Using this repo
-You can run these codes directly on M-series Macbooks since they are ARM-based.
-Vanilla M3 CPU-only can run Qwen3-600m-INT8 at 60+ toks/sec, just run the following: 
+## Setting up this repo
+
+If developing on a Mac:
 
 ```bash
-tests/run.sh 
+# Needs C++ & Python, then Install CMake and Python dependencies weight convertion dependencies
+brew install cmake
+pip3 install -r tools/requirements.txt
 ```
 
-## Generating weights from HuggingFace 
-
-Run one of the following 
+If developing on Windows ARM PC: 
 
 ```bash
-# Language models (INT8)
-python3 tools/convert_hf.py google/gemma-3-270m-it weights/gemma3-270m/
-python3 tools/convert_hf.py LiquidAI/LFM2-350M weights/lfm2-350m/  # supports tool call
-python3 tools/convert_hf.py HuggingFaceTB/SmolLM2-360m-Instruct weights/smollm2-360m/ 
-python3 tools/convert_hf.py Qwen/Qwen3-0.6B weights/qwen3-600m/  # supports tool call
-python3 tools/convert_hf.py LiquidAI/LFM2-700M weights/lfm2-700m/ # supports tool call
-python3 tools/convert_hf.py google/gemma-3-1b-it weights/gemma3-1b/  
-python3 tools/convert_hf.py LiquidAI/LFM2-1.2B weights/lfm2-1.2B/ # supports tool call
-python3 tools/convert_hf.py Qwen/Qwen3-1.7B weights/qwen3-1.7B/ # supports tool call
-python3 tools/convert_hf.py HuggingFaceTB/SmolLM2-1.7B-Instruct weights/smollm2-1.7b/ 
-
-# Embedding-only models 
-python3 tools/convert_hf.py Qwen/Qwen3-Embedding-0.6B weights/qwen3-embed-600m/ 
-python3 tools/convert_hf.py nomic-ai/nomic-embed-text-v2-moe weights/nomic/ 
+# Needs C++, Python and MySys with Pacman, then install CMake and Python dependencies weight convertion dependencies 
+pacman -S mingw-w64-clang-aarch64-cmake mingw-w64-clang-aarch64-toolchain mingw-w64-clang-aarch64-mman-win32
+pip3 install -r tools/requirements.txt
 ```
 
-Then replace the model path in `tests/test_engine.cpp` with your choice.
+## Running the codes 
+
+```bash
+tests/run.sh # tests/run.bat for Windows ARM
+```
+
+To generate weights from HuggingFace:
+
+```bash
+cli/cactus download Qwen/Qwen3-0.6B # HuggingFace path
+# stored as the weights/Qwen3-0.6B
+# replace with model path in tests/test_engine.cpp 
+```
+
+You can just interact with the model during dev using:
+
+```bash
+cli/cactus run LiquidAI/LFM2-VL-450M 
+```
+
+## Supported models (INT8)
+
+| Model | Completion | Tool Call | Vision | Embed |
+|-------|--------------------|-------------------|----------------|------|
+| google/gemma-3-270m-it | ✓ | ✗ | ✗ | ✗ |
+| LiquidAI/LFM2-350M | ✓ | ✓ | ✗ | ✓ |
+| HuggingFaceTB/SmolLM2-360m-Instruct | ✓ | ✗ | ✗ | ✗ |
+| LiquidAI/LFM2-VL-450M | ✓ | ✗ | ✓ | ✓ |
+| Qwen/Qwen3-0.6B | ✓ | ✓ | ✗ | ✓ |
+| Qwen/Qwen3-Embedding-0.6B | ✗ | ✗ | ✗ | ✓ |
+| LiquidAI/LFM2-700M | ✓ | ✓ | ✗ | ✓ |
+| nomic-ai/nomic-embed-text-v2-moe | ✗ | ✗ | ✗ | ✓ |
+| google/gemma-3-1b-it | ✓ | ✗ | ✗ | ✗ |
+| LiquidAI/LFM2-1.2B | ✓ | ✓ | ✗ | ✓ |
+| LiquidAI/LFM2-1.2B-RAG | ✓ | ✓ | ✗ | ✓ |
+| LiquidAI/LFM2-VL-1.6B | ✓ | ✗ | ✓ | ✓ |
+| Qwen/Qwen3-1.7B | ✓ | ✓ | ✗ | ✓ |
+| HuggingFaceTB/SmolLM2-1.7B-Instruct | ✓ | ✗ | ✗ | ✓ |
+
 
 ## Resources 
 
@@ -142,7 +166,7 @@ Then replace the model path in `tests/test_engine.cpp` with your choice.
 
 - [Kotlin Multiplatform SDK](https://github.com/cactus-compute/cactus-kotlin)
 - [Flutter SDK](https://github.com/cactus-compute/cactus-flutter)
-- [React Native SDK](https://github.com/cactus-compute/cactus-react)
+- [React Native SDK](https://github.com/cactus-compute/cactus-react-native)
 - [Swift SDK](https://github.com/mhayes853/swift-cactus)
 
 ## Try demo apps

@@ -1,15 +1,25 @@
 #include "graph.h"
+#include <algorithm>
+#include <cctype>
 #include <chrono>
-#include <iostream>
-#include <iomanip>
+#include <cmath>
+#include <cstdlib>
+#include <ctime>
 #include <fstream>
+#include <iomanip>
+#include <iostream>
+#include <filesystem>
+#include <system_error>
+#include <limits>
 #include <set>
 #include <iostream>
+#include <sstream>
 
 static const char* op_type_names[] = {
     "INPUT", "PRECISION_CAST",
     "ADD", "ADD_CLIPPED", "SUBTRACT", "MULTIPLY", "DIVIDE",
     "MATMUL", "TRANSPOSE", "RESHAPE", "SLICE", "GATHER", "EMBEDDING",
+    "BILINEAR_INTERPOLATION",
     "SUM", "MEAN", "VARIANCE", "MIN", "MAX",
     "RMS_NORM", "ROPE", "SOFTMAX", "ATTENTION", "CONV1D_CAUSAL", "CONV1D_K3",
     "SCALAR_ADD", "SCALAR_SUBTRACT", "SCALAR_MULTIPLY", "SCALAR_DIVIDE",
@@ -139,6 +149,23 @@ size_t CactusGraph::transpose(size_t input, ComputeBackend backend) {
         std::swap(permutation[permutation.size()-2], permutation[permutation.size()-1]);
     }
     
+    OpParams params{.permutation = permutation, .backend = backend};
+    return add_node(OpType::TRANSPOSE, {input}, output_shape, params);
+}
+
+size_t CactusGraph::transposeN(size_t input, const std::vector<size_t>& permutation, ComputeBackend backend) {
+    const auto& input_buffer = get_output_buffer(input);
+    if (permutation.size() != input_buffer.shape.size()) {
+        throw std::runtime_error("transposeN permutation size must match tensor rank");
+    }
+    std::vector<size_t> output_shape(permutation.size());
+    for (size_t i = 0; i < permutation.size(); ++i) {
+        size_t p = permutation[i];
+        if (p >= input_buffer.shape.size()) {
+            throw std::runtime_error("transposeN permutation index out of range");
+        }
+        output_shape[i] = input_buffer.shape[p];
+    }
     OpParams params{.permutation = permutation, .backend = backend};
     return add_node(OpType::TRANSPOSE, {input}, output_shape, params);
 }
@@ -590,6 +617,75 @@ size_t CactusGraph::mmap_weights(const std::string& filename) {
     return node_id;
 }
 
+size_t CactusGraph::load_weights(const std::string& filename) {
+    auto it = weight_cache_.find(filename);
+    if (it != weight_cache_.end()) {
+        return it->second;
+    }
+
+    std::ifstream file(filename, std::ios::binary | std::ios::ate);
+    if (!file.is_open()) {
+        throw std::runtime_error("Cannot open weight file: " + filename);
+    }
+
+    size_t file_size = file.tellg();
+    file.seekg(0, std::ios::beg);
+
+    std::unique_ptr<char[]> buffer = std::make_unique<char[]>(file_size);
+    if (!file.read(buffer.get(), file_size)) {
+        throw std::runtime_error("Failed to read weight file: " + filename);
+    }
+    file.close();
+
+    const char* ptr = buffer.get();
+    size_t offset = 0;
+
+    uint32_t ndim = *reinterpret_cast<const uint32_t*>(ptr + offset);
+    offset += sizeof(uint32_t);
+
+    std::vector<size_t> shape(ndim);
+    for (uint32_t i = 0; i < ndim; i++) {
+        uint64_t dim_val = *reinterpret_cast<const uint64_t*>(ptr + offset);
+        shape[i] = static_cast<size_t>(dim_val);
+        offset += sizeof(uint64_t);
+    }
+
+    uint32_t prec_val = *reinterpret_cast<const uint32_t*>(ptr + offset);
+    Precision precision = static_cast<Precision>(prec_val);
+    offset += sizeof(uint32_t);
+
+    offset += sizeof(uint64_t);
+
+    float scale = 1.0f;
+    if (precision == Precision::INT8) {
+        scale = *reinterpret_cast<const float*>(ptr + offset);
+        offset += sizeof(float);
+
+        std::string scale_filename = filename;
+        size_t dot_pos = scale_filename.find_last_of('.');
+        if (dot_pos != std::string::npos) {
+            scale_filename = scale_filename.substr(0, dot_pos) + ".scale";
+            std::ifstream scale_file(scale_filename);
+            if (scale_file.is_open()) {
+                float external_scale;
+                scale_file >> external_scale;
+                scale = external_scale;  
+                scale_file.close();
+            }
+        }
+    }
+
+    size_t node_id = input(shape, precision);
+    set_quantization_scale(node_id, scale);
+
+    const void* weight_data = ptr + offset;
+    set_input(node_id, weight_data, precision);
+
+    weight_cache_[filename] = node_id;
+
+    return node_id;
+}
+
 void CactusGraph::set_quantization_scale(size_t node_id, float scale) {
     auto it = node_index_map_.find(node_id);
     if (it != node_index_map_.end()) {
@@ -637,6 +733,19 @@ size_t CactusGraph::embedding(size_t embedding_tensor, size_t indices) {
     
     return add_node(OpType::EMBEDDING, {embedding_tensor, indices}, output_shape, params);
 }
+
+size_t CactusGraph::bilinear_interpolation(size_t pos_embeds, size_t dst_height, size_t dst_width) {
+    const auto& pos_embeds_buffer = get_output_buffer(pos_embeds);
+    size_t embed_dim = pos_embeds_buffer.shape[1];
+    std::vector<size_t> output_shape = {dst_height * dst_width, embed_dim};
+    
+    OpParams params;
+    params.dst_height = dst_height;
+    params.dst_width = dst_width;
+    params.output_precision = Precision::FP32;
+    
+    return add_node(OpType::BILINEAR_INTERPOLATION, {pos_embeds}, output_shape, params);
+}   
 
 size_t CactusGraph::precision_cast(size_t input, Precision target_precision) {
     OpParams params{};
@@ -707,8 +816,29 @@ const BufferDesc& CactusGraph::get_output_buffer(size_t node_id) const {
 
 void CactusGraph::execute(const std::string& profile_file) {
     allocate_buffers();
-    std::cout<<"buffers allocated"<<std::endl;
 
+    auto get_env_int = [](const char* name, int fallback) -> int {
+        const char* val = std::getenv(name);
+        return val ? std::atoi(val) : fallback;
+    };
+
+    auto get_env_str = [](const char* name) -> std::string {
+        const char* val = std::getenv(name);
+        return val ? std::string(val) : std::string();
+    };
+
+    bool capture_to_stdout = get_env_int("CACTUS_CAPTURE_STDOUT", 0) != 0;
+    std::string capture_file_path = get_env_str("CACTUS_CAPTURE_FILE");
+    bool capture_requested = get_env_int("CACTUS_CAPTURE_ENABLE", 0) != 0;
+    
+    if (!capture_requested) {
+        capture_requested = capture_to_stdout || !capture_file_path.empty();
+    } else if (capture_file_path.empty() && !capture_to_stdout) {
+        capture_to_stdout = true;
+    }
+
+    size_t capture_preview_count = static_cast<size_t>(get_env_int("CACTUS_CAPTURE_PREVIEW_COUNT", 8));
+    size_t capture_max_elements = static_cast<size_t>(get_env_int("CACTUS_CAPTURE_MAX_ELEMENTS", 65536));
 
     bool enable_profiling = !profile_file.empty();
     std::ofstream profile_out;
@@ -834,6 +964,225 @@ void CactusGraph::execute(const std::string& profile_file) {
             compute_node_optimized(*node, nodes_, node_index_map_);
         }
     }
+
+    std::unique_ptr<std::ofstream> capture_file_stream;
+    std::vector<std::ostream*> capture_outputs;
+
+    if (capture_requested) {
+        if (capture_to_stdout) {
+            capture_outputs.push_back(&std::cout);
+        }
+
+        if (!capture_file_path.empty()) {
+            std::filesystem::path capture_path(capture_file_path);
+            if (capture_path.has_parent_path()) {
+                std::error_code ec;
+                std::filesystem::create_directories(capture_path.parent_path(), ec);
+            }
+
+            auto stream_ptr = std::make_unique<std::ofstream>(capture_path, std::ios::out | std::ios::app);
+            if (stream_ptr->is_open()) {
+                capture_outputs.push_back(stream_ptr.get());
+                capture_file_stream = std::move(stream_ptr);
+            } else {
+                std::cerr << "Failed to open capture file: " << capture_path << std::endl;
+            }
+        }
+
+        if (capture_outputs.empty()) {
+            capture_requested = false;
+        }
+    }
+
+    if (capture_requested) {
+        auto precision_to_string = [](Precision p) -> const char* {
+            switch (p) {
+                case Precision::FP32: return "FP32";
+                case Precision::FP16: return "FP16";
+                case Precision::INT8: return "INT8";
+                default: return "UNKNOWN";
+            }
+        };
+
+        auto format_double = [](double value) {
+            std::ostringstream oss;
+            oss << std::fixed << std::setprecision(6) << value;
+            return oss.str();
+        };
+
+        auto now = std::chrono::system_clock::now();
+        std::time_t now_time = std::chrono::system_clock::to_time_t(now);
+        std::tm time_info{};
+#if defined(_WIN32)
+        localtime_s(&time_info, &now_time);
+#else
+        localtime_r(&now_time, &time_info);
+#endif
+
+        auto write_header = [&](std::ostream& stream) {
+            stream << "=== Graph Debug Capture ===" << std::endl;
+            stream << "Timestamp: " << std::put_time(&time_info, "%Y-%m-%d %H:%M:%S") << std::endl;
+            stream << "Captured nodes: " << debug_nodes_.size() << std::endl;
+            stream << std::string(60, '-') << std::endl;
+        };
+
+        auto write_separator = [](std::ostream& stream) {
+            stream << std::string(60, '-') << std::endl;
+        };
+
+        if (debug_nodes_.empty()) {
+            for (auto* stream : capture_outputs) {
+                write_header(*stream);
+                *stream << "No debug nodes registered on this graph." << std::endl;
+                write_separator(*stream);
+                stream->flush();
+            }
+        } else {
+            for (auto* stream : capture_outputs) {
+                write_header(*stream);
+            }
+
+            for (const auto& entry : debug_nodes_) {
+                auto node_it = node_index_map_.find(entry.node_id);
+                const GraphNode* node_ptr = nullptr;
+                if (node_it != node_index_map_.end()) {
+                    node_ptr = nodes_[node_it->second].get();
+                }
+
+                if (!node_ptr) {
+                    for (auto* stream : capture_outputs) {
+                        *stream << "Layer " << entry.layer_idx << " - " << entry.name
+                                << " (node " << entry.node_id << ")" << std::endl;
+                        *stream << "  Data: <unavailable; node not present in graph>" << std::endl;
+                        write_separator(*stream);
+                    }
+                    continue;
+                }
+
+                const BufferDesc& buffer = node_ptr->output_buffer;
+                const void* data_ptr = buffer.get_data();
+                size_t total_size = buffer.total_size;
+
+                std::ostringstream shape_ss;
+                shape_ss << "[";
+                for (size_t i = 0; i < buffer.shape.size(); ++i) {
+                    if (i > 0) {
+                        shape_ss << ",";
+                    }
+                    shape_ss << buffer.shape[i];
+                }
+                shape_ss << "]";
+                std::string shape_str = shape_ss.str();
+
+                bool has_data = data_ptr != nullptr && total_size > 0;
+                size_t elements_to_process = total_size;
+                bool truncated = false;
+                if (has_data && elements_to_process > capture_max_elements && capture_max_elements > 0) {
+                    elements_to_process = capture_max_elements;
+                    truncated = true;
+                }
+
+                std::vector<float> preview_values;
+                if (capture_preview_count > 0) {
+                    preview_values.reserve(std::min(capture_preview_count, elements_to_process));
+                }
+
+                double min_val = std::numeric_limits<double>::infinity();
+                double max_val = -std::numeric_limits<double>::infinity();
+                long double sum = 0.0L;
+                long double sum_sq = 0.0L;
+
+                if (has_data && elements_to_process > 0) {
+                    auto accumulate = [&](float value, size_t index) {
+                        double v = static_cast<double>(value);
+                        min_val = std::min(min_val, v);
+                        max_val = std::max(max_val, v);
+                        sum += static_cast<long double>(value);
+                        sum_sq += static_cast<long double>(value) * static_cast<long double>(value);
+                        if (capture_preview_count > 0 && index < capture_preview_count) {
+                            preview_values.push_back(value);
+                        }
+                    };
+
+                    if (buffer.precision == Precision::FP32) {
+                        const float* typed = static_cast<const float*>(data_ptr);
+                        for (size_t i = 0; i < elements_to_process; ++i) {
+                            accumulate(typed[i], i);
+                        }
+                    } else if (buffer.precision == Precision::FP16) {
+                        const __fp16* typed = reinterpret_cast<const __fp16*>(data_ptr);
+                        for (size_t i = 0; i < elements_to_process; ++i) {
+                            accumulate(static_cast<float>(typed[i]), i);
+                        }
+                    } else if (buffer.precision == Precision::INT8) {
+                        const int8_t* typed = reinterpret_cast<const int8_t*>(data_ptr);
+                        float scale = buffer.quantization_scale;
+                        for (size_t i = 0; i < elements_to_process; ++i) {
+                            accumulate(static_cast<float>(typed[i]) * scale, i);
+                        }
+                    } else {
+                        has_data = false;
+                    }
+                } else {
+                    has_data = false;
+                }
+
+                size_t processed_count = has_data ? elements_to_process : 0;
+                long double mean_ld = processed_count > 0 ? sum / processed_count : 0.0L;
+                long double variance_ld = processed_count > 0 ? (sum_sq / processed_count) - (mean_ld * mean_ld) : 0.0L;
+                if (variance_ld < 0.0L) {
+                    variance_ld = 0.0L;
+                }
+                double mean_val = static_cast<double>(mean_ld);
+                double stddev_val = processed_count > 0 ? std::sqrt(static_cast<double>(variance_ld)) : 0.0;
+
+                std::ostringstream preview_ss;
+                if (capture_preview_count > 0 && !preview_values.empty()) {
+                    preview_ss << "[";
+                    for (size_t i = 0; i < preview_values.size(); ++i) {
+                        if (i > 0) {
+                            preview_ss << ", ";
+                        }
+                        preview_ss << format_double(static_cast<double>(preview_values[i]));
+                    }
+                    if (processed_count > preview_values.size()) {
+                        if (!preview_values.empty()) {
+                            preview_ss << ", ...";
+                        } else {
+                            preview_ss << "...";
+                        }
+                    }
+                    preview_ss << "]";
+                }
+
+                for (auto* stream : capture_outputs) {
+                    *stream << "Layer " << entry.layer_idx << " - " << entry.name
+                            << " (node " << entry.node_id << ")" << std::endl;
+                    *stream << "  Shape: " << shape_str << "  Precision: " << precision_to_string(buffer.precision) << std::endl;
+                    if (!has_data) {
+                        *stream << "  Data: <unavailable>" << std::endl;
+                    } else {
+                        *stream << "  Stats: min=" << format_double(min_val)
+                                << " max=" << format_double(max_val)
+                                << " mean=" << format_double(mean_val)
+                                << " std=" << format_double(stddev_val) << std::endl;
+                        if (truncated || processed_count < total_size) {
+                            *stream << "  Note: stats computed on first " << processed_count
+                                    << " of " << total_size << " values" << std::endl;
+                        }
+                        if (capture_preview_count > 0 && !preview_values.empty()) {
+                            *stream << "  Preview: " << preview_ss.str() << std::endl;
+                        }
+                    }
+                    write_separator(*stream);
+                }
+            }
+
+            for (auto* stream : capture_outputs) {
+                stream->flush();
+            }
+        }
+    }
     
     if (enable_profiling) {
         auto total_end = std::chrono::high_resolution_clock::now();
@@ -856,6 +1205,7 @@ void CactusGraph::hard_reset() {
     mapped_files_.clear();
     weight_cache_.clear();
     next_node_id_ = 0;
+    debug_nodes_.clear();
 }
 
 void CactusGraph::soft_reset() {
@@ -889,4 +1239,5 @@ void CactusGraph::soft_reset() {
     }
     
     next_node_id_ = max_preserved_id + 1;
+    debug_nodes_.clear();
 }

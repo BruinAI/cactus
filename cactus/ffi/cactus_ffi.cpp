@@ -8,6 +8,8 @@
 #include <iostream>
 #include <atomic>
 #include <cstring>
+#include <filesystem>
+#include <cmath>
 #include <algorithm>
 
 using namespace cactus::engine;
@@ -47,7 +49,7 @@ const char* cactus_get_last_error() {
     return last_error_message.c_str();
 }
 
-cactus_model_t cactus_init(const char* model_path, size_t context_size) {
+cactus_model_t cactus_init(const char* model_path, size_t context_size, const char* corpus_dir) {
     try {
         
         auto* handle = new CactusModelHandle();
@@ -65,7 +67,19 @@ cactus_model_t cactus_init(const char* model_path, size_t context_size) {
             delete handle;
             return nullptr;
         }
-        
+
+        if (corpus_dir != nullptr) {
+            Tokenizer* tok = handle->model->get_tokenizer();
+            if (tok) {
+                try {
+                    cactus::engine::Tokenizer* etok = static_cast<cactus::engine::Tokenizer*>(tok);
+                    etok->set_corpus_dir(std::string(corpus_dir));
+                } catch (...) {
+                    
+                }
+            }
+        }
+
         return handle;
     } catch (const std::exception& e) {
         last_error_message = std::string(e.what());
@@ -262,7 +276,9 @@ int cactus_complete(
         auto* tokenizer = handle->model->get_tokenizer();
         handle->should_stop = false;
         
-        auto messages = parse_messages_json(messages_json);
+        std::vector<std::string> image_paths;
+        auto messages = parse_messages_json(messages_json, image_paths);
+        
         if (messages.empty()) {
             handle_error_response("No messages provided", response_buffer, buffer_size);
             return -1;
@@ -287,6 +303,7 @@ int cactus_complete(
             return -1;
         }
 
+        // Use incremental processing approach from main
         std::vector<uint32_t> current_prompt_tokens = tokenizer->encode(full_prompt);
         
         std::vector<uint32_t> tokens_to_process;
@@ -310,7 +327,7 @@ int cactus_complete(
 
         std::vector<uint32_t> generated_tokens;
         double time_to_first_token = 0.0;
-        
+        // Generate first token - use image support from HEAD if images are present
         uint32_t next_token;
         if (tokens_to_process.empty()) {
             if (handle->processed_tokens.empty()) {
@@ -320,7 +337,11 @@ int cactus_complete(
             std::vector<uint32_t> last_token_vec = { handle->processed_tokens.back() };
             next_token = handle->model->generate(last_token_vec, temperature, top_p, top_k);
         } else {
-            next_token = handle->model->generate(tokens_to_process, temperature, top_p, top_k);
+            if (!image_paths.empty()) {
+                next_token = handle->model->generate_with_images(tokens_to_process, image_paths, temperature, top_p, top_k, "profile.txt");
+            } else {
+                next_token = handle->model->generate(tokens_to_process, temperature, top_p, top_k, "profile.txt");
+            }
         }
         
         handle->processed_tokens = current_prompt_tokens;

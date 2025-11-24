@@ -14,6 +14,8 @@
 // Config
 // ---------------------------
 static const char* kModelPath = "../../weights/whisper-medium16";
+static std::string tokenizerPathStr = std::string(kModelPath) + "/tokenizer.json";
+const char* tokenizerPath = tokenizerPathStr.c_str();
 static const char* kMelFile   = "/Users/parkiratsandhu/Documents/programming_projects/cactus_bruinai/cactus/tests/whisper_tests/mel.npy";
 static const char* kTokFile   = "/Users/parkiratsandhu/Documents/programming_projects/cactus_bruinai/cactus/tests/whisper_tests/decoder_input_tokens.npy";
 
@@ -89,7 +91,7 @@ bool run_whisper_test(const char* title,
               << "║" << std::setw(42) << std::left << std::string("          ") + title << "║\n"
               << "╚══════════════════════════════════════════╝\n";
 
-    cactus_model_t model = cactus_init(kModelPath, 2048);
+    cactus_model_t model = cactus_init(kModelPath, 2048, tokenizerPath);
     if (!model) {
         std::cerr << "[✗] Failed to initialize Whisper model\n";
         return false;
