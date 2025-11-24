@@ -38,33 +38,6 @@ static void apply_whisper_logits_processors(
     }
 }
 
-// static void debug_print_tensor_5x5(CactusGraph* gb, size_t node_id, const char* name) {
-//     auto& buf = gb->get_output_buffer(node_id);
-//     const std::vector<size_t>& shape = buf.shape;
-//     const float* ptr = reinterpret_cast<const float*>(gb->get_output(node_id));
-
-//     if (shape.size() < 2) {
-//         std::cout << "(Tensor rank < 2, cannot print 5×5)" << std::endl;
-//         return;
-//     }
-
-//     size_t rows = shape[0];
-//     size_t cols = shape[1];
-
-//     size_t rmax = std::min<size_t>(rows, 5);
-//     size_t cmax = std::min<size_t>(cols, 5);
-
-//     for (size_t r = 0; r < rmax; ++r) {
-//         std::cout << "row " << r << ": ";
-//         for (size_t c = 0; c < cmax; ++c) {
-//             float v = ptr[r * cols + c];
-//             std::cout << v << "  ";
-//         }
-//         std::cout << std::endl;
-//     }
-//     std::cout << "------------------------------------------" << std::endl;
-// }
-
 WhisperModel::WhisperModel() : Model() {}
 
 WhisperModel::WhisperModel(const Config& config) : Model(config) {
@@ -418,9 +391,6 @@ size_t WhisperModel::build_encoder_transformer_block(
         encoder_block_out_nodes_[layer_idx] = out;
     }
 
-    if(layer_idx > encoder_block_out_nodes_.size())
-        std::cout<<"WTF"<<std::endl;
-
     return out;
 }
 
@@ -524,7 +494,7 @@ void WhisperModel::run_encoder(const std::vector<float>& mel_bins)
 
 
 
-size_t WhisperModel::run_decoder_step(const std::vector<uint32_t>& tokens, bool use_cache) {
+size_t WhisperModel::run_decoder_step(const std::vector<uint32_t>& tokens, bool use_cache, bool last_token_only) {
     auto* gb = static_cast<CactusGraph*>(graph_handle_);
     
     const size_t full_len = tokens.size();
@@ -539,13 +509,6 @@ size_t WhisperModel::run_decoder_step(const std::vector<uint32_t>& tokens, bool 
     size_t start_idx = (use_cache && kv_cache_.current_seq_len > 0) ? full_len - 1 : 0;
     size_t new_tokens = full_len - start_idx;
 
-
-    std::cout << "[Debug] full_len=" << full_len 
-          << " use_cache=" << use_cache
-          << " kv_len=" << kv_cache_.current_seq_len << std::endl;
-    std::cout << "[Debug] tokens: ";
-    for (auto t : tokens) std::cout << t << " ";
-    std::cout << std::endl;
     size_t tok_input = gb->input({new_tokens}, Precision::FP32);
     std::vector<float> tok_f(new_tokens);
     for (size_t i = 0; i < new_tokens; i++) {
@@ -576,17 +539,19 @@ size_t WhisperModel::run_decoder_step(const std::vector<uint32_t>& tokens, bool 
         weight_nodes_.decoder_norm_bias
     );
 
-    auto dec_shape = gb->get_output_buffer(dec_norm).shape;
-    auto w_shape   = gb->get_output_buffer(output_weight_node_id_).shape;
-    std::cout << "[Debug] dec_norm shape: " << dec_shape[0] << " x " << dec_shape[1] << std::endl;
-    std::cout << "[Debug] output_weight shape: " << w_shape[0] << " x " << w_shape[1] << std::endl;
+        // Only keep the last token if requested
+    size_t logits_input = dec_norm;
+    if (last_token_only) {
+        // new_tokens is at least 1
+        size_t row_index = new_tokens - 1;
+        logits_input = gb->slice(logits_input, 0, row_index, 1); 
+        // shape becomes [1, D]
+    }
 
-    size_t logits = gb->matmul(dec_norm, output_weight_node_id_, true, backend);
+    auto w_shape = gb->get_output_buffer(output_weight_node_id_).shape;
+    // (optional debug: log shapes here if you want)
 
-
-    if (new_tokens > 1) 
-        logits = gb->slice(logits, 0,  new_tokens - 1, 1);
-
+    size_t logits = gb->matmul(logits_input, output_weight_node_id_, true, backend);
 
     last_new_tokens_ = new_tokens;
     return logits;
@@ -607,7 +572,7 @@ size_t WhisperModel::forward(const std::vector<float>& mel_bins, const std::vect
         run_encoder(mel_bins);
     }
 
-    return run_decoder_step(tokens, use_cache);
+    return run_decoder_step(tokens, use_cache, false);
 }
 
 uint32_t WhisperModel::generate_with_audio(
@@ -652,14 +617,11 @@ uint32_t WhisperModel::generate_with_audio(
         reset_graph_side_cache_nodes();
         first_decode_step_ = true;
         run_encoder(mel_bins);
-        logits_node = run_decoder_step(full_tokens, false);
+        logits_node = run_decoder_step(full_tokens, false, false);
     }
 
     else
     {
-        std::cout << "[Debug] Warm decoder step, KV len="
-              << kv_cache_.current_seq_len << std::endl;
-
         gb->soft_reset();
         reset_graph_side_cache_nodes();
 
@@ -670,10 +632,8 @@ uint32_t WhisperModel::generate_with_audio(
         gb->set_input(enc_node, encoder_output_host_.data(), encoder_output_precision_);
         weight_nodes_.encoder_output = enc_node;
 
-        // No manual K/V upload here – build_decoder_self_attention will pull from kv_cache_ directly
-
         std::vector<uint32_t> last_token_vec = { tokens.back() };
-        logits_node = run_decoder_step(last_token_vec, true);
+        logits_node = run_decoder_step(last_token_vec, true, true);
     }
     
     size_t sampled_token_id = gb->sample(logits_node, temperature, top_p, top_k);

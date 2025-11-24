@@ -294,7 +294,7 @@ protected:
     void run_encoder(const std::vector<float>& mel_bins);
     void reset_graph_side_cache_nodes();
 
-    size_t run_decoder_step(const std::vector<uint32_t>& tokens, bool use_cache);
+    size_t run_decoder_step(const std::vector<uint32_t>& tokens, bool use_cache, bool last_token_only);
 
     void load_weights_to_graph(CactusGraph* gb) override;
 
