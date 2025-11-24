@@ -8,13 +8,17 @@ from pathlib import Path
 from typing import Optional
 
 try:
-    from transformers import AutoTokenizer, AutoModelForCausalLM, AutoProcessor, AutoModelForImageTextToText, AutoModel, AutoConfig, Lfm2VlForConditionalGeneration
+    from transformers import AutoTokenizer, AutoModelForCausalLM, AutoProcessor, AutoModelForImageTextToText, AutoModel, AutoConfig
     import torch
     # Note: for SmolVLM, we also need Pillow + num2words + torchvision
-except ImportError:
-    print("Please install required packages: pip install torch transformers")
+except ImportError as e:
+    print(f"Please install required packages: pip install torch transformers\nError: {e}")
     sys.exit(1)
 
+try:
+    from transformers import Lfm2VlForConditionalGeneration
+except ImportError:
+    Lfm2VlForConditionalGeneration = None
 try:
     from huggingface_hub import hf_hub_download  # type: ignore
 except ImportError:
@@ -919,7 +923,7 @@ def convert_hf_model_weights_vlm(model, output_dir, precision='INT8', args=None)
 
     return model_config
 
-def convert_hf_tokenizer(tokenizer, output_dir):
+def convert_hf_tokenizer(tokenizer, output_dir, token=None):
     is_sentencepiece = False
     tokenizer_model_path = None
 
@@ -935,7 +939,8 @@ def convert_hf_tokenizer(tokenizer, output_dir):
             try:
                 tokenizer_model_path = hf_hub_download(
                     repo_id=tokenizer.name_or_path,
-                    filename="tokenizer.model"
+                    filename="tokenizer.model",
+                    token=token,
                 )
             except Exception:
                 pass
@@ -999,7 +1004,7 @@ def convert_hf_tokenizer(tokenizer, output_dir):
     if not merges_written and hf_hub_download:
         try:
             import shutil
-            merges_file = hf_hub_download(repo_id=tokenizer.name_or_path, filename="merges.txt")
+            merges_file = hf_hub_download(repo_id=tokenizer.name_or_path, filename="merges.txt", token=token)
             shutil.copy2(merges_file, merges_output)
             merges_written = True
         except Exception:
@@ -1106,7 +1111,7 @@ def convert_hf_tokenizer(tokenizer, output_dir):
         config_path = None
         if hasattr(tokenizer, 'name_or_path') and hf_hub_download:
             try:
-                config_path = hf_hub_download(repo_id=tokenizer.name_or_path, filename="tokenizer_config.json")
+                config_path = hf_hub_download(repo_id=tokenizer.name_or_path, filename="tokenizer_config.json", token=token)
                 with open(config_path, 'r') as f:
                     tokenizer_full_config = json.load(f)
                     
@@ -1173,7 +1178,7 @@ def convert_hf_tokenizer(tokenizer, output_dir):
             f.write(f"has_tool_support=true\n")
             f.write(f"tool_token_count={len(tool_tokens)}\n")
 
-def convert_processors(processor, model_name, output_dir):
+def convert_processors(processor, model_name, output_dir, token=None):
     if processor is None:
         return
 
@@ -1198,7 +1203,7 @@ def convert_processors(processor, model_name, output_dir):
 
     for fname in candidate_files:
         try:
-            path = hf_hub_download(repo_id=model_name, filename=fname)
+            path = hf_hub_download(repo_id=model_name, filename=fname, token=token)
             import shutil
             shutil.copy2(path, output_dir / fname)
             print(f"  Downloaded and saved {fname}")
@@ -1208,6 +1213,7 @@ def convert_processors(processor, model_name, output_dir):
 def convert_hf_to_cactus_vlm(model_name, output_dir, precision='INT8', cache_dir=None, args=None):
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
+    token = getattr(args, 'token', None) if args else None
 
     print(f"Converting VLM {model_name} to {precision}...")
 
@@ -1234,13 +1240,15 @@ def convert_hf_to_cactus_vlm(model_name, output_dir, precision='INT8', cache_dir
         processor = AutoProcessor.from_pretrained(
             model_name,
             cache_dir=cache_dir,
-            trust_remote_code=True
+            trust_remote_code=True,
+            token=token,
         )
         model = AutoModelForImageTextToText.from_pretrained(
             model_name,
             cache_dir=cache_dir,
             trust_remote_code=True,
-            torch_dtype=torch.float32
+            torch_dtype=torch.float32,
+            token=token,
         )
 
         tokenizer = None
@@ -1253,10 +1261,11 @@ def convert_hf_to_cactus_vlm(model_name, output_dir, precision='INT8', cache_dir
             tokenizer = AutoTokenizer.from_pretrained(
                 model_name,
                 cache_dir=cache_dir,
-                trust_remote_code=True
+                trust_remote_code=True,
+                token=token,
             )
         try:
-            convert_processors(processor, model_name, output_dir)
+            convert_processors(processor, model_name, output_dir, token=token)
         except Exception as e:
             print(f"  Warning: convert_processors failed: {e}")
     except Exception as e:
@@ -1279,7 +1288,7 @@ def convert_hf_to_cactus_vlm(model_name, output_dir, precision='INT8', cache_dir
                 value_str = str(value)
             f.write(f"{key}={value_str}\n")
 
-    convert_hf_tokenizer(tokenizer, output_dir)
+    convert_hf_tokenizer(tokenizer, output_dir, token=token)
     print(f"\nConversion complete: {output_dir}")
 
     del model
@@ -1321,6 +1330,7 @@ def _vision_weight_sanity(model):
 def convert_hf_to_cactus_vlm(model_name, output_dir, precision='INT8', cache_dir=None, args=None):
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
+    token = getattr(args, 'token', None) if args else None
 
     print(f"Converting VLM {model_name} to {precision}...")
 
@@ -1348,21 +1358,23 @@ def convert_hf_to_cactus_vlm(model_name, output_dir, precision='INT8', cache_dir
         processor = AutoProcessor.from_pretrained(
             model_name,
             cache_dir=cache_dir,
-            trust_remote_code=True
+            trust_remote_code=True,
+            token=token,
         )
 
         # Decide the correct model class
-        cfg = AutoConfig.from_pretrained(model_name, cache_dir=cache_dir, trust_remote_code=True)
+        cfg = AutoConfig.from_pretrained(model_name, cache_dir=cache_dir, trust_remote_code=True, token=token)
         dtype = _pick_dtype()
         print(f"[info] selected torch_dtype={dtype}")
 
-        if _is_lfm2_vl(model_name, cfg):
+        if _is_lfm2_vl(model_name, cfg) and Lfm2VlForConditionalGeneration is not None:
             print("[info] Detected LFM2-VL checkpoint; loading Lfm2VlForConditionalGeneration")
             model = Lfm2VlForConditionalGeneration.from_pretrained(
                 model_name,
                 cache_dir=cache_dir,
                 trust_remote_code=True,
                 torch_dtype=dtype,
+                token=token,
             )
         else:
             # If you truly support other VLM families, load their exact classes here.
@@ -1375,6 +1387,7 @@ def convert_hf_to_cactus_vlm(model_name, output_dir, precision='INT8', cache_dir
                 cache_dir=cache_dir,
                 trust_remote_code=True,
                 torch_dtype=dtype,
+                token=token,
             )
 
         # Optional tokenizer extraction (AutoProcessor usually provides it)
@@ -1384,7 +1397,8 @@ def convert_hf_to_cactus_vlm(model_name, output_dir, precision='INT8', cache_dir
             tokenizer = AutoTokenizer.from_pretrained(
                 model_name,
                 cache_dir=cache_dir,
-                trust_remote_code=True
+                trust_remote_code=True,
+                token=token,
             )
 
         # ---- NEW: quick sanity on vision weights to catch random init
@@ -1397,7 +1411,7 @@ def convert_hf_to_cactus_vlm(model_name, output_dir, precision='INT8', cache_dir
 
         # Convert processor assets
         try:
-            convert_processors(processor, model_name, output_dir)
+            convert_processors(processor, model_name, output_dir, token=token)
         except Exception as e:
             print(f"  Warning: convert_processors failed: {e}")
 
@@ -1423,7 +1437,7 @@ def convert_hf_to_cactus_vlm(model_name, output_dir, precision='INT8', cache_dir
                 value_str = str(value)
             f.write(f"{key}={value_str}\n")
 
-    convert_hf_tokenizer(tokenizer, output_dir)
+    convert_hf_tokenizer(tokenizer, output_dir, token=token)
     print(f"\nConversion complete: {output_dir}")
 
     del model
@@ -1434,6 +1448,7 @@ def convert_hf_to_cactus_vlm(model_name, output_dir, precision='INT8', cache_dir
 def convert_hf_to_cactus(model_name, output_dir, precision='INT8', cache_dir=None, args=None):
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
+    token = getattr(args, 'token', None) if args else None
 
     if 'vl' in str(model_name).lower() or 'vlm' in str(model_name).lower():
         return convert_hf_to_cactus_vlm(model_name, output_dir, precision, cache_dir, args)
@@ -1445,12 +1460,14 @@ def convert_hf_to_cactus(model_name, output_dir, precision='INT8', cache_dir=Non
             model_name, 
             cache_dir=cache_dir,
             trust_remote_code=True,
+            token=token,
         )
 
         model = AutoModel.from_pretrained(
             model_name,
             cache_dir=cache_dir,
             trust_remote_code=True,
+            token=token,
         )
     
     else:
@@ -1459,18 +1476,21 @@ def convert_hf_to_cactus(model_name, output_dir, precision='INT8', cache_dir=Non
                 model_name, 
                 cache_dir=cache_dir,
                 trust_remote_code=True,
+                token=token,
             )
             try:
                 model = AutoModelForCausalLM.from_pretrained(
                     model_name,
                     cache_dir=cache_dir,
                     trust_remote_code=True,
+                    token=token,
                 )
             except ValueError:
                 model = AutoModel.from_pretrained(
                     model_name,
                     cache_dir=cache_dir,
                     trust_remote_code=True,
+                    token=token,
                 )
         except Exception as e:
             print(f"Error: {e}")
@@ -1497,7 +1517,7 @@ def convert_hf_to_cactus(model_name, output_dir, precision='INT8', cache_dir=Non
         for key, value in config.items():
             f.write(f"{key}={format_config_value(value)}\n")
     
-    convert_hf_tokenizer(tokenizer, output_dir)
+    convert_hf_tokenizer(tokenizer, output_dir, token=token)
     print(f"\nConversion complete: {output_dir}")
 
     del model
@@ -1516,6 +1536,7 @@ def create_parser():
     parser.add_argument('--precision', choices=['INT8', 'FP16', 'FP32'], default='INT8',
                        help='Quantization precision')
     parser.add_argument('--cache-dir', help='Cache directory for HuggingFace models')
+    parser.add_argument('--token', type=str, help='HuggingFace API token for gated models (or set HF_TOKEN env var)')
     parser.add_argument('--lora-dir-path', type=str, help='Directory containing LoRA weights (.npy files)')
 
     quant_group = parser.add_argument_group('Quantization Parameters')
