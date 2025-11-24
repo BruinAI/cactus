@@ -29,13 +29,15 @@ inline AudioFP32 load_wav_fp32(const std::string& path) {
     file.read(riff, 4);
     if (std::string(riff, 4) != "RIFF") throw std::runtime_error("Not RIFF");
 
+     std::cout<<"made it this far"<<std::endl;
+
     uint32_t chunk_size;
     file.read(reinterpret_cast<char*>(&chunk_size), 4);
 
     char wave[4];
     file.read(wave, 4);
     if (std::string(wave, 4) != "WAVE") throw std::runtime_error("Not WAVE");
-
+    
     // ---- fmt ----
     char fmt_id[4];
     uint32_t fmt_size;

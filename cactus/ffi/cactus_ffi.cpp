@@ -1,5 +1,6 @@
 #include "cactus_ffi.h"
 #include "ffi_utils.h"
+#include "../../libs/audio/wav.h"
 #include "../engine/engine.h"
 #include <memory>
 #include <string>
@@ -37,6 +38,79 @@ static bool matches_stop_sequence(const std::vector<uint32_t>& generated_tokens,
     return false;
 }
 
+static std::vector<float> compute_whisper_mel_from_wav(const std::string& wav_path) {
+    using namespace cactus::engine;
+
+    // 1) Load WAV → mono FP32
+    AudioFP32 audio = load_wav(wav_path);
+
+    // 2) Resample to 16 kHz
+    std::vector<float> waveform_16k = resample_to_16k_fp32(audio.samples, audio.sample_rate);
+
+    // 3) Spectrogram config matching Whisper
+    AudioProcessor::SpectrogramConfig cfg{};
+    cfg.n_fft        = 400; 
+    cfg.frame_length = 400;
+    cfg.hop_length   = 160;
+    cfg.power        = 2.0f;
+    cfg.center       = true;
+    cfg.pad_mode     = "reflect";
+    cfg.onesided     = true;
+    cfg.dither       = 0.0f;
+    cfg.mel_floor    = 1e-10f;
+    cfg.log_mel      = "log10";      // <- IMPORTANT: log10, NOT "dB"
+    cfg.reference    = 1.0f;
+    cfg.min_value    = 1e-10f;
+    cfg.remove_dc_offset = true;
+
+    const size_t num_mel_filters = 80;
+    const size_t num_frequency_bins = cfg.n_fft / 2 + 1;
+
+    AudioProcessor ap;
+    ap.init_mel_filters(
+        num_frequency_bins,
+        num_mel_filters,
+        /*min_freq*/ 0.0f,
+        /*max_freq*/ 8000.0f,
+        /*sampling_rate*/ 16000
+    );
+
+    std::vector<float> mel = ap.compute_spectrogram(waveform_16k, cfg);
+
+    if (mel.empty()) {
+        return mel;
+    }
+
+    size_t n_mels = num_mel_filters;
+    size_t n_frames = mel.size() / n_mels;
+
+    float max_val = -std::numeric_limits<float>::infinity();
+    for (float v : mel) {
+        if (v > max_val) max_val = v;
+    }
+    float min_allowed = max_val - 8.0f;
+
+    for (float& v : mel) {
+        if (v < min_allowed) v = min_allowed;
+        v = (v + 4.0f) / 4.0f;
+    }
+
+    const size_t target_frames = 3000;
+    if (n_frames != target_frames) {
+        std::vector<float> fixed(n_mels * target_frames, 0.0f);
+
+        size_t copy_frames = std::min(n_frames, target_frames);
+        for (size_t m = 0; m < n_mels; ++m) {
+            const float* src = &mel[m * n_frames];
+            float* dst = &fixed[m * target_frames];
+            std::copy(src, src + copy_frames, dst);
+        }
+
+        return fixed;
+    }
+
+    return mel;
+}
 
 
 
@@ -125,7 +199,7 @@ int cactus_test_whisper_from_files_json(
 
         std::cout << "Trying to find files" << std::endl;
 
-        std::vector<float>    mel_bins  = load_mel_from_npy(mel_file_path);
+        std::vector<float> mel_bins  = compute_whisper_mel_from_wav(mel_file_path);
         std::vector<uint32_t> tokens    = load_tokens_from_npy(tok_file_path);
 
         std::cout << "Found fiiles" << std::endl;

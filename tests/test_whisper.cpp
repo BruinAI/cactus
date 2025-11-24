@@ -10,18 +10,13 @@
 #include <vector>
 #include <string>
 
-// ---------------------------
-// Config
-// ---------------------------
-static const char* kModelPath = "../../weights/whisper-medium16";
+static const char* kModelPath = "../../weights/whisper-medium8";
 static std::string tokenizerPathStr = std::string(kModelPath) + "/tokenizer.json";
 const char* tokenizerPath = tokenizerPathStr.c_str();
-static const char* kMelFile   = "/Users/parkiratsandhu/Documents/programming_projects/cactus_bruinai/cactus/tests/whisper_tests/mel.npy";
-static const char* kTokFile   = "/Users/parkiratsandhu/Documents/programming_projects/cactus_bruinai/cactus/tests/whisper_tests/decoder_input_tokens.npy";
+static const char* kMelFile = "/Users/parkiratsandhu/Documents/programming_projects/cactus_bruinai/cactus/tests/whisper_tests/test.wav";
+static const char* kTokFile = "/Users/parkiratsandhu/Documents/programming_projects/cactus_bruinai/cactus/tests/whisper_tests/decoder_input_tokens.npy";
 
-// ---------------------------
-// Streaming collector
-// ---------------------------
+
 struct StreamingData {
     std::vector<std::string> tokens;
     std::vector<uint32_t> token_ids;
@@ -36,7 +31,6 @@ static void whisper_stream_callback(const char* token, uint32_t token_id, void* 
     data->token_ids.push_back(token_id);
     data->token_count++;
 
-    // If text is empty (special token), print token id
     if (token && *token)
         std::cout << token << std::flush;
     else
