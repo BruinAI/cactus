@@ -153,7 +153,7 @@ cactus_model_t cactus_init(const char* model_path, size_t context_size, const ch
     }
 }
 
-int cactus_test_whisper_from_files_json(
+int cactus_complete_audio(
     cactus_model_t model,
     const char* audio_file_path,
     const char* prompt,
@@ -183,7 +183,6 @@ int cactus_test_whisper_from_files_json(
         auto* handle = static_cast<CactusModelHandle*>(model);
         handle->should_stop = false;
 
-        std::cout << "Trying to find files" << std::endl;
         std::vector<float> mel_bins = compute_whisper_mel_from_wav(audio_file_path);
 
         if (mel_bins.empty()) {
@@ -198,16 +197,13 @@ int cactus_test_whisper_from_files_json(
         }
 
         std::string prompt_text(prompt);
-        std::cout << "[Debug] Using prompt text: \"" << prompt_text << "\"" << std::endl;
+        std::cout << "Using prompt text: \"" << prompt_text << "\"" << std::endl;
 
         std::vector<uint32_t> tokens = tokenizer->encode(prompt_text);
         if (tokens.empty()) {
             handle_error_response("Decoder input tokens are empty after encoding prompt text", response_buffer, buffer_size);
             return -1;
         }
-
-        std::cout << "Built tokens from prompt text" << std::endl;
-        std::cout << "[Debug] decoder prompt token count = " << tokens.size() << std::endl;
 
         std::vector<std::vector<uint32_t>> stop_token_sequences;
         stop_token_sequences.push_back({ tokenizer->get_eos_token() });
@@ -276,7 +272,7 @@ int cactus_test_whisper_from_files_json(
         }
 
         std::strcpy(response_buffer, json.c_str());
-        std::cout << "[Debug] Final JSON:\n" << json << std::endl;
+        std::cout << "Final JSON:\n" << json << std::endl;
 
         return static_cast<int>(json.size());
     }

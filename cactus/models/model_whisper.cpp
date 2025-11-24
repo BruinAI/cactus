@@ -665,9 +665,6 @@ uint32_t WhisperModel::generate_with_audio(
         ? ComputeBackend::CPU
         : ComputeBackend::NPU;
 
-    std::cout << "[Debug] eos=" << get_tokenizer()->get_eos_token()
-              << " bos=" << get_tokenizer()->get_bos_token() << std::endl;
-
     bool cold_start = !encoder_ready_;
     size_t logits_node = 0;
 

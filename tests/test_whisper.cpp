@@ -13,7 +13,7 @@
 static const char* kModelPath = "../../weights/whisper-medium8";
 static std::string tokenizerPathStr = std::string(kModelPath) + "/tokenizer.json";
 const char* tokenizerPath = tokenizerPathStr.c_str();
-static const char* audioFilePath = "/Users/parkiratsandhu/Documents/programming_projects/cactus_bruinai/cactus/tests/assets/test.wav";
+static const char* audioFilePath = "../assets/test.wav";
 static const char* prompt = "<|startoftranscript|><|en|><|transcribe|><|notimestamps|>";
 
 struct StreamingData {
@@ -94,7 +94,7 @@ bool run_whisper_test(const char* title,
     stream.stop_at = stop_at;
 
     std::cout << "Transcript (streamed if enabled): ";
-    int rc = cactus_test_whisper_from_files_json(
+    int rc = cactus_complete_audio(
         model, audioFilePath, prompt,
         response, sizeof(response),
         temperature, top_p, top_k, max_tokens,

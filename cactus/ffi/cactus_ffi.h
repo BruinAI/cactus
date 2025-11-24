@@ -33,7 +33,7 @@ CACTUS_FFI_EXPORT int cactus_complete(
     void* user_data
 );
 
-int cactus_test_whisper_from_files_json(
+int cactus_complete_audio(
     cactus_model_t model,
     const char* mel_npy_path,
     const char* tokens_npy_path,
