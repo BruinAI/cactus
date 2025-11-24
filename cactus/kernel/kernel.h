@@ -250,6 +250,17 @@ void cactus_conv1d_f16_k3(
     size_t stride
 );
 
+void cactus_conv1d_i8_k3(
+    const int8_t* input,
+    const int8_t* weight,
+    int32_t* output,
+    size_t N,
+    size_t L,
+    size_t C_in, 
+    size_t C_out,
+    size_t stride
+);
+
 void cactus_sample_f32(const float* logits, uint32_t* output, size_t vocab_size,
                        float temperature, float top_p, size_t top_k, size_t random_seed);
 void cactus_sample_f16(const __fp16* logits, uint32_t* output, size_t vocab_size,
