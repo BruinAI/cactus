@@ -8,7 +8,6 @@
 #include <stdexcept>
 #include <algorithm>
 #include <cmath>
-// (Apple Clang, GCC on ARM, Clang on ARM, etc.)
 
 
 struct AudioFP32 {
@@ -16,20 +15,14 @@ struct AudioFP32 {
     std::vector<float> samples;
 };
 
-// =========================================================
-// 1. WAV loader → always loads to FP32 first
-// =========================================================
 inline AudioFP32 load_wav_fp32(const std::string& path) {
     std::ifstream file(path, std::ios::binary);
     if (!file)
         throw std::runtime_error("Could not open WAV file: " + path);
 
-    // ---- RIFF ----
     char riff[4];
     file.read(riff, 4);
     if (std::string(riff, 4) != "RIFF") throw std::runtime_error("Not RIFF");
-
-     std::cout<<"made it this far"<<std::endl;
 
     uint32_t chunk_size;
     file.read(reinterpret_cast<char*>(&chunk_size), 4);
@@ -38,7 +31,6 @@ inline AudioFP32 load_wav_fp32(const std::string& path) {
     file.read(wave, 4);
     if (std::string(wave, 4) != "WAVE") throw std::runtime_error("Not WAVE");
     
-    // ---- fmt ----
     char fmt_id[4];
     uint32_t fmt_size;
     file.read(fmt_id, 4);
@@ -63,7 +55,6 @@ inline AudioFP32 load_wav_fp32(const std::string& path) {
     if (fmt_size > 16)
         file.seekg(fmt_size - 16, std::ios::cur);
 
-    // ---- find "data" chunk ----
     char data_id[4];
     uint32_t data_size;
 
@@ -75,21 +66,18 @@ inline AudioFP32 load_wav_fp32(const std::string& path) {
         if (std::string(data_id, 4) == "data")
             break;
 
-        // skip other chunks
         file.seekg(data_size, std::ios::cur);
     }
 
-    size_t num_samples = data_size / 2;  // 16-bit
+    size_t num_samples = data_size / 2;
     std::vector<float> tmp(num_samples);
 
-    // read PCM samples
     for (size_t i = 0; i < num_samples; i++) {
         int16_t s;
         file.read(reinterpret_cast<char*>(&s), 2);
         tmp[i] = float(s) / 32768.0f;
     }
 
-    // ---- stereo → mono ----
     std::vector<float> mono;
 
     if (num_channels == 1) {
@@ -105,18 +93,9 @@ inline AudioFP32 load_wav_fp32(const std::string& path) {
     return AudioFP32{ (int)sample_rate, std::move(mono) };
 }
 
-
-
-
-// =========================================================
-// 4. Unified API
-// =========================================================
 inline AudioFP32 load_wav(const std::string& path) {
     return load_wav_fp32(path);
 }
-// =========================================================
-// 5. Resampling (same algorithm, different output type)
-// =========================================================
 
 inline std::vector<float> resample_to_16k_fp32(
     const std::vector<float>& in, int sr_in)
@@ -141,4 +120,4 @@ inline std::vector<float> resample_to_16k_fp32(
     return out;
 }
 
-#endif // WAV_LOADER_H
+#endif

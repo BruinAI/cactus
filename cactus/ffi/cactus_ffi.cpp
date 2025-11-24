@@ -40,14 +40,9 @@ static bool matches_stop_sequence(const std::vector<uint32_t>& generated_tokens,
 
 static std::vector<float> compute_whisper_mel_from_wav(const std::string& wav_path) {
     using namespace cactus::engine;
-
-    // 1) Load WAV → mono FP32
     AudioFP32 audio = load_wav(wav_path);
-
-    // 2) Resample to 16 kHz
     std::vector<float> waveform_16k = resample_to_16k_fp32(audio.samples, audio.sample_rate);
 
-    // 3) Spectrogram config matching Whisper
     AudioProcessor::SpectrogramConfig cfg{};
     cfg.n_fft        = 400; 
     cfg.frame_length = 400;
@@ -67,13 +62,7 @@ static std::vector<float> compute_whisper_mel_from_wav(const std::string& wav_pa
     const size_t num_frequency_bins = cfg.n_fft / 2 + 1;
 
     AudioProcessor ap;
-    ap.init_mel_filters(
-        num_frequency_bins,
-        num_mel_filters,
-        /*min_freq*/ 0.0f,
-        /*max_freq*/ 8000.0f,
-        /*sampling_rate*/ 16000
-    );
+    ap.init_mel_filters(num_frequency_bins,num_mel_filters,0.0f,8000.0f,16000);
 
     std::vector<float> mel = ap.compute_spectrogram(waveform_16k, cfg);
 
@@ -166,8 +155,8 @@ cactus_model_t cactus_init(const char* model_path, size_t context_size, const ch
 
 int cactus_test_whisper_from_files_json(
     cactus_model_t model,
-    const char* mel_file_path,
-    const char* tok_file_path,
+    const char* audio_file_path,
+    const char* prompt,
     char* response_buffer,
     size_t buffer_size,
     float temperature,
@@ -178,15 +167,12 @@ int cactus_test_whisper_from_files_json(
     void* user_data
 ) {
     if (!model) {
-        std::string error_msg = last_error_message.empty() ?
-            "Model not initialized. Check model path and files." : last_error_message;
+        std::string error_msg = last_error_message.empty() ? "Model not initialized. Check model path and files." : last_error_message;
         handle_error_response(error_msg, response_buffer, buffer_size);
         return -1;
     }
 
-    std::cout << "Hey" << std::endl;
-
-    if (!mel_file_path || !tok_file_path || !response_buffer || buffer_size == 0) {
+    if (!audio_file_path || !prompt || !response_buffer || buffer_size == 0) {
         handle_error_response("Invalid parameters", response_buffer, buffer_size);
         return -1;
     }
@@ -198,17 +184,30 @@ int cactus_test_whisper_from_files_json(
         handle->should_stop = false;
 
         std::cout << "Trying to find files" << std::endl;
+        std::vector<float> mel_bins = compute_whisper_mel_from_wav(audio_file_path);
 
-        std::vector<float> mel_bins  = compute_whisper_mel_from_wav(mel_file_path);
-        std::vector<uint32_t> tokens    = load_tokens_from_npy(tok_file_path);
-
-        std::cout << "Found fiiles" << std::endl;
+        if (mel_bins.empty()) {
+            handle_error_response("Computed mel spectrogram is empty", response_buffer, buffer_size);
+            return -1;
+        }
 
         auto* tokenizer = handle->model->get_tokenizer();
         if (!tokenizer) {
             handle_error_response("Tokenizer unavailable for Whisper model", response_buffer, buffer_size);
             return -1;
         }
+
+        std::string prompt_text(prompt);
+        std::cout << "[Debug] Using prompt text: \"" << prompt_text << "\"" << std::endl;
+
+        std::vector<uint32_t> tokens = tokenizer->encode(prompt_text);
+        if (tokens.empty()) {
+            handle_error_response("Decoder input tokens are empty after encoding prompt text", response_buffer, buffer_size);
+            return -1;
+        }
+
+        std::cout << "Built tokens from prompt text" << std::endl;
+        std::cout << "[Debug] decoder prompt token count = " << tokens.size() << std::endl;
 
         std::vector<std::vector<uint32_t>> stop_token_sequences;
         stop_token_sequences.push_back({ tokenizer->get_eos_token() });
@@ -218,47 +217,34 @@ int cactus_test_whisper_from_files_json(
         std::vector<uint32_t> generated_tokens;
         std::string final_text;
 
-        // ── FIRST STEP: use full prompt tokens ────────────────────────────────
-        uint32_t next_token = handle->model->generate_with_audio(
-            tokens, mel_bins,
-            temperature, top_p, top_k, "profile.txt"
-        );
-
-        {
+        uint32_t next_token = handle->model->generate_with_audio(tokens, mel_bins,temperature, top_p, top_k, "profile.txt");{
             auto t_first = std::chrono::high_resolution_clock::now();
-            time_to_first_token =
-                std::chrono::duration_cast<std::chrono::microseconds>(t_first - start_time).count() / 1000.0;
+            time_to_first_token = std::chrono::duration_cast<std::chrono::microseconds>(t_first - start_time).count() / 1000.0;
         }
 
         generated_tokens.push_back(next_token);
-        tokens.push_back(next_token);   // extend full history
+        tokens.push_back(next_token);
         completion_tokens++;
 
         if (callback) {
-            std::string piece = tokenizer->decode({next_token});
+            std::string piece = tokenizer->decode({ next_token });
             final_text += piece;
             callback(piece.c_str(), next_token, user_data);
         } else {
-            final_text += tokenizer->decode({next_token});
+            final_text += tokenizer->decode({ next_token });
         }
 
-        // ── MORE TOKENS ───────────────────────────────────────────────────────
         if (!matches_stop_sequence(generated_tokens, stop_token_sequences)) {
             for (size_t i = 1; i < max_tokens; ++i) {
                 if (handle->should_stop) break;
 
-                // KEY CHANGE: pass FULL token history, not {tokens.back()}
-                next_token = handle->model->generate_with_audio(
-                    tokens,          // full decoder history
-                    mel_bins,
-                    temperature, top_p, top_k, "profile.txt"
-                );
+                next_token = handle->model->generate_with_audio(tokens,mel_bins,temperature, top_p, top_k, "profile.txt");
 
                 generated_tokens.push_back(next_token);
-                tokens.push_back(next_token);   // grow history
+                tokens.push_back(next_token);
                 completion_tokens++;
 
-                std::string piece = tokenizer->decode({next_token});
+                std::string piece = tokenizer->decode({ next_token });
                 final_text += piece;
 
                 std::cout << piece << std::endl;
@@ -272,33 +258,20 @@ int cactus_test_whisper_from_files_json(
         }
 
         auto end_time = std::chrono::high_resolution_clock::now();
-        double total_time_ms =
-            std::chrono::duration_cast<std::chrono::microseconds>(end_time - start_time).count() / 1000.0;
+        double total_time_ms =std::chrono::duration_cast<std::chrono::microseconds>(end_time - start_time).count() / 1000.0;
 
         double decode_time_ms = std::max(0.0, total_time_ms - time_to_first_token);
-        double tokens_per_second =
-            (completion_tokens > 1 && decode_time_ms > 0.0)
-                ? ((completion_tokens - 1) * 1000.0) / decode_time_ms
-                : 0.0;
+        double tokens_per_second =(completion_tokens > 1 && decode_time_ms > 0.0) ? ((completion_tokens - 1) * 1000.0) / decode_time_ms: 0.0;
 
         size_t prompt_tokens = 0;
         if (!tokens.empty() && completion_tokens <= tokens.size())
             prompt_tokens = tokens.size() - completion_tokens;
 
-        std::string json = construct_response_json(
-            final_text,
-            {},
-            time_to_first_token,
-            total_time_ms,
-            tokens_per_second,
-            prompt_tokens,
-            completion_tokens
-        );
+        std::string json = construct_response_json(final_text, {}, time_to_first_token,total_time_ms,tokens_per_second,prompt_tokens,completion_tokens);
 
         if (json.size() >= buffer_size) {
             std::cout << "Response buffer too small for Whisper output" << std::endl;
-            handle_error_response("Response buffer too small for Whisper output",
-                                  response_buffer, buffer_size);
+            handle_error_response("Response buffer too small for Whisper output", response_buffer, buffer_size);
             return -1;
         }
 
@@ -307,19 +280,12 @@ int cactus_test_whisper_from_files_json(
 
         return static_cast<int>(json.size());
     }
-    catch (const std::exception& e) {
-        handle_error_response(std::string("Exception in Whisper JSON decode: ") + e.what(),
-                              response_buffer, buffer_size);
-        return -1;
-    }
     catch (...) {
         handle_error_response("Unknown fatal error inside Whisper FFI",
                               response_buffer, buffer_size);
         return -1;
     }
 }
-
-
 
 int cactus_complete(
     cactus_model_t model,

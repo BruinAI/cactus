@@ -680,7 +680,6 @@ uint32_t WhisperModel::generate_with_audio(
 
     if (cold_start)
     {
-        std::cout << "[Debug] Running encoder (prefill)" << std::endl;
         gb->soft_reset();
         kv_cache_.reset();
         kv_cache_.current_seq_len = 0;
@@ -812,9 +811,6 @@ uint32_t WhisperModel::generate_with_audio(
 
     auto* out_ptr = gb->get_output(sampled_token_id);
     uint32_t sampled = *reinterpret_cast<uint32_t*>(out_ptr);
-
-    std::cout << "[Debug] Returning sampled token " << sampled
-              << " (\"" << get_tokenizer()->decode({sampled}) << "\")\n";
 
     return sampled;
 }

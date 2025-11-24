@@ -13,9 +13,8 @@
 static const char* kModelPath = "../../weights/whisper-medium8";
 static std::string tokenizerPathStr = std::string(kModelPath) + "/tokenizer.json";
 const char* tokenizerPath = tokenizerPathStr.c_str();
-static const char* kMelFile = "/Users/parkiratsandhu/Documents/programming_projects/cactus_bruinai/cactus/tests/whisper_tests/test.wav";
-static const char* kTokFile = "/Users/parkiratsandhu/Documents/programming_projects/cactus_bruinai/cactus/tests/whisper_tests/decoder_input_tokens.npy";
-
+static const char* audioFilePath = "/Users/parkiratsandhu/Documents/programming_projects/cactus_bruinai/cactus/tests/assets/test.wav";
+static const char* prompt = "<|startoftranscript|><|en|><|transcribe|><|notimestamps|>";
 
 struct StreamingData {
     std::vector<std::string> tokens;
@@ -42,9 +41,6 @@ static void whisper_stream_callback(const char* token, uint32_t token_id, void* 
     }
 }
 
-// ---------------------------
-// JSON field extractors (robust)
-// ---------------------------
 static std::string extract_json_string_field(const std::string& json, const std::string& key) {
     std::string pattern = "\"" + key + "\":";
     size_t pos = json.find(pattern);
@@ -99,7 +95,7 @@ bool run_whisper_test(const char* title,
 
     std::cout << "Transcript (streamed if enabled): ";
     int rc = cactus_test_whisper_from_files_json(
-        model, kMelFile, kTokFile,
+        model, audioFilePath, prompt,
         response, sizeof(response),
         temperature, top_p, top_k, max_tokens,
         use_streaming ? whisper_stream_callback : nullptr,
@@ -115,7 +111,6 @@ bool run_whisper_test(const char* title,
 
     std::string json = response;
 
-    // Extract metrics (robust to field renames)
     double ttft_ms   = extract_json_number_field(json, "time_to_first_token_ms");
     double tps       = extract_json_number_field(json, "tokens_per_second");
     double total_ms  = extract_json_number_field(json, "total_time_ms");
@@ -144,13 +139,10 @@ bool run_whisper_test(const char* title,
     return ok;
 }
 
-// ---------------------------
-// Individual tests (robust predicates)
-// ---------------------------
 static bool test_whisper_prefill_only() {
     return run_whisper_test(
         "WHISPER PREFILL ONLY",
-        0.0f, 1.0f, 0, 1,  // <= only 1 token decode, no continuation
+        0.0f, 0.0f, 0, 1,  // <= only 1 token decode, no continuation
         false,             // no streaming
         -1,
         [](int rc,
@@ -181,29 +173,11 @@ static bool test_whisper_autoregressive_longer() {
     );
 }
 
-static bool test_whisper_streaming_early_stop() {
-    return run_whisper_test(
-        "WHISPER STREAMING (EARLY STOP @ 20)",
-        0.0f, 1.0f, 0, 128, true, 20,
-        [](int rc,
-           const std::string& /*text*/,
-           double /*ttft*/,
-           double /*tps*/,
-           double /*n_comp*/,
-           int streamed_tokens) {
-            return rc > 0 && streamed_tokens >= 20;
-        }
-    );
-}
 
-// ---------------------------
-// Test runner main
-// ---------------------------
 int main() {
     TestUtils::TestRunner runner("Whisper Tests");
-    // runner.run_test("whisper_prefill_basic",      test_whisper_prefill_only());
+    runner.run_test("whisper_prefill_basic",      test_whisper_prefill_only());
     runner.run_test("whisper_autoregressive_100",  test_whisper_autoregressive_longer());
-    // runner.run_test("whisper_streaming_stop20",   test_whisper_streaming_early_stop());
     runner.print_summary();
     return runner.all_passed() ? 0 : 1;
 }
