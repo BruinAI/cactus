@@ -243,7 +243,7 @@ int cactus_complete_audio(
                 std::string piece = tokenizer->decode({ next_token });
                 final_text += piece;
 
-                std::cout << piece << std::endl;
+                std::cout << piece;
 
                 if (callback) {
                     callback(piece.c_str(), next_token, user_data);

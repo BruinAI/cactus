@@ -26,20 +26,20 @@ struct StreamingData {
 
 static void whisper_stream_callback(const char* token, uint32_t token_id, void* user_data) {
     auto* data = static_cast<StreamingData*>(user_data);
-    data->tokens.push_back(token);
     data->token_ids.push_back(token_id);
     data->token_count++;
 
-    if (token && *token)
-        std::cout << token << std::flush;
-    else
-        std::cout << "<" << token_id << ">" << std::flush;
+    std::string out = token ? token : "";
+    for (char& c : out) if (c == '\n') c = ' ';
+
+    std::cout << out << std::flush;
 
     if (data->stop_at > 0 && data->token_count >= data->stop_at) {
-        std::cout << "\n\n[→ Stopping at token #" << data->stop_at << "]" << std::endl;
+        std::cout << " [→ stopped]" << std::flush;
         cactus_stop(data->model);
     }
 }
+
 
 static std::string extract_json_string_field(const std::string& json, const std::string& key) {
     std::string pattern = "\"" + key + "\":";
