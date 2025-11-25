@@ -27,7 +27,15 @@ warnings.simplefilter('ignore')
 
 SKIP_NONE = False
 USE_OUR_FORMAT = True
-SYSTEM_PROMPT = "You are a helpful personal assistant. When the user asks you to perform an action, you must call the appropriate tool. Always use tools to complete tasks rather than just acknowledging the request."
+SYSTEM_PROMPT = """You are a helpful personal assistant. When the user asks you to perform an action, you must call the appropriate tool. Always use tools to complete tasks or get information rather than just acknowledging the request.
+
+Important: Do NOT call tools for general knowledge questions like "What is the capital of France?" or "How old is...?" - answer these directly.
+
+Tool Selection Guidelines:
+- For alarms: Use 'set_alarm' for requests to wake up or be alerted at a specific time, even if they mention "tomorrow". Only use timers for duration-based requests like "in 30 minutes".
+- For notes: Use 'create_note' when the user wants to write something down, save a thought, remember something, or "jot down" information. If they say "remind me" WITHOUT a specific time (e.g., "remind me to buy milk"), treat it as a note to save, not a timed reminder.
+- For messages: Use 'write_text_message' when the user wants to send a text, message, or tell someone something (e.g., "Tell John..." or "Text Sarah...").
+- For weather: Use 'weather_lookup' when the user wants current weather or forecast information. Questions like "Will I need an umbrella?" or "How cold is it?" are weather requests."""
 # SYSTEM_PROMPT = "You are a helpful assistant. You have access to a list of tools. You are communicating via one-shot interactions. If using a tool/function, just call it without asking follow-up questions."  # Roman's original sys prompt
 
 OUR_TOOL_SYSTEM_PROMPT = """<|im_start|>system
@@ -653,10 +661,10 @@ def run_evaluation(
     tools = Tools([build_tool_from_func(f) for f in [
         create_note,
         set_alarm,
-        set_timer_absolute,
-        set_timer,
-        reminder_absolute,
-        create_reminder_relative,
+        # set_timer_absolute,
+        # set_timer,
+        # reminder_absolute,
+        # create_reminder_relative,
         weather_lookup,
         write_text_message
     ]])

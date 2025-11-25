@@ -29,6 +29,16 @@ from unittest import result
 
 
 USE_OUR_FORMAT = True
+SYSTEM_PROMPT = """You are a helpful personal assistant. When the user asks you to perform an action, you must call the appropriate tool. Always use tools to complete tasks or get information rather than just acknowledging the request.
+
+Important: Do NOT call tools for general knowledge questions like "What is the capital of France?" or "How old is...?" - answer these directly.
+
+Tool Selection Guidelines:
+- For alarms: Use 'set_alarm' for requests to wake up or be alerted at a specific time, even if they mention "tomorrow". Only use timers for duration-based requests like "in 30 minutes".
+- For notes: Use 'create_note' when the user wants to write something down, save a thought, remember something, or "jot down" information. If they say "remind me" WITHOUT a specific time (e.g., "remind me to buy milk"), treat it as a note to save, not a timed reminder.
+- For messages: Use 'write_text_message' when the user wants to send a text, message, or tell someone something (e.g., "Tell John..." or "Text Sarah...").
+- For weather: Use 'weather_lookup' when the user wants current weather or forecast information. Questions like "Will I need an umbrella?" or "How cold is it?" are weather requests."""
+
 OUR_TOOL_SYSTEM_PROMPT = """<|im_start|>system
 {system_content}
 
@@ -46,7 +56,7 @@ def format_qwen3_dataset(
     sample: Dict[str, Any],
     tools: List[Dict[str, Any]],
     tokenizer,
-    system_prompt_addition: str = "You are a helpful personal assistant. When the user asks you to perform an action like setting a timer, creating a reminder, or taking a note, you must call the appropriate tool. Always use tools to complete tasks rather than just acknowledging the request."
+    system_prompt_addition: str = SYSTEM_PROMPT,
 ) -> Optional[List[Dict[str, str]]]:
     """
     Format a Noah dataset sample into Qwen 3 tool calling format following BFCL conventions.
@@ -82,7 +92,7 @@ def format_qwen3_dataset(
     # Use HuggingFace tokenizer apply_chat_template
     # ========================================================================
 
-    # Uses default system prompt:
+    # default system prompt (old):
     """<|im_start|>system
 # Tools
 
