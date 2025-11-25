@@ -367,7 +367,6 @@ size_t CactusGraph::conv1d_k3(size_t input, size_t weight, size_t stride){
     if (w.shape[2] != 3) throw std::runtime_error("K=3 expected in conv1d_k3");
 
     const size_t N    = xin.shape[0];
-    const size_t C_in = xin.shape[1];
     const size_t L    = xin.shape[2];
     const size_t C_out= w.shape[0];
     const size_t K    = w.shape[2];

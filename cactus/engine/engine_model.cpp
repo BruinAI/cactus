@@ -71,7 +71,7 @@ bool Model::init(CactusGraph* external_graph, const std::string& model_folder, s
 }
 
 bool Model::init_internal(CactusGraph* gb, const std::string& model_folder, size_t context_size,
-                          const std::string& system_prompt, bool do_warmup) {
+                          const std::string& system_prompt, bool /*do_warmup*/) {
     model_folder_path_ = model_folder;
     std::string config_path = model_folder + "/config.txt";
 
@@ -177,8 +177,8 @@ bool Model::init_internal(CactusGraph* gb, const std::string& model_folder, size
     return true;
 }
 
-size_t Model::forward(const std::vector<float>& mel_bins, const std::vector<uint32_t>& tokens, bool use_cache){
-    forward(tokens, use_cache);
+size_t Model::forward(const std::vector<float>& /*mel_bins*/, const std::vector<uint32_t>& tokens, bool use_cache){
+    return forward(tokens, use_cache);
 }
 
 uint32_t Model::generate(const std::vector<uint32_t>& tokens, float temperature, float top_p,
@@ -216,8 +216,8 @@ uint32_t Model::generate(const std::vector<uint32_t>& tokens, float temperature,
     return *static_cast<uint32_t*>(output_ptr);
 }
 
-uint32_t Model::generate_with_audio(const std::vector<uint32_t>& tokens, const std::vector<float>& mel_bins, float temperature, float top_p, size_t top_k, const std::string& profile_file){
-    generate(tokens, temperature, top_p, top_k, profile_file);
+uint32_t Model::generate_with_audio(const std::vector<uint32_t>& tokens, const std::vector<float>& /*mel_bins*/, float temperature, float top_p, size_t top_k, const std::string& profile_file){
+    return generate(tokens, temperature, top_p, top_k, profile_file);
 }
 
 uint32_t Model::generate_with_images(const std::vector<uint32_t>& tokens, const std::vector<std::string>& image_paths,
@@ -322,47 +322,47 @@ bool Config::from_json(const std::string& config_path) {
         value.erase(0, value.find_first_not_of(" \t"));
         value.erase(value.find_last_not_of(" \t") + 1);
         
-        if (key == "vocab_size") vocab_size = std::stoul(value);
-        else if (key == "bos_token_id") bos_token_id = std::stoul(value);
-        else if (key == "eos_token_id") eos_token_id = std::stoul(value);
-        else if (key == "num_layers") num_layers = std::stoul(value);
-        else if (key == "hidden_dim") hidden_dim = std::stoul(value);
-        else if (key == "ffn_intermediate_dim") ffn_intermediate_dim = std::stoul(value);
-        else if (key == "attention_heads") attention_heads = std::stoul(value);
-        else if (key == "attention_kv_heads") attention_kv_heads = std::stoul(value);
-        else if (key == "attention_head_dim") attention_head_dim = std::stoul(value);
+        if (key == "vocab_size") vocab_size = static_cast<uint32_t>(std::stoul(value));
+        else if (key == "bos_token_id") bos_token_id = static_cast<uint32_t>(std::stoul(value));
+        else if (key == "eos_token_id") eos_token_id = static_cast<uint32_t>(std::stoul(value));
+        else if (key == "num_layers") num_layers = static_cast<uint32_t>(std::stoul(value));
+        else if (key == "hidden_dim") hidden_dim = static_cast<uint32_t>(std::stoul(value));
+        else if (key == "ffn_intermediate_dim") ffn_intermediate_dim = static_cast<uint32_t>(std::stoul(value));
+        else if (key == "attention_heads") attention_heads = static_cast<uint32_t>(std::stoul(value));
+        else if (key == "attention_kv_heads") attention_kv_heads = static_cast<uint32_t>(std::stoul(value));
+        else if (key == "attention_head_dim") attention_head_dim = static_cast<uint32_t>(std::stoul(value));
         else if (key == "layer_norm_eps") layer_norm_eps = std::stof(value);
         else if (key == "rope_theta") rope_theta = std::stof(value);
-        else if (key == "num_experts") num_experts = std::stoul(value);
-        else if (key == "num_shared_experts") num_shared_experts = std::stoul(value);
-        else if (key == "num_top_experts") num_top_experts = std::stoul(value);
-        else if (key == "moe_every_n_layers") moe_every_n_layers = std::stoul(value);
+        else if (key == "num_experts") num_experts = static_cast<uint32_t>(std::stoul(value));
+        else if (key == "num_shared_experts") num_shared_experts = static_cast<uint32_t>(std::stoul(value));
+        else if (key == "num_top_experts") num_top_experts = static_cast<uint32_t>(std::stoul(value));
+        else if (key == "moe_every_n_layers") moe_every_n_layers = static_cast<uint32_t>(std::stoul(value));
         else if (key == "tie_word_embeddings") tie_word_embeddings = (value == "true" || value == "1");
-        else if (key == "vision_hidden_dim") vision_hidden_dim = std::stoul(value);
-        else if (key == "vision_num_layers") vision_num_layers = std::stoul(value);
-        else if (key == "vision_attention_heads") vision_attention_heads = std::stoul(value);
-        else if (key == "vision_image_size") vision_image_size = std::stoul(value);
-        else if (key == "vision_patch_size") vision_patch_size = std::stoul(value);
-        else if (key == "vision_num_channels") vision_num_channels = std::stoul(value);
-        else if (key == "vision_embed_dim") vision_embed_dim = std::stoul(value);
-        else if (key == "visual_tokens_per_img") visual_tokens_per_img = std::stoul(value);
+        else if (key == "vision_hidden_dim") vision_hidden_dim = static_cast<uint32_t>(std::stoul(value));
+        else if (key == "vision_num_layers") vision_num_layers = static_cast<uint32_t>(std::stoul(value));
+        else if (key == "vision_attention_heads") vision_attention_heads = static_cast<uint32_t>(std::stoul(value));
+        else if (key == "vision_image_size") vision_image_size = static_cast<uint32_t>(std::stoul(value));
+        else if (key == "vision_patch_size") vision_patch_size = static_cast<uint32_t>(std::stoul(value));
+        else if (key == "vision_num_channels") vision_num_channels = static_cast<uint32_t>(std::stoul(value));
+        else if (key == "vision_embed_dim") vision_embed_dim = static_cast<uint32_t>(std::stoul(value));
+        else if (key == "visual_tokens_per_img") visual_tokens_per_img = static_cast<uint32_t>(std::stoul(value));
         else if (key == "use_pixel_shuffle") use_pixel_shuffle = (value == "true" || value == "1");
-        else if (key == "pixel_shuffle_factor") pixel_shuffle_factor = std::stoul(value);
+        else if (key == "pixel_shuffle_factor") pixel_shuffle_factor = static_cast<uint32_t>(std::stoul(value));
         else if (key == "use_image_tokens") use_image_tokens = (value == "true" || value == "1");
         else if (key == "use_layout_tags") use_layout_tags = (value == "true" || value == "1");
-        else if (key == "image_seq_len") image_seq_len = std::stoul(value);
-        else if (key == "global_image_size") global_image_size = std::stoul(value);
-        else if (key == "max_tile_size") max_tile_size = std::stoul(value);
+        else if (key == "image_seq_len") image_seq_len = static_cast<uint32_t>(std::stoul(value));
+        else if (key == "global_image_size") global_image_size = static_cast<uint32_t>(std::stoul(value));
+        else if (key == "max_tile_size") max_tile_size = static_cast<uint32_t>(std::stoul(value));
         else if (key == "rescale_factor") rescale_factor = std::stof(value);
         else if (key == "image_mean") image_mean = std::stof(value);
         else if (key == "image_std") image_std = std::stof(value);
-        else if (key == "downsample_factor") downsample_factor = std::stoul(value);
-        else if (key == "min_tiles") min_tiles = std::stoul(value);
-        else if (key == "max_tiles") max_tiles = std::stoul(value);
+        else if (key == "downsample_factor") downsample_factor = static_cast<uint32_t>(std::stoul(value));
+        else if (key == "min_tiles") min_tiles = static_cast<uint32_t>(std::stoul(value));
+        else if (key == "max_tiles") max_tiles = static_cast<uint32_t>(std::stoul(value));
         else if (key == "use_thumbnail") use_thumbnail = (value == "true" || value == "1");
-        else if (key == "min_image_tokens") min_image_tokens = std::stoul(value);
-        else if (key == "max_image_tokens") max_image_tokens = std::stoul(value);
-        else if (key == "tile_size") tile_size = std::stoul(value);
+        else if (key == "min_image_tokens") min_image_tokens = static_cast<uint32_t>(std::stoul(value));
+        else if (key == "max_image_tokens") max_image_tokens = static_cast<uint32_t>(std::stoul(value));
+        else if (key == "tile_size") tile_size = static_cast<uint32_t>(std::stoul(value));
         else if (key == "max_pixels_tolerance") max_pixels_tolerance = std::stof(value);
         else if (key == "do_image_splitting") do_image_splitting = (value == "true" || value == "1");
         else if (key == "precision") {

@@ -10,11 +10,9 @@
 #include <vector>
 #include <string>
 
-static const char* kModelPath = "../../weights/whisper-medium8";
-static std::string tokenizerPathStr = std::string(kModelPath) + "/tokenizer.json";
-const char* tokenizerPath = tokenizerPathStr.c_str();
-static const char* audioFilePath = "../assets/test.wav";
-static const char* prompt = "<|startoftranscript|><|en|><|transcribe|><|notimestamps|>";
+static const char* kModelPath = "../../weights/whisper-small";
+static const char* kAudioFilePath = "../assets/test.wav";
+static const char* kPrompt = "<|startoftranscript|><|en|><|transcribe|><|notimestamps|>";
 
 struct StreamingData {
     std::vector<std::string> tokens;
@@ -64,15 +62,9 @@ static double extract_json_number_field(const std::string& json, const std::stri
     catch (...) { return def; }
 }
 
-// ---------------------------
-// Core test runner
-// ---------------------------
 template<typename Predicate>
 bool run_whisper_test(const char* title,
-                      float temperature,
-                      float top_p,
-                      size_t top_k,
-                      size_t max_tokens,
+                      const char* options_json,
                       bool use_streaming,
                       int stop_at,
                       Predicate check)
@@ -81,7 +73,7 @@ bool run_whisper_test(const char* title,
               << "║" << std::setw(42) << std::left << std::string("          ") + title << "║\n"
               << "╚══════════════════════════════════════════╝\n";
 
-    cactus_model_t model = cactus_init(kModelPath, 2048, tokenizerPath);
+    cactus_model_t model = cactus_init(kModelPath, 2048, nullptr);
     if (!model) {
         std::cerr << "[✗] Failed to initialize Whisper model\n";
         return false;
@@ -94,10 +86,10 @@ bool run_whisper_test(const char* title,
     stream.stop_at = stop_at;
 
     std::cout << "Transcript (streamed if enabled): ";
-    int rc = cactus_complete_audio(
-        model, audioFilePath, prompt,
+    int rc = cactus_transcribe(
+        model, kAudioFilePath, kPrompt,
         response, sizeof(response),
-        temperature, top_p, top_k, max_tokens,
+        options_json,
         use_streaming ? whisper_stream_callback : nullptr,
         use_streaming ? (void*)&stream : nullptr
     );
@@ -140,10 +132,11 @@ bool run_whisper_test(const char* title,
 }
 
 static bool test_whisper_prefill_only() {
+    const char* options = R"({"max_tokens": 1})";
     return run_whisper_test(
         "WHISPER PREFILL ONLY",
-        0.0f, 0.0f, 0, 1,  // <= only 1 token decode, no continuation
-        false,             // no streaming
+        options,
+        false,  // no streaming
         -1,
         [](int rc,
            const std::string& /*text*/,
@@ -151,17 +144,18 @@ static bool test_whisper_prefill_only() {
            double /*tps*/,
            double n_comp,
            int /*streamed_tokens*/) {
-            // success if prefill ran and produced logits, even if no tokens were sampled
             return rc > 0 && n_comp >= 0.0;
         }
     );
 }
 
-
 static bool test_whisper_autoregressive_longer() {
+    const char* options = R"({"max_tokens": 100})";
     return run_whisper_test(
         "WHISPER AUTOREGRESSIVE (100 TOKENS)",
-        0.0f, 0.0f, 0, 100, false, -1,
+        options,
+        false,  // no streaming
+        -1,
         [](int rc,
            const std::string& /*text*/,
            double /*ttft*/,

@@ -153,16 +153,13 @@ cactus_model_t cactus_init(const char* model_path, size_t context_size, const ch
     }
 }
 
-int cactus_complete_audio(
+int cactus_transcribe(
     cactus_model_t model,
     const char* audio_file_path,
     const char* prompt,
     char* response_buffer,
     size_t buffer_size,
-    float temperature,
-    float top_p,
-    size_t top_k,
-    size_t max_tokens,
+    const char* options_json,
     cactus_token_callback callback,
     void* user_data
 ) {
@@ -182,6 +179,12 @@ int cactus_complete_audio(
 
         auto* handle = static_cast<CactusModelHandle*>(model);
         handle->should_stop = false;
+
+        float temperature, top_p;
+        size_t top_k, max_tokens;
+        std::vector<std::string> stop_sequences;
+        parse_options_json(options_json ? options_json : "",
+                          temperature, top_p, top_k, max_tokens, stop_sequences);
 
         std::vector<float> mel_bins = compute_whisper_mel_from_wav(audio_file_path);
 

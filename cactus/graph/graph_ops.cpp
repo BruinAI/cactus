@@ -707,14 +707,11 @@ void compute_fused_node(GraphNode& node, const std::vector<std::unique_ptr<Graph
                 if (K != 3)
                     throw std::runtime_error("Conv1d_k3 only supports K=3!");
 
-                // Output layout matches input activations
                 size_t L_out = ((L - 1) / stride) + 1;
                 Y.shape     = { N, C_out, L_out };
                 Y.precision = X.precision;
 
-                // --- NEW: handle INT8 weights, similar to CONV1D_CAUSAL depthwise ---
                 if (W.precision == Precision::INT8) {
-                    // We assume activations are FP16 for this path, same as depthwise conv.
                     if (X.precision != Precision::FP16) {
                         throw std::runtime_error(
                             "Conv1d_k3 with INT8 weights currently requires FP16 activations");
@@ -726,7 +723,6 @@ void compute_fused_node(GraphNode& node, const std::vector<std::unique_ptr<Graph
 
                     std::vector<__fp16> W_fp16(W_size);
                     for (size_t i = 0; i < W_size; ++i) {
-                        // dequantize weights into FP16
                         W_fp16[i] = static_cast<__fp16>(W_int8[i] * w_s);
                     }
 
@@ -737,9 +733,7 @@ void compute_fused_node(GraphNode& node, const std::vector<std::unique_ptr<Graph
                         N, L, C_in, C_out, stride
                     );
                 }
-                // --- Existing FP16 / FP32 paths ---
                 else if (X.precision == Precision::FP32) {
-                    // assumes W.precision == FP32 here
                     cactus_conv1d_f32_k3(
                         X.data_as<float>(),
                         W.data_as<float>(),
@@ -748,7 +742,6 @@ void compute_fused_node(GraphNode& node, const std::vector<std::unique_ptr<Graph
                     );
                 }
                 else if (X.precision == Precision::FP16) {
-                    // assumes W.precision == FP16 here
                     cactus_conv1d_f16_k3(
                         X.data_as<__fp16>(),
                         W.data_as<__fp16>(),

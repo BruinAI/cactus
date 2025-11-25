@@ -218,8 +218,8 @@ protected:
 
 
 class LFM2Model : public Model {
-    friend class Lfm2VlModel;  
-    
+    friend class Lfm2VlModel;
+
 public:
     LFM2Model();
     explicit LFM2Model(const Config& config);
@@ -232,6 +232,7 @@ public:
               const std::string& system_prompt = "", bool do_warmup = true) override;
 
 protected:
+    using Model::forward;
     size_t build_attention(CactusGraph* gb, size_t normalized_input, uint32_t layer_idx,
                           ComputeBackend backend, bool use_cache = false, size_t position_offset = 0) override;
 
@@ -370,7 +371,7 @@ protected:
         throw std::runtime_error("Whisper: build_transformer_block unused");
     }
 
-    size_t forward(const std::vector<uint32_t>& tokens, bool use_cache = false) override {
+    size_t forward(const std::vector<uint32_t>& /*tokens*/, bool /*use_cache*/ = false) override {
         throw std::runtime_error("Whisper requires mel+token forward().");
     }
 
@@ -404,10 +405,10 @@ protected:
     size_t build_decoder_transformer_block(CactusGraph* gb, size_t hidden, uint32_t layer_idx,
                                   ComputeBackend backend, bool use_cache = false, size_t position_offset = 0);
     
-    size_t build_conv1d(CactusGraph* gb, size_t input, ComputeBackend backend);
+    size_t build_conv1d(CactusGraph* gb, size_t input);
 
-    uint32_t generate_with_audio(const std::vector<uint32_t>& tokens, const std::vector<float>& mel_bins, 
-                                    float temperature = -1.0f, float top_p = -1.0f, size_t top_k = 0, const std::string& profile_file = "") override;
+    uint32_t generate_with_audio(const std::vector<uint32_t>& tokens, const std::vector<float>& mel_bins,
+                                    float temperature = 0.0f, float top_p = 0.0f, size_t top_k = 0, const std::string& profile_file = "") override;
 
 private:
     struct WeightNodeIDs {
@@ -495,22 +496,11 @@ private:
     std::vector<size_t> encoder_output_shape_;
     size_t last_conv1_node_ = 0;
     size_t last_conv2_node_ = 0;
-    size_t last_conv2_transposed_node_ = 0;
     size_t last_encoder_post_norm_node_ = 0;
     size_t last_enc_plus_pos_node_ = 0;
     size_t encoder_transformer_block_0 = 0;
     size_t encoder_pre_gelu = 0;
     size_t encoder_post_gelu = 0;
-    size_t encoder_ln1_node_ = 0;
-    size_t encoder_sa_out_node_ = 0;
-    size_t encoder_ln2_node_ = 0;
-
-    size_t encoder_block1_out_node_ = 0;
-
-    size_t last_dec_norm_node_ = 0;
-
-    size_t decoder_emb_pos_node_ = 0;
-    size_t decoder_block0_out_node_ = 0;
 
     std::vector<size_t> encoder_block_out_nodes_;
     std::vector<uint8_t> encoder_output_bytes_;

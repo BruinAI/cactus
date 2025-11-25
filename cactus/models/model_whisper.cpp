@@ -17,27 +17,6 @@ struct ConvDebugNodes {
 };
 
 
-static void apply_whisper_logits_processors(
-    float* logits,
-    size_t vocab_size,
-    const std::vector<size_t>& suppress_tokens,
-    const std::vector<size_t>& begin_suppress_tokens,
-    bool is_first_decode_step
-) {
-    for (int tid : suppress_tokens) {
-        if (tid >= 0 && static_cast<size_t>(tid) < vocab_size) {
-            logits[tid] = -1e9f;
-        }
-    }
-    if (is_first_decode_step) {
-        for (int tid : begin_suppress_tokens) {
-            if (tid >= 0 && static_cast<size_t>(tid) < vocab_size) {
-                logits[tid] = -1e9f;
-            }
-        }
-    }
-}
-
 WhisperModel::WhisperModel() : Model() {}
 
 WhisperModel::WhisperModel(const Config& config) : Model(config) {
@@ -171,7 +150,7 @@ size_t WhisperModel::build_decoder_mlp(CactusGraph* gb, size_t input, uint32_t l
 
 
 
-size_t WhisperModel::build_encoder_attention(CactusGraph* gb, size_t input, uint32_t layer_idx, ComputeBackend backend, bool use_cache, size_t position_offset){
+size_t WhisperModel::build_encoder_attention(CactusGraph* gb, size_t input, uint32_t layer_idx, ComputeBackend backend, bool use_cache, size_t /*position_offset*/){
 
     const auto& layer = weight_nodes_.layers[layer_idx];
 
@@ -244,7 +223,6 @@ void WhisperModel::reset_graph_side_cache_nodes() {
 size_t WhisperModel::build_decoder_self_attention(CactusGraph* gb, size_t input, uint32_t layer_idx, ComputeBackend backend, bool use_cache, size_t position_offset){
     const auto& layer = weight_nodes_.layers[layer_idx];
 
-    // 1. Standard Q/K/V projections for the *new* tokens
     auto q = gb->matmul(input, layer.decoder_self_attn_q_weight, true, backend);
     q = gb->add(q, layer.decoder_self_attn_q_bias);
 
@@ -257,20 +235,18 @@ size_t WhisperModel::build_decoder_self_attention(CactusGraph* gb, size_t input,
         throw std::runtime_error("decoder self-attn: q must be [T_new, D]");
     }
 
-    size_t seq_new      = q_shape[0];
-    size_t num_heads    = config_.attention_heads;
-    size_t head_dim     = config_.attention_head_dim;
+    size_t seq_new = q_shape[0];
+    size_t num_heads = config_.attention_heads;
+    size_t head_dim = config_.attention_head_dim;
     size_t num_kv_heads = config_.attention_kv_heads;
-
-    // 2D -> 4D for attention op
-    auto q_4d = gb->reshape(q, {1, seq_new,       num_heads,    head_dim});
-    auto k_4d = gb->reshape(k, {1, seq_new,       num_kv_heads, head_dim});
-    auto v_4d = gb->reshape(v, {1, seq_new,       num_kv_heads, head_dim});
+ 
+    auto q_4d = gb->reshape(q, {1, seq_new, num_heads, head_dim});
+    auto k_4d = gb->reshape(k, {1, seq_new, num_kv_heads, head_dim});
+    auto v_4d = gb->reshape(v, {1, seq_new, num_kv_heads, head_dim});
 
     size_t final_k = k_4d;
     size_t final_v = v_4d;
 
-    // 2. If caching, pull previous K/V from kv_cache_ (Qwen-style)
     if (use_cache && !kv_cache_.is_empty()) {
         auto k_view = kv_cache_.get_key_view(layer_idx);
         auto v_view = kv_cache_.get_value_view(layer_idx);
@@ -289,8 +265,7 @@ size_t WhisperModel::build_decoder_self_attention(CactusGraph* gb, size_t input,
             {1, cache_len, num_kv_heads, head_dim},
             kv_cache_.precision
         );
-
-        // If ring-buffer is contiguous, just use ptr1; otherwise use the helper
+ 
         if (k_view.ptr2 == nullptr && v_view.ptr2 == nullptr) {
             gb->set_input(cache_k_node, k_view.ptr1, kv_cache_.precision);
             gb->set_input(cache_v_node, v_view.ptr1, kv_cache_.precision);
@@ -298,24 +273,19 @@ size_t WhisperModel::build_decoder_self_attention(CactusGraph* gb, size_t input,
             gb->set_input(cache_k_node, kv_cache_.get_key_ptr(layer_idx), kv_cache_.precision);
             gb->set_input(cache_v_node, kv_cache_.get_value_ptr(layer_idx), kv_cache_.precision);
         }
-
-        // Append new tokens on the right
+ 
         final_k = gb->concat(cache_k_node, k_4d, 1);
         final_v = gb->concat(cache_v_node, v_4d, 1);
     }
-
-    // 3. Always remember where K/V live in this graph so update_kv_cache can copy them
-    if (use_cache) {
-        // When use_cache==true, final_k/final_v include the *full* sequence (old+new)
+ 
+    if (use_cache) { 
         cache_k_output_nodes_[layer_idx] = final_k;
         cache_v_output_nodes_[layer_idx] = final_v;
-    } else {
-        // First pass (no cache yet) – we only have new tokens
+    } else { 
         cache_k_output_nodes_[layer_idx] = k_4d;
         cache_v_output_nodes_[layer_idx] = v_4d;
     }
-
-    // 4. Actual attention
+ 
     auto attn_out_4d = gb->attention(q_4d, final_k, final_v, attention_scale_, position_offset);
     auto attn_out    = gb->reshape(attn_out_4d, {seq_new, num_heads * head_dim});
 
@@ -324,7 +294,7 @@ size_t WhisperModel::build_decoder_self_attention(CactusGraph* gb, size_t input,
     return output;
 }
 
-size_t WhisperModel::build_encoder_self_attention(CactusGraph* gb, size_t input, uint32_t layer_idx, ComputeBackend backend, bool use_cache, size_t position_offset){
+size_t WhisperModel::build_encoder_self_attention(CactusGraph* gb, size_t input, uint32_t layer_idx, ComputeBackend backend, bool use_cache, size_t /*position_offset*/){
     const auto& layer = weight_nodes_.layers[layer_idx];
 
     if(use_cache)
@@ -354,13 +324,12 @@ size_t WhisperModel::build_encoder_self_attention(CactusGraph* gb, size_t input,
     return output;
 }
 
-size_t WhisperModel::build_conv1d(CactusGraph* gb, size_t input, ComputeBackend backend)
+size_t WhisperModel::build_conv1d(CactusGraph* gb, size_t input)
 {
     size_t conv_input = input;
     const auto& xbuf = gb->get_output_buffer(input);
 
-    if (xbuf.precision == Precision::INT8) {
-        // Upcast activations to FP16 just for the conv
+    if (xbuf.precision == Precision::INT8) { 
         conv_input = gb->precision_cast(input, Precision::FP16);
     }
 
@@ -513,7 +482,7 @@ void WhisperModel::run_encoder(const std::vector<float>& mel_bins)
         gb->set_input(mel_input, mel_bins.data(), Precision::FP32);
     }
 
-    size_t conv2_transposed = build_conv1d(gb, mel_input, backend);
+    size_t conv2_transposed = build_conv1d(gb, mel_input);
 
     const auto& conv_shape = gb->get_output_buffer(conv2_transposed).shape;
     if (conv_shape.size() != 3 || conv_shape[0] != 1)
@@ -661,9 +630,6 @@ uint32_t WhisperModel::generate_with_audio(
         throw std::runtime_error("Mel bins cannot be empty in Whisper generate_with_audio");
 
     auto* gb = static_cast<CactusGraph*>(graph_handle_);
-    auto backend = (config_.default_backend == Config::Backend::CPU)
-        ? ComputeBackend::CPU
-        : ComputeBackend::NPU;
 
     bool cold_start = !encoder_ready_;
     size_t logits_node = 0;

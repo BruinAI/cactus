@@ -11,8 +11,13 @@
 #include <vector>
 #include <sstream>
 
-const char* g_model_path = "../../weights/whisper-medium";
-const char* g_options = R"({"max_tokens": 256, "stop_sequences": ["<|im_end|>", "<end_of_turn>"]})";
+
+const char* g_model_path = "../../weights/lfm2-1.2b";
+
+const char* g_options = R"({
+        "max_tokens": 256,
+        "stop_sequences": ["<|im_end|>", "<end_of_turn>"]
+    })";
 
 struct Timer {
     std::chrono::high_resolution_clock::time_point start;

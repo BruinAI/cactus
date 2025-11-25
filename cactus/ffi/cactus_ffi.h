@@ -33,16 +33,13 @@ CACTUS_FFI_EXPORT int cactus_complete(
     void* user_data
 );
 
-int cactus_complete_audio(
+CACTUS_FFI_EXPORT int cactus_transcribe(
     cactus_model_t model,
-    const char* mel_npy_path,
-    const char* tokens_npy_path,
+    const char* audio_file_path,
+    const char* prompt,
     char* response_buffer,
     size_t buffer_size,
-    float temperature,
-    float top_p,
-    size_t top_k,
-    size_t max_tokens,
+    const char* options_json,
     cactus_token_callback callback,
     void* user_data
 );
