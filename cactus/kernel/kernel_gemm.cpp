@@ -464,7 +464,6 @@ static void cactus_matmul_int8_to_int32_worker(const int8_t* a, const int8_t* b_
     constexpr int TILE_M = 4;
     constexpr int TILE_N = 4;
     constexpr int VECTOR_WIDTH = 16;
-    constexpr int DOT_GRANULARITY = 4;
     constexpr int VECTOR_UNROLL = 2;
     const size_t K_aligned = (K / (VECTOR_WIDTH * VECTOR_UNROLL)) * (VECTOR_WIDTH * VECTOR_UNROLL);
 
@@ -518,7 +517,6 @@ static void cactus_matmul_int8_to_int32_worker(const int8_t* a, const int8_t* b_
 
                     int32_t sum = vaddvq_s32(accumulators[m][n]);
 
-                    // Handle remainder scalar loop
                     for (size_t k = K_aligned; k < K; ++k) {
                         sum += static_cast<int32_t>(a[row * K + k]) *
                                static_cast<int32_t>(b_transposed[col * K + k]);
