@@ -275,6 +275,10 @@ void cactus_conv1d_f16_k3(
 void cactus_bilinear_interpolation_fp32(const float* input, float* output, size_t src_height, size_t src_width, size_t embed_dim,
                                         size_t dst_height, size_t dst_width);
 
+void cactus_resize_nearest_asymmetric_fp32(const float* input, float* output, size_t src_height, size_t src_width, size_t embed_dim, size_t dst_height, size_t dst_width);
+void cactus_resize_nearest_asymmetric_fp16(const __fp16* input, __fp16* output, size_t src_height, size_t src_width, size_t embed_dim, size_t dst_height, size_t dst_width);
+void cactus_resize_nearest_asymmetric_int8(const int8_t* input, int8_t* output, size_t src_height, size_t src_width, size_t embed_dim, size_t dst_height, size_t dst_width);
+
 void cactus_sample_f32(const float* logits, uint32_t* output, size_t vocab_size,
                        float temperature, float top_p, size_t top_k, size_t random_seed);
 void cactus_sample_f16(const __fp16* logits, uint32_t* output, size_t vocab_size,

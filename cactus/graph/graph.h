@@ -28,7 +28,7 @@ enum class OpType {
     INPUT, PRECISION_CAST,
     ADD, ADD_CLIPPED, SUBTRACT, MULTIPLY, DIVIDE,
     MATMUL, TRANSPOSE, RESHAPE, SLICE, GATHER, EMBEDDING,
-    BILINEAR_INTERPOLATION,
+    BILINEAR_INTERPOLATION, RESIZE,
     SUM, MEAN, VARIANCE, MIN, MAX,
     ELEM_WISE_MIN, ELEM_WISE_MAX,
     RMS_NORM, ROPE, SOFTMAX, ATTENTION, CONV1D_CAUSAL, CONV1D_K3,
@@ -247,6 +247,7 @@ public:
     size_t embedding(const std::string& filename, size_t indices);
     size_t embedding(size_t embedding_tensor, size_t indices);
     size_t bilinear_interpolation(size_t pos_embeds, size_t dst_height, size_t dst_width);
+    size_t resize_nearest_asymmetric(size_t input, size_t dst_height, size_t dst_width);
 
     size_t layernorm(size_t input, size_t weight, size_t bias, float epsilon = 1e-5f);
     size_t batchnorm(size_t input, size_t weight, size_t bias, size_t mean, size_t variance, float epsilon = 1e-5f);

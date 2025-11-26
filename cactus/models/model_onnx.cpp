@@ -3,8 +3,6 @@
 #include <cmath>
 #include <stdexcept>
 #include <algorithm>
-#include <iostream>
-
 namespace cactus {
 namespace engine {
 
@@ -306,7 +304,71 @@ size_t OnnxModel::build_flatten(CactusGraph* gb, const OnnxNodeConfig& node) {
 }
 
 size_t OnnxModel::build_gather(CactusGraph* gb, const OnnxNodeConfig& node) {
-    throw std::runtime_error("Gather not yet implemented");
+    if (node.inputs.size() < 2) {
+        throw std::runtime_error("Gather requires data and indices inputs");
+    }
+
+    size_t data_id = onnx_to_cactus_id_[node.inputs[0]];
+    size_t indices_id = onnx_to_cactus_id_[node.inputs[1]];
+
+    const BufferDesc& data_buf = gb->get_output_buffer(data_id);
+    if (data_buf.shape.empty()) {
+        throw std::runtime_error("Gather requires non-scalar data tensor");
+    }
+
+    int axis = static_cast<int>(node.attributes.axis);
+    int rank = static_cast<int>(data_buf.shape.size());
+    if (axis < 0) {
+        axis += rank;
+    }
+    if (axis < 0 || axis >= rank) {
+        throw std::runtime_error("Gather axis out of range");
+    }
+
+    size_t output_id = 0;
+
+    if (axis == 0) {
+        output_id = gb->gather(data_id, indices_id);
+    } else {
+        std::vector<size_t> perm;
+        perm.reserve(rank);
+        perm.push_back(static_cast<size_t>(axis));
+        for (size_t d = 0; d < data_buf.shape.size(); ++d) {
+            if (static_cast<int>(d) == axis) {
+                continue;
+            }
+            perm.push_back(d);
+        }
+
+        size_t transposed_data = gb->transposeN(data_id, perm);
+        size_t gathered = gb->gather(transposed_data, indices_id);
+
+        const BufferDesc& indices_buf = gb->get_output_buffer(indices_id);
+        size_t indices_rank = indices_buf.shape.size();
+        size_t gathered_rank = indices_rank + data_buf.shape.size() - 1;
+
+        std::vector<size_t> perm_after;
+        perm_after.reserve(gathered_rank);
+        size_t axis_block_start = indices_rank;
+        size_t axis_block_end = axis_block_start + static_cast<size_t>(axis);
+        for (size_t i = axis_block_start; i < axis_block_end; ++i) {
+            perm_after.push_back(i);
+        }
+        for (size_t i = 0; i < indices_rank; ++i) {
+            perm_after.push_back(i);
+        }
+        for (size_t i = axis_block_end; i < gathered_rank; ++i) {
+            perm_after.push_back(i);
+        }
+
+        output_id = gb->transposeN(gathered, perm_after);
+    }
+
+    if (!node.outputs.empty()) {
+        onnx_to_cactus_id_[node.outputs[0]] = output_id;
+    }
+
+    return output_id;
 }
 
 size_t OnnxModel::build_gemm(CactusGraph* gb, const OnnxNodeConfig& node) {

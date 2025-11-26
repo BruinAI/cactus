@@ -517,3 +517,153 @@ void cactus_bilinear_interpolation_fp32(const float* input, float* output, size_
         }
     }
 }
+
+void cactus_resize_nearest_asymmetric_fp32(const float* input,
+                                           float* output,
+                                           size_t src_height,
+                                           size_t src_width,
+                                           size_t embed_dim,
+                                           size_t dst_height,
+                                           size_t dst_width)
+{
+    if (src_height == 0 || src_width == 0 || dst_height == 0 || dst_width == 0) {
+        throw std::runtime_error("Resize nearest asymmetric: invalid input dimensions");
+    }
+
+    const float scale_h =
+        static_cast<float>(src_height) / static_cast<float>(dst_height);
+    const float scale_w =
+        static_cast<float>(src_width) / static_cast<float>(dst_width);
+
+    CactusThreading::parallel_for_2d(
+        dst_height,
+        dst_width,
+        CactusThreading::Thresholds::ELEMENT_WISE,
+        [&](size_t dst_y, size_t dst_x) {
+            const float src_y_f = static_cast<float>(dst_y) * scale_h;
+            int src_y = static_cast<int>(std::floor(src_y_f));
+            if (src_y < 0) {
+                src_y = 0;
+            } else if (src_y >= static_cast<int>(src_height)) {
+                src_y = static_cast<int>(src_height) - 1;
+            }
+
+            const float src_x_f = static_cast<float>(dst_x) * scale_w;
+            int src_x = static_cast<int>(std::floor(src_x_f));
+            if (src_x < 0) {
+                src_x = 0;
+            } else if (src_x >= static_cast<int>(src_width)) {
+                src_x = static_cast<int>(src_width) - 1;
+            }
+
+            const size_t src_idx =
+                (static_cast<size_t>(src_y) * src_width + static_cast<size_t>(src_x))
+                * embed_dim;
+            const size_t dst_idx =
+                (dst_y * dst_width + dst_x) * embed_dim;
+
+            for (size_t d = 0; d < embed_dim; ++d) {
+                output[dst_idx + d] = input[src_idx + d];
+            }
+        });
+}
+
+void cactus_resize_nearest_asymmetric_fp16(const __fp16* input,
+                                           __fp16* output,
+                                           size_t src_height,
+                                           size_t src_width,
+                                           size_t embed_dim,
+                                           size_t dst_height,
+                                           size_t dst_width)
+{
+    if (src_height == 0 || src_width == 0 || dst_height == 0 || dst_width == 0) {
+        throw std::runtime_error("Resize nearest asymmetric: invalid input dimensions");
+    }
+
+    const float scale_h =
+        static_cast<float>(src_height) / static_cast<float>(dst_height);
+    const float scale_w =
+        static_cast<float>(src_width) / static_cast<float>(dst_width);
+
+    CactusThreading::parallel_for_2d(
+        dst_height,
+        dst_width,
+        CactusThreading::Thresholds::ELEMENT_WISE,
+        [&](size_t dst_y, size_t dst_x) {
+            const float src_y_f = static_cast<float>(dst_y) * scale_h;
+            int src_y = static_cast<int>(std::floor(src_y_f));
+            if (src_y < 0) {
+                src_y = 0;
+            } else if (src_y >= static_cast<int>(src_height)) {
+                src_y = static_cast<int>(src_height) - 1;
+            }
+
+            const float src_x_f = static_cast<float>(dst_x) * scale_w;
+            int src_x = static_cast<int>(std::floor(src_x_f));
+            if (src_x < 0) {
+                src_x = 0;
+            } else if (src_x >= static_cast<int>(src_width)) {
+                src_x = static_cast<int>(src_width) - 1;
+            }
+
+            const size_t src_idx =
+                (static_cast<size_t>(src_y) * src_width + static_cast<size_t>(src_x))
+                * embed_dim;
+            const size_t dst_idx =
+                (dst_y * dst_width + dst_x) * embed_dim;
+
+            for (size_t d = 0; d < embed_dim; ++d) {
+                output[dst_idx + d] = input[src_idx + d];
+            }
+        });
+}
+
+void cactus_resize_nearest_asymmetric_int8(const int8_t* input,
+                                           int8_t* output,
+                                           size_t src_height,
+                                           size_t src_width,
+                                           size_t embed_dim,
+                                           size_t dst_height,
+                                           size_t dst_width)
+{
+    if (src_height == 0 || src_width == 0 || dst_height == 0 || dst_width == 0) {
+        throw std::runtime_error("Resize nearest asymmetric: invalid input dimensions");
+    }
+
+    const float scale_h =
+        static_cast<float>(src_height) / static_cast<float>(dst_height);
+    const float scale_w =
+        static_cast<float>(src_width) / static_cast<float>(dst_width);
+
+    CactusThreading::parallel_for_2d(
+        dst_height,
+        dst_width,
+        CactusThreading::Thresholds::ELEMENT_WISE,
+        [&](size_t dst_y, size_t dst_x) {
+            const float src_y_f = static_cast<float>(dst_y) * scale_h;
+            int src_y = static_cast<int>(std::floor(src_y_f));
+            if (src_y < 0) {
+                src_y = 0;
+            } else if (src_y >= static_cast<int>(src_height)) {
+                src_y = static_cast<int>(src_height) - 1;
+            }
+
+            const float src_x_f = static_cast<float>(dst_x) * scale_w;
+            int src_x = static_cast<int>(std::floor(src_x_f));
+            if (src_x < 0) {
+                src_x = 0;
+            } else if (src_x >= static_cast<int>(src_width)) {
+                src_x = static_cast<int>(src_width) - 1;
+            }
+
+            const size_t src_idx =
+                (static_cast<size_t>(src_y) * src_width + static_cast<size_t>(src_x))
+                * embed_dim;
+            const size_t dst_idx =
+                (dst_y * dst_width + dst_x) * embed_dim;
+
+            for (size_t d = 0; d < embed_dim; ++d) {
+                output[dst_idx + d] = input[src_idx + d];
+            }
+        });
+}

@@ -11,6 +11,8 @@
 #include <algorithm>
 #include <cmath>
 #include <assert.h>
+#include <string>
+#include <type_traits>
 
 namespace {
     thread_local std::vector<int8_t> transpose_buffer_int8;
@@ -39,6 +41,31 @@ namespace {
     void ensure_quantization_buffer_int8(size_t required_size) {
         if (quantization_buffer_int8.size() < required_size) {
             quantization_buffer_int8.resize(required_size);
+        }
+    }
+
+    template<typename TensorT, typename IndexT>
+    void gather_memcpy(const TensorT* tensor_data,
+                       TensorT* output,
+                       const IndexT* indices,
+                       size_t num_indices,
+                       size_t first_dim,
+                       size_t element_size,
+                       size_t bytes_per_element) {
+        using SignedIndex = std::make_signed_t<size_t>;
+        const SignedIndex signed_first_dim = static_cast<SignedIndex>(first_dim);
+        for (size_t i = 0; i < num_indices; ++i) {
+            SignedIndex signed_idx = static_cast<SignedIndex>(indices[i]);
+            if (signed_idx < 0) {
+                signed_idx += signed_first_dim;
+            }
+            if (signed_idx >= signed_first_dim || signed_idx < 0) {
+                size_t idx = static_cast<size_t>(signed_idx);
+                throw std::runtime_error("Gather index " + std::to_string(idx) +
+                                         " out of bounds for dimension " + std::to_string(first_dim));
+            }
+            size_t idx = static_cast<size_t>(signed_idx);
+            std::memcpy(output + i * element_size, tensor_data + idx * element_size, bytes_per_element);
         }
     }
 }
@@ -189,15 +216,14 @@ void compute_fused_node(GraphNode& node, const std::vector<std::unique_ptr<Graph
             
             if (tensor_buffer.precision == Precision::INT8) {
                 const int8_t* tensor_data = tensor_buffer.data_as<int8_t>();
-                const int8_t* indices = indices_buffer.data_as<int8_t>();
                 int8_t* output = node.output_buffer.data_as<int8_t>();
-                
-                    for (size_t i = 0; i < num_indices; i++) {
-                        size_t idx = static_cast<size_t>(indices[i]);
-                        if (idx >= first_dim) {
-                            throw std::runtime_error("Gather index " + std::to_string(idx) + " out of bounds for dimension " + std::to_string(first_dim));
-                        }
-                        std::memcpy(output + i * element_size, tensor_data + idx * element_size, bytes_per_element);
+
+                if (indices_buffer.precision == Precision::INT8) {
+                    const int8_t* indices = indices_buffer.data_as<int8_t>();
+                    gather_memcpy(tensor_data, output, indices, num_indices, first_dim, element_size, bytes_per_element);
+                } else {
+                    const float* indices = indices_buffer.data_as<float>();
+                    gather_memcpy(tensor_data, output, indices, num_indices, first_dim, element_size, bytes_per_element);
                 }
             } else if (tensor_buffer.precision == Precision::FP16) {
                 const __fp16* tensor_data = tensor_buffer.data_as<__fp16>();
@@ -205,22 +231,10 @@ void compute_fused_node(GraphNode& node, const std::vector<std::unique_ptr<Graph
                 
                 if (indices_buffer.precision == Precision::INT8) {
                     const int8_t* indices = indices_buffer.data_as<int8_t>();
-                    for (size_t i = 0; i < num_indices; i++) {
-                        size_t idx = static_cast<size_t>(indices[i]);
-                        if (idx >= first_dim) {
-                            throw std::runtime_error("Gather index " + std::to_string(idx) + " out of bounds for dimension " + std::to_string(first_dim));
-                        }
-                        std::memcpy(output + i * element_size, tensor_data + idx * element_size, bytes_per_element);
-                    }
+                    gather_memcpy(tensor_data, output, indices, num_indices, first_dim, element_size, bytes_per_element);
                 } else {
                     const float* indices = indices_buffer.data_as<float>();
-                    for (size_t i = 0; i < num_indices; i++) {
-                        size_t idx = static_cast<size_t>(indices[i]);
-                        if (idx >= first_dim) {
-                            throw std::runtime_error("Gather index " + std::to_string(idx) + " out of bounds for dimension " + std::to_string(first_dim));
-                        }
-                        std::memcpy(output + i * element_size, tensor_data + idx * element_size, bytes_per_element);
-                    }
+                    gather_memcpy(tensor_data, output, indices, num_indices, first_dim, element_size, bytes_per_element);
                 }
             } else {
                 const float* tensor_data = tensor_buffer.data_as<float>();
@@ -228,22 +242,10 @@ void compute_fused_node(GraphNode& node, const std::vector<std::unique_ptr<Graph
                 
                 if (indices_buffer.precision == Precision::INT8) {
                     const int8_t* indices = indices_buffer.data_as<int8_t>();
-                    for (size_t i = 0; i < num_indices; i++) {
-                        size_t idx = static_cast<size_t>(indices[i]);
-                        if (idx >= first_dim) {
-                            throw std::runtime_error("Gather index " + std::to_string(idx) + " out of bounds for dimension " + std::to_string(first_dim));
-                        }
-                        std::memcpy(output + i * element_size, tensor_data + idx * element_size, bytes_per_element);
-                    }
+                    gather_memcpy(tensor_data, output, indices, num_indices, first_dim, element_size, bytes_per_element);
                 } else {
                     const float* indices = indices_buffer.data_as<float>();
-                    for (size_t i = 0; i < num_indices; i++) {
-                        size_t idx = static_cast<size_t>(indices[i]);
-                        if (idx >= first_dim) {
-                            throw std::runtime_error("Gather index " + std::to_string(idx) + " out of bounds for dimension " + std::to_string(first_dim));
-                        }
-                        std::memcpy(output + i * element_size, tensor_data + idx * element_size, bytes_per_element);
-                    }
+                    gather_memcpy(tensor_data, output, indices, num_indices, first_dim, element_size, bytes_per_element);
                 }
             }
             break;
@@ -449,6 +451,37 @@ void compute_fused_node(GraphNode& node, const std::vector<std::unique_ptr<Graph
             cactus_bilinear_interpolation_fp32(pos_embed_fp32.data(), output, 
                                               src_height, src_width, embed_dim,
                                               dst_height, dst_width);
+            break;
+        }
+        case OpType::RESIZE: {
+            const auto& input_buffer = nodes[node_index_map.at(node.input_ids[0])]->output_buffer;
+            const auto& shape = input_buffer.shape;
+            
+            if (shape.size() != 3) {
+                throw std::runtime_error("Resize nearest asymmetric requires 3D input tensor [src_height, src_width, embed_dim], got " + 
+                                        std::to_string(shape.size()) + "D tensor");
+            }
+
+            size_t src_height = shape[0];
+            size_t src_width = shape[1];
+            size_t embed_dim = shape[2];
+
+            size_t dst_height = node.params.dst_height;
+            size_t dst_width = node.params.dst_width;
+            
+            if (input_buffer.precision == Precision::INT8) {
+                cactus_resize_nearest_asymmetric_int8(input_buffer.data_as<int8_t>(), node.output_buffer.data_as<int8_t>(), 
+                                                       src_height, src_width, embed_dim,
+                                                       dst_height, dst_width);
+            } else if (input_buffer.precision == Precision::FP16) {
+                cactus_resize_nearest_asymmetric_fp16(input_buffer.data_as<__fp16>(), node.output_buffer.data_as<__fp16>(), 
+                                                       src_height, src_width, embed_dim,
+                                                       dst_height, dst_width);
+            } else {
+                cactus_resize_nearest_asymmetric_fp32(input_buffer.data_as<float>(), node.output_buffer.data_as<float>(), 
+                                                       src_height, src_width, embed_dim,
+                                                       dst_height, dst_width);
+            }
             break;
         }
         case OpType::RMS_NORM: {

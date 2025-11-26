@@ -18,14 +18,15 @@ static const char* op_type_names[] = {
     "INPUT", "PRECISION_CAST",
     "ADD", "ADD_CLIPPED", "SUBTRACT", "MULTIPLY", "DIVIDE",
     "MATMUL", "TRANSPOSE", "RESHAPE", "SLICE", "GATHER", "EMBEDDING",
-    "BILINEAR_INTERPOLATION",
+    "BILINEAR_INTERPOLATION", "RESIZE",
     "SUM", "MEAN", "VARIANCE", "MIN", "MAX",
+    "ELEM_WISE_MIN", "ELEM_WISE_MAX",
     "RMS_NORM", "ROPE", "SOFTMAX", "ATTENTION", "CONV1D_CAUSAL", "CONV1D_K3",
     "SCALAR_ADD", "SCALAR_SUBTRACT", "SCALAR_MULTIPLY", "SCALAR_DIVIDE",
     "SCALAR_EXP", "SCALAR_SQRT", "SCALAR_COS", "SCALAR_SIN",
-    "SILU", "GELU", "SAMPLE", "CONCAT",
+    "SILU", "GELU", "SIGMOID", "SAMPLE", "CONCAT",
     "SCATTER_TOPK",
-    "TOPK", "LAYERNORM",
+    "TOPK", "LAYERNORM", "BATCHNORM",
     "INDEX"
 };
 
@@ -742,9 +743,29 @@ size_t CactusGraph::bilinear_interpolation(size_t pos_embeds, size_t dst_height,
     params.dst_height = dst_height;
     params.dst_width = dst_width;
     params.output_precision = Precision::FP32;
+
     
     return add_node(OpType::BILINEAR_INTERPOLATION, {pos_embeds}, output_shape, params);
 }   
+
+size_t CactusGraph::resize_nearest_asymmetric(size_t input, size_t dst_height, size_t dst_width) {
+
+    const auto& input_buffer = get_output_buffer(input);
+    if (input_buffer.shape.size() != 3) {
+        throw std::runtime_error("Resize nearest asymmetric input must be 3D [src_height, src_width, embed_dim]");
+    }
+
+    size_t embed_dim = input_buffer.shape[2];
+
+    std::vector<size_t> output_shape = {dst_height, dst_width, embed_dim};
+
+    OpParams params;
+    params.dst_height = dst_height;
+    params.dst_width = dst_width;
+    params.output_precision = input_buffer.precision;
+
+    return add_node(OpType::RESIZE, {input}, output_shape, params);
+}
 
 size_t CactusGraph::precision_cast(size_t input, Precision target_precision) {
     OpParams params{};
