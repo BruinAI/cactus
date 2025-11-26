@@ -19,7 +19,7 @@ static const char* op_type_names[] = {
     "ADD", "ADD_CLIPPED", "SUBTRACT", "MULTIPLY", "DIVIDE",
     "MATMUL", "TRANSPOSE", "RESHAPE", "SLICE", "GATHER", "EMBEDDING",
     "BILINEAR_INTERPOLATION", "RESIZE",
-    "SUM", "MEAN", "VARIANCE", "MIN", "MAX",
+    "SUM", "MEAN", "VARIANCE", "MIN", "MAX", "MAXPOOL", "GLOBAL_AVG_POOL", "CONV2D", "CONV_TRANSPOSE2D",
     "ELEM_WISE_MIN", "ELEM_WISE_MAX",
     "RMS_NORM", "ROPE", "SOFTMAX", "ATTENTION", "CONV1D_CAUSAL", "CONV1D_K3",
     "SCALAR_ADD", "SCALAR_SUBTRACT", "SCALAR_MULTIPLY", "SCALAR_DIVIDE",
@@ -383,6 +383,165 @@ size_t CactusGraph::conv1d_k3(size_t input, size_t weight, size_t stride){
     return add_node(OpType::CONV1D_K3, {input, weight}, {}, params);
 }
 
+size_t CactusGraph::maxpool(size_t input,
+                            size_t kernel_h, size_t kernel_w,
+                            size_t stride,
+                            size_t pad,
+                            size_t dilation) {
+    const auto& input_buffer = get_output_buffer(input);
+
+    if (input_buffer.shape.size() != 4) {
+        throw std::runtime_error("MaxPool2D expects a 4D tensor in NCHW layout");
+    }
+
+    if (kernel_h == 0 || kernel_w == 0) {
+        throw std::runtime_error("MaxPool kernel dimensions must be > 0");
+    }
+    if (stride == 0) {
+        throw std::runtime_error("MaxPool stride must be > 0");
+    }
+    if (dilation == 0) {
+        throw std::runtime_error("MaxPool dilation must be > 0");
+    }
+
+    size_t N = input_buffer.shape[0];
+    size_t C = input_buffer.shape[1];
+    size_t H = input_buffer.shape[2];
+    size_t W = input_buffer.shape[3];
+
+    size_t eff_h = (kernel_h - 1) * dilation + 1;
+    size_t eff_w = (kernel_w - 1) * dilation + 1;
+
+    if (H + 2 * pad < eff_h || W + 2 * pad < eff_w) {
+        throw std::runtime_error("MaxPool kernel (with padding/dilation) is larger than the input spatial dimensions");
+    }
+
+    size_t out_h = (H + 2 * pad - eff_h) / stride + 1;
+    size_t out_w = (W + 2 * pad - eff_w) / stride + 1;
+
+    OpParams params{};
+    params.kernel_h = kernel_h;
+    params.kernel_w = kernel_w;
+    params.stride = stride;
+    params.pad = pad;
+    params.dilation = dilation;
+
+    std::vector<size_t> output_shape = {N, C, out_h, out_w};
+    return add_node(OpType::MAXPOOL, {input}, output_shape, params);
+}
+
+size_t CactusGraph::global_avg_pool(size_t input) {
+    const auto& input_buffer = get_output_buffer(input);
+
+    if (input_buffer.shape.size() != 4) {
+        throw std::runtime_error("GlobalAveragePool expects a 4D tensor in NCHW layout");
+    }
+
+    size_t N = input_buffer.shape[0];
+    size_t C = input_buffer.shape[1];
+
+    // Output shape is [N, C, 1, 1]
+    std::vector<size_t> output_shape = {N, C, 1, 1};
+    return add_node(OpType::GLOBAL_AVG_POOL, {input}, output_shape, {});
+}
+
+size_t CactusGraph::conv2d(size_t input, size_t weight, size_t bias,
+                           size_t kernel_h, size_t kernel_w,
+                           size_t stride,
+                           size_t pad,
+                           size_t groups) {
+    const auto& input_buffer = get_output_buffer(input);
+    const auto& weight_buffer = get_output_buffer(weight);
+
+    if (input_buffer.shape.size() != 4) {
+        throw std::runtime_error("Conv2D expects a 4D input tensor in NCHW layout");
+    }
+    if (weight_buffer.shape.size() != 4) {
+        throw std::runtime_error("Conv2D expects a 4D weight tensor [C_out, C_in/groups, kH, kW]");
+    }
+
+    size_t N = input_buffer.shape[0];
+    size_t C_in = input_buffer.shape[1];
+    size_t H = input_buffer.shape[2];
+    size_t W = input_buffer.shape[3];
+    size_t C_out = weight_buffer.shape[0];
+
+    if (C_in % groups != 0) {
+        throw std::runtime_error("Conv2D: C_in must be divisible by groups");
+    }
+    if (C_out % groups != 0) {
+        throw std::runtime_error("Conv2D: C_out must be divisible by groups");
+    }
+
+    size_t H_out = (H + 2 * pad - kernel_h) / stride + 1;
+    size_t W_out = (W + 2 * pad - kernel_w) / stride + 1;
+
+    OpParams params{};
+    params.kernel_h = kernel_h;
+    params.kernel_w = kernel_w;
+    params.stride = stride;
+    params.pad = pad;
+    params.groups = groups;
+
+    std::vector<size_t> inputs = {input, weight};
+    if (bias != 0) {
+        inputs.push_back(bias);
+    }
+
+    std::vector<size_t> output_shape = {N, C_out, H_out, W_out};
+    return add_node(OpType::CONV2D, inputs, output_shape, params);
+}
+
+size_t CactusGraph::conv_transpose2d(size_t input, size_t weight, size_t bias,
+                                      size_t kernel_h, size_t kernel_w,
+                                      size_t stride,
+                                      size_t pad,
+                                      size_t groups) {
+    const auto& input_buffer = get_output_buffer(input);
+    const auto& weight_buffer = get_output_buffer(weight);
+
+    if (input_buffer.shape.size() != 4) {
+        throw std::runtime_error("ConvTranspose2D expects a 4D input tensor in NCHW layout");
+    }
+    if (weight_buffer.shape.size() != 4) {
+        throw std::runtime_error("ConvTranspose2D expects a 4D weight tensor [C_in, C_out/groups, kH, kW]");
+    }
+
+    size_t N = input_buffer.shape[0];
+    size_t C_in = input_buffer.shape[1];
+    size_t H_in = input_buffer.shape[2];
+    size_t W_in = input_buffer.shape[3];
+    // Weight shape for ConvTranspose: [C_in, C_out_per_group, kH, kW]
+    size_t C_out = weight_buffer.shape[1] * groups;
+
+    if (C_in % groups != 0) {
+        throw std::runtime_error("ConvTranspose2D: C_in must be divisible by groups");
+    }
+    if (C_out % groups != 0) {
+        throw std::runtime_error("ConvTranspose2D: C_out must be divisible by groups");
+    }
+
+    // Output size formula for ConvTranspose:
+    // H_out = (H_in - 1) * stride - 2*pad + kernel_h
+    // W_out = (W_in - 1) * stride - 2*pad + kernel_w
+    size_t H_out = (H_in - 1) * stride - 2 * pad + kernel_h;
+    size_t W_out = (W_in - 1) * stride - 2 * pad + kernel_w;
+
+    OpParams params{};
+    params.kernel_h = kernel_h;
+    params.kernel_w = kernel_w;
+    params.stride = stride;
+    params.pad = pad;
+    params.groups = groups;
+
+    std::vector<size_t> inputs = {input, weight};
+    if (bias != 0) {
+        inputs.push_back(bias);
+    }
+
+    std::vector<size_t> output_shape = {N, C_out, H_out, W_out};
+    return add_node(OpType::CONV_TRANSPOSE2D, inputs, output_shape, params);
+}
 
 size_t CactusGraph::concat(size_t input1, size_t input2, int axis) {
     const auto& buffer1 = get_output_buffer(input1);
@@ -749,15 +908,14 @@ size_t CactusGraph::bilinear_interpolation(size_t pos_embeds, size_t dst_height,
 }   
 
 size_t CactusGraph::resize_nearest_asymmetric(size_t input, size_t dst_height, size_t dst_width) {
-
     const auto& input_buffer = get_output_buffer(input);
     if (input_buffer.shape.size() != 3) {
-        throw std::runtime_error("Resize nearest asymmetric input must be 3D [src_height, src_width, embed_dim]");
+        throw std::runtime_error("Resize nearest asymmetric input must be 3D [outer_count, src_height, src_width]");
     }
 
-    size_t embed_dim = input_buffer.shape[2];
+    size_t outer_count = input_buffer.shape[0];
 
-    std::vector<size_t> output_shape = {dst_height, dst_width, embed_dim};
+    std::vector<size_t> output_shape = {outer_count, dst_height, dst_width};
 
     OpParams params;
     params.dst_height = dst_height;

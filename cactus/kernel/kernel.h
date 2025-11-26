@@ -275,9 +275,87 @@ void cactus_conv1d_f16_k3(
 void cactus_bilinear_interpolation_fp32(const float* input, float* output, size_t src_height, size_t src_width, size_t embed_dim,
                                         size_t dst_height, size_t dst_width);
 
-void cactus_resize_nearest_asymmetric_fp32(const float* input, float* output, size_t src_height, size_t src_width, size_t embed_dim, size_t dst_height, size_t dst_width);
-void cactus_resize_nearest_asymmetric_fp16(const __fp16* input, __fp16* output, size_t src_height, size_t src_width, size_t embed_dim, size_t dst_height, size_t dst_width);
-void cactus_resize_nearest_asymmetric_int8(const int8_t* input, int8_t* output, size_t src_height, size_t src_width, size_t embed_dim, size_t dst_height, size_t dst_width);
+void cactus_resize_nearest_asymmetric_fp32(const float* input, float* output, size_t outer_count, size_t src_height, size_t src_width, size_t dst_height, size_t dst_width);
+void cactus_resize_nearest_asymmetric_fp16(const __fp16* input, __fp16* output, size_t outer_count, size_t src_height, size_t src_width, size_t dst_height, size_t dst_width);
+void cactus_resize_nearest_asymmetric_int8(const int8_t* input, int8_t* output, size_t outer_count, size_t src_height, size_t src_width, size_t dst_height, size_t dst_width);
+
+void cactus_maxpool2d_f32(
+    const float* input, float* output,
+    size_t N, size_t C, size_t H, size_t W,
+    size_t kernel_h, size_t kernel_w,
+    size_t stride_h, size_t stride_w,
+    size_t pad_top, size_t pad_left,
+    size_t pad_bottom, size_t pad_right,
+    size_t dilation_h, size_t dilation_w);
+
+void cactus_maxpool2d_f16(
+    const __fp16* input, __fp16* output,
+    size_t N, size_t C, size_t H, size_t W,
+    size_t kernel_h, size_t kernel_w,
+    size_t stride_h, size_t stride_w,
+    size_t pad_top, size_t pad_left,
+    size_t pad_bottom, size_t pad_right,
+    size_t dilation_h, size_t dilation_w);
+
+void cactus_maxpool2d_int8(
+    const int8_t* input, int8_t* output,
+    size_t N, size_t C, size_t H, size_t W,
+    size_t kernel_h, size_t kernel_w,
+    size_t stride_h, size_t stride_w,
+    size_t pad_top, size_t pad_left,
+    size_t pad_bottom, size_t pad_right,
+    size_t dilation_h, size_t dilation_w);
+
+void cactus_global_avg_pool2d_f32(
+    const float* input, float* output,
+    size_t N, size_t C, size_t H, size_t W);
+
+void cactus_global_avg_pool2d_f16(
+    const __fp16* input, __fp16* output,
+    size_t N, size_t C, size_t H, size_t W);
+
+void cactus_global_avg_pool2d_int8(
+    const int8_t* input, int8_t* output,
+    size_t N, size_t C, size_t H, size_t W,
+    float input_scale, float output_scale);
+
+void cactus_conv2d_f32(
+    const float* input, const float* weights, const float* bias, float* output,
+    size_t N, size_t C_in, size_t H, size_t W_in,
+    size_t C_out,
+    size_t kernel_h, size_t kernel_w,
+    size_t stride_h, size_t stride_w,
+    size_t pad_top, size_t pad_left,
+    size_t pad_bottom, size_t pad_right,
+    size_t groups);
+
+void cactus_conv2d_f16(
+    const __fp16* input, const __fp16* weights, const __fp16* bias, __fp16* output,
+    size_t N, size_t C_in, size_t H, size_t W_in,
+    size_t C_out,
+    size_t kernel_h, size_t kernel_w,
+    size_t stride_h, size_t stride_w,
+    size_t pad_top, size_t pad_left,
+    size_t pad_bottom, size_t pad_right,
+    size_t groups);
+
+void cactus_conv_transpose2d_f32(
+    const float* input, const float* weights, const float* bias, float* output,
+    size_t N, size_t C_in, size_t H_in, size_t W_in,
+    size_t C_out,
+    size_t kernel_h, size_t kernel_w,
+    size_t stride, size_t pad,
+    size_t groups,
+    size_t H_out, size_t W_out);
+
+void cactus_conv_transpose2d_f16(
+    const __fp16* input, const __fp16* weights, const __fp16* bias, __fp16* output,
+    size_t N, size_t C_in, size_t H_in, size_t W_in,
+    size_t C_out,
+    size_t kernel_h, size_t kernel_w,
+    size_t stride, size_t pad,
+    size_t groups,
+    size_t H_out, size_t W_out);
 
 void cactus_sample_f32(const float* logits, uint32_t* output, size_t vocab_size,
                        float temperature, float top_p, size_t top_k, size_t random_seed);

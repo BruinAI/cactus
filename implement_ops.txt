@@ -443,13 +443,11 @@ Progress:
         reshape, flatten, transpose, Unsqueeze
         max, min,
         BatchNormalization,
-        Slice, Split, 
-    Not started:
-        Gather,
+        Slice, Split, Gather,
         Resize,
-        GlobalAveragePool, MaxPool
+        MaxPool, 
+    Not started:
+        GlobalAveragePool,
         Conv, ConvTranspose
     Will need kernels:
-        Conv, ConvTranspose, GlobalAveragePool, MaxPool, Resize (unless reuse bilinear interpolation)
-        MAYBE: Gather
-
+        Conv, ConvTranspose, GlobalAveragePool, MaxPool

@@ -1,5 +1,5 @@
 {
-  "model_path": "/home/karen/Documents/cactus/yolov11.onnx",
+  "model_path": "/home/karen/Projects/cactus/yolov11.onnx",
   "nodes": [
     {
       "attributes": {
@@ -3536,7 +3536,14 @@
         "extrapolation_value": 0.0,
         "keep_aspect_ratio_policy": "stretch",
         "mode": "nearest",
-        "nearest_mode": "floor"
+        "nearest_mode": "floor",
+        "roi": false,
+        "scales": [
+          1.0,
+          1.0,
+          2.0,
+          2.0
+        ]
       },
       "id": 187,
       "inputs": [
@@ -3898,7 +3905,14 @@
         "extrapolation_value": 0.0,
         "keep_aspect_ratio_policy": "stretch",
         "mode": "nearest",
-        "nearest_mode": "floor"
+        "nearest_mode": "floor",
+        "roi": false,
+        "scales": [
+          1.0,
+          1.0,
+          2.0,
+          2.0
+        ]
       },
       "id": 208,
       "inputs": [

@@ -29,7 +29,7 @@ enum class OpType {
     ADD, ADD_CLIPPED, SUBTRACT, MULTIPLY, DIVIDE,
     MATMUL, TRANSPOSE, RESHAPE, SLICE, GATHER, EMBEDDING,
     BILINEAR_INTERPOLATION, RESIZE,
-    SUM, MEAN, VARIANCE, MIN, MAX,
+    SUM, MEAN, VARIANCE, MIN, MAX, MAXPOOL, GLOBAL_AVG_POOL, CONV2D, CONV_TRANSPOSE2D,
     ELEM_WISE_MIN, ELEM_WISE_MAX,
     RMS_NORM, ROPE, SOFTMAX, ATTENTION, CONV1D_CAUSAL, CONV1D_K3,
     SCALAR_ADD, SCALAR_SUBTRACT, SCALAR_MULTIPLY, SCALAR_DIVIDE, SCALAR_EXP, SCALAR_SQRT, SCALAR_COS, SCALAR_SIN,
@@ -142,6 +142,10 @@ struct OpParams {
 
     size_t dilation = 1;
     size_t stride = 1;
+    size_t pad = 0;
+    size_t kernel_h = 1;
+    size_t kernel_w = 1;
+    size_t groups = 1;
     float temperature = 1.0f;
     float top_p = 1.0f;
     size_t top_k = 0;
@@ -261,6 +265,22 @@ public:
 
     size_t conv1d_causal(size_t input, size_t weight, size_t kernel_size, size_t dilation = 1);
     size_t conv1d_k3(size_t input, size_t weight, size_t stride);
+    size_t maxpool(size_t input,
+                   size_t kernel_h, size_t kernel_w,
+                   size_t stride,
+                   size_t pad,
+                   size_t dilation = 1);
+    size_t global_avg_pool(size_t input);
+    size_t conv2d(size_t input, size_t weight, size_t bias,
+                  size_t kernel_h, size_t kernel_w,
+                  size_t stride,
+                  size_t pad,
+                  size_t groups);
+    size_t conv_transpose2d(size_t input, size_t weight, size_t bias,
+                            size_t kernel_h, size_t kernel_w,
+                            size_t stride,
+                            size_t pad,
+                            size_t groups);
     
     size_t sample(size_t logits, float temperature = 0.6f, float top_p = 0.95f, size_t top_k = 20);
     

@@ -442,6 +442,10 @@ void compute_node_optimized(GraphNode& node, const std::vector<std::unique_ptr<G
         case OpType::EMBEDDING:
         case OpType::BILINEAR_INTERPOLATION:
         case OpType::RESIZE:
+        case OpType::MAXPOOL:
+        case OpType::GLOBAL_AVG_POOL:
+        case OpType::CONV2D:
+        case OpType::CONV_TRANSPOSE2D:
             compute_fused_node(node, nodes, node_index_map);
             break;
         case OpType::SAMPLE:

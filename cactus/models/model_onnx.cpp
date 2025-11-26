@@ -242,11 +242,238 @@ size_t OnnxModel::build_concat(CactusGraph* gb, const OnnxNodeConfig& node) {
 }
 
 size_t OnnxModel::build_conv(CactusGraph* gb, const OnnxNodeConfig& node) {
-    throw std::runtime_error("Conv not yet implemented");
+    // Conv: Y = conv(X, W) + B (optional bias)
+    // Inputs: X (input), W (weights), B (optional bias)
+    if (node.inputs.size() < 2) {
+        throw std::runtime_error("Conv requires at least 2 inputs (X, W)");
+    }
+
+    size_t input_id = onnx_to_cactus_id_[node.inputs[0]];
+    size_t weight_id = onnx_to_cactus_id_[node.inputs[1]];
+    size_t bias_id = 0;
+    if (node.inputs.size() > 2) {
+        bias_id = onnx_to_cactus_id_[node.inputs[2]];
+    }
+
+    const auto& input_buffer = gb->get_output_buffer(input_id);
+    const auto& weight_buffer = gb->get_output_buffer(weight_id);
+    const auto& attrs = node.attributes;
+
+    // Validate 4D tensors (2D conv with NCHW)
+    if (input_buffer.shape.size() != 4) {
+        throw std::runtime_error("Conv requires a 4D input tensor (NCHW)");
+    }
+    if (weight_buffer.shape.size() != 4) {
+        throw std::runtime_error("Conv requires a 4D weight tensor [C_out, C_in/groups, kH, kW]");
+    }
+
+    // Validate dilations == [1, 1]
+    if (!attrs.dilations.empty()) {
+        if (attrs.dilations.size() != 2) {
+            throw std::runtime_error("Conv dilations must be length 2");
+        }
+        if (attrs.dilations[0] != 1 || attrs.dilations[1] != 1) {
+            throw std::runtime_error("Conv dilation must be 1 (no atrous convolution supported)");
+        }
+    }
+
+    // Get kernel shape
+    if (attrs.kernel_shape.size() != 2) {
+        throw std::runtime_error("Conv requires a 2D kernel_shape");
+    }
+    size_t kernel_h = static_cast<size_t>(attrs.kernel_shape[0]);
+    size_t kernel_w = static_cast<size_t>(attrs.kernel_shape[1]);
+    if (kernel_h == 0 || kernel_w == 0) {
+        throw std::runtime_error("Conv kernel dimensions must be > 0");
+    }
+
+    // Get strides (must be equal)
+    size_t stride = 1;
+    if (!attrs.strides.empty()) {
+        if (attrs.strides.size() != 2) {
+            throw std::runtime_error("Conv strides must be length 2");
+        }
+        if (attrs.strides[0] != attrs.strides[1]) {
+            throw std::runtime_error("Conv strides must be equal across axes");
+        }
+        stride = static_cast<size_t>(attrs.strides[0]);
+        if (stride == 0) {
+            throw std::runtime_error("Conv stride must be > 0");
+        }
+    }
+
+    // Get groups
+    size_t groups = static_cast<size_t>(attrs.group);
+    if (groups == 0) groups = 1;
+
+    // Resolve padding (must be uniform)
+    size_t pad = 0;
+
+    if (attrs.auto_pad == "VALID") {
+        // VALID means no padding
+        pad = 0;
+    } else if (attrs.auto_pad.empty() || attrs.auto_pad == "NOTSET") {
+        // Use explicit pads attribute
+        if (!attrs.pads.empty()) {
+            if (attrs.pads.size() != 4) {
+                throw std::runtime_error("Conv pads must have 4 values [top, left, bottom, right]");
+            }
+            int64_t pad_top = attrs.pads[0];
+            int64_t pad_left = attrs.pads[1];
+            int64_t pad_bottom = attrs.pads[2];
+            int64_t pad_right = attrs.pads[3];
+
+            if (pad_top != pad_bottom || pad_left != pad_right || pad_top != pad_left) {
+                throw std::runtime_error("Conv pads must be equal across all sides");
+            }
+            if (pad_top < 0) {
+                throw std::runtime_error("Conv pads must be non-negative");
+            }
+            pad = static_cast<size_t>(pad_top);
+        }
+    } else {
+        throw std::runtime_error("Conv auto_pad must be 'VALID', 'NOTSET', or empty");
+    }
+
+    // Validate groups
+    size_t C_in = input_buffer.shape[1];
+    size_t C_out = weight_buffer.shape[0];
+    if (C_in % groups != 0) {
+        throw std::runtime_error("Conv: C_in must be divisible by groups");
+    }
+    if (C_out % groups != 0) {
+        throw std::runtime_error("Conv: C_out must be divisible by groups");
+    }
+
+    size_t output_id = gb->conv2d(input_id, weight_id, bias_id,
+                                   kernel_h, kernel_w,
+                                   stride,
+                                   pad,
+                                   groups);
+
+    if (!node.outputs.empty()) {
+        onnx_to_cactus_id_[node.outputs[0]] = output_id;
+    }
+
+    return output_id;
 }
 
 size_t OnnxModel::build_conv_transpose(CactusGraph* gb, const OnnxNodeConfig& node) {
-    throw std::runtime_error("ConvTranspose not yet implemented");
+    // ConvTranspose: Y = conv_transpose(X, W) + B (optional bias)
+    // Inputs: X (input), W (weights), B (optional bias)
+    // Weight shape: [C_in, C_out_per_group, kH, kW] (note: reversed from Conv)
+    if (node.inputs.size() < 2) {
+        throw std::runtime_error("ConvTranspose requires at least 2 inputs (X, W)");
+    }
+
+    size_t input_id = onnx_to_cactus_id_[node.inputs[0]];
+    size_t weight_id = onnx_to_cactus_id_[node.inputs[1]];
+    size_t bias_id = 0;
+    if (node.inputs.size() > 2) {
+        bias_id = onnx_to_cactus_id_[node.inputs[2]];
+    }
+
+    const auto& input_buffer = gb->get_output_buffer(input_id);
+    const auto& weight_buffer = gb->get_output_buffer(weight_id);
+    const auto& attrs = node.attributes;
+
+    // Validate 4D tensors (2D conv transpose with NCHW)
+    if (input_buffer.shape.size() != 4) {
+        throw std::runtime_error("ConvTranspose requires a 4D input tensor (NCHW)");
+    }
+    if (weight_buffer.shape.size() != 4) {
+        throw std::runtime_error("ConvTranspose requires a 4D weight tensor [C_in, C_out/groups, kH, kW]");
+    }
+
+    // Validate dilations == [1, 1]
+    if (!attrs.dilations.empty()) {
+        if (attrs.dilations.size() != 2) {
+            throw std::runtime_error("ConvTranspose dilations must be length 2");
+        }
+        if (attrs.dilations[0] != 1 || attrs.dilations[1] != 1) {
+            throw std::runtime_error("ConvTranspose dilation must be 1 (no atrous convolution supported)");
+        }
+    }
+
+    // Get kernel shape
+    if (attrs.kernel_shape.size() != 2) {
+        throw std::runtime_error("ConvTranspose requires a 2D kernel_shape");
+    }
+    size_t kernel_h = static_cast<size_t>(attrs.kernel_shape[0]);
+    size_t kernel_w = static_cast<size_t>(attrs.kernel_shape[1]);
+    if (kernel_h == 0 || kernel_w == 0) {
+        throw std::runtime_error("ConvTranspose kernel dimensions must be > 0");
+    }
+
+    // Get strides (must be equal)
+    size_t stride = 1;
+    if (!attrs.strides.empty()) {
+        if (attrs.strides.size() != 2) {
+            throw std::runtime_error("ConvTranspose strides must be length 2");
+        }
+        if (attrs.strides[0] != attrs.strides[1]) {
+            throw std::runtime_error("ConvTranspose strides must be equal across axes");
+        }
+        stride = static_cast<size_t>(attrs.strides[0]);
+        if (stride == 0) {
+            throw std::runtime_error("ConvTranspose stride must be > 0");
+        }
+    }
+
+    // Get groups
+    size_t groups = static_cast<size_t>(attrs.group);
+    if (groups == 0) groups = 1;
+
+    // Resolve padding (must be uniform)
+    size_t pad = 0;
+
+    if (attrs.auto_pad == "VALID") {
+        // VALID means no padding
+        pad = 0;
+    } else if (attrs.auto_pad.empty() || attrs.auto_pad == "NOTSET") {
+        // Use explicit pads attribute
+        if (!attrs.pads.empty()) {
+            if (attrs.pads.size() != 4) {
+                throw std::runtime_error("ConvTranspose pads must have 4 values [top, left, bottom, right]");
+            }
+            int64_t pad_top = attrs.pads[0];
+            int64_t pad_left = attrs.pads[1];
+            int64_t pad_bottom = attrs.pads[2];
+            int64_t pad_right = attrs.pads[3];
+
+            if (pad_top != pad_bottom || pad_left != pad_right || pad_top != pad_left) {
+                throw std::runtime_error("ConvTranspose pads must be equal across all sides");
+            }
+            if (pad_top < 0) {
+                throw std::runtime_error("ConvTranspose pads must be non-negative");
+            }
+            pad = static_cast<size_t>(pad_top);
+        }
+    } else {
+        throw std::runtime_error("ConvTranspose auto_pad must be 'VALID', 'NOTSET', or empty");
+    }
+
+    // Validate groups
+    size_t C_in = input_buffer.shape[1];
+    size_t C_out = weight_buffer.shape[1] * groups;
+    if (C_in % groups != 0) {
+        throw std::runtime_error("ConvTranspose: C_in must be divisible by groups");
+    }
+    if (C_out % groups != 0) {
+        throw std::runtime_error("ConvTranspose: C_out must be divisible by groups");
+    }
+
+    size_t output_id = gb->conv_transpose2d(input_id, weight_id, bias_id,
+                                             kernel_h, kernel_w,
+                                             stride,
+                                             pad,
+                                             groups);
+
+    if (!node.outputs.empty()) {
+        onnx_to_cactus_id_[node.outputs[0]] = output_id;
+    }
+
+    return output_id;
 }
 
 size_t OnnxModel::build_flatten(CactusGraph* gb, const OnnxNodeConfig& node) {
@@ -420,7 +647,24 @@ size_t OnnxModel::build_gemm(CactusGraph* gb, const OnnxNodeConfig& node) {
 }
 
 size_t OnnxModel::build_global_average_pool(CactusGraph* gb, const OnnxNodeConfig& node) {
-    throw std::runtime_error("GlobalAveragePool not yet implemented");
+    if (node.inputs.size() != 1) {
+        throw std::runtime_error("GlobalAveragePool requires exactly 1 input");
+    }
+
+    size_t input_id = onnx_to_cactus_id_[node.inputs[0]];
+    const auto& input_buffer = gb->get_output_buffer(input_id);
+
+    if (input_buffer.shape.size() != 4) {
+        throw std::runtime_error("GlobalAveragePool expects a 4D tensor in NCHW layout");
+    }
+
+    size_t output_id = gb->global_avg_pool(input_id);
+
+    if (!node.outputs.empty()) {
+        onnx_to_cactus_id_[node.outputs[0]] = output_id;
+    }
+
+    return output_id;
 }
 
 size_t OnnxModel::build_matmul(CactusGraph* gb, const OnnxNodeConfig& node) {
@@ -445,7 +689,77 @@ size_t OnnxModel::build_matmul(CactusGraph* gb, const OnnxNodeConfig& node) {
 }
 
 size_t OnnxModel::build_max_pool(CactusGraph* gb, const OnnxNodeConfig& node) {
-    throw std::runtime_error("MaxPool not yet implemented");
+    if (node.inputs.empty()) {
+        throw std::runtime_error("MaxPool requires at least one input");
+    }
+
+    size_t input_id = onnx_to_cactus_id_[node.inputs[0]];
+    const auto& input_buffer = gb->get_output_buffer(input_id);
+    const auto& attrs = node.attributes;
+
+    if (input_buffer.shape.size() != 4) {
+        throw std::runtime_error("MaxPool requires a 4D input tensor (NCHW)");
+    }
+
+    if (attrs.auto_pad != "" && attrs.auto_pad != "NOTSET") {
+        throw std::runtime_error("MaxPool auto_pad must be empty or NOTSET");
+    }
+
+    if (attrs.kernel_shape.size() != 2) {
+        throw std::runtime_error("MaxPool requires a 2D kernel_shape");
+    }
+
+    size_t kernel_h = static_cast<size_t>(attrs.kernel_shape[0]);
+    size_t kernel_w = static_cast<size_t>(attrs.kernel_shape[1]);
+    if (kernel_h == 0 || kernel_w == 0) {
+        throw std::runtime_error("MaxPool kernel dimensions must be > 0");
+    }
+
+    size_t stride = 1;
+    if (!attrs.strides.empty()) {
+        if (attrs.strides.size() != 2) throw std::runtime_error("MaxPool strides must be length 2");
+        if (attrs.strides[0] != attrs.strides[1]) {
+            throw std::runtime_error("MaxPool strides must be equal across axes");
+        }
+        stride = static_cast<size_t>(attrs.strides[0]);
+        if (stride == 0) throw std::runtime_error("MaxPool stride must be > 0");
+    }
+
+    size_t dilation = 1;
+    if (!attrs.dilations.empty()) {
+        if (attrs.dilations.size() != 2) throw std::runtime_error("MaxPool dilations must be length 2");
+        if (attrs.dilations[0] != attrs.dilations[1]) {
+            throw std::runtime_error("MaxPool dilations must be equal across axes");
+        }
+        dilation = static_cast<size_t>(attrs.dilations[0]);
+        if (dilation == 0) throw std::runtime_error("MaxPool dilation must be > 0");
+    }
+
+    size_t pad = 0;
+    if (!attrs.pads.empty()) {
+        if (attrs.pads.size() != 4) {
+            throw std::runtime_error("MaxPool pads must have 4 values");
+        }
+        int64_t pad_top = attrs.pads[0];
+        int64_t pad_left = attrs.pads[1];
+        int64_t pad_bottom = attrs.pads[2];
+        int64_t pad_right = attrs.pads[3];
+
+        if (pad_top != pad_bottom || pad_left != pad_right || pad_top != pad_left) {
+            throw std::runtime_error("MaxPool pads must be equal across all sides");
+        }
+        if (pad_top < 0) {
+            throw std::runtime_error("MaxPool pads must be non-negative");
+        }
+        pad = static_cast<size_t>(pad_top);
+    }
+
+    size_t output_id = gb->maxpool(input_id, kernel_h, kernel_w, stride, pad, dilation);
+    if (!node.outputs.empty()) {
+        onnx_to_cactus_id_[node.outputs[0]] = output_id;
+    }
+
+    return output_id;
 }
 
 size_t OnnxModel::build_reshape(CactusGraph* gb, const OnnxNodeConfig& node) {
@@ -529,7 +843,104 @@ size_t OnnxModel::build_reshape(CactusGraph* gb, const OnnxNodeConfig& node) {
 }
 
 size_t OnnxModel::build_resize(CactusGraph* gb, const OnnxNodeConfig& node) {
-    throw std::runtime_error("Resize not yet implemented");
+    if (node.inputs.empty()) {
+        throw std::runtime_error("Resize requires at least one input");
+    }
+
+    size_t input_id = onnx_to_cactus_id_[node.inputs[0]];
+    const auto& input_buffer = gb->get_output_buffer(input_id);
+    const auto& attrs = node.attributes;
+
+    if (attrs.roi) {
+        throw std::runtime_error("Resize ROI input must be empty for this implementation");
+    }
+    if (attrs.antialias) {
+        throw std::runtime_error("Resize antialias must be disabled");
+    }
+    if (!attrs.mode.empty() && attrs.mode != "nearest") {
+        throw std::runtime_error("Resize mode must be 'nearest'");
+    }
+    if (!attrs.coordinate_transformation_mode.empty() && attrs.coordinate_transformation_mode != "asymmetric") {
+        throw std::runtime_error("Resize coordinate_transformation_mode must be 'asymmetric'");
+    }
+    if (!attrs.nearest_mode.empty() && attrs.nearest_mode != "floor") {
+        throw std::runtime_error("Resize nearest_mode must be 'floor'");
+    }
+    if (attrs.keep_aspect_ratio_policy != "" && attrs.keep_aspect_ratio_policy != "stretch") {
+        throw std::runtime_error("Resize keep_aspect_ratio_policy must be 'stretch' (or unspecified)");
+    }
+    if (attrs.exclude_outside != 0) {
+        throw std::runtime_error("Resize exclude_outside must be 0");
+    }
+    if (std::fabs(attrs.extrapolation_value) > 1e-6f) {
+        throw std::runtime_error("Resize extrapolation_value must be 0");
+    }
+
+    const auto& scales = attrs.scales;
+    if (scales.empty()) {
+        throw std::runtime_error("Resize requires static scales attribute");
+    }
+
+    size_t rank = input_buffer.shape.size();
+    if (rank < 2) {
+        throw std::runtime_error("Resize requires at least 2D input");
+    }
+    if (scales.size() != rank) {
+        throw std::runtime_error("Resize: scales.size() must match input rank");
+    }
+
+    const float eps = 1e-6f;
+    std::vector<size_t> resized_axes;
+    for (size_t i = 0; i < rank; ++i) {
+        if (std::fabs(scales[i] - 1.0f) > eps) {
+            resized_axes.push_back(i);
+        }
+    }
+    if (resized_axes.size() > 2) {
+        throw std::runtime_error("Resize: more than two resized axes not supported");
+    }
+    for (size_t axis : resized_axes) {
+        if (axis < rank - 2) {
+            throw std::runtime_error("Resize: only last two dimensions may be resized");
+        }
+    }
+
+    std::vector<size_t> out_shape(rank);
+    for (size_t i = 0; i < rank; ++i) {
+        float scaled = static_cast<float>(input_buffer.shape[i]) * scales[i];
+        size_t dim = static_cast<size_t>(std::floor(scaled + eps));
+        out_shape[i] = dim == 0 ? 1 : dim;
+    }
+
+    if (resized_axes.empty()) {
+        if (!node.outputs.empty()) {
+            onnx_to_cactus_id_[node.outputs[0]] = input_id;
+        }
+        return input_id;
+    }
+
+    const size_t src_h = input_buffer.shape[rank - 2];
+    const size_t src_w = input_buffer.shape[rank - 1];
+    const size_t dst_h = out_shape[rank - 2];
+    const size_t dst_w = out_shape[rank - 1];
+
+    size_t outer_count = 1;
+    for (size_t i = 0; i < rank - 2; ++i) {
+        outer_count *= input_buffer.shape[i];
+    }
+
+    std::vector<size_t> collapsed_shape = {outer_count, src_h, src_w};
+    size_t reshaped_input = gb->reshape(input_id, collapsed_shape);
+
+    size_t resized_id = gb->resize_nearest_asymmetric(reshaped_input, dst_h, dst_w);
+
+    size_t final_id = gb->reshape(resized_id, out_shape);
+
+    if (!node.outputs.empty()) {
+        onnx_to_cactus_id_[node.outputs[0]] = final_id;
+    }
+
+    return final_id;
 }
 
 size_t OnnxModel::build_slice(CactusGraph* gb, const OnnxNodeConfig& node) {

@@ -458,30 +458,275 @@ void compute_fused_node(GraphNode& node, const std::vector<std::unique_ptr<Graph
             const auto& shape = input_buffer.shape;
             
             if (shape.size() != 3) {
-                throw std::runtime_error("Resize nearest asymmetric requires 3D input tensor [src_height, src_width, embed_dim], got " + 
+                throw std::runtime_error("Resize nearest asymmetric requires 3D input tensor [outer_count, src_height, src_width], got " + 
                                         std::to_string(shape.size()) + "D tensor");
             }
 
-            size_t src_height = shape[0];
-            size_t src_width = shape[1];
-            size_t embed_dim = shape[2];
+            size_t outer_count = shape[0];
+            size_t src_height = shape[1];
+            size_t src_width = shape[2];
 
             size_t dst_height = node.params.dst_height;
             size_t dst_width = node.params.dst_width;
             
             if (input_buffer.precision == Precision::INT8) {
                 cactus_resize_nearest_asymmetric_int8(input_buffer.data_as<int8_t>(), node.output_buffer.data_as<int8_t>(), 
-                                                       src_height, src_width, embed_dim,
+                                                       outer_count, src_height, src_width,
                                                        dst_height, dst_width);
             } else if (input_buffer.precision == Precision::FP16) {
                 cactus_resize_nearest_asymmetric_fp16(input_buffer.data_as<__fp16>(), node.output_buffer.data_as<__fp16>(), 
-                                                       src_height, src_width, embed_dim,
+                                                       outer_count, src_height, src_width,
                                                        dst_height, dst_width);
             } else {
                 cactus_resize_nearest_asymmetric_fp32(input_buffer.data_as<float>(), node.output_buffer.data_as<float>(), 
-                                                       src_height, src_width, embed_dim,
+                                                       outer_count, src_height, src_width,
                                                        dst_height, dst_width);
             }
+            break;
+        }
+        case OpType::MAXPOOL: {
+            const auto& input_buffer = nodes[node_index_map.at(node.input_ids[0])]->output_buffer;
+
+            if (input_buffer.shape.size() != 4) {
+                throw std::runtime_error("MaxPool operation requires a 4D input tensor [N,C,H,W]");
+            }
+
+            size_t N = input_buffer.shape[0];
+            size_t C = input_buffer.shape[1];
+            size_t H = input_buffer.shape[2];
+            size_t W = input_buffer.shape[3];
+
+            size_t kernel_h = node.params.kernel_h;
+            size_t kernel_w = node.params.kernel_w;
+            size_t stride = node.params.stride;
+            size_t dilation = node.params.dilation;
+            size_t pad = node.params.pad;
+
+            if (kernel_h == 0 || kernel_w == 0) {
+                throw std::runtime_error("MaxPool kernel dimensions must be > 0");
+            }
+            if (stride == 0) {
+                throw std::runtime_error("MaxPool stride must be > 0");
+            }
+            if (dilation == 0) {
+                throw std::runtime_error("MaxPool dilation must be > 0");
+            }
+
+            size_t eff_h = (kernel_h - 1) * dilation + 1;
+            size_t eff_w = (kernel_w - 1) * dilation + 1;
+
+            if (H + 2 * pad < eff_h || W + 2 * pad < eff_w) {
+                throw std::runtime_error("MaxPool kernel (with padding/dilation) is larger than the input spatial dimensions");
+            }
+
+            size_t out_h = (H + 2 * pad - eff_h) / stride + 1;
+            size_t out_w = (W + 2 * pad - eff_w) / stride + 1;
+
+            node.output_buffer.shape = {N, C, out_h, out_w};
+            node.output_buffer.precision = input_buffer.precision;
+            node.output_buffer.quantization_scale = input_buffer.quantization_scale;
+
+            if (input_buffer.precision == Precision::INT8) {
+                cactus_maxpool2d_int8(
+                    input_buffer.data_as<int8_t>(),
+                    node.output_buffer.data_as<int8_t>(),
+                    N, C, H, W,
+                    kernel_h, kernel_w,
+                    stride, stride,
+                    pad, pad,
+                    pad, pad,
+                    dilation, dilation);
+            } else if (input_buffer.precision == Precision::FP16) {
+                cactus_maxpool2d_f16(
+                    input_buffer.data_as<__fp16>(),
+                    node.output_buffer.data_as<__fp16>(),
+                    N, C, H, W,
+                    kernel_h, kernel_w,
+                    stride, stride,
+                    pad, pad,
+                    pad, pad,
+                    dilation, dilation);
+            } else {
+                cactus_maxpool2d_f32(
+                    input_buffer.data_as<float>(),
+                    node.output_buffer.data_as<float>(),
+                    N, C, H, W,
+                    kernel_h, kernel_w,
+                    stride, stride,
+                    pad, pad,
+                    pad, pad,
+                    dilation, dilation);
+            }
+
+            break;
+        }
+        case OpType::GLOBAL_AVG_POOL: {
+            const auto& input_buffer = nodes[node_index_map.at(node.input_ids[0])]->output_buffer;
+
+            if (input_buffer.shape.size() != 4) {
+                throw std::runtime_error("GlobalAveragePool requires a 4D input tensor [N,C,H,W]");
+            }
+
+            size_t N = input_buffer.shape[0];
+            size_t C = input_buffer.shape[1];
+            size_t H = input_buffer.shape[2];
+            size_t W = input_buffer.shape[3];
+
+            node.output_buffer.shape = {N, C, 1, 1};
+            node.output_buffer.precision = input_buffer.precision;
+            node.output_buffer.quantization_scale = input_buffer.quantization_scale;
+
+            if (input_buffer.precision == Precision::INT8) {
+                cactus_global_avg_pool2d_int8(
+                    input_buffer.data_as<int8_t>(),
+                    node.output_buffer.data_as<int8_t>(),
+                    N, C, H, W,
+                    input_buffer.quantization_scale,
+                    node.output_buffer.quantization_scale);
+            } else if (input_buffer.precision == Precision::FP16) {
+                cactus_global_avg_pool2d_f16(
+                    input_buffer.data_as<__fp16>(),
+                    node.output_buffer.data_as<__fp16>(),
+                    N, C, H, W);
+            } else {
+                cactus_global_avg_pool2d_f32(
+                    input_buffer.data_as<float>(),
+                    node.output_buffer.data_as<float>(),
+                    N, C, H, W);
+            }
+
+            break;
+        }
+        case OpType::CONV2D: {
+            const auto& input_buffer = nodes[node_index_map.at(node.input_ids[0])]->output_buffer;
+            const auto& weight_buffer = nodes[node_index_map.at(node.input_ids[1])]->output_buffer;
+
+            if (input_buffer.shape.size() != 4) {
+                throw std::runtime_error("Conv2D requires a 4D input tensor [N,C_in,H,W]");
+            }
+
+            size_t N = input_buffer.shape[0];
+            size_t C_in = input_buffer.shape[1];
+            size_t H = input_buffer.shape[2];
+            size_t W = input_buffer.shape[3];
+            size_t C_out = weight_buffer.shape[0];
+
+            size_t kernel_h = node.params.kernel_h;
+            size_t kernel_w = node.params.kernel_w;
+            size_t stride = node.params.stride;
+            size_t pad = node.params.pad;
+            size_t groups = node.params.groups;
+
+            size_t H_out = (H + 2 * pad - kernel_h) / stride + 1;
+            size_t W_out = (W + 2 * pad - kernel_w) / stride + 1;
+
+            node.output_buffer.shape = {N, C_out, H_out, W_out};
+            node.output_buffer.precision = input_buffer.precision;
+            node.output_buffer.quantization_scale = input_buffer.quantization_scale;
+
+            bool has_bias = node.input_ids.size() > 2;
+
+            if (input_buffer.precision == Precision::FP16) {
+                const __fp16* bias_ptr = nullptr;
+                if (has_bias) {
+                    bias_ptr = nodes[node_index_map.at(node.input_ids[2])]->output_buffer.data_as<__fp16>();
+                }
+                cactus_conv2d_f16(
+                    input_buffer.data_as<__fp16>(),
+                    weight_buffer.data_as<__fp16>(),
+                    bias_ptr,
+                    node.output_buffer.data_as<__fp16>(),
+                    N, C_in, H, W,
+                    C_out,
+                    kernel_h, kernel_w,
+                    stride, stride,
+                    pad, pad, pad, pad,
+                    groups);
+            } else {
+                const float* bias_ptr = nullptr;
+                if (has_bias) {
+                    bias_ptr = nodes[node_index_map.at(node.input_ids[2])]->output_buffer.data_as<float>();
+                }
+                cactus_conv2d_f32(
+                    input_buffer.data_as<float>(),
+                    weight_buffer.data_as<float>(),
+                    bias_ptr,
+                    node.output_buffer.data_as<float>(),
+                    N, C_in, H, W,
+                    C_out,
+                    kernel_h, kernel_w,
+                    stride, stride,
+                    pad, pad, pad, pad,
+                    groups);
+            }
+
+            break;
+        }
+        case OpType::CONV_TRANSPOSE2D: {
+            const auto& input_buffer = nodes[node_index_map.at(node.input_ids[0])]->output_buffer;
+            const auto& weight_buffer = nodes[node_index_map.at(node.input_ids[1])]->output_buffer;
+
+            if (input_buffer.shape.size() != 4) {
+                throw std::runtime_error("ConvTranspose2D requires a 4D input tensor [N,C_in,H,W]");
+            }
+
+            size_t N = input_buffer.shape[0];
+            size_t C_in = input_buffer.shape[1];
+            size_t H_in = input_buffer.shape[2];
+            size_t W_in = input_buffer.shape[3];
+            // Weight shape for ConvTranspose: [C_in, C_out_per_group, kH, kW]
+            size_t groups = node.params.groups;
+            size_t C_out = weight_buffer.shape[1] * groups;
+
+            size_t kernel_h = node.params.kernel_h;
+            size_t kernel_w = node.params.kernel_w;
+            size_t stride = node.params.stride;
+            size_t pad = node.params.pad;
+
+            // Output size formula for ConvTranspose
+            size_t H_out = (H_in - 1) * stride - 2 * pad + kernel_h;
+            size_t W_out = (W_in - 1) * stride - 2 * pad + kernel_w;
+
+            node.output_buffer.shape = {N, C_out, H_out, W_out};
+            node.output_buffer.precision = input_buffer.precision;
+            node.output_buffer.quantization_scale = input_buffer.quantization_scale;
+
+            bool has_bias = node.input_ids.size() > 2;
+
+            if (input_buffer.precision == Precision::FP16) {
+                const __fp16* bias_ptr = nullptr;
+                if (has_bias) {
+                    bias_ptr = nodes[node_index_map.at(node.input_ids[2])]->output_buffer.data_as<__fp16>();
+                }
+                cactus_conv_transpose2d_f16(
+                    input_buffer.data_as<__fp16>(),
+                    weight_buffer.data_as<__fp16>(),
+                    bias_ptr,
+                    node.output_buffer.data_as<__fp16>(),
+                    N, C_in, H_in, W_in,
+                    C_out,
+                    kernel_h, kernel_w,
+                    stride, pad,
+                    groups,
+                    H_out, W_out);
+            } else {
+                const float* bias_ptr = nullptr;
+                if (has_bias) {
+                    bias_ptr = nodes[node_index_map.at(node.input_ids[2])]->output_buffer.data_as<float>();
+                }
+                cactus_conv_transpose2d_f32(
+                    input_buffer.data_as<float>(),
+                    weight_buffer.data_as<float>(),
+                    bias_ptr,
+                    node.output_buffer.data_as<float>(),
+                    N, C_in, H_in, W_in,
+                    C_out,
+                    kernel_h, kernel_w,
+                    stride, pad,
+                    groups,
+                    H_out, W_out);
+            }
+
             break;
         }
         case OpType::RMS_NORM: {

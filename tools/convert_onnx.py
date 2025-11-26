@@ -295,6 +295,33 @@ def main():
             attrs["axes"] = axes
             attrs["slice_steps"] = steps
 
+        # --- Resize: bake static roi/scales/sizes tensors ---
+        if node.op_type == "Resize":
+            roi_present = False
+            if len(node.input) > 1:
+                roi_name = node.input[1]
+                if roi_name:
+                    roi_present = True
+                    print(
+                        f"WARNING: Resize node {node.name} supplies ROI tensor "
+                        f"{roi_name}; ROI must be empty and will be ignored."
+                    )
+            attrs["roi"] = roi_present
+
+            if len(node.input) > 2:
+                size_name = node.input[2]
+                if size_name and size_name in initializer_map:
+                    tensor = numpy_helper.to_array(initializer_map[size_name])
+                    flat = tensor.flatten()
+                    if flat.dtype.kind in {"i", "u"}:
+                        attrs["sizes"] = [int(x) for x in flat.tolist()]
+                    else:
+                        attrs["scales"] = [float(x) for x in flat.tolist()]
+                else:
+                    print(
+                        f"WARNING: Resize node {node.name} uses non-initializer "
+                        f"input scales/sizes tensor {size_name}; dynamic values not baked."
+                    )
         # --- Split: bake static splits when provided as second input ---
         if node.op_type == "Split" and len(node.input) > 1:
             split_sizes_name = node.input[1]

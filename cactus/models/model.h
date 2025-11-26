@@ -452,6 +452,9 @@ public:
         // Attribute parameters for ONNX operators
         bool antialias = false;
         std::string keep_aspect_ratio_policy;
+        std::vector<float> scales;
+        std::vector<int64_t> sizes;
+        bool roi = false;
         float beta = 0.0f;
         std::string nearest_mode;
         std::vector<int64_t> pads;
