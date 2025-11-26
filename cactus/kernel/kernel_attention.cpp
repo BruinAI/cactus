@@ -1208,15 +1208,31 @@ void cactus_rope_f16(
                     for (size_t i = vectorized_half_dim; i < half_dim; ++i) {
                         const __fp16 cos_val = cos_ptr[i];
                         const __fp16 sin_val = sin_ptr[i];
-                        
+
                         const __fp16 x_first_half = input_ptr[i];
                         const __fp16 x_second_half = input_ptr[i + half_dim];
-                        
+
                         output_ptr[i] = x_first_half * cos_val - x_second_half * sin_val;
-                        
+
                         output_ptr[i + half_dim] = x_second_half * cos_val + x_first_half * sin_val;
                     }
                 }
             }
         });
+}
+
+void shrink_rope_caches() {
+    std::vector<float>().swap(CactusRoPE::rope_cache.cos_table);
+    std::vector<float>().swap(CactusRoPE::rope_cache.sin_table);
+    CactusRoPE::rope_cache.max_seq_len = 0;
+    CactusRoPE::rope_cache.head_dim = 0;
+    CactusRoPE::rope_cache.theta = 0.0f;
+    CactusRoPE::rope_cache.initialized = false;
+
+    std::vector<__fp16>().swap(CactusRoPEF16::rope_cache_f16.cos_table);
+    std::vector<__fp16>().swap(CactusRoPEF16::rope_cache_f16.sin_table);
+    CactusRoPEF16::rope_cache_f16.max_seq_len = 0;
+    CactusRoPEF16::rope_cache_f16.head_dim = 0;
+    CactusRoPEF16::rope_cache_f16.theta = 0.0f;
+    CactusRoPEF16::rope_cache_f16.initialized = false;
 } 

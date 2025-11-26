@@ -17,30 +17,37 @@ namespace {
     thread_local std::vector<__fp16> transpose_buffer_fp16;
     thread_local std::vector<float> transpose_buffer_fp32;
     thread_local std::vector<int8_t> quantization_buffer_int8;
-    
+
     void ensure_transpose_buffer_int8(size_t required_size) {
         if (transpose_buffer_int8.size() < required_size) {
             transpose_buffer_int8.resize(required_size);
         }
     }
-    
+
     void ensure_transpose_buffer_fp16(size_t required_size) {
         if (transpose_buffer_fp16.size() < required_size) {
             transpose_buffer_fp16.resize(required_size);
         }
     }
-    
+
     void ensure_transpose_buffer_fp32(size_t required_size) {
         if (transpose_buffer_fp32.size() < required_size) {
             transpose_buffer_fp32.resize(required_size);
         }
     }
-    
+
     void ensure_quantization_buffer_int8(size_t required_size) {
         if (quantization_buffer_int8.size() < required_size) {
             quantization_buffer_int8.resize(required_size);
         }
     }
+}
+
+void shrink_thread_local_buffers() {
+    std::vector<int8_t>().swap(transpose_buffer_int8);
+    std::vector<__fp16>().swap(transpose_buffer_fp16);
+    std::vector<float>().swap(transpose_buffer_fp32);
+    std::vector<int8_t>().swap(quantization_buffer_int8);
 }
 
 void compute_reduce_node(GraphNode& node, const std::vector<std::unique_ptr<GraphNode>>& nodes, const std::unordered_map<size_t, size_t>& node_index_map) {

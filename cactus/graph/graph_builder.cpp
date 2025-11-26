@@ -1,4 +1,5 @@
 #include "graph.h"
+#include "../kernel/kernel.h"
 #include <algorithm>
 #include <cctype>
 #include <chrono>
@@ -1205,6 +1206,8 @@ void CactusGraph::hard_reset() {
     weight_cache_.clear();
     next_node_id_ = 0;
     debug_nodes_.clear();
+    shrink_thread_local_buffers();
+    shrink_rope_caches();
 }
 
 void CactusGraph::soft_reset() {
@@ -1239,4 +1242,10 @@ void CactusGraph::soft_reset() {
     
     next_node_id_ = max_preserved_id + 1;
     debug_nodes_.clear();
+}
+
+void CactusGraph::release_weight_pages() {
+    for (auto& mapped_file : mapped_files_) {
+        mapped_file->release_pages();
+    }
 }
