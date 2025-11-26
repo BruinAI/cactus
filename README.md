@@ -64,32 +64,38 @@ Example response from Gemma3-270m-INT8
 }
 ```
 
-## INT8 CPU Performance (LFM2-1.2B) (722mb Compressed)
+## INT8 CPU-ONLY Performance 
 
-| Device | Prefill (toks/s) | Decode (toks/s) | Battery Drain (%/min) |
-|:-------------------------------|:--------------------:|:----------------:|:---------------------:|
-| Macbook M4 Pro                 | 590                  | 96               | -                     |
-| Mac Mini M4 Pro                | 580                  | 93               | -                     |
-| iPhone 17 Pro                  | 420                  | 81               | 0.44                  |
-| Galaxy S25 Ultra               | 336                  | 64               | 0.45                  |
-| iPhone 16 Pro                  | 334                  | 64               | -                     |
-| Nothing 3a Pro                 | 296                  | 63               | 0.44                  |
-| Macbook Pro M3                 | 462                  | 62               | -                     |
-| iPhone 15 Pro                  | 274                  | 57               | -                     |
-| iPhone 14 Pro                  | 269                  | 51               | -                     |
-| OnePlus 13 5G                  | 268                  | 51               | 0.33                  |
-| Macbook Air M3                 | 260                  | 50               | -                     |
-| Galaxy S24 Ultra               | 240                  | 46               | 0.48                  |
-| iPhone 15                      | 241                  | 46               | -                     |
-| Galaxy S23                     | 233                  | 45               | -                     |
-| iPhone 13 Pro                  | 218                  | 42               | -                     |
-| OnePlus 12                     | 216                  | 42               | 0.42                  |
-| iPhone 13 mini                 | 156                  | 30               | -                     |
-| Redmi K70 Ultra                | 154                  | 30               | 0.41                  |
-| Xiaomi 13                      | 153                  | 30               | 0.50                  |
-| Pixel 6a                       | 85                   | 13               | 0.48                  |
-| Nothing 3a                     | 83                   | 13               | 0.48                  |
-| Raspberry Pi 5                 | 50                   | 8.5              | -                     |
+- LLM/VLM Model: LFM2-VL-450m
+- Transcribe Model: Whisper-Small
+- [Peak RAM calculation logic](tests/test_utils.h#L160-L213) 
+- Covers the full range of consumer devices
+
+| Device | Short decode | 1k prefill/decode | 4k prefill/decode | 4k Peak RAM | 256x256 VLM TTFT | 256x256 VLM Decode | 256x256 VLM Peak RAM | 30s Transcribe TTFT | 30s Transcribe Decode | 30s Transcribe Peak RAM |
+|:------:|:------:|:------:|:------:|:------:|:------:|:------:|:------:|:------:|:------:|:------:|
+| Mac M4 Pro | 173 tps | 1574/115 tps | 1089/100 tps | 122 MB | 0.38s | 168 tps | 112 MB | 1.7s | 83 tps | 142 MB |
+| Mac M3 Pro | - | - | - | - | - | - | - | - | - | - |
+| Mac M2 Pro | - | - | - | - | - | - | - | - | - | - |
+| Qualcomm PC X-Elite | - | - | - | - | - | - | - | - | - | - |
+| Qualcomm PC X-Plus | - | - | - | - | - | - | - | - | - | - |
+| iPad/Mac M5 | - | - | - | - | - | - | - | - | - | - |
+| iPad/Mac M4 | - | - | - | - | - | - | - | - | - | - |
+| iPad/Mac M3 | - | - | - | - | - | - | - | - | - | - |
+| iPhone 17 Pro | - | - | - | - | - | - | - | - | - | - |
+| iPhone 16 Pro | - | - | - | - | - | - | - | - | - | - |
+| iPhone 15 Pro | - | - | - | - | - | - | - | - | - | - |
+| Galaxy S25 Ultra | - | - | - | - | - | - | - | - | - | - |
+| Galaxy S24 Ultra | - | - | - | - | - | - | - | - | - | - |
+| Galaxy S23 Ultra | - | - | - | - | - | - | - | - | - | - |
+| Pixel 10 Pro | - | - | - | - | - | - | - | - | - | - |
+| Pixel 9 pro | - | - | - | - | - | - | - | - | - | - |
+| Pixel 8 Pro | - | - | - | - | - | - | - | - | - | - |
+| Oppo Find X9 | - | - | - | - | - | - | - | - | - | - |
+| Xiaomi 15T Pro | - | - | - | - | - | - | - | - | - | - |
+| Nothing CMF 3 Pro | - | - | - | - | - | - | - | - | - | - |
+| Galaxy A56 | - | - | - | - | - | - | - | - | - | - |
+| Galaxy A55 | - | - | - | - | - | - | - | - | - | - |
+| Raspberry Pi 5 | - | - | - | - | - | - | - | - | - | - |
 
 ## Coming improvements:
 
@@ -113,7 +119,7 @@ cli/cactus download Qwen/Qwen3-0.6B # HF name, stored to weights/Qwen3-0.6B
 | Model | Completion | Tool Call | Vision | Embed | Speech
 |-------|--------------------|-------------------|----------------|------|------|
 | google/gemma-3-270m-it | ✓ | ✗ | ✗ | ✗ | ✗ |
-| openai/whisper-small | ✗ | ✗ | ✗ | ✗ | ✓ |
+| openai/whisper-small | ✗ | ✗ | ✗ | ✓ | ✓ |
 | LiquidAI/LFM2-350M | ✓ | ✓ | ✗ | ✓ | ✗ |
 | HuggingFaceTB/SmolLM2-360m-Instruct | ✓ | ✗ | ✗ | ✗ | ✗ |
 | LiquidAI/LFM2-VL-450M | ✓ | ✗ | ✓ | ✓ | ✗ |
@@ -121,7 +127,7 @@ cli/cactus download Qwen/Qwen3-0.6B # HF name, stored to weights/Qwen3-0.6B
 | Qwen/Qwen3-Embedding-0.6B | ✗ | ✗ | ✗ | ✓ | ✗ |
 | LiquidAI/LFM2-700M | ✓ | ✓ | ✗ | ✓ | ✗ |
 | nomic-ai/nomic-embed-text-v2-moe | ✗ | ✗ | ✗ | ✓ | ✗ |
-| openai/whisper-medium | ✗ | ✗ | ✗ | ✗ | ✓ |
+| openai/whisper-medium | ✗ | ✗ | ✗ | ✓ | ✓ |
 | google/gemma-3-1b-it | ✓ | ✗ | ✗ | ✗ | ✗ |
 | LiquidAI/LFM2-1.2B | ✓ | ✓ | ✗ | ✓ | ✗ |
 | LiquidAI/LFM2-1.2B-RAG | ✓ | ✓ | ✗ | ✓ | ✗ |
