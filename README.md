@@ -158,7 +158,7 @@ Or simply use the provided SDKs
 - [Swift SDK](https://github.com/mhayes853/swift-cactus)
 
 ## Try demo apps
-
+i
 - [iOS Demo](https://apps.apple.com/gb/app/cactus-chat/id6744444212)
 - [Android Demo](https://play.google.com/store/apps/details?id=com.rshemetsubuser.myapp)
 
