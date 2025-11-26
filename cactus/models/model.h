@@ -410,6 +410,8 @@ protected:
     uint32_t generate_with_audio(const std::vector<uint32_t>& tokens, const std::vector<float>& mel_bins,
                                     float temperature = 0.0f, float top_p = 0.0f, size_t top_k = 0, const std::string& profile_file = "") override;
 
+    void reset_cache() override;
+
 private:
     struct WeightNodeIDs {
         size_t output_weight;

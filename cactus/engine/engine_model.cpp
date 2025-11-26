@@ -71,7 +71,8 @@ bool Model::init(CactusGraph* external_graph, const std::string& model_folder, s
 }
 
 bool Model::init_internal(CactusGraph* gb, const std::string& model_folder, size_t context_size,
-                          const std::string& system_prompt, bool /*do_warmup*/) {
+                          const std::string& system_prompt, bool do_warmup) {
+
     model_folder_path_ = model_folder;
     std::string config_path = model_folder + "/config.txt";
 
@@ -104,13 +105,10 @@ bool Model::init_internal(CactusGraph* gb, const std::string& model_folder, size
         tokenizer_ = std::make_unique<SPTokenizer>();
     }
 
-    
-    
     if (!tokenizer_->load_vocabulary_with_config(vocab_file, merges_file, tokenizer_config_file)) {
         return false;
     }
-    
-    
+
     graph_handle_ = gb;
 
     if(config_.model_type == Config::ModelType::WHISPER){
@@ -121,7 +119,6 @@ bool Model::init_internal(CactusGraph* gb, const std::string& model_folder, size
     }
 
     load_weights_to_graph(gb);
-    
 
     if (config_.model_type == Config::ModelType::GEMMA) {
         attention_scale_ = 1.0f / std::sqrt(256.0f);
@@ -161,19 +158,13 @@ bool Model::init_internal(CactusGraph* gb, const std::string& model_folder, size
 
     initialized_ = true;
 
-    if(config_.model_type == Config::ModelType::WHISPER){
-        
-    }
-
-    else{
-        std::string warmup_text = system_prompt.empty() ? "Henry" : system_prompt;
+    if (do_warmup && config_.model_type != Config::ModelType::WHISPER) {
+        std::string warmup_text = system_prompt.empty() ? "Hello" : system_prompt;
         auto warmup_tokens = tokenizer_->encode(warmup_text);
         forward(warmup_tokens);
     }
 
-    //Add warmup for whisper
-
-    kv_cache_.reset();
+    reset_cache();
     return true;
 }
 

@@ -200,8 +200,6 @@ int cactus_transcribe(
         }
 
         std::string prompt_text(prompt);
-        std::cout << "Using prompt text: \"" << prompt_text << "\"" << std::endl;
-
         std::vector<uint32_t> tokens = tokenizer->encode(prompt_text);
         if (tokens.empty()) {
             handle_error_response("Decoder input tokens are empty after encoding prompt text", response_buffer, buffer_size);
@@ -246,8 +244,6 @@ int cactus_transcribe(
                 std::string piece = tokenizer->decode({ next_token });
                 final_text += piece;
 
-                std::cout << piece;
-
                 if (callback) {
                     callback(piece.c_str(), next_token, user_data);
                 }
@@ -275,8 +271,6 @@ int cactus_transcribe(
         }
 
         std::strcpy(response_buffer, json.c_str());
-        std::cout << "Final JSON:\n" << json << std::endl;
-
         return static_cast<int>(json.size());
     }
     catch (...) {

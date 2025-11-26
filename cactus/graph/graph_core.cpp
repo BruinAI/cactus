@@ -67,7 +67,6 @@ void dispatch_binary_op(OpType op, const T* lhs, const T* rhs, T* output, size_t
     switch (op) {
         case OpType::ADD:
             if constexpr (std::is_same_v<T, int8_t>) {
-                std::cout<<"add Entered"<<std::endl;
                 cactus_add_int8(lhs, rhs, output, count);
             } else if constexpr (std::is_same_v<T, __fp16>) {
                 cactus_add_f16(lhs, rhs, output, count);

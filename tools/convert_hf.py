@@ -4,6 +4,7 @@ import struct
 import sys
 import json
 import argparse
+import re
 from pathlib import Path
 from typing import Optional
 
@@ -208,7 +209,6 @@ def convert_hf_model_weights(model, output_dir, precision='INT8', args=None):
 
     state_dict = model.state_dict()
     config = model.config
-    print(config)
     saved_tensor_full_names = set()
     
     # Helper function to safely get config attributes
@@ -381,24 +381,104 @@ def convert_hf_model_weights(model, output_dir, precision='INT8', args=None):
             saved_tensor_full_names.add(name)
             break
 
+    # Vision tower weights (VLM models only - will be skipped for regular models)
+    if is_vlm:
+        vision_items = [
+            ('model.vision_tower.vision_model.embeddings.patch_embedding.weight', 'vision_patch_embedding.weights'),
+            ('model.vision_model.embeddings.patch_embedding.weight', 'vision_patch_embedding.weights'),
+            ('model.vision_tower.vision_model.embeddings.patch_embedding.bias', 'vision_patch_embedding.bias.weights'),
+            ('model.vision_model.embeddings.patch_embedding.bias', 'vision_patch_embedding.bias.weights'),
+            ('model.vision_tower.vision_model.embeddings.position_embedding.weight', 'vision_position_embedding.weights'),
+            ('model.vision_model.embeddings.position_embedding.weight', 'vision_position_embedding.weights'),
+            ('model.vision_tower.vision_model.post_layernorm.weight', 'vision_post_layernorm.weights'),
+            ('model.vision_model.post_layernorm.weight', 'vision_post_layernorm.weights'),
+            ('model.vision_tower.vision_model.post_layernorm.bias', 'vision_post_layernorm.bias.weights'),
+            ('model.vision_model.post_layernorm.bias', 'vision_post_layernorm.bias.weights')
+        ]
+        for key, outname in vision_items:
+            if key in state_dict:
+                save_tensor_with_header(state_dict[key], output_dir / outname, precision, stats_tracker=quantization_stats, args=args, model_type=detected_model_type)
+                saved_tensor_full_names.add(key)
+
+        # Multi-modal projector weights
+        projector_weights = [
+            ('model.multi_modal_projector.linear_1.weight', 'projector_linear1.weights'),
+            ('model.multi_modal_projector.linear_1.bias', 'projector_linear1.bias.weights'),
+            ('model.multi_modal_projector.linear_2.weight', 'projector_linear2.weights'),
+            ('model.multi_modal_projector.linear_2.bias', 'projector_linear2.bias.weights'),
+            ('model.multi_modal_projector.layer_norm.weight', 'projector_layer_norm.weights'),
+            ('model.multi_modal_projector.layer_norm.bias', 'projector_layer_norm.bias.weights'),
+        ]
+        for key, outname in projector_weights:
+            if key in state_dict:
+                save_tensor_with_header(state_dict[key], output_dir / outname, precision, stats_tracker=quantization_stats, args=args, model_type=detected_model_type)
+                saved_tensor_full_names.add(key)
+
+        # Vision encoder layers
+        max_v_idx = -1
+        vision_prefix = None
+        for k in state_dict.keys():
+            m = re.search(r'model\.vision_tower\.vision_model\.encoder\.layers\.(\d+)\.', k)
+            if m:
+                vision_prefix = 'model.vision_tower.vision_model.encoder.layers.'
+                try:
+                    idx = int(m.group(1))
+                    if idx > max_v_idx:
+                        max_v_idx = idx
+                except Exception:
+                    pass
+            if not vision_prefix:
+                m = re.search(r'model\.vision_model\.encoder\.layers\.(\d+)\.', k)
+                if m:
+                    vision_prefix = 'model.vision_model.encoder.layers.'
+                    try:
+                        idx = int(m.group(1))
+                        if idx > max_v_idx:
+                            max_v_idx = idx
+                    except Exception:
+                        pass
+
+        if not vision_prefix:
+            vision_prefix = 'model.vision_model.encoder.layers.'
+
+        vision_layers = max_v_idx + 1 if max_v_idx >= 0 else 0
+
+        for i_v in range(vision_layers):
+            vpref = f'{vision_prefix}{i_v}.'
+            vision_layer_weights = [
+                (vpref + 'layer_norm1.weight', f'vision_layer_{i_v}_layer_norm1.weights'),
+                (vpref + 'layer_norm1.bias', f'vision_layer_{i_v}_layer_norm1.bias.weights'),
+                (vpref + 'layer_norm2.weight', f'vision_layer_{i_v}_layer_norm2.weights'),
+                (vpref + 'layer_norm2.bias', f'vision_layer_{i_v}_layer_norm2.bias.weights'),
+                (vpref + 'mlp.fc1.weight', f'vision_layer_{i_v}_ffn_fc1.weights'),
+                (vpref + 'mlp.fc1.bias', f'vision_layer_{i_v}_ffn_fc1.bias.weights'),
+                (vpref + 'mlp.fc2.weight', f'vision_layer_{i_v}_ffn_fc2.weights'),
+                (vpref + 'mlp.fc2.bias', f'vision_layer_{i_v}_ffn_fc2.bias.weights'),
+                (vpref + 'self_attn.q_proj.weight', f'vision_layer_{i_v}_self_attn_q.weights'),
+                (vpref + 'self_attn.k_proj.weight', f'vision_layer_{i_v}_self_attn_k.weights'),
+                (vpref + 'self_attn.v_proj.weight', f'vision_layer_{i_v}_self_attn_v.weights'),
+                (vpref + 'self_attn.out_proj.weight', f'vision_layer_{i_v}_self_attn_out.weights'),
+                (vpref + 'self_attn.q_proj.bias', f'vision_layer_{i_v}_self_attn_q.bias.weights'),
+                (vpref + 'self_attn.k_proj.bias', f'vision_layer_{i_v}_self_attn_k.bias.weights'),
+                (vpref + 'self_attn.v_proj.bias', f'vision_layer_{i_v}_self_attn_v.bias.weights'),
+                (vpref + 'self_attn.out_proj.bias', f'vision_layer_{i_v}_self_attn_out.bias.weights'),
+            ]
+            for fname, out in vision_layer_weights:
+                if fname in state_dict:
+                    save_tensor_with_header(state_dict[fname], output_dir / out, precision, stats_tracker=quantization_stats, args=args, model_type=detected_model_type)
+                    saved_tensor_full_names.add(fname)
+
     num_layers = model_config['num_layers']
     missing_tensors = []
     for i in range(num_layers):
         
-        layer_prefixes = [f'model.layers.{i}.', f'layers.{i}.', f'transformer.h.{i}.', f'encoder.layers.{i}.', f'decoder.layers.{i}.', f'model.encoder.layers.{i}.', f'model.decoder.layers.{i}.']
+        layer_prefixes = [f'model.language_model.layers.{i}.', f'model.text_model.layers.{i}.', f'model.layers.{i}.', f'layers.{i}.', f'transformer.h.{i}.', f'encoder.layers.{i}.', f'decoder.layers.{i}.', f'model.encoder.layers.{i}.', f'model.decoder.layers.{i}.']
         
         existing_prefixes = set() #Culprit
         for prefix in layer_prefixes:
             for key in state_dict.keys():
                 if(key.startswith(prefix)):
                     existing_prefixes.add(prefix)
-
-        # for thing in existing_prefixes:
-        #     print(thing)
-
-            # if any(key.startswith(prefix) for key in state_dict.keys()):
-            #     layer_prefix = prefix
-            #     break
 
         if not existing_prefixes:
             missing_tensors.append((i, "<no-layer-prefix>", ["<no-matching-prefix>"]))
@@ -1377,9 +1457,6 @@ def convert_hf_to_cactus_vlm(model_name, output_dir, precision='INT8', cache_dir
                 token=token,
             )
         else:
-            # If you truly support other VLM families, load their exact classes here.
-            # Fallback to AutoModelForImageTextToText is kept as a last resort,
-            # but beware it may initialize heads randomly for unknown architectures.
             from transformers import AutoModelForImageTextToText
             print("[warn] Non-LFM2-VL model; using AutoModelForImageTextToText (may re-init heads)")
             model = AutoModelForImageTextToText.from_pretrained(
@@ -1401,7 +1478,6 @@ def convert_hf_to_cactus_vlm(model_name, output_dir, precision='INT8', cache_dir
                 token=token,
             )
 
-        # ---- NEW: quick sanity on vision weights to catch random init
         if _is_lfm2_vl(model_name, cfg):
             ok = _vision_weight_sanity(model)
             if not ok:

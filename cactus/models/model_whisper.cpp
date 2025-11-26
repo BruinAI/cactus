@@ -220,6 +220,18 @@ void WhisperModel::reset_graph_side_cache_nodes() {
     cache_v_output_nodes_.assign(config_.num_layers, 0);
 }
 
+void WhisperModel::reset_cache() {
+    Model::reset_cache();
+    encoder_ready_ = false;
+    encoder_kv_ready_ = false;
+    first_decode_step_ = true;
+    encoder_output_host_.clear();
+    encoder_k_host_.clear();
+    encoder_v_host_.clear();
+    encoder_k_shape_.clear();
+    encoder_v_shape_.clear();
+}
+
 size_t WhisperModel::build_decoder_self_attention(CactusGraph* gb, size_t input, uint32_t layer_idx, ComputeBackend backend, bool use_cache, size_t position_offset){
     const auto& layer = weight_nodes_.layers[layer_idx];
 
