@@ -399,6 +399,7 @@ Lfm2VlModel::ForwardImageResult Lfm2VlModel::forward_images(
     CactusGraph* gb,
     const std::vector<uint32_t>& tokens,
     const std::vector<std::string>& image_paths,
+    const std::vector<std::pair<int, int>>& image_sizes,
     ComputeBackend backend,
     bool use_cache) {
     if (!gb) {
@@ -410,8 +411,10 @@ Lfm2VlModel::ForwardImageResult Lfm2VlModel::forward_images(
 
     std::vector<std::vector<ProjectedTileFeature>> all_image_embeddings;
     all_image_embeddings.reserve(image_paths.size());
-    for (const auto& image_path : image_paths) {
-        auto preprocessed = preprocessor_.preprocess_from_file(image_path);
+    for (size_t i = 0; i < image_paths.size(); ++i) {
+        const auto& image_path = image_paths[i];
+        std::pair<int, int> target_size = (i < image_sizes.size()) ? image_sizes[i] : std::make_pair(-1, -1);
+        auto preprocessed = preprocessor_.preprocess_from_file(image_path, target_size);
         
         auto image_features = get_image_features(gb, preprocessed, backend);
         
@@ -444,6 +447,7 @@ Lfm2VlModel::ForwardImageResult Lfm2VlModel::forward_images(
 uint32_t Lfm2VlModel::generate_with_images(
     const std::vector<uint32_t>& tokens,
     const std::vector<std::string>& image_paths,
+    const std::vector<std::pair<int, int>>& image_sizes,
     float temperature,
     float top_p,
     size_t top_k,
@@ -488,7 +492,7 @@ uint32_t Lfm2VlModel::generate_with_images(
     size_t final_hidden_node = 0;
 
     if (need_prefill) {
-        auto forward_result = forward_images(gb, tokens, image_paths, backend, true);
+        auto forward_result = forward_images(gb, tokens, image_paths, image_sizes, backend, true);
         
         final_hidden_node = forward_result.final_hidden_node;
         seq_len_for_updates = forward_result.seq_len;

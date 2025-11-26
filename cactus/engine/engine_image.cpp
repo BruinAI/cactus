@@ -210,12 +210,61 @@ Siglip2Preprocessor::SpatialShapeResult Siglip2Preprocessor::compute_spatial_sha
 }
 
 
-Siglip2Preprocessor::PreprocessedImage Siglip2Preprocessor::preprocess_from_file(const std::string& image_path) {
+Siglip2Preprocessor::PreprocessedImage Siglip2Preprocessor::preprocess_from_file(const std::string& image_path, std::pair<int, int> target_size) {
     int width, height, channels;
     unsigned char* img_data = stbi_load(image_path.c_str(), &width, &height, &channels, 0);
     
     if (!img_data) {
         throw std::runtime_error("Failed to load image: " + image_path + " - " + std::string(stbi_failure_reason()));
+    }
+    if (target_size.first > 0 && target_size.second > 0) {
+        int target_width = target_size.first;
+        int target_height = target_size.second;
+        
+        const int expected_channels = 3;
+        std::vector<unsigned char> rgb_data;
+        const unsigned char* source_data = img_data;
+        int source_channels = channels;
+        
+        if (config_.do_convert_rgb && channels != expected_channels) {
+            rgb_data = convert_to_rgb(img_data, width, height, channels);
+            source_data = rgb_data.data();
+            source_channels = expected_channels;
+        }
+        
+        const size_t src_elements = static_cast<size_t>(width) * height * source_channels;
+        std::vector<float> src_float(src_elements);
+        for (size_t idx = 0; idx < src_elements; ++idx) {
+            src_float[idx] = static_cast<float>(source_data[idx]);
+        }
+        
+        std::vector<float> resized_data(static_cast<size_t>(target_width) * target_height * source_channels);
+        
+        stbir_pixel_layout layout = (source_channels == 1) ? STBIR_1CHANNEL : 
+                                    (source_channels == 3) ? STBIR_RGB : STBIR_RGBA;
+        
+        float* resize_result = stbir_resize_float_linear(
+            src_float.data(), width, height, 0,
+            resized_data.data(), target_width, target_height, 0,
+            layout
+        );
+        
+        if (!resize_result) {
+            stbi_image_free(img_data);
+            throw std::runtime_error("Failed to resize image to target size");
+        }
+        
+        std::vector<unsigned char> resized_uchar(static_cast<size_t>(target_width) * target_height * source_channels);
+        for (size_t idx = 0; idx < resized_uchar.size(); ++idx) {
+            float val = resized_data[idx];
+            val = std::max(0.0f, std::min(255.0f, val));
+            resized_uchar[idx] = static_cast<unsigned char>(val);
+        }
+        
+        stbi_image_free(img_data);
+        
+        PreprocessedImage result = preprocess_from_memory(resized_uchar.data(), target_width, target_height, source_channels);
+        return result;
     }
 
     PreprocessedImage result;

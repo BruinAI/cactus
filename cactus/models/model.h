@@ -369,6 +369,7 @@ public:
     uint32_t generate_with_images(
         const std::vector<uint32_t>& tokens,
         const std::vector<std::string>& image_paths,
+        const std::vector<std::pair<int, int>>& image_sizes = {},
         float temperature = -1.0f,
         float top_p = -1.0f,
         size_t top_k = 0,
@@ -412,6 +413,7 @@ private:
         CactusGraph* gb,
         const std::vector<uint32_t>& tokens,
         const std::vector<std::string>& image_paths,
+        const std::vector<std::pair<int, int>>& image_sizes,
         ComputeBackend backend,
         bool use_cache);
     size_t build_multimodal_projector(

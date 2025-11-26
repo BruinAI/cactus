@@ -268,11 +268,25 @@ std::string Tokenizer::format_lfm2_vl_style(
     for (const auto& msg : messages) {
         result += "<|im_start|>" + msg.role + "\n";
         result += msg.content;
-        for (const auto& image_path : msg.images) {
+        for (size_t img_idx = 0; img_idx < msg.images.size(); ++img_idx) {
+            const auto& image_path = msg.images[img_idx];
             int width = 0, height = 0, channels = 0;
-            unsigned char* img_data = stbi_load(image_path.c_str(), &width, &height, &channels, 0);
             
-            if (img_data) {
+            bool has_target_size = img_idx < msg.image_sizes.size() && 
+                                   msg.image_sizes[img_idx].first > 0 && 
+                                   msg.image_sizes[img_idx].second > 0;
+            
+            if (has_target_size) {
+                width = msg.image_sizes[img_idx].first;
+                height = msg.image_sizes[img_idx].second;
+            } else {
+                unsigned char* img_data = stbi_load(image_path.c_str(), &width, &height, &channels, 0);
+                if (img_data) {
+                    stbi_image_free(img_data);
+                }
+            }
+            
+            if (width > 0 && height > 0) {
                 Siglip2Preprocessor preprocessor;
                 auto shape_result = preprocessor.compute_spatial_shapes(height, width);
                 int downsample_factor = 2;
@@ -315,8 +329,6 @@ std::string Tokenizer::format_lfm2_vl_style(
                 }
                 
                 result += "<|image_end|>";
-                
-                stbi_image_free(img_data);
             } else {
                 result += "<image>";
             }

@@ -114,7 +114,8 @@ int cactus_complete(
         handle->should_stop = false;
         
         std::vector<std::string> image_paths;
-        auto messages = parse_messages_json(messages_json, image_paths);
+        std::vector<std::pair<int, int>> image_sizes;
+        auto messages = parse_messages_json(messages_json, image_paths, image_sizes);
         
         if (messages.empty()) {
             handle_error_response("No messages provided", response_buffer, buffer_size);
@@ -175,7 +176,7 @@ int cactus_complete(
             next_token = handle->model->generate(last_token_vec, temperature, top_p, top_k);
         } else {
             if (!image_paths.empty()) {
-                next_token = handle->model->generate_with_images(tokens_to_process, image_paths, temperature, top_p, top_k, "profile.txt");
+                next_token = handle->model->generate_with_images(tokens_to_process, image_paths, image_sizes, temperature, top_p, top_k, "profile.txt");
             } else {
                 next_token = handle->model->generate(tokens_to_process, temperature, top_p, top_k, "profile.txt");
             }

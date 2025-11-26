@@ -33,9 +33,11 @@ inline void handle_error_response(const std::string& error_message, char* respon
 }
 
 inline std::vector<cactus::engine::ChatMessage> parse_messages_json(const std::string& json, 
-                                                                   std::vector<std::string>& out_image_paths) {
+                                                                   std::vector<std::string>& out_image_paths,
+                                                                   std::vector<std::pair<int, int>>& out_image_sizes) {
     std::vector<cactus::engine::ChatMessage> messages;
     out_image_paths.clear();
+    out_image_sizes.clear();
     
     size_t pos = json.find('[');
     if (pos == std::string::npos) {
@@ -110,10 +112,54 @@ inline std::vector<cactus::engine::ChatMessage> parse_messages_json(const std::s
                         
                         msg.images.push_back(img_path);
                         out_image_paths.push_back(img_path);
+                        out_image_sizes.push_back({-1, -1});
                         img_pos = img_end;
                     }
                 }
             }
+        }
+        
+        size_t image_sizes_pos = json.find("\"image_sizes\"", pos);
+        if (image_sizes_pos != std::string::npos && image_sizes_pos < obj_end) {
+            size_t outer_array_start = json.find('[', image_sizes_pos);
+            if (outer_array_start != std::string::npos && outer_array_start < obj_end) {
+                int bracket_count = 1;
+                size_t outer_array_end = outer_array_start + 1;
+                while (outer_array_end < json.length() && bracket_count > 0) {
+                    if (json[outer_array_end] == '[') bracket_count++;
+                    else if (json[outer_array_end] == ']') bracket_count--;
+                    outer_array_end++;
+                }
+                
+                if (outer_array_end <= obj_end) {
+                    size_t tuple_pos = outer_array_start;
+                    while (true) {
+                        tuple_pos = json.find('[', tuple_pos + 1);
+                        if (tuple_pos == std::string::npos || tuple_pos >= outer_array_end - 1) break;
+                        
+                        size_t tuple_end = json.find(']', tuple_pos);
+                        if (tuple_end == std::string::npos || tuple_end >= outer_array_end) break;
+                        
+                        std::string tuple_content = json.substr(tuple_pos + 1, tuple_end - tuple_pos - 1);
+                        
+                        size_t comma_pos = tuple_content.find(',');
+                        if (comma_pos != std::string::npos) {
+                            try {
+                                int width = std::stoi(tuple_content.substr(0, comma_pos));
+                                int height = std::stoi(tuple_content.substr(comma_pos + 1));
+                                msg.image_sizes.push_back({width, height});
+                            } catch (...) {
+                            }
+                        }
+                        
+                        tuple_pos = tuple_end;
+                    }
+                }
+            }
+        }
+        size_t image_start_idx = out_image_sizes.size() - msg.images.size();
+        for (size_t i = 0; i < msg.image_sizes.size() && i < msg.images.size(); ++i) {
+            out_image_sizes[image_start_idx + i] = msg.image_sizes[i];
         }
         
         messages.push_back(msg);

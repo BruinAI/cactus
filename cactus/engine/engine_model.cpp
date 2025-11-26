@@ -195,8 +195,10 @@ uint32_t Model::generate(const std::vector<uint32_t>& tokens, float temperature,
 }
 
 uint32_t Model::generate_with_images(const std::vector<uint32_t>& tokens, const std::vector<std::string>& image_paths,
+                                     const std::vector<std::pair<int, int>>& image_sizes,
                                      float temperature, float top_p, size_t top_k, const std::string& profile_file) {
     (void)image_paths;
+    (void)image_sizes;
     return generate(tokens, temperature, top_p, top_k, profile_file);
 }
 
