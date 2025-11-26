@@ -181,8 +181,6 @@ void compute_topk_node(GraphNode& node, const std::vector<std::unique_ptr<GraphN
 void compute_layernorm_node(GraphNode& node, const std::vector<std::unique_ptr<GraphNode>>& nodes, const std::unordered_map<size_t, size_t>& node_index_map);
 void compute_index_node(GraphNode& node, const std::vector<std::unique_ptr<GraphNode>>& nodes, const std::unordered_map<size_t, size_t>& node_index_map);
 
-void shrink_thread_local_buffers();
-
 namespace ValidationUtils {
     void validate_tensor_dims(const std::vector<size_t>& shape, size_t required_dims, const std::string& op_name);
     void validate_precision(Precision actual, Precision required, const std::string& op_name);
@@ -269,7 +267,6 @@ public:
     void execute(const std::string& profile_file = "");
     void hard_reset();
     void soft_reset();
-    void release_weight_pages();
 
     void register_debug_node(uint32_t layer_idx, const std::string& name, size_t node_id);
     void capture_debug_node(uint32_t layer_idx, const std::string& name, size_t node_id);
@@ -320,10 +317,10 @@ namespace GraphFile {
         
         void* data();
         const void* data() const;
-        void release_pages();
-
+        
         template<typename T>
         const T* typed_data() const;
+        
         LoadedNode load_into_graph(CactusGraph& graph) const;
         
     private:

@@ -201,12 +201,6 @@ const void* GraphFile::MappedFile::data() const {
     return static_cast<const char*>(mapped_data_) + data_offset_;
 }
 
-void GraphFile::MappedFile::release_pages() {
-    if (mapped_data_ != nullptr && mapped_data_ != MAP_FAILED && file_size_ > 0) {
-        madvise(mapped_data_, file_size_, MADV_DONTNEED);
-    }
-}
-
 template<typename T>
 const T* GraphFile::MappedFile::typed_data() const {
     return static_cast<const T*>(data());
