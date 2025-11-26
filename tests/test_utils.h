@@ -14,6 +14,13 @@
 
 #ifdef __APPLE__
 #include <mach/mach.h>
+#elif defined(_WIN32) || defined(_WIN64)
+#include <windows.h>
+#include <psapi.h>
+#elif defined(__linux__)
+#include <cstddef>
+#include <cstdio>
+#include <unistd.h>
 #endif
 
 namespace TestUtils {
@@ -164,7 +171,29 @@ inline size_t get_memory_footprint_bytes() {
     if (task_info(mach_task_self(), TASK_VM_INFO, (task_info_t)&vm_info, &count) == KERN_SUCCESS) {
         return vm_info.phys_footprint;
     }
+#elif defined(_WIN32) || defined(_WIN64)
+    PROCESS_MEMORY_COUNTERS pmc;
+    if (GetProcessMemoryInfo(GetCurrentProcess(), &pmc, sizeof(pmc))) {
+        return pmc.WorkingSetSize;
+    }
+#elif defined(__linux__)
+    long rss_pages = 0;
+
+    FILE* f = std::fopen("/proc/self/statm", "r");
+    if (f) {
+        if (std::fscanf(f, "%*s %ld", &rss_pages) == 1) {
+            std::fclose(f);
+            long page_size = sysconf(_SC_PAGESIZE);
+            if (page_size > 0 && rss_pages > 0) {
+                return static_cast<size_t>(rss_pages) *
+                        static_cast<size_t>(page_size);
+            }
+        } else {
+            std::fclose(f);
+        }
+    }
 #endif
+
     return 0;
 }
 
