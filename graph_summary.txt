@@ -13134,6 +13134,8 @@ Conv
 ConvTranspose
 Cos
 Div
+Sin
+Softmax
 Flatten
 Gather
 Gemm
@@ -13146,9 +13148,7 @@ Mul
 Reshape
 Resize
 Sigmoid
-Sin
 Slice
-Softmax
 Split
 Sub
 Transpose

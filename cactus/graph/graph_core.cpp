@@ -421,6 +421,9 @@ void compute_node_optimized(GraphNode& node, const std::vector<std::unique_ptr<G
         case OpType::MATMUL:
             compute_matmul_node(node, nodes, node_index_map);
             break;
+        case OpType::MATMUL_ND:
+            compute_matmul_nd_node(node, nodes, node_index_map);
+            break;
         case OpType::TRANSPOSE:
             compute_transpose_node(node, nodes, node_index_map);
             break;

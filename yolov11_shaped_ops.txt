@@ -1,0 +1,314 @@
+================================================================================
+OpType      : Add
+# Inputs    : 2
+# Outputs   : 1
+Attr names  : []
+Node count  : 15
+Example node:
+  Name   : node_Add_60
+  Inputs :
+    - split_1_split_1: [1, 16, 128, 160]
+    - silu_4: [1, 16, 128, 160]
+  Outputs:
+    - add_5: [1, 16, 128, 160]
+
+================================================================================
+OpType      : BatchNormalization
+# Inputs    : 5
+# Outputs   : 1
+Attr names  : ['epsilon', 'momentum']
+Node count  : 81
+Example node:
+  Name   : n0
+  Inputs :
+    - conv2d: [1, 8, 256, 320]
+    - backbone.layers.0.bn.weight: [8]
+    - backbone.layers.0.bn.bias: [8]
+    - backbone.layers.0.bn.bias: [8]
+    - backbone.layers.0.bn.weight: [8]
+  Outputs:
+    - getitem: [1, 8, 256, 320]
+
+================================================================================
+OpType      : Concat
+# Inputs    : 2
+# Outputs   : 1
+Attr names  : ['axis']
+Node count  : 10
+Example node:
+  Name   : node_Concat_231
+  Inputs :
+    - add_21: [1, 16, 32, 40]
+    - silu_18: [1, 16, 32, 40]
+  Outputs:
+    - cat_2: [1, 32, 32, 40]
+
+================================================================================
+OpType      : Concat
+# Inputs    : 3
+# Outputs   : 1
+Attr names  : ['axis']
+Node count  : 12
+Example node:
+  Name   : node_Concat_64
+  Inputs :
+    - split_1_split_0: [1, 16, 128, 160]
+    - split_1_split_1: [1, 16, 128, 160]
+    - add_5: [1, 16, 128, 160]
+  Outputs:
+    - cat: [1, 48, 128, 160]
+
+================================================================================
+OpType      : Concat
+# Inputs    : 4
+# Outputs   : 1
+Attr names  : ['axis']
+Node count  : 2
+Example node:
+  Name   : node_Concat_391
+  Inputs :
+    - silu_31: [1, 32, 16, 20]
+    - max_pool2d: [1, 32, 16, 20]
+    - max_pool2d_1: [1, 32, 16, 20]
+    - max_pool2d_2: [1, 32, 16, 20]
+  Outputs:
+    - cat_6: [1, 128, 16, 20]
+
+================================================================================
+OpType      : Conv
+# Inputs    : 3
+# Outputs   : 1
+Attr names  : ['auto_pad', 'dilations', 'group', 'pads', 'strides']
+Node count  : 89
+Example node:
+  Name   : node_Conv_6
+  Inputs :
+    - x: [1, 3, 512, 640]
+    - backbone.layers.0.conv.weight: [8, 3, 3, 3]
+    - backbone.layers.0.bn.bias: [8]
+  Outputs:
+    - conv2d: [1, 8, 256, 320]
+
+================================================================================
+OpType      : Gather
+# Inputs    : 2
+# Outputs   : 1
+Attr names  : ['axis']
+Node count  : 4
+Example node:
+  Name   : node_Gather_1006
+  Inputs :
+    - sub: [1, 2, 6720]
+    - val_38: []
+  Outputs:
+    - select: [1, 6720]
+
+================================================================================
+OpType      : MatMul
+# Inputs    : 2
+# Outputs   : 1
+Attr names  : []
+Node count  : 2
+Example node:
+  Name   : node_MatMul_436
+  Inputs :
+    - transpose: [1, 2, 320, 32]
+    - split_with_sizes_2_split_1: [1, 2, 32, 320]
+  Outputs:
+    - matmul: [1, 2, 320, 320]
+
+================================================================================
+OpType      : Max
+# Inputs    : 2
+# Outputs   : 1
+Attr names  : []
+Node count  : 2
+Example node:
+  Name   : n0_115
+  Inputs :
+    - select: [1, 6720]
+    - select_1: [1, 6720]
+  Outputs:
+    - maximum: [1, 6720]
+
+================================================================================
+OpType      : MaxPool
+# Inputs    : 1
+# Outputs   : 1
+Attr names  : ['auto_pad', 'ceil_mode', 'dilations', 'kernel_shape', 'pads', 'storage_order', 'strides']
+Node count  : 3
+Example node:
+  Name   : node_MaxPool_388
+  Inputs :
+    - silu_31: [1, 32, 16, 20]
+  Outputs:
+    - max_pool2d: [1, 32, 16, 20]
+
+================================================================================
+OpType      : Min
+# Inputs    : 2
+# Outputs   : 1
+Attr names  : []
+Node count  : 2
+Example node:
+  Name   : n0_113
+  Inputs :
+    - select: [1, 6720]
+    - select_1: [1, 6720]
+  Outputs:
+    - minimum: [1, 6720]
+
+================================================================================
+OpType      : Mul
+# Inputs    : 2
+# Outputs   : 1
+Attr names  : []
+Node count  : 79
+Example node:
+  Name   : node_Mul_12
+  Inputs :
+    - getitem: [1, 8, 256, 320]
+    - val_8: [1, 8, 256, 320]
+  Outputs:
+    - silu: [1, 8, 256, 320]
+
+================================================================================
+OpType      : Reshape
+# Inputs    : 2
+# Outputs   : 1
+Attr names  : ['allowzero']
+Node count  : 12
+Example node:
+  Name   : node_Reshape_428
+  Inputs :
+    - getitem_198: [1, 256, 16, 20]
+    - val_255: [4]
+  Outputs:
+    - view: [1, 2, 128, 320]
+
+================================================================================
+OpType      : Resize
+# Inputs    : 3
+# Outputs   : 1
+Attr names  : ['antialias', 'coordinate_transformation_mode', 'cubic_coeff_a', 'exclude_outside', 'extrapolation_value', 'keep_aspect_ratio_policy', 'mode', 'nearest_mode']
+Node count  : 2
+Example node:
+  Name   : node_Resize_505
+  Inputs :
+    - silu_35: [1, 256, 16, 20]
+    - : Unknown
+    - val_294: [4]
+  Outputs:
+    - upsample_nearest2d: [1, 256, 32, 40]
+
+================================================================================
+OpType      : Sigmoid
+# Inputs    : 1
+# Outputs   : 1
+Attr names  : []
+Node count  : 77
+Example node:
+  Name   : node_Sigmoid_11
+  Inputs :
+    - getitem: [1, 8, 256, 320]
+  Outputs:
+    - val_8: [1, 8, 256, 320]
+
+================================================================================
+OpType      : Softmax
+# Inputs    : 1
+# Outputs   : 1
+Attr names  : ['axis']
+Node count  : 1
+Example node:
+  Name   : node_Softmax_439
+  Inputs :
+    - mul: [1, 2, 320, 320]
+  Outputs:
+    - softmax: [1, 2, 320, 320]
+
+================================================================================
+OpType      : Split
+# Inputs    : 1
+# Outputs   : 2
+Attr names  : ['axis', 'num_outputs']
+Node count  : 9
+Example node:
+  Name   : node_Split_1361
+  Inputs :
+    - silu_2: [1, 32, 128, 160]
+  Outputs:
+    - split_1_split_0: [1, 16, 128, 160]
+    - split_1_split_1: [1, 16, 128, 160]
+
+================================================================================
+OpType      : Split
+# Inputs    : 2
+# Outputs   : 2
+Attr names  : ['axis']
+Node count  : 1
+Example node:
+  Name   : node_Split_1571
+  Inputs :
+    - silu_33: [1, 256, 16, 20]
+    - val_247: [2]
+  Outputs:
+    - split_with_sizes_1_split_0: [1, 128, 16, 20]
+    - split_with_sizes_1_split_1: [1, 128, 16, 20]
+
+================================================================================
+OpType      : Split
+# Inputs    : 2
+# Outputs   : 3
+Attr names  : ['axis']
+Node count  : 1
+Example node:
+  Name   : node_Split_1582
+  Inputs :
+    - view: [1, 2, 128, 320]
+    - val_256: [3]
+  Outputs:
+    - split_with_sizes_2_split_0: [1, 2, 32, 320]
+    - split_with_sizes_2_split_1: [1, 2, 32, 320]
+    - split_with_sizes_2_split_2: [1, 2, 64, 320]
+
+================================================================================
+OpType      : Sub
+# Inputs    : 2
+# Outputs   : 1
+Attr names  : []
+Node count  : 1
+Example node:
+  Name   : node_Sub_991
+  Inputs :
+    - permute_1: [2, 6720]
+    - split_24_split_0: [1, 2, 6720]
+  Outputs:
+    - sub: [1, 2, 6720]
+
+================================================================================
+OpType      : Transpose
+# Inputs    : 1
+# Outputs   : 1
+Attr names  : ['perm']
+Node count  : 8
+Example node:
+  Name   : node_Transpose_435
+  Inputs :
+    - split_with_sizes_2_split_0: [1, 2, 32, 320]
+  Outputs:
+    - transpose: [1, 2, 320, 32]
+
+================================================================================
+OpType      : Unsqueeze
+# Inputs    : 2
+# Outputs   : 1
+Attr names  : []
+Node count  : 8
+Example node:
+  Name   : node_Unsqueeze_829
+  Inputs :
+    - expand_1: [64, 80]
+    - val_484: [1]
+  Outputs:
+    - val_485: [64, 80, 1]

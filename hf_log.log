@@ -1,0 +1,1993 @@
+------------------------------------------------------------
+Layer 319 - CONCAT#319 (node /model.23/Concat_5)
+  Shape: [1,84,8400]  Precision: FP32
+  Stats: min=0.000000 max=636.393799 mean=109.792656 std=167.046509
+  Note: stats computed on first 65536 of 705600 values
+  Preview: [5.251437, 16.885635, 27.425531, 41.494736, 56.996498, 63.926785, 66.851784, 70.069153, ...]
+------------------------------------------------------------
+Layer 0 - CONV#0 (node /model.0/conv/Conv)
+  Shape: [1,16,320,320]  Precision: FP32
+  Stats: min=-12.620382 max=32.329899 mean=1.708033 std=1.679511
+  Note: stats computed on first 65536 of 1638400 values
+  Preview: [22.875460, 1.536958, 1.457239, 1.569086, 1.430830, 1.557806, 1.426386, 1.354356, ...]
+------------------------------------------------------------
+Layer 1 - SIGMOID#1 (node /model.0/act/Sigmoid)
+  Shape: [1,16,320,320]  Precision: FP32
+  Stats: min=0.000003 max=1.000000 mean=0.818017 std=0.104228
+  Note: stats computed on first 65536 of 1638400 values
+  Preview: [1.000000, 0.823022, 0.811110, 0.827653, 0.807031, 0.826038, 0.806338, 0.794841, ...]
+------------------------------------------------------------
+Layer 2 - MUL#2 (node /model.0/act/Mul)
+  Shape: [1,16,320,320]  Precision: FP32
+  Stats: min=-0.278464 max=32.329899 mean=1.482454 std=1.667933
+  Note: stats computed on first 65536 of 1638400 values
+  Preview: [22.875460, 1.264951, 1.181981, 1.298659, 1.154724, 1.286807, 1.150149, 1.076498, ...]
+------------------------------------------------------------
+Layer 3 - CONV#3 (node /model.1/conv/Conv)
+  Shape: [1,32,160,160]  Precision: FP32
+  Stats: min=-9.961657 max=33.909695 mean=2.075218 std=2.338411
+  Note: stats computed on first 65536 of 819200 values
+  Preview: [-0.628743, 0.758757, 0.755374, 0.797915, 0.855764, 0.748316, 0.771947, 0.697135, ...]
+------------------------------------------------------------
+Layer 4 - SIGMOID#4 (node /model.1/act/Sigmoid)
+  Shape: [1,32,160,160]  Precision: FP32
+  Stats: min=0.000047 max=1.000000 mean=0.786447 std=0.253224
+  Note: stats computed on first 65536 of 819200 values
+  Preview: [0.347796, 0.681084, 0.680349, 0.689528, 0.701775, 0.678812, 0.683942, 0.667552, ...]
+------------------------------------------------------------
+Layer 5 - MUL#5 (node /model.1/act/Mul)
+  Shape: [1,32,160,160]  Precision: FP32
+  Stats: min=-0.278465 max=33.909695 mean=2.079400 std=2.146960
+  Note: stats computed on first 65536 of 819200 values
+  Preview: [-0.218674, 0.516777, 0.513918, 0.550185, 0.600554, 0.507965, 0.527967, 0.465374, ...]
+------------------------------------------------------------
+Layer 6 - CONV#6 (node /model.2/cv1/conv/Conv)
+  Shape: [1,32,160,160]  Precision: FP32
+  Stats: min=-15.389506 max=17.585367 mean=2.296387 std=2.236680
+  Note: stats computed on first 65536 of 819200 values
+  Preview: [17.585367, 14.424051, 14.787469, 15.044324, 15.225933, 15.436438, 15.501537, 15.694281, ...]
+------------------------------------------------------------
+Layer 7 - SIGMOID#7 (node /model.2/cv1/act/Sigmoid)
+  Shape: [1,32,160,160]  Precision: FP32
+  Stats: min=0.000000 max=1.000000 mean=0.797973 std=0.242258
+  Note: stats computed on first 65536 of 819200 values
+  Preview: [1.000000, 0.999999, 1.000000, 1.000000, 1.000000, 1.000000, 1.000000, 1.000000, ...]
+------------------------------------------------------------
+Layer 8 - MUL#8 (node /model.2/cv1/act/Mul)
+  Shape: [1,32,160,160]  Precision: FP32
+  Stats: min=-0.278465 max=17.585367 mean=2.317632 std=1.973731
+  Note: stats computed on first 65536 of 819200 values
+  Preview: [17.585367, 14.424044, 14.787463, 15.044319, 15.225928, 15.436434, 15.501535, 15.694280, ...]
+------------------------------------------------------------
+Layer 9 - SPLIT#9 (node /model.2/Split)
+  Shape: [1,16,160,160]  Precision: FP32
+  Stats: min=-0.278465 max=17.585367 mean=2.317632 std=1.973731
+  Note: stats computed on first 65536 of 409600 values
+  Preview: [17.585367, 14.424044, 14.787463, 15.044319, 15.225928, 15.436434, 15.501535, 15.694280, ...]
+------------------------------------------------------------
+Layer 9 - SPLIT#9 (node /model.2/Split)
+  Shape: [1,16,160,160]  Precision: FP32
+  Stats: min=-0.278465 max=7.972208 mean=1.211193 std=0.978527
+  Note: stats computed on first 65536 of 409600 values
+  Preview: [0.100931, 0.577760, 0.553248, 0.331399, 0.246080, 0.296511, 0.216032, 0.174092, ...]
+------------------------------------------------------------
+Layer 10 - CONV#10 (node /model.2/m.0/cv1/conv/Conv)
+  Shape: [1,8,160,160]  Precision: FP32
+  Stats: min=-3.456465 max=1.752134 mean=0.832706 std=0.580441
+  Note: stats computed on first 65536 of 204800 values
+  Preview: [1.464162, 1.408725, 1.368279, 1.353036, 1.333065, 1.346392, 1.366744, 1.381079, ...]
+------------------------------------------------------------
+Layer 11 - SIGMOID#11 (node /model.2/m.0/cv1/act/Sigmoid)
+  Shape: [1,8,160,160]  Precision: FP32
+  Stats: min=0.030577 max=0.852222 mean=0.687018 std=0.126081
+  Note: stats computed on first 65536 of 204800 values
+  Preview: [0.812168, 0.803565, 0.797102, 0.794626, 0.791347, 0.793539, 0.796854, 0.799164, ...]
+------------------------------------------------------------
+Layer 12 - MUL#12 (node /model.2/m.0/cv1/act/Mul)
+  Shape: [1,8,160,160]  Precision: FP32
+  Stats: min=-0.278465 max=1.493206 mean=0.645070 std=0.424329
+  Note: stats computed on first 65536 of 204800 values
+  Preview: [1.189146, 1.132002, 1.090658, 1.075157, 1.054918, 1.068414, 1.089094, 1.103709, ...]
+------------------------------------------------------------
+Layer 13 - CONV#13 (node /model.2/m.0/cv2/conv/Conv)
+  Shape: [1,16,160,160]  Precision: FP32
+  Stats: min=-22.474371 max=20.414824 mean=-0.411432 std=3.481828
+  Note: stats computed on first 65536 of 409600 values
+  Preview: [-4.312048, 0.812625, 2.452086, 1.328289, 1.358318, -0.611128, 0.825395, 0.220802, ...]
+------------------------------------------------------------
+Layer 14 - SIGMOID#14 (node /model.2/m.0/cv2/act/Sigmoid)
+  Shape: [1,16,160,160]  Precision: FP32
+  Stats: min=0.000000 max=1.000000 mean=0.452259 std=0.342510
+  Note: stats computed on first 65536 of 409600 values
+  Preview: [0.013229, 0.692669, 0.920714, 0.790557, 0.795486, 0.351802, 0.695380, 0.554977, ...]
+------------------------------------------------------------
+Layer 15 - MUL#15 (node /model.2/m.0/cv2/act/Mul)
+  Shape: [1,16,160,160]  Precision: FP32
+  Stats: min=-0.278465 max=20.414824 mean=0.841529 std=1.986010
+  Note: stats computed on first 65536 of 409600 values
+  Preview: [-0.057043, 0.562880, 2.257669, 1.050089, 1.080523, -0.214996, 0.573964, 0.122540, ...]
+------------------------------------------------------------
+Layer 16 - ADD#16 (node /model.2/m.0/Add)
+  Shape: [1,16,160,160]  Precision: FP32
+  Stats: min=-0.556918 max=21.646128 mean=2.052722 std=2.224603
+  Note: stats computed on first 65536 of 409600 values
+  Preview: [0.043888, 1.140640, 2.810917, 1.381487, 1.326603, 0.081515, 0.789996, 0.296633, ...]
+------------------------------------------------------------
+Layer 17 - CONCAT#17 (node /model.2/Concat)
+  Shape: [1,48,160,160]  Precision: FP32
+  Stats: min=-0.278465 max=17.585367 mean=2.317632 std=1.973731
+  Note: stats computed on first 65536 of 1228800 values
+  Preview: [17.585367, 14.424044, 14.787463, 15.044319, 15.225928, 15.436434, 15.501535, 15.694280, ...]
+------------------------------------------------------------
+Layer 18 - CONV#18 (node /model.2/cv2/conv/Conv)
+  Shape: [1,64,160,160]  Precision: FP32
+  Stats: min=-10.376687 max=7.327781 mean=1.677441 std=2.225319
+  Note: stats computed on first 65536 of 1638400 values
+  Preview: [5.315392, 7.327781, 6.455535, 6.218733, 6.101234, 6.030288, 6.078450, 6.165874, ...]
+------------------------------------------------------------
+Layer 19 - SIGMOID#19 (node /model.2/cv2/act/Sigmoid)
+  Shape: [1,64,160,160]  Precision: FP32
+  Stats: min=0.000031 max=0.999343 mean=0.714137 std=0.276161
+  Note: stats computed on first 65536 of 1638400 values
+  Preview: [0.995109, 0.999343, 0.998431, 0.998012, 0.997765, 0.997601, 0.997713, 0.997905, ...]
+------------------------------------------------------------
+Layer 20 - MUL#20 (node /model.2/cv2/act/Mul)
+  Shape: [1,64,160,160]  Precision: FP32
+  Stats: min=-0.278465 max=7.322969 mean=1.785578 std=1.886610
+  Note: stats computed on first 65536 of 1638400 values
+  Preview: [5.289392, 7.322969, 6.445404, 6.206372, 6.087597, 6.015821, 6.064551, 6.152954, ...]
+------------------------------------------------------------
+Layer 21 - CONV#21 (node /model.3/conv/Conv)
+  Shape: [1,64,80,80]  Precision: FP32
+  Stats: min=-13.424795 max=7.987523 mean=0.243042 std=1.121909
+  Note: stats computed on first 65536 of 409600 values
+  Preview: [3.754356, 2.167408, 2.131468, 2.138202, 2.198839, 2.275526, 2.294900, 2.282279, ...]
+------------------------------------------------------------
+Layer 22 - SIGMOID#22 (node /model.3/act/Sigmoid)
+  Shape: [1,64,80,80]  Precision: FP32
+  Stats: min=0.000001 max=0.999660 mean=0.551069 std=0.214452
+  Note: stats computed on first 65536 of 409600 values
+  Preview: [0.977120, 0.897284, 0.893924, 0.894561, 0.900145, 0.906830, 0.908454, 0.907399, ...]
+------------------------------------------------------------
+Layer 23 - MUL#23 (node /model.3/act/Mul)
+  Shape: [1,64,80,80]  Precision: FP32
+  Stats: min=-0.278465 max=7.984810 mean=0.365565 std=0.691157
+  Note: stats computed on first 65536 of 409600 values
+  Preview: [3.668457, 1.944781, 1.905371, 1.912752, 1.979274, 2.063515, 2.084811, 2.070937, ...]
+------------------------------------------------------------
+Layer 24 - CONV#24 (node /model.4/cv1/conv/Conv)
+  Shape: [1,64,80,80]  Precision: FP32
+  Stats: min=-5.461873 max=3.554218 mean=0.664894 std=0.789866
+  Note: stats computed on first 65536 of 409600 values
+  Preview: [2.923738, 1.956151, 1.874508, 1.816025, 1.804306, 1.956474, 1.901564, 1.814685, ...]
+------------------------------------------------------------
+Layer 25 - SIGMOID#25 (node /model.4/cv1/act/Sigmoid)
+  Shape: [1,64,80,80]  Precision: FP32
+  Stats: min=0.004228 max=0.972192 mean=0.648884 std=0.160905
+  Note: stats computed on first 65536 of 409600 values
+  Preview: [0.949008, 0.876116, 0.866979, 0.860088, 0.858672, 0.876151, 0.870068, 0.859927, ...]
+------------------------------------------------------------
+Layer 26 - MUL#26 (node /model.4/cv1/act/Mul)
+  Shape: [1,64,80,80]  Precision: FP32
+  Stats: min=-0.278465 max=3.455381 mean=0.556545 std=0.518390
+  Note: stats computed on first 65536 of 409600 values
+  Preview: [2.774649, 1.713815, 1.625159, 1.561942, 1.549307, 1.714167, 1.654491, 1.560496, ...]
+------------------------------------------------------------
+Layer 27 - SPLIT#27 (node /model.4/Split)
+  Shape: [1,32,80,80]  Precision: FP32
+  Stats: min=-0.278465 max=3.455381 mean=0.556545 std=0.518390
+  Note: stats computed on first 65536 of 204800 values
+  Preview: [2.774649, 1.713815, 1.625159, 1.561942, 1.549307, 1.714167, 1.654491, 1.560496, ...]
+------------------------------------------------------------
+Layer 27 - SPLIT#27 (node /model.4/Split)
+  Shape: [1,32,80,80]  Precision: FP32
+  Stats: min=-0.278465 max=2.713407 mean=0.332109 std=0.502453
+  Note: stats computed on first 65536 of 204800 values
+  Preview: [-0.235318, -0.037409, -0.068923, -0.028930, 0.006220, 0.005279, -0.007182, -0.017281, ...]
+------------------------------------------------------------
+Layer 28 - CONV#28 (node /model.4/m.0/cv1/conv/Conv)
+  Shape: [1,16,80,80]  Precision: FP32
+  Stats: min=-2.817585 max=2.625708 mean=0.611168 std=0.905858
+  Note: stats computed on first 65536 of 102400 values
+  Preview: [0.974677, 2.006247, 1.203978, 1.013263, 0.892816, 1.008933, 1.022372, 0.876885, ...]
+------------------------------------------------------------
+Layer 29 - SIGMOID#29 (node /model.4/m.0/cv1/act/Sigmoid)
+  Shape: [1,16,80,80]  Precision: FP32
+  Stats: min=0.056381 max=0.932498 mean=0.631908 std=0.195997
+  Note: stats computed on first 65536 of 102400 values
+  Preview: [0.726051, 0.881451, 0.769232, 0.733658, 0.709471, 0.732811, 0.735434, 0.706176, ...]
+------------------------------------------------------------
+Layer 30 - MUL#30 (node /model.4/m.0/cv1/act/Mul)
+  Shape: [1,16,80,80]  Precision: FP32
+  Stats: min=-0.278465 max=2.448467 mean=0.563013 std=0.590828
+  Note: stats computed on first 65536 of 102400 values
+  Preview: [0.707664, 1.768409, 0.926138, 0.743388, 0.633427, 0.739357, 0.751887, 0.619235, ...]
+------------------------------------------------------------
+Layer 31 - CONV#31 (node /model.4/m.0/cv2/conv/Conv)
+  Shape: [1,32,80,80]  Precision: FP32
+  Stats: min=-4.685149 max=4.566340 mean=1.104386 std=1.152766
+  Note: stats computed on first 65536 of 204800 values
+  Preview: [1.273456, 1.491593, 1.467471, 1.367619, 1.381289, 1.457093, 1.229431, 1.042617, ...]
+------------------------------------------------------------
+Layer 32 - SIGMOID#32 (node /model.4/m.0/cv2/act/Sigmoid)
+  Shape: [1,32,80,80]  Precision: FP32
+  Stats: min=0.009147 max=0.989711 mean=0.704695 std=0.196631
+  Note: stats computed on first 65536 of 204800 values
+  Preview: [0.781334, 0.816317, 0.812673, 0.796995, 0.799198, 0.811088, 0.773719, 0.739355, ...]
+------------------------------------------------------------
+Layer 33 - MUL#33 (node /model.4/m.0/cv2/act/Mul)
+  Shape: [1,32,80,80]  Precision: FP32
+  Stats: min=-0.278465 max=4.519357 mean=0.998445 std=1.003098
+  Note: stats computed on first 65536 of 204800 values
+  Preview: [0.994995, 1.217613, 1.192573, 1.089985, 1.103923, 1.181830, 0.951234, 0.770864, ...]
+------------------------------------------------------------
+Layer 34 - ADD#34 (node /model.4/m.0/Add)
+  Shape: [1,32,80,80]  Precision: FP32
+  Stats: min=-0.555332 max=5.120459 mean=1.330554 std=0.945138
+  Note: stats computed on first 65536 of 204800 values
+  Preview: [0.759677, 1.180204, 1.123650, 1.061056, 1.110143, 1.187110, 0.944052, 0.753582, ...]
+------------------------------------------------------------
+Layer 35 - CONCAT#35 (node /model.4/Concat)
+  Shape: [1,96,80,80]  Precision: FP32
+  Stats: min=-0.278465 max=3.455381 mean=0.556545 std=0.518390
+  Note: stats computed on first 65536 of 614400 values
+  Preview: [2.774649, 1.713815, 1.625159, 1.561942, 1.549307, 1.714167, 1.654491, 1.560496, ...]
+------------------------------------------------------------
+Layer 36 - CONV#36 (node /model.4/cv2/conv/Conv)
+  Shape: [1,128,80,80]  Precision: FP32
+  Stats: min=-5.134588 max=3.028176 mean=-0.932102 std=0.809594
+  Note: stats computed on first 65536 of 819200 values
+  Preview: [-1.010474, -0.615014, -0.891607, -0.786462, -0.646130, -0.763939, -0.870703, -0.922810, ...]
+------------------------------------------------------------
+Layer 37 - SIGMOID#37 (node /model.4/cv2/act/Sigmoid)
+  Shape: [1,128,80,80]  Precision: FP32
+  Stats: min=0.005855 max=0.953831 mean=0.307037 std=0.154219
+  Note: stats computed on first 65536 of 819200 values
+  Preview: [0.266887, 0.350916, 0.290778, 0.312929, 0.343862, 0.317792, 0.295108, 0.284386, ...]
+------------------------------------------------------------
+Layer 38 - MUL#38 (node /model.4/cv2/act/Mul)
+  Shape: [1,128,80,80]  Precision: FP32
+  Stats: min=-0.278465 max=2.888368 mean=-0.163657 std=0.170671
+  Note: stats computed on first 65536 of 819200 values
+  Preview: [-0.269682, -0.215818, -0.259260, -0.246107, -0.222180, -0.242773, -0.256952, -0.262434, ...]
+------------------------------------------------------------
+Layer 39 - CONV#39 (node /model.5/conv/Conv)
+  Shape: [1,128,40,40]  Precision: FP32
+  Stats: min=-4.774806 max=3.432720 mean=-0.184682 std=0.908071
+  Note: stats computed on first 65536 of 204800 values
+  Preview: [-0.374925, -1.180360, -1.212041, -0.995447, -0.926593, -0.964099, -1.015050, -1.009087, ...]
+------------------------------------------------------------
+Layer 40 - SIGMOID#40 (node /model.5/act/Sigmoid)
+  Shape: [1,128,40,40]  Precision: FP32
+  Stats: min=0.008369 max=0.968712 mean=0.461760 std=0.196966
+  Note: stats computed on first 65536 of 204800 values
+  Preview: [0.407351, 0.234987, 0.229340, 0.269838, 0.283616, 0.276058, 0.265993, 0.267159, ...]
+------------------------------------------------------------
+Layer 41 - MUL#41 (node /model.5/act/Mul)
+  Shape: [1,128,40,40]  Precision: FP32
+  Stats: min=-0.278465 max=3.325315 mean=0.092494 std=0.424101
+  Note: stats computed on first 65536 of 204800 values
+  Preview: [-0.152726, -0.277370, -0.277970, -0.268609, -0.262797, -0.266148, -0.269996, -0.269586, ...]
+------------------------------------------------------------
+Layer 42 - CONV#42 (node /model.6/cv1/conv/Conv)
+  Shape: [1,128,40,40]  Precision: FP32
+  Stats: min=-5.349112 max=5.385372 mean=-0.205061 std=1.029590
+  Note: stats computed on first 65536 of 204800 values
+  Preview: [2.321257, 1.717240, 1.376744, 1.399063, 1.281198, 1.490631, 1.567582, 1.440477, ...]
+------------------------------------------------------------
+Layer 43 - SIGMOID#43 (node /model.6/cv1/act/Sigmoid)
+  Shape: [1,128,40,40]  Precision: FP32
+  Stats: min=0.004730 max=0.995438 mean=0.463718 std=0.211591
+  Note: stats computed on first 65536 of 204800 values
+  Preview: [0.910622, 0.847773, 0.798468, 0.802035, 0.782654, 0.816173, 0.827439, 0.808529, ...]
+------------------------------------------------------------
+Layer 44 - MUL#44 (node /model.6/cv1/act/Mul)
+  Shape: [1,128,40,40]  Precision: FP32
+  Stats: min=-0.278465 max=5.360802 mean=0.120533 std=0.435507
+  Note: stats computed on first 65536 of 204800 values
+  Preview: [2.113788, 1.455830, 1.099286, 1.122097, 1.002735, 1.216612, 1.297077, 1.164667, ...]
+------------------------------------------------------------
+Layer 45 - SPLIT#45 (node /model.6/Split)
+  Shape: [1,64,40,40]  Precision: FP32
+  Stats: min=-0.278465 max=5.360802 mean=0.120533 std=0.435507
+  Note: stats computed on first 65536 of 102400 values
+  Preview: [2.113788, 1.455830, 1.099286, 1.122097, 1.002735, 1.216612, 1.297077, 1.164667, ...]
+------------------------------------------------------------
+Layer 45 - SPLIT#45 (node /model.6/Split)
+  Shape: [1,64,40,40]  Precision: FP32
+  Stats: min=-0.278465 max=4.406595 mean=0.120365 std=0.439728
+  Note: stats computed on first 65536 of 102400 values
+  Preview: [-0.226902, -0.170762, -0.181685, -0.151564, -0.158322, -0.100077, -0.097862, -0.081376, ...]
+------------------------------------------------------------
+Layer 46 - CONV#46 (node /model.6/m.0/cv1/conv/Conv)
+  Shape: [1,32,40,40]  Precision: FP32
+  Stats: min=-2.850785 max=2.429982 mean=0.248987 std=0.763972
+  Note: stats computed on all 51200 values
+  Preview: [0.357652, -0.157659, -0.461607, -0.507813, -0.577839, -0.513474, -0.514062, -0.536613, ...]
+------------------------------------------------------------
+Layer 47 - CONV#47 (node /model.6/m.0/cv2/conv/Conv)
+  Shape: [1,32,40,40]  Precision: FP32
+  Stats: min=-7.620232 max=4.960932 mean=-0.314811 std=1.078841
+  Note: stats computed on all 51200 values
+  Preview: [-1.503710, -0.340871, -0.233515, -0.238771, -0.143036, -0.309507, -0.395251, -0.485175, ...]
+------------------------------------------------------------
+Layer 48 - SIGMOID#48 (node /model.6/m.0/cv1/act/Sigmoid)
+  Shape: [1,32,40,40]  Precision: FP32
+  Stats: min=0.054641 max=0.919085 mean=0.559052 std=0.170594
+  Note: stats computed on all 51200 values
+  Preview: [0.588472, 0.460667, 0.386605, 0.375706, 0.359430, 0.374379, 0.374242, 0.368976, ...]
+------------------------------------------------------------
+Layer 49 - SIGMOID#49 (node /model.6/m.0/cv2/act/Sigmoid)
+  Shape: [1,32,40,40]  Precision: FP32
+  Stats: min=0.000490 max=0.993042 mean=0.432346 std=0.213322
+  Note: stats computed on all 51200 values
+  Preview: [0.181873, 0.415598, 0.441885, 0.440589, 0.464302, 0.423235, 0.402454, 0.381031, ...]
+------------------------------------------------------------
+Layer 50 - MUL#50 (node /model.6/m.0/cv1/act/Mul)
+  Shape: [1,32,40,40]  Precision: FP32
+  Stats: min=-0.278465 max=2.233361 mean=0.269226 std=0.414671
+  Note: stats computed on all 51200 values
+  Preview: [0.210468, -0.072628, -0.178459, -0.190789, -0.207693, -0.192234, -0.192384, -0.197997, ...]
+------------------------------------------------------------
+Layer 51 - MUL#51 (node /model.6/m.0/cv2/act/Mul)
+  Shape: [1,32,40,40]  Precision: FP32
+  Stats: min=-0.278465 max=4.926416 mean=0.090212 std=0.565048
+  Note: stats computed on all 51200 values
+  Preview: [-0.273484, -0.141665, -0.103187, -0.105200, -0.066412, -0.130994, -0.159070, -0.184867, ...]
+------------------------------------------------------------
+Layer 52 - CONV#52 (node /model.6/m.0/m/m.0/cv1/conv/Conv)
+  Shape: [1,32,40,40]  Precision: FP32
+  Stats: min=-4.008889 max=3.055254 mean=-0.437494 std=0.848092
+  Note: stats computed on all 51200 values
+  Preview: [-1.482899, -1.563593, -1.733527, -2.102550, -2.053811, -2.086157, -1.895290, -1.763456, ...]
+------------------------------------------------------------
+Layer 53 - SIGMOID#53 (node /model.6/m.0/m/m.0/cv1/act/Sigmoid)
+  Shape: [1,32,40,40]  Precision: FP32
+  Stats: min=0.017830 max=0.955009 mean=0.407719 std=0.179131
+  Note: stats computed on all 51200 values
+  Preview: [0.184990, 0.173132, 0.150137, 0.108849, 0.113668, 0.110450, 0.130642, 0.146358, ...]
+------------------------------------------------------------
+Layer 54 - MUL#54 (node /model.6/m.0/m/m.0/cv1/act/Mul)
+  Shape: [1,32,40,40]  Precision: FP32
+  Stats: min=-0.278465 max=2.917794 mean=-0.027690 std=0.318021
+  Note: stats computed on all 51200 values
+  Preview: [-0.274321, -0.270707, -0.260267, -0.228861, -0.233452, -0.230415, -0.247605, -0.258096, ...]
+------------------------------------------------------------
+Layer 55 - CONV#55 (node /model.6/m.0/m/m.0/cv2/conv/Conv)
+  Shape: [1,32,40,40]  Precision: FP32
+  Stats: min=-5.158700 max=3.515893 mean=0.296339 std=1.015455
+  Note: stats computed on all 51200 values
+  Preview: [0.721151, 0.608696, 0.726224, 0.896353, 0.820413, 0.870008, 0.789710, 0.655061, ...]
+------------------------------------------------------------
+Layer 56 - SIGMOID#56 (node /model.6/m.0/m/m.0/cv2/act/Sigmoid)
+  Shape: [1,32,40,40]  Precision: FP32
+  Stats: min=0.005716 max=0.971137 mean=0.564685 std=0.213778
+  Note: stats computed on all 51200 values
+  Preview: [0.672860, 0.647643, 0.673976, 0.710199, 0.694324, 0.704747, 0.687769, 0.658150, ...]
+------------------------------------------------------------
+Layer 57 - MUL#57 (node /model.6/m.0/m/m.0/cv2/act/Mul)
+  Shape: [1,32,40,40]  Precision: FP32
+  Stats: min=-0.278465 max=3.414412 mean=0.383151 std=0.601561
+  Note: stats computed on all 51200 values
+  Preview: [0.485234, 0.394218, 0.489458, 0.636589, 0.569632, 0.613135, 0.543138, 0.431128, ...]
+------------------------------------------------------------
+Layer 58 - ADD#58 (node /model.6/m.0/m/m.0/Add)
+  Shape: [1,32,40,40]  Precision: FP32
+  Stats: min=-0.556918 max=3.535046 mean=0.652378 std=0.692064
+  Note: stats computed on all 51200 values
+  Preview: [0.695702, 0.321589, 0.310998, 0.445800, 0.361940, 0.420901, 0.350754, 0.233131, ...]
+------------------------------------------------------------
+Layer 59 - CONV#59 (node /model.6/m.0/m/m.1/cv1/conv/Conv)
+  Shape: [1,32,40,40]  Precision: FP32
+  Stats: min=-4.070738 max=2.820238 mean=-0.390782 std=0.907498
+  Note: stats computed on all 51200 values
+  Preview: [-0.572267, -0.048304, 0.163948, 0.164154, 0.106030, 0.176820, 0.191736, 0.170612, ...]
+------------------------------------------------------------
+Layer 60 - SIGMOID#60 (node /model.6/m.0/m/m.1/cv1/act/Sigmoid)
+  Shape: [1,32,40,40]  Precision: FP32
+  Stats: min=0.016778 max=0.943760 mean=0.421025 std=0.189790
+  Note: stats computed on all 51200 values
+  Preview: [0.360714, 0.487926, 0.540896, 0.540947, 0.526483, 0.544090, 0.547788, 0.542550, ...]
+------------------------------------------------------------
+Layer 61 - MUL#61 (node /model.6/m.0/m/m.1/cv1/act/Mul)
+  Shape: [1,32,40,40]  Precision: FP32
+  Stats: min=-0.278465 max=2.661627 mean=0.005953 std=0.327747
+  Note: stats computed on all 51200 values
+  Preview: [-0.206425, -0.023569, 0.088679, 0.088799, 0.055823, 0.096206, 0.105031, 0.092566, ...]
+------------------------------------------------------------
+Layer 62 - CONV#62 (node /model.6/m.0/m/m.1/cv2/conv/Conv)
+  Shape: [1,32,40,40]  Precision: FP32
+  Stats: min=-6.943870 max=6.479344 mean=1.413426 std=1.207278
+  Note: stats computed on all 51200 values
+  Preview: [0.705280, 0.704793, 1.429141, 1.530535, 1.248034, 1.182558, 1.059687, 1.166302, ...]
+------------------------------------------------------------
+Layer 63 - SIGMOID#63 (node /model.6/m.0/m/m.1/cv2/act/Sigmoid)
+  Shape: [1,32,40,40]  Precision: FP32
+  Stats: min=0.000964 max=0.998468 mean=0.756988 std=0.194813
+  Note: stats computed on all 51200 values
+  Preview: [0.669357, 0.669250, 0.806767, 0.822085, 0.776959, 0.765407, 0.742631, 0.762476, ...]
+------------------------------------------------------------
+Layer 64 - MUL#64 (node /model.6/m.0/m/m.1/cv2/act/Mul)
+  Shape: [1,32,40,40]  Precision: FP32
+  Stats: min=-0.278465 max=6.469415 mean=1.295633 std=1.032180
+  Note: stats computed on all 51200 values
+  Preview: [0.472084, 0.471683, 1.152984, 1.258230, 0.969671, 0.905139, 0.786956, 0.889278, ...]
+------------------------------------------------------------
+Layer 65 - ADD#65 (node /model.6/m.0/m/m.1/Add)
+  Shape: [1,32,40,40]  Precision: FP32
+  Stats: min=-0.822328 max=9.024783 mean=1.948011 std=1.294650
+  Note: stats computed on all 51200 values
+  Preview: [1.167786, 0.793272, 1.463982, 1.704030, 1.331611, 1.326040, 1.137710, 1.122409, ...]
+------------------------------------------------------------
+Layer 66 - CONCAT#66 (node /model.6/m.0/Concat)
+  Shape: [1,64,40,40]  Precision: FP32
+  Stats: min=-0.822328 max=9.024783 mean=1.523565 std=1.417062
+  Note: stats computed on first 65536 of 102400 values
+  Preview: [1.167786, 0.793272, 1.463982, 1.704030, 1.331611, 1.326040, 1.137710, 1.122409, ...]
+------------------------------------------------------------
+Layer 67 - CONV#67 (node /model.6/m.0/cv3/conv/Conv)
+  Shape: [1,64,40,40]  Precision: FP32
+  Stats: min=-6.666285 max=5.782199 mean=-0.369807 std=1.130905
+  Note: stats computed on first 65536 of 102400 values
+  Preview: [-0.637170, 0.245048, 0.479539, 0.266620, -0.305273, -0.490490, -0.418989, -0.745874, ...]
+------------------------------------------------------------
+Layer 68 - SIGMOID#68 (node /model.6/m.0/cv3/act/Sigmoid)
+  Shape: [1,64,40,40]  Precision: FP32
+  Stats: min=0.001271 max=0.996928 mean=0.432125 std=0.218554
+  Note: stats computed on first 65536 of 102400 values
+  Preview: [0.345886, 0.560957, 0.617639, 0.566263, 0.424269, 0.379778, 0.396759, 0.321721, ...]
+------------------------------------------------------------
+Layer 69 - MUL#69 (node /model.6/m.0/cv3/act/Mul)
+  Shape: [1,64,40,40]  Precision: FP32
+  Stats: min=-0.278465 max=5.764433 mean=0.082255 std=0.456611
+  Note: stats computed on first 65536 of 102400 values
+  Preview: [-0.220389, 0.137462, 0.296182, 0.150977, -0.129518, -0.186277, -0.166237, -0.239963, ...]
+------------------------------------------------------------
+Layer 70 - CONCAT#70 (node /model.6/Concat)
+  Shape: [1,192,40,40]  Precision: FP32
+  Stats: min=-0.278465 max=5.360802 mean=0.120533 std=0.435507
+  Note: stats computed on first 65536 of 307200 values
+  Preview: [2.113788, 1.455830, 1.099286, 1.122097, 1.002735, 1.216612, 1.297077, 1.164667, ...]
+------------------------------------------------------------
+Layer 71 - CONV#71 (node /model.6/cv2/conv/Conv)
+  Shape: [1,128,40,40]  Precision: FP32
+  Stats: min=-6.946121 max=4.635056 mean=-0.570668 std=1.064039
+  Note: stats computed on first 65536 of 204800 values
+  Preview: [-0.043857, -0.062867, 0.105029, 0.200155, 0.091543, 0.042285, 0.022091, -0.126912, ...]
+------------------------------------------------------------
+Layer 72 - SIGMOID#72 (node /model.6/cv2/act/Sigmoid)
+  Shape: [1,128,40,40]  Precision: FP32
+  Stats: min=0.000961 max=0.990388 mean=0.388868 std=0.208131
+  Note: stats computed on first 65536 of 204800 values
+  Preview: [0.489038, 0.484288, 0.526233, 0.549872, 0.522870, 0.510570, 0.505523, 0.468315, ...]
+------------------------------------------------------------
+Layer 73 - MUL#73 (node /model.6/cv2/act/Mul)
+  Shape: [1,128,40,40]  Precision: FP32
+  Stats: min=-0.278465 max=4.590502 mean=-0.004121 std=0.378397
+  Note: stats computed on first 65536 of 204800 values
+  Preview: [-0.021448, -0.030446, 0.055270, 0.110060, 0.047865, 0.021589, 0.011168, -0.059435, ...]
+------------------------------------------------------------
+Layer 74 - CONV#74 (node /model.7/conv/Conv)
+  Shape: [1,256,20,20]  Precision: FP32
+  Stats: min=-7.222535 max=4.611863 mean=-0.593117 std=1.063248
+  Note: stats computed on first 65536 of 102400 values
+  Preview: [-0.232309, -1.875684, -1.713462, -1.592467, -1.745435, -1.657161, -1.782352, -1.511528, ...]
+------------------------------------------------------------
+Layer 75 - SIGMOID#75 (node /model.7/act/Sigmoid)
+  Shape: [1,256,20,20]  Precision: FP32
+  Stats: min=0.000729 max=0.990164 mean=0.382549 std=0.207272
+  Note: stats computed on first 65536 of 102400 values
+  Preview: [0.442182, 0.132885, 0.152715, 0.169037, 0.148624, 0.160144, 0.144013, 0.180712, ...]
+------------------------------------------------------------
+Layer 76 - MUL#76 (node /model.7/act/Mul)
+  Shape: [1,256,20,20]  Precision: FP32
+  Stats: min=-0.278465 max=4.566503 mean=-0.010508 std=0.402458
+  Note: stats computed on first 65536 of 102400 values
+  Preview: [-0.102723, -0.249251, -0.261672, -0.269186, -0.259413, -0.265384, -0.256682, -0.273152, ...]
+------------------------------------------------------------
+Layer 77 - CONV#77 (node /model.8/cv1/conv/Conv)
+  Shape: [1,256,20,20]  Precision: FP32
+  Stats: min=-10.357675 max=6.025820 mean=-0.599942 std=1.320585
+  Note: stats computed on first 65536 of 102400 values
+  Preview: [-1.563131, -1.805013, -2.042254, -1.930224, -2.110585, -1.685767, -1.365755, -1.497303, ...]
+------------------------------------------------------------
+Layer 78 - SIGMOID#78 (node /model.8/cv1/act/Sigmoid)
+  Shape: [1,256,20,20]  Precision: FP32
+  Stats: min=0.000032 max=0.997590 mean=0.388106 std=0.238354
+  Note: stats computed on first 65536 of 102400 values
+  Preview: [0.173198, 0.141242, 0.114837, 0.126726, 0.108072, 0.156333, 0.203306, 0.182828, ...]
+------------------------------------------------------------
+Layer 79 - MUL#79 (node /model.8/cv1/act/Mul)
+  Shape: [1,256,20,20]  Precision: FP32
+  Stats: min=-0.278465 max=6.011300 mean=0.072928 std=0.571853
+  Note: stats computed on first 65536 of 102400 values
+  Preview: [-0.270731, -0.254943, -0.234527, -0.244609, -0.228096, -0.263542, -0.277667, -0.273749, ...]
+------------------------------------------------------------
+Layer 80 - SPLIT#80 (node /model.8/Split)
+  Shape: [1,128,20,20]  Precision: FP32
+  Stats: min=-0.278465 max=5.974251 mean=0.112657 std=0.606995
+  Note: stats computed on all 51200 values
+  Preview: [-0.270731, -0.254943, -0.234527, -0.244609, -0.228096, -0.263542, -0.277667, -0.273749, ...]
+------------------------------------------------------------
+Layer 80 - SPLIT#80 (node /model.8/Split)
+  Shape: [1,128,20,20]  Precision: FP32
+  Stats: min=-0.278465 max=6.011300 mean=-0.050000 std=0.394638
+  Note: stats computed on all 51200 values
+  Preview: [0.734298, 0.093894, -0.099517, -0.103371, -0.109699, 0.064502, 0.183466, 0.131741, ...]
+------------------------------------------------------------
+Layer 81 - CONV#81 (node /model.8/m.0/cv1/conv/Conv)
+  Shape: [1,64,20,20]  Precision: FP32
+  Stats: min=-6.375601 max=2.572562 mean=-0.168682 std=0.854441
+  Note: stats computed on all 25600 values
+  Preview: [-1.025963, -0.375992, -0.169715, -0.317229, -0.090296, -0.306370, -0.453063, -0.429792, ...]
+------------------------------------------------------------
+Layer 82 - CONV#82 (node /model.8/m.0/cv2/conv/Conv)
+  Shape: [1,64,20,20]  Precision: FP32
+  Stats: min=-8.560938 max=9.235189 mean=-0.259800 std=1.270486
+  Note: stats computed on all 25600 values
+  Preview: [1.802375, 0.666465, 0.594661, 0.836131, 0.512171, 0.647783, 0.760804, 0.755976, ...]
+------------------------------------------------------------
+Layer 83 - SIGMOID#83 (node /model.8/m.0/cv1/act/Sigmoid)
+  Shape: [1,64,20,20]  Precision: FP32
+  Stats: min=0.001700 max=0.929075 mean=0.467956 std=0.181520
+  Note: stats computed on all 25600 values
+  Preview: [0.263868, 0.407094, 0.457673, 0.421351, 0.477441, 0.424001, 0.388633, 0.394176, ...]
+------------------------------------------------------------
+Layer 84 - SIGMOID#84 (node /model.8/m.0/cv2/act/Sigmoid)
+  Shape: [1,64,20,20]  Precision: FP32
+  Stats: min=0.000191 max=0.999902 mean=0.448608 std=0.233741
+  Note: stats computed on all 25600 values
+  Preview: [0.858438, 0.660711, 0.644434, 0.697650, 0.625315, 0.656511, 0.681528, 0.680480, ...]
+------------------------------------------------------------
+Layer 85 - MUL#85 (node /model.8/m.0/cv1/act/Mul)
+  Shape: [1,64,20,20]  Precision: FP32
+  Stats: min=-0.278465 max=2.390103 mean=0.074777 std=0.356961
+  Note: stats computed on all 25600 values
+  Preview: [-0.270718, -0.153064, -0.077674, -0.133665, -0.043111, -0.129901, -0.176075, -0.169414, ...]
+------------------------------------------------------------
+Layer 86 - MUL#86 (node /model.8/m.0/cv2/act/Mul)
+  Shape: [1,64,20,20]  Precision: FP32
+  Stats: min=-0.278465 max=9.234289 mean=0.172183 std=0.676356
+  Note: stats computed on all 25600 values
+  Preview: [1.547226, 0.440341, 0.383220, 0.583326, 0.320268, 0.425277, 0.518510, 0.514426, ...]
+------------------------------------------------------------
+Layer 87 - CONV#87 (node /model.8/m.0/m/m.0/cv1/conv/Conv)
+  Shape: [1,64,20,20]  Precision: FP32
+  Stats: min=-6.094109 max=5.200659 mean=-0.632587 std=1.193383
+  Note: stats computed on all 25600 values
+  Preview: [-0.456245, 0.219783, 0.597832, 0.844703, 1.100257, 1.013441, 0.785096, 0.631659, ...]
+------------------------------------------------------------
+Layer 88 - SIGMOID#88 (node /model.8/m.0/m/m.0/cv1/act/Sigmoid)
+  Shape: [1,64,20,20]  Precision: FP32
+  Stats: min=0.002251 max=0.994517 mean=0.379584 std=0.226616
+  Note: stats computed on all 25600 values
+  Preview: [0.387877, 0.554726, 0.645160, 0.699455, 0.750308, 0.733693, 0.686777, 0.652866, ...]
+------------------------------------------------------------
+Layer 89 - MUL#89 (node /model.8/m.0/m/m.0/cv1/act/Mul)
+  Shape: [1,64,20,20]  Precision: FP32
+  Stats: min=-0.278465 max=5.172146 mean=0.024837 std=0.463799
+  Note: stats computed on all 25600 values
+  Preview: [-0.176967, 0.121919, 0.385697, 0.590831, 0.825532, 0.743555, 0.539186, 0.412389, ...]
+------------------------------------------------------------
+Layer 90 - CONV#90 (node /model.8/m.0/m/m.0/cv2/conv/Conv)
+  Shape: [1,64,20,20]  Precision: FP32
+  Stats: min=-6.050835 max=6.961716 mean=0.135589 std=1.175455
+  Note: stats computed on all 25600 values
+  Preview: [0.032645, 0.251386, 0.118100, 0.086103, 0.141460, 0.267406, 0.556356, 0.798131, ...]
+------------------------------------------------------------
+Layer 91 - SIGMOID#91 (node /model.8/m.0/m/m.0/cv2/act/Sigmoid)
+  Shape: [1,64,20,20]  Precision: FP32
+  Stats: min=0.002350 max=0.999053 mean=0.537311 std=0.226359
+  Note: stats computed on all 25600 values
+  Preview: [0.508161, 0.562518, 0.529491, 0.521512, 0.535306, 0.566456, 0.635609, 0.689575, ...]
+------------------------------------------------------------
+Layer 92 - MUL#92 (node /model.8/m.0/m/m.0/cv2/act/Mul)
+  Shape: [1,64,20,20]  Precision: FP32
+  Stats: min=-0.278465 max=6.955127 mean=0.334378 std=0.607647
+  Note: stats computed on all 25600 values
+  Preview: [0.016589, 0.141409, 0.062533, 0.044904, 0.075724, 0.151474, 0.353624, 0.550371, ...]
+------------------------------------------------------------
+Layer 93 - ADD#93 (node /model.8/m.0/m/m.0/Add)
+  Shape: [1,64,20,20]  Precision: FP32
+  Stats: min=-0.556891 max=6.860142 mean=0.409155 std=0.678123
+  Note: stats computed on all 25600 values
+  Preview: [-0.254129, -0.011655, -0.015141, -0.088761, 0.032613, 0.021573, 0.177549, 0.380957, ...]
+------------------------------------------------------------
+Layer 94 - CONV#94 (node /model.8/m.0/m/m.1/cv1/conv/Conv)
+  Shape: [1,64,20,20]  Precision: FP32
+  Stats: min=-7.853190 max=5.731953 mean=-0.223503 std=1.314081
+  Note: stats computed on all 25600 values
+  Preview: [0.410123, 0.341849, 0.554455, 0.419905, 0.475577, 0.557720, 0.804015, 0.921398, ...]
+------------------------------------------------------------
+Layer 95 - SIGMOID#95 (node /model.8/m.0/m/m.1/cv1/act/Sigmoid)
+  Shape: [1,64,20,20]  Precision: FP32
+  Stats: min=0.000388 max=0.996770 mean=0.462256 std=0.244021
+  Note: stats computed on all 25600 values
+  Preview: [0.601117, 0.584640, 0.635169, 0.603460, 0.616703, 0.635925, 0.690833, 0.715327, ...]
+------------------------------------------------------------
+Layer 96 - MUL#96 (node /model.8/m.0/m/m.1/cv1/act/Mul)
+  Shape: [1,64,20,20]  Precision: FP32
+  Stats: min=-0.278465 max=5.713437 mean=0.209845 std=0.640076
+  Note: stats computed on all 25600 values
+  Preview: [0.246532, 0.199858, 0.352172, 0.253396, 0.293290, 0.354668, 0.555440, 0.659101, ...]
+------------------------------------------------------------
+Layer 97 - CONV#97 (node /model.8/m.0/m/m.1/cv2/conv/Conv)
+  Shape: [1,64,20,20]  Precision: FP32
+  Stats: min=-9.541661 max=8.567668 mean=0.802808 std=2.029749
+  Note: stats computed on all 25600 values
+  Preview: [1.190212, 0.936861, 1.277045, 1.766492, 2.090677, 2.315598, 2.212936, 2.132262, ...]
+------------------------------------------------------------
+Layer 98 - SIGMOID#98 (node /model.8/m.0/m/m.1/cv2/act/Sigmoid)
+  Shape: [1,64,20,20]  Precision: FP32
+  Stats: min=0.000072 max=0.999810 mean=0.633928 std=0.292765
+  Note: stats computed on all 25600 values
+  Preview: [0.766779, 0.718465, 0.781946, 0.854021, 0.889994, 0.910161, 0.901405, 0.894000, ...]
+------------------------------------------------------------
+Layer 99 - MUL#99 (node /model.8/m.0/m/m.1/cv2/act/Mul)
+  Shape: [1,64,20,20]  Precision: FP32
+  Stats: min=-0.278464 max=8.566039 mean=1.071345 std=1.392506
+  Note: stats computed on all 25600 values
+  Preview: [0.912629, 0.673102, 0.998581, 1.508621, 1.860689, 2.107567, 1.994752, 1.906242, ...]
+------------------------------------------------------------
+Layer 100 - ADD#100 (node /model.8/m.0/m/m.1/Add)
+  Shape: [1,64,20,20]  Precision: FP32
+  Stats: min=-0.834820 max=10.046457 mean=1.480500 std=1.588827
+  Note: stats computed on all 25600 values
+  Preview: [0.658500, 0.661447, 0.983440, 1.419860, 1.893302, 2.129140, 2.172301, 2.287199, ...]
+------------------------------------------------------------
+Layer 101 - CONCAT#101 (node /model.8/m.0/Concat)
+  Shape: [1,128,20,20]  Precision: FP32
+  Stats: min=-0.834820 max=10.046457 mean=0.826341 std=1.385221
+  Note: stats computed on all 51200 values
+  Preview: [0.658500, 0.661447, 0.983440, 1.419860, 1.893302, 2.129140, 2.172301, 2.287199, ...]
+------------------------------------------------------------
+Layer 102 - CONV#102 (node /model.8/m.0/cv3/conv/Conv)
+  Shape: [1,128,20,20]  Precision: FP32
+  Stats: min=-8.634638 max=6.629884 mean=-0.639608 std=1.418943
+  Note: stats computed on all 51200 values
+  Preview: [-0.825276, -0.729375, -1.187791, -1.489073, -1.441862, -1.509789, -1.501469, -1.526865, ...]
+------------------------------------------------------------
+Layer 103 - SIGMOID#103 (node /model.8/m.0/cv3/act/Sigmoid)
+  Shape: [1,128,20,20]  Precision: FP32
+  Stats: min=0.000178 max=0.998681 mean=0.384293 std=0.243924
+  Note: stats computed on all 51200 values
+  Preview: [0.304645, 0.325332, 0.233654, 0.184061, 0.191257, 0.180970, 0.182207, 0.178453, ...]
+------------------------------------------------------------
+Layer 104 - MUL#104 (node /model.8/m.0/cv3/act/Mul)
+  Shape: [1,128,20,20]  Precision: FP32
+  Stats: min=-0.278465 max=6.621142 mean=0.087893 std=0.620286
+  Note: stats computed on all 51200 values
+  Preview: [-0.251416, -0.237289, -0.277532, -0.274080, -0.275766, -0.273227, -0.273577, -0.272473, ...]
+------------------------------------------------------------
+Layer 105 - CONCAT#105 (node /model.8/Concat)
+  Shape: [1,384,20,20]  Precision: FP32
+  Stats: min=-0.278465 max=6.011300 mean=0.072928 std=0.571853
+  Note: stats computed on first 65536 of 153600 values
+  Preview: [-0.270731, -0.254943, -0.234527, -0.244609, -0.228096, -0.263542, -0.277667, -0.273749, ...]
+------------------------------------------------------------
+Layer 106 - CONV#106 (node /model.8/cv2/conv/Conv)
+  Shape: [1,256,20,20]  Precision: FP32
+  Stats: min=-8.276994 max=4.964442 mean=-0.523573 std=1.536836
+  Note: stats computed on first 65536 of 102400 values
+  Preview: [0.503579, 1.012543, 0.768324, 0.735470, 0.630122, 1.002103, 1.112373, 0.962099, ...]
+------------------------------------------------------------
+Layer 107 - SIGMOID#107 (node /model.8/cv2/act/Sigmoid)
+  Shape: [1,256,20,20]  Precision: FP32
+  Stats: min=0.000254 max=0.993067 mean=0.415808 std=0.261021
+  Note: stats computed on first 65536 of 102400 values
+  Preview: [0.623300, 0.733518, 0.683158, 0.676004, 0.652517, 0.731472, 0.752571, 0.723542, ...]
+------------------------------------------------------------
+Layer 108 - MUL#108 (node /model.8/cv2/act/Mul)
+  Shape: [1,256,20,20]  Precision: FP32
+  Stats: min=-0.278465 max=4.930022 mean=0.169038 std=0.642413
+  Note: stats computed on first 65536 of 102400 values
+  Preview: [0.313881, 0.742718, 0.524886, 0.497181, 0.411166, 0.733010, 0.837140, 0.696119, ...]
+------------------------------------------------------------
+Layer 109 - CONV#109 (node /model.9/cv1/conv/Conv)
+  Shape: [1,128,20,20]  Precision: FP32
+  Stats: min=-3.129933 max=6.971077 mean=1.985718 std=1.018435
+  Note: stats computed on all 51200 values
+  Preview: [3.229605, 2.287757, 2.083083, 2.026194, 2.066263, 1.875168, 2.116256, 2.180934, ...]
+------------------------------------------------------------
+Layer 110 - SIGMOID#110 (node /model.9/cv1/act/Sigmoid)
+  Shape: [1,128,20,20]  Precision: FP32
+  Stats: min=0.041889 max=0.999062 mean=0.843390 std=0.116765
+  Note: stats computed on all 51200 values
+  Preview: [0.961933, 0.907858, 0.889248, 0.883520, 0.887581, 0.867055, 0.892473, 0.898524, ...]
+------------------------------------------------------------
+Layer 111 - MUL#111 (node /model.9/cv1/act/Mul)
+  Shape: [1,128,20,20]  Precision: FP32
+  Stats: min=-0.278454 max=6.964540 mean=1.782802 std=1.047885
+  Note: stats computed on all 51200 values
+  Preview: [3.106665, 2.076958, 1.852378, 1.790183, 1.833975, 1.625874, 1.888702, 1.959623, ...]
+------------------------------------------------------------
+Layer 112 - MAXPOOL#112 (node /model.9/m/MaxPool)
+  Shape: [1,128,20,20]  Precision: FP32
+  Stats: min=-0.106170 max=6.964540 mean=2.683471 std=1.065262
+  Note: stats computed on all 51200 values
+  Preview: [3.272077, 3.272077, 3.272077, 2.461450, 2.640711, 2.658216, 3.010666, 3.100755, ...]
+------------------------------------------------------------
+Layer 113 - MAXPOOL#113 (node /model.9/m_1/MaxPool)
+  Shape: [1,128,20,20]  Precision: FP32
+  Stats: min=0.030987 max=6.964540 mean=3.093158 std=1.054143
+  Note: stats computed on all 51200 values
+  Preview: [3.272077, 3.586757, 3.586757, 3.586757, 3.833117, 4.266932, 4.266932, 4.391667, ...]
+------------------------------------------------------------
+Layer 114 - MAXPOOL#114 (node /model.9/m_2/MaxPool)
+  Shape: [1,128,20,20]  Precision: FP32
+  Stats: min=0.467662 max=6.964540 mean=3.338536 std=1.037385
+  Note: stats computed on all 51200 values
+  Preview: [4.261168, 4.261168, 4.261168, 4.266932, 4.266932, 4.436025, 4.436025, 4.436025, ...]
+------------------------------------------------------------
+Layer 115 - CONCAT#115 (node /model.9/Concat)
+  Shape: [1,512,20,20]  Precision: FP32
+  Stats: min=-0.278454 max=6.964540 mean=1.991699 std=1.131509
+  Note: stats computed on first 65536 of 204800 values
+  Preview: [3.106665, 2.076958, 1.852378, 1.790183, 1.833975, 1.625874, 1.888702, 1.959623, ...]
+------------------------------------------------------------
+Layer 116 - CONV#116 (node /model.9/cv2/conv/Conv)
+  Shape: [1,256,20,20]  Precision: FP32
+  Stats: min=-6.950945 max=3.594591 mean=-1.276819 std=1.485427
+  Note: stats computed on first 65536 of 102400 values
+  Preview: [-2.546582, -2.502266, -2.636004, -2.503200, -2.021141, -1.868218, -1.570767, -1.226895, ...]
+------------------------------------------------------------
+Layer 117 - SIGMOID#117 (node /model.9/cv2/act/Sigmoid)
+  Shape: [1,256,20,20]  Precision: FP32
+  Stats: min=0.000957 max=0.973263 mean=0.289951 std=0.231759
+  Note: stats computed on first 65536 of 102400 values
+  Preview: [0.072656, 0.075699, 0.066857, 0.075634, 0.117001, 0.133748, 0.172107, 0.226725, ...]
+------------------------------------------------------------
+Layer 118 - MUL#118 (node /model.9/cv2/act/Mul)
+  Shape: [1,256,20,20]  Precision: FP32
+  Stats: min=-0.278465 max=3.498481 mean=-0.045069 std=0.361998
+  Note: stats computed on first 65536 of 102400 values
+  Preview: [-0.185026, -0.189420, -0.176235, -0.189327, -0.236476, -0.249870, -0.270340, -0.278168, ...]
+------------------------------------------------------------
+Layer 119 - CONV#119 (node /model.10/cv1/conv/Conv)
+  Shape: [1,256,20,20]  Precision: FP32
+  Stats: min=-8.675964 max=9.123940 mean=-0.647235 std=1.658868
+  Note: stats computed on first 65536 of 102400 values
+  Preview: [0.809880, 0.907491, 0.854102, 1.203753, 1.240054, 1.001773, 0.934415, 0.985860, ...]
+------------------------------------------------------------
+Layer 120 - SIGMOID#120 (node /model.10/cv1/act/Sigmoid)
+  Shape: [1,256,20,20]  Precision: FP32
+  Stats: min=0.000171 max=0.999891 mean=0.393506 std=0.270246
+  Note: stats computed on first 65536 of 102400 values
+  Preview: [0.692084, 0.712487, 0.701427, 0.769192, 0.775573, 0.731407, 0.717970, 0.728270, ...]
+------------------------------------------------------------
+Layer 121 - MUL#121 (node /model.10/cv1/act/Mul)
+  Shape: [1,256,20,20]  Precision: FP32
+  Stats: min=-0.278465 max=9.122947 mean=0.174932 std=0.737750
+  Note: stats computed on first 65536 of 102400 values
+  Preview: [0.560505, 0.646575, 0.599090, 0.925917, 0.961753, 0.732703, 0.670882, 0.717972, ...]
+------------------------------------------------------------
+Layer 122 - SPLIT#122 (node /model.10/Split)
+  Shape: [1,128,20,20]  Precision: FP32
+  Stats: min=-0.278465 max=9.122947 mean=0.162931 std=0.742222
+  Note: stats computed on all 51200 values
+  Preview: [0.560505, 0.646575, 0.599090, 0.925917, 0.961753, 0.732703, 0.670882, 0.717972, ...]
+------------------------------------------------------------
+Layer 122 - SPLIT#122 (node /model.10/Split)
+  Shape: [1,128,20,20]  Precision: FP32
+  Stats: min=-0.278465 max=4.948577 mean=0.417720 std=0.883962
+  Note: stats computed on all 51200 values
+  Preview: [0.381312, 0.358896, 0.221717, 0.010777, -0.038913, 0.057367, 0.019513, 0.024103, ...]
+------------------------------------------------------------
+Layer 123 - CONV#123 (node /model.10/m/m.0/attn/qkv/conv/Conv)
+  Shape: [1,256,20,20]  Precision: FP32
+  Stats: min=-8.178468 max=8.101614 mean=0.040916 std=1.464594
+  Note: stats computed on first 65536 of 102400 values
+  Preview: [2.441773, 2.865494, 2.915805, 3.112730, 3.155654, 3.162419, 3.210838, 3.238728, ...]
+------------------------------------------------------------
+Layer 124 - RESHAPE#124 (node /model.10/m/m.0/attn/Reshape)
+  Shape: [1,2,128,400]  Precision: FP32
+  Stats: min=-8.178468 max=8.101614 mean=0.040916 std=1.464594
+  Note: stats computed on first 65536 of 102400 values
+  Preview: [2.441773, 2.865494, 2.915805, 3.112730, 3.155654, 3.162419, 3.210838, 3.238728, ...]
+------------------------------------------------------------
+Layer 125 - SPLIT#125 (node /model.10/m/m.0/attn/Split)
+  Shape: [1,2,32,400]  Precision: FP32
+  Stats: min=-5.092391 max=5.627058 mean=-0.017518 std=1.332947
+  Note: stats computed on all 25600 values
+  Preview: [2.441773, 2.865494, 2.915805, 3.112730, 3.155654, 3.162419, 3.210838, 3.238728, ...]
+------------------------------------------------------------
+Layer 125 - SPLIT#125 (node /model.10/m/m.0/attn/Split)
+  Shape: [1,2,32,400]  Precision: FP32
+  Stats: min=-5.074530 max=8.101614 mean=0.106130 std=1.177841
+  Note: stats computed on all 25600 values
+  Preview: [2.302068, 2.704989, 2.719765, 2.906485, 2.829632, 2.912092, 3.165864, 3.098701, ...]
+------------------------------------------------------------
+Layer 125 - SPLIT#125 (node /model.10/m/m.0/attn/Split)
+  Shape: [1,2,64,400]  Precision: FP32
+  Stats: min=-8.178468 max=5.906674 mean=0.041610 std=1.428440
+  Note: stats computed on all 51200 values
+  Preview: [-0.682485, -0.292578, -0.392446, -0.431752, -0.466805, -0.319460, -0.684092, -0.617452, ...]
+------------------------------------------------------------
+Layer 126 - TRANSPOSE#126 (node /model.10/m/m.0/attn/Transpose)
+  Shape: [1,2,400,32]  Precision: FP32
+  Stats: min=-5.092391 max=5.627058 mean=-0.017518 std=1.332947
+  Note: stats computed on all 25600 values
+  Preview: [2.441773, -1.671353, 1.822622, -0.598549, 2.048111, 2.127090, -0.400034, 0.866201, ...]
+------------------------------------------------------------
+Layer 127 - RESHAPE#127 (node /model.10/m/m.0/attn/Reshape_2)
+  Shape: [1,128,20,20]  Precision: FP32
+  Stats: min=-8.178468 max=5.906674 mean=0.041610 std=1.428440
+  Note: stats computed on all 51200 values
+  Preview: [-0.682485, -0.292578, -0.392446, -0.431752, -0.466805, -0.319460, -0.684092, -0.617452, ...]
+------------------------------------------------------------
+Layer 128 - MATMUL#128 (node /model.10/m/m.0/attn/MatMul)
+  Shape: [1,2,400,400]  Precision: FP32
+  Stats: min=-33.269196 max=62.845387 mean=15.575903 std=18.560369
+  Note: stats computed on first 65536 of 320000 values
+  Preview: [39.991646, 38.074417, 35.064484, 33.273804, 32.838085, 34.924263, 36.350758, 37.585178, ...]
+------------------------------------------------------------
+Layer 129 - CONV#129 (node /model.10/m/m.0/attn/pe/conv/Conv)
+  Shape: [1,128,20,20]  Precision: FP32
+  Stats: min=-4.206373 max=7.181702 mean=-0.004148 std=0.980265
+  Note: stats computed on all 51200 values
+  Preview: [0.444947, 0.220044, 0.272311, 0.311026, 0.351939, 0.266306, 0.488138, 0.449881, ...]
+------------------------------------------------------------
+Layer 130 - MUL#130 (node /model.10/m/m.0/attn/Mul)
+  Shape: [1,2,400,400]  Precision: FP32
+  Stats: min=-5.881218 max=11.109599 mean=2.753457 std=3.281041
+  Note: stats computed on first 65536 of 320000 values
+  Preview: [7.069591, 6.730669, 6.198584, 5.882033, 5.805008, 6.173796, 6.425967, 6.644184, ...]
+------------------------------------------------------------
+Layer 131 - SOFTMAX#131 (node /model.10/m/m.0/attn/Softmax)
+  Shape: [1,2,400,400]  Precision: FP32
+  Stats: min=0.000000 max=0.281220 mean=0.002499 std=0.005121
+  Note: stats computed on first 65536 of 320000 values
+  Preview: [0.040918, 0.029155, 0.017125, 0.012478, 0.011553, 0.016706, 0.021498, 0.026740, ...]
+------------------------------------------------------------
+Layer 132 - TRANSPOSE#132 (node /model.10/m/m.0/attn/Transpose_1)
+  Shape: [1,2,400,400]  Precision: FP32
+  Stats: min=0.000000 max=0.281220 mean=0.002846 std=0.005205
+  Note: stats computed on first 65536 of 320000 values
+  Preview: [0.040918, 0.017549, 0.018332, 0.015851, 0.015698, 0.014760, 0.017577, 0.018359, ...]
+------------------------------------------------------------
+Layer 133 - MATMUL#133 (node /model.10/m/m.0/attn/MatMul_1)
+  Shape: [1,2,64,400]  Precision: FP32
+  Stats: min=-6.181072 max=3.674091 mean=0.047395 std=1.106701
+  Note: stats computed on all 51200 values
+  Preview: [-0.103174, -0.093787, -0.188633, -0.189680, -0.224398, -0.129175, -0.163368, -0.168069, ...]
+------------------------------------------------------------
+Layer 134 - RESHAPE#134 (node /model.10/m/m.0/attn/Reshape_1)
+  Shape: [1,128,20,20]  Precision: FP32
+  Stats: min=-6.181072 max=3.674091 mean=0.047395 std=1.106701
+  Note: stats computed on all 51200 values
+  Preview: [-0.103174, -0.093787, -0.188633, -0.189680, -0.224398, -0.129175, -0.163368, -0.168069, ...]
+------------------------------------------------------------
+Layer 135 - ADD#135 (node /model.10/m/m.0/attn/Add)
+  Shape: [1,128,20,20]  Precision: FP32
+  Stats: min=-3.762630 max=3.136291 mean=0.043248 std=0.644601
+  Note: stats computed on all 51200 values
+  Preview: [0.341773, 0.126257, 0.083678, 0.121346, 0.127541, 0.137130, 0.324770, 0.281812, ...]
+------------------------------------------------------------
+Layer 136 - CONV#136 (node /model.10/m/m.0/attn/proj/conv/Conv)
+  Shape: [1,128,20,20]  Precision: FP32
+  Stats: min=-4.835852 max=4.319301 mean=-0.040707 std=0.866352
+  Note: stats computed on all 51200 values
+  Preview: [-0.859743, -1.138168, -0.653721, -0.242403, -0.156221, -0.572691, -0.280107, -0.229251, ...]
+------------------------------------------------------------
+Layer 137 - ADD#137 (node /model.10/m/m.0/Add)
+  Shape: [1,128,20,20]  Precision: FP32
+  Stats: min=-4.465517 max=6.135221 mean=0.377014 std=1.150826
+  Note: stats computed on all 51200 values
+  Preview: [-0.478431, -0.779272, -0.432004, -0.231626, -0.195133, -0.515324, -0.260594, -0.205148, ...]
+------------------------------------------------------------
+Layer 138 - CONV#138 (node /model.10/m/m.0/ffn/ffn.0/conv/Conv)
+  Shape: [1,256,20,20]  Precision: FP32
+  Stats: min=-5.916237 max=3.325017 mean=-1.540014 std=1.046192
+  Note: stats computed on first 65536 of 102400 values
+  Preview: [-0.964627, -1.004004, -1.237522, -1.249739, -1.286650, -1.389409, -1.381970, -1.457271, ...]
+------------------------------------------------------------
+Layer 139 - SIGMOID#139 (node /model.10/m/m.0/ffn/ffn.0/act/Sigmoid)
+  Shape: [1,256,20,20]  Precision: FP32
+  Stats: min=0.002688 max=0.965277 mean=0.217423 std=0.159406
+  Note: stats computed on first 65536 of 102400 values
+  Preview: [0.275953, 0.268155, 0.224868, 0.222745, 0.216420, 0.199502, 0.200693, 0.188885, ...]
+------------------------------------------------------------
+Layer 140 - MUL#140 (node /model.10/m/m.0/ffn/ffn.0/act/Mul)
+  Shape: [1,256,20,20]  Precision: FP32
+  Stats: min=-0.278465 max=3.209563 mean=-0.176838 std=0.203388
+  Note: stats computed on first 65536 of 102400 values
+  Preview: [-0.266192, -0.269229, -0.278279, -0.278374, -0.278457, -0.277190, -0.277351, -0.275257, ...]
+------------------------------------------------------------
+Layer 141 - CONV#141 (node /model.10/m/m.0/ffn/ffn.1/conv/Conv)
+  Shape: [1,128,20,20]  Precision: FP32
+  Stats: min=-3.632849 max=3.872071 mean=-0.059857 std=0.609325
+  Note: stats computed on all 51200 values
+  Preview: [-0.517866, -0.572394, -0.572168, -0.483317, -0.445606, -0.459052, -0.518210, -0.516947, ...]
+------------------------------------------------------------
+Layer 142 - ADD#142 (node /model.10/m/m.0/Add_1)
+  Shape: [1,128,20,20]  Precision: FP32
+  Stats: min=-4.324500 max=6.167411 mean=0.317156 std=1.219061
+  Note: stats computed on all 51200 values
+  Preview: [-0.996298, -1.351667, -1.004172, -0.714944, -0.640740, -0.974376, -0.778804, -0.722095, ...]
+------------------------------------------------------------
+Layer 143 - CONCAT#143 (node /model.10/Concat)
+  Shape: [1,256,20,20]  Precision: FP32
+  Stats: min=-4.311356 max=9.122947 mean=0.135384 std=0.846840
+  Note: stats computed on first 65536 of 102400 values
+  Preview: [0.560505, 0.646575, 0.599090, 0.925917, 0.961753, 0.732703, 0.670882, 0.717972, ...]
+------------------------------------------------------------
+Layer 144 - CONV#144 (node /model.10/cv2/conv/Conv)
+  Shape: [1,256,20,20]  Precision: FP32
+  Stats: min=-6.905494 max=4.205563 mean=-0.902333 std=1.216945
+  Note: stats computed on first 65536 of 102400 values
+  Preview: [-2.430444, -2.911231, -2.775515, -2.337209, -2.243797, -2.457746, -2.324716, -2.329736, ...]
+------------------------------------------------------------
+Layer 145 - SIGMOID#145 (node /model.10/cv2/act/Sigmoid)
+  Shape: [1,256,20,20]  Precision: FP32
+  Stats: min=0.001001 max=0.985307 mean=0.332891 std=0.212464
+  Note: stats computed on first 65536 of 102400 values
+  Preview: [0.080880, 0.051601, 0.058662, 0.088088, 0.095886, 0.078874, 0.089097, 0.088690, ...]
+------------------------------------------------------------
+Layer 146 - MUL#146 (node /model.10/cv2/act/Mul)
+  Shape: [1,256,20,20]  Precision: FP32
+  Stats: min=-0.278465 max=4.143770 mean=-0.051482 std=0.378616
+  Note: stats computed on first 65536 of 102400 values
+  Preview: [-0.196575, -0.150223, -0.162817, -0.205880, -0.215148, -0.193852, -0.207124, -0.206624, ...]
+------------------------------------------------------------
+Layer 147 - RESIZE#147 (node /model.11/Resize)
+  Shape: [1,256,40,40]  Precision: FP32
+  Stats: min=-0.278465 max=4.143770 mean=0.014798 std=0.473265
+  Note: stats computed on first 65536 of 409600 values
+  Preview: [-0.196575, -0.196575, -0.150223, -0.150223, -0.162817, -0.162817, -0.205880, -0.205880, ...]
+------------------------------------------------------------
+Layer 148 - CONCAT#148 (node /model.12/Concat)
+  Shape: [1,384,40,40]  Precision: FP32
+  Stats: min=-0.278465 max=4.143770 mean=0.014798 std=0.473265
+  Note: stats computed on first 65536 of 614400 values
+  Preview: [-0.196575, -0.196575, -0.150223, -0.150223, -0.162817, -0.162817, -0.205880, -0.205880, ...]
+------------------------------------------------------------
+Layer 149 - CONV#149 (node /model.13/cv1/conv/Conv)
+  Shape: [1,128,40,40]  Precision: FP32
+  Stats: min=-4.483716 max=3.765059 mean=0.132104 std=1.056267
+  Note: stats computed on first 65536 of 204800 values
+  Preview: [1.313491, 0.873565, 1.074588, 1.141415, 1.134064, 1.052849, 1.104501, 1.100070, ...]
+------------------------------------------------------------
+Layer 150 - SIGMOID#150 (node /model.13/cv1/act/Sigmoid)
+  Shape: [1,128,40,40]  Precision: FP32
+  Stats: min=0.011165 max=0.977358 mean=0.531280 std=0.220962
+  Note: stats computed on first 65536 of 204800 values
+  Preview: [0.788097, 0.705487, 0.745468, 0.757939, 0.756588, 0.741322, 0.751102, 0.750273, ...]
+------------------------------------------------------------
+Layer 151 - MUL#151 (node /model.13/cv1/act/Mul)
+  Shape: [1,128,40,40]  Precision: FP32
+  Stats: min=-0.278465 max=3.679812 mean=0.302108 std=0.572912
+  Note: stats computed on first 65536 of 204800 values
+  Preview: [1.035158, 0.616289, 0.801071, 0.865123, 0.858019, 0.780500, 0.829593, 0.825353, ...]
+------------------------------------------------------------
+Layer 152 - SPLIT#152 (node /model.13/Split)
+  Shape: [1,64,40,40]  Precision: FP32
+  Stats: min=-0.278465 max=3.679812 mean=0.302108 std=0.572912
+  Note: stats computed on first 65536 of 102400 values
+  Preview: [1.035158, 0.616289, 0.801071, 0.865123, 0.858019, 0.780500, 0.829593, 0.825353, ...]
+------------------------------------------------------------
+Layer 152 - SPLIT#152 (node /model.13/Split)
+  Shape: [1,64,40,40]  Precision: FP32
+  Stats: min=-0.278465 max=2.128709 mean=-0.003404 std=0.388996
+  Note: stats computed on first 65536 of 102400 values
+  Preview: [0.377635, 0.712292, 0.623657, 0.557136, 0.631354, 0.611943, 0.680583, 0.675618, ...]
+------------------------------------------------------------
+Layer 153 - CONV#153 (node /model.13/m.0/cv1/conv/Conv)
+  Shape: [1,32,40,40]  Precision: FP32
+  Stats: min=-4.025071 max=2.727081 mean=-0.223705 std=1.108890
+  Note: stats computed on all 51200 values
+  Preview: [-0.330515, -0.708942, -0.643563, -0.381213, -0.323795, -0.454967, -0.319632, -0.317760, ...]
+------------------------------------------------------------
+Layer 154 - SIGMOID#154 (node /model.13/m.0/cv1/act/Sigmoid)
+  Shape: [1,32,40,40]  Precision: FP32
+  Stats: min=0.017549 max=0.938606 mean=0.458013 std=0.229644
+  Note: stats computed on all 51200 values
+  Preview: [0.418115, 0.329833, 0.344441, 0.405834, 0.419751, 0.388180, 0.420765, 0.421222, ...]
+------------------------------------------------------------
+Layer 155 - MUL#155 (node /model.13/m.0/cv1/act/Mul)
+  Shape: [1,32,40,40]  Precision: FP32
+  Stats: min=-0.278465 max=2.559654 mean=0.150301 std=0.507355
+  Note: stats computed on all 51200 values
+  Preview: [-0.138193, -0.233832, -0.221670, -0.154709, -0.135913, -0.176609, -0.134490, -0.133847, ...]
+------------------------------------------------------------
+Layer 156 - CONV#156 (node /model.13/m.0/cv2/conv/Conv)
+  Shape: [1,64,40,40]  Precision: FP32
+  Stats: min=-5.248320 max=5.060329 mean=0.046044 std=1.250874
+  Note: stats computed on first 65536 of 102400 values
+  Preview: [-0.353382, -1.271484, -1.043372, -0.982670, -1.079443, -1.081389, -1.047049, -1.133511, ...]
+------------------------------------------------------------
+Layer 157 - SIGMOID#157 (node /model.13/m.0/cv2/act/Sigmoid)
+  Shape: [1,64,40,40]  Precision: FP32
+  Stats: min=0.005229 max=0.993696 mean=0.511176 std=0.246772
+  Note: stats computed on first 65536 of 102400 values
+  Preview: [0.412563, 0.219003, 0.260500, 0.272362, 0.253612, 0.253243, 0.259792, 0.243514, ...]
+------------------------------------------------------------
+Layer 158 - MUL#158 (node /model.13/m.0/cv2/act/Mul)
+  Shape: [1,64,40,40]  Precision: FP32
+  Stats: min=-0.278465 max=5.028431 mean=0.328525 std=0.696945
+  Note: stats computed on first 65536 of 102400 values
+  Preview: [-0.145792, -0.278459, -0.271798, -0.267642, -0.273759, -0.273854, -0.272015, -0.276025, ...]
+------------------------------------------------------------
+Layer 159 - ADD#159 (node /model.13/m.0/Add)
+  Shape: [1,64,40,40]  Precision: FP32
+  Stats: min=-0.556923 max=5.166430 mean=0.325121 std=0.781099
+  Note: stats computed on first 65536 of 102400 values
+  Preview: [0.231843, 0.433832, 0.351859, 0.289493, 0.357595, 0.338088, 0.408568, 0.399592, ...]
+------------------------------------------------------------
+Layer 160 - CONCAT#160 (node /model.13/Concat)
+  Shape: [1,192,40,40]  Precision: FP32
+  Stats: min=-0.278465 max=3.679812 mean=0.302108 std=0.572912
+  Note: stats computed on first 65536 of 307200 values
+  Preview: [1.035158, 0.616289, 0.801071, 0.865123, 0.858019, 0.780500, 0.829593, 0.825353, ...]
+------------------------------------------------------------
+Layer 161 - CONV#161 (node /model.13/cv2/conv/Conv)
+  Shape: [1,128,40,40]  Precision: FP32
+  Stats: min=-5.110359 max=2.489686 mean=-0.368000 std=0.889940
+  Note: stats computed on first 65536 of 204800 values
+  Preview: [-1.838680, -0.441135, 0.243383, 0.682630, 0.671473, 0.688062, 0.692354, 0.707432, ...]
+------------------------------------------------------------
+Layer 162 - SIGMOID#162 (node /model.13/cv2/act/Sigmoid)
+  Shape: [1,128,40,40]  Precision: FP32
+  Stats: min=0.005998 max=0.923416 mean=0.425277 std=0.186186
+  Note: stats computed on first 65536 of 204800 values
+  Preview: [0.137207, 0.391471, 0.560547, 0.664325, 0.661833, 0.665536, 0.666490, 0.669833, ...]
+------------------------------------------------------------
+Layer 163 - MUL#163 (node /model.13/cv2/act/Mul)
+  Shape: [1,128,40,40]  Precision: FP32
+  Stats: min=-0.278465 max=2.299015 mean=0.007225 std=0.326333
+  Note: stats computed on first 65536 of 204800 values
+  Preview: [-0.252281, -0.172691, 0.136428, 0.453488, 0.444403, 0.457930, 0.461447, 0.473861, ...]
+------------------------------------------------------------
+Layer 164 - RESIZE#164 (node /model.14/Resize)
+  Shape: [1,128,80,80]  Precision: FP32
+  Stats: min=-0.278465 max=1.948076 mean=-0.064242 std=0.337178
+  Note: stats computed on first 65536 of 819200 values
+  Preview: [-0.252281, -0.252281, -0.172691, -0.172691, 0.136428, 0.136428, 0.453488, 0.453488, ...]
+------------------------------------------------------------
+Layer 165 - CONCAT#165 (node /model.15/Concat)
+  Shape: [1,256,80,80]  Precision: FP32
+  Stats: min=-0.278465 max=1.948076 mean=-0.064242 std=0.337178
+  Note: stats computed on first 65536 of 1638400 values
+  Preview: [-0.252281, -0.252281, -0.172691, -0.172691, 0.136428, 0.136428, 0.453488, 0.453488, ...]
+------------------------------------------------------------
+Layer 166 - CONV#166 (node /model.16/cv1/conv/Conv)
+  Shape: [1,64,80,80]  Precision: FP32
+  Stats: min=-4.355575 max=2.173872 mean=0.181105 std=0.993762
+  Note: stats computed on first 65536 of 409600 values
+  Preview: [-1.762799, -1.557802, -1.957467, -2.048420, -1.990844, -2.158773, -2.333998, -2.310781, ...]
+------------------------------------------------------------
+Layer 167 - SIGMOID#167 (node /model.16/cv1/act/Sigmoid)
+  Shape: [1,64,80,80]  Precision: FP32
+  Stats: min=0.012672 max=0.897879 mean=0.555315 std=0.203208
+  Note: stats computed on first 65536 of 409600 values
+  Preview: [0.146440, 0.173962, 0.123741, 0.114212, 0.120168, 0.103514, 0.088346, 0.090234, ...]
+------------------------------------------------------------
+Layer 168 - MUL#168 (node /model.16/cv1/act/Mul)
+  Shape: [1,64,80,80]  Precision: FP32
+  Stats: min=-0.278465 max=1.951873 mean=0.301182 std=0.368461
+  Note: stats computed on first 65536 of 409600 values
+  Preview: [-0.258145, -0.270999, -0.242220, -0.233954, -0.239235, -0.223464, -0.206200, -0.208511, ...]
+------------------------------------------------------------
+Layer 169 - SPLIT#169 (node /model.16/Split)
+  Shape: [1,32,80,80]  Precision: FP32
+  Stats: min=-0.278465 max=1.951873 mean=0.301182 std=0.368461
+  Note: stats computed on first 65536 of 204800 values
+  Preview: [-0.258145, -0.270999, -0.242220, -0.233954, -0.239235, -0.223464, -0.206200, -0.208511, ...]
+------------------------------------------------------------
+Layer 169 - SPLIT#169 (node /model.16/Split)
+  Shape: [1,32,80,80]  Precision: FP32
+  Stats: min=-0.278465 max=2.257047 mean=0.174147 std=0.594211
+  Note: stats computed on first 65536 of 204800 values
+  Preview: [1.440736, 1.244761, 1.348803, 1.369134, 1.530880, 1.513831, 1.597515, 1.602601, ...]
+------------------------------------------------------------
+Layer 170 - CONV#170 (node /model.16/m.0/cv1/conv/Conv)
+  Shape: [1,16,80,80]  Precision: FP32
+  Stats: min=-2.834647 max=3.373396 mean=0.014923 std=0.659543
+  Note: stats computed on first 65536 of 102400 values
+  Preview: [0.200970, 0.023164, 0.143660, -0.056961, -0.095731, -0.192944, -0.303766, -0.294968, ...]
+------------------------------------------------------------
+Layer 171 - SIGMOID#171 (node /model.16/m.0/cv1/act/Sigmoid)
+  Shape: [1,16,80,80]  Precision: FP32
+  Stats: min=0.055480 max=0.966863 mean=0.504776 std=0.150347
+  Note: stats computed on first 65536 of 102400 values
+  Preview: [0.550074, 0.505791, 0.535853, 0.485764, 0.476085, 0.451913, 0.424637, 0.426788, ...]
+------------------------------------------------------------
+Layer 172 - MUL#172 (node /model.16/m.0/cv1/act/Mul)
+  Shape: [1,16,80,80]  Precision: FP32
+  Stats: min=-0.278465 max=3.261611 mean=0.106470 std=0.332873
+  Note: stats computed on first 65536 of 102400 values
+  Preview: [0.110548, 0.011716, 0.076981, -0.027669, -0.045576, -0.087194, -0.128990, -0.125889, ...]
+------------------------------------------------------------
+Layer 173 - CONV#173 (node /model.16/m.0/cv2/conv/Conv)
+  Shape: [1,32,80,80]  Precision: FP32
+  Stats: min=-4.365927 max=3.210120 mean=0.086816 std=0.819182
+  Note: stats computed on first 65536 of 204800 values
+  Preview: [-0.314635, -0.070104, -0.595429, -0.701168, -0.495188, -0.704615, -0.650898, -0.609428, ...]
+------------------------------------------------------------
+Layer 174 - SIGMOID#174 (node /model.16/m.0/cv2/act/Sigmoid)
+  Shape: [1,32,80,80]  Precision: FP32
+  Stats: min=0.012544 max=0.961213 mean=0.524163 std=0.176157
+  Note: stats computed on first 65536 of 204800 values
+  Preview: [0.421984, 0.482481, 0.355390, 0.331553, 0.378672, 0.330790, 0.342787, 0.352190, ...]
+------------------------------------------------------------
+Layer 175 - MUL#175 (node /model.16/m.0/cv2/act/Mul)
+  Shape: [1,32,80,80]  Precision: FP32
+  Stats: min=-0.278465 max=3.085610 mean=0.188822 std=0.400680
+  Note: stats computed on first 65536 of 204800 values
+  Preview: [-0.132771, -0.033824, -0.211610, -0.232475, -0.187514, -0.233079, -0.223120, -0.214634, ...]
+------------------------------------------------------------
+Layer 176 - ADD#176 (node /model.16/m.0/Add)
+  Shape: [1,32,80,80]  Precision: FP32
+  Stats: min=-0.556909 max=3.707978 mean=0.362969 std=0.715112
+  Note: stats computed on first 65536 of 204800 values
+  Preview: [1.307966, 1.210938, 1.137193, 1.136660, 1.343367, 1.280752, 1.374396, 1.387967, ...]
+------------------------------------------------------------
+Layer 177 - CONCAT#177 (node /model.16/Concat)
+  Shape: [1,96,80,80]  Precision: FP32
+  Stats: min=-0.278465 max=1.951873 mean=0.301182 std=0.368461
+  Note: stats computed on first 65536 of 614400 values
+  Preview: [-0.258145, -0.270999, -0.242220, -0.233954, -0.239235, -0.223464, -0.206200, -0.208511, ...]
+------------------------------------------------------------
+Layer 178 - CONV#178 (node /model.16/cv2/conv/Conv)
+  Shape: [1,64,80,80]  Precision: FP32
+  Stats: min=-2.963341 max=2.867640 mean=0.053419 std=0.635114
+  Note: stats computed on first 65536 of 409600 values
+  Preview: [0.305344, 0.751063, 1.527353, 1.251788, 1.164880, 1.097292, 1.045781, 0.972020, ...]
+------------------------------------------------------------
+Layer 179 - SIGMOID#179 (node /model.16/cv2/act/Sigmoid)
+  Shape: [1,64,80,80]  Precision: FP32
+  Stats: min=0.049110 max=0.946223 mean=0.511490 std=0.143712
+  Note: stats computed on first 65536 of 409600 values
+  Preview: [0.575748, 0.679410, 0.821619, 0.777609, 0.762218, 0.749752, 0.739964, 0.725522, ...]
+------------------------------------------------------------
+Layer 180 - MUL#180 (node /model.16/cv2/act/Mul)
+  Shape: [1,64,80,80]  Precision: FP32
+  Stats: min=-0.278465 max=2.713428 mean=0.118377 std=0.370142
+  Note: stats computed on first 65536 of 409600 values
+  Preview: [0.175801, 0.510280, 1.254902, 0.973401, 0.887893, 0.822698, 0.773840, 0.705221, ...]
+------------------------------------------------------------
+Layer 181 - CONV#181 (node /model.17/conv/Conv)
+  Shape: [1,64,40,40]  Precision: FP32
+  Stats: min=-4.756343 max=2.646656 mean=-0.781237 std=1.009667
+  Note: stats computed on first 65536 of 102400 values
+  Preview: [-1.437268, -0.675336, -1.288905, -1.404406, -1.634888, -1.623742, -1.733541, -1.672910, ...]
+------------------------------------------------------------
+Layer 182 - CONV#182 (node /model.23/cv2.0/cv2.0.0/conv/Conv)
+  Shape: [1,64,80,80]  Precision: FP32
+  Stats: min=-4.694893 max=2.559894 mean=-0.267240 std=0.837544
+  Note: stats computed on first 65536 of 409600 values
+  Preview: [-2.893426, -2.710810, -2.579485, -2.531862, -2.693655, -2.264762, -1.924022, -2.166899, ...]
+------------------------------------------------------------
+Layer 183 - CONV#183 (node /model.23/cv3.0/cv3.0.0/cv3.0.0.0/conv/Conv)
+  Shape: [1,64,80,80]  Precision: FP32
+  Stats: min=-1.132094 max=3.202964 mean=1.187912 std=0.950938
+  Note: stats computed on first 65536 of 409600 values
+  Preview: [0.153989, 0.193604, 0.672009, 1.002998, 0.830400, 0.750151, 0.717084, 0.666591, ...]
+------------------------------------------------------------
+Layer 184 - SIGMOID#184 (node /model.17/act/Sigmoid)
+  Shape: [1,64,40,40]  Precision: FP32
+  Stats: min=0.008524 max=0.933805 mean=0.344050 std=0.196680
+  Note: stats computed on first 65536 of 102400 values
+  Preview: [0.191969, 0.337303, 0.216038, 0.197118, 0.163162, 0.164689, 0.150135, 0.158037, ...]
+------------------------------------------------------------
+Layer 185 - SIGMOID#185 (node /model.23/cv2.0/cv2.0.0/act/Sigmoid)
+  Shape: [1,64,80,80]  Precision: FP32
+  Stats: min=0.009059 max=0.928235 mean=0.441831 std=0.182777
+  Note: stats computed on first 65536 of 409600 values
+  Preview: [0.052480, 0.062339, 0.070470, 0.073654, 0.063349, 0.094084, 0.127414, 0.102763, ...]
+------------------------------------------------------------
+Layer 186 - SIGMOID#186 (node /model.23/cv3.0/cv3.0.0/cv3.0.0.0/act/Sigmoid)
+  Shape: [1,64,80,80]  Precision: FP32
+  Stats: min=0.243775 max=0.960946 mean=0.728628 std=0.167159
+  Note: stats computed on first 65536 of 409600 values
+  Preview: [0.538421, 0.548250, 0.661953, 0.731648, 0.696440, 0.679211, 0.671965, 0.660739, ...]
+------------------------------------------------------------
+Layer 187 - MUL#187 (node /model.17/act/Mul)
+  Shape: [1,64,40,40]  Precision: FP32
+  Stats: min=-0.278465 max=2.471459 mean=-0.073543 std=0.321192
+  Note: stats computed on first 65536 of 102400 values
+  Preview: [-0.275911, -0.227793, -0.278453, -0.276834, -0.266751, -0.267413, -0.260265, -0.264381, ...]
+------------------------------------------------------------
+Layer 188 - MUL#188 (node /model.23/cv2.0/cv2.0.0/act/Mul)
+  Shape: [1,64,80,80]  Precision: FP32
+  Stats: min=-0.278465 max=2.376184 mean=0.033626 std=0.380604
+  Note: stats computed on first 65536 of 409600 values
+  Preview: [-0.151846, -0.168988, -0.181777, -0.186483, -0.170640, -0.213077, -0.245147, -0.222676, ...]
+------------------------------------------------------------
+Layer 189 - MUL#189 (node /model.23/cv3.0/cv3.0.0/cv3.0.0.0/act/Mul)
+  Shape: [1,64,80,80]  Precision: FP32
+  Stats: min=-0.275976 max=3.077874 mean=1.022809 std=0.876555
+  Note: stats computed on first 65536 of 409600 values
+  Preview: [0.082911, 0.106144, 0.444838, 0.733841, 0.578323, 0.509511, 0.481855, 0.440443, ...]
+------------------------------------------------------------
+Layer 190 - CONCAT#190 (node /model.18/Concat)
+  Shape: [1,192,40,40]  Precision: FP32
+  Stats: min=-0.278465 max=2.471459 mean=-0.073543 std=0.321192
+  Note: stats computed on first 65536 of 307200 values
+  Preview: [-0.275911, -0.227793, -0.278453, -0.276834, -0.266751, -0.267413, -0.260265, -0.264381, ...]
+------------------------------------------------------------
+Layer 191 - CONV#191 (node /model.23/cv2.0/cv2.0.1/conv/Conv)
+  Shape: [1,64,80,80]  Precision: FP32
+  Stats: min=-9.006631 max=19.033876 mean=1.067778 std=2.271031
+  Note: stats computed on first 65536 of 409600 values
+  Preview: [0.406435, -1.614427, 3.515597, -1.483053, 3.956574, 3.531284, 2.332865, -0.335986, ...]
+------------------------------------------------------------
+Layer 192 - CONV#192 (node /model.23/cv3.0/cv3.0.0/cv3.0.0.1/conv/Conv)
+  Shape: [1,80,80,80]  Precision: FP32
+  Stats: min=-2.675031 max=1.860917 mean=-0.319632 std=0.580124
+  Note: stats computed on first 65536 of 512000 values
+  Preview: [-0.657175, -0.503113, -0.447329, -0.399060, -0.388289, -0.387963, -0.435105, -0.441399, ...]
+------------------------------------------------------------
+Layer 193 - CONV#193 (node /model.19/cv1/conv/Conv)
+  Shape: [1,128,40,40]  Precision: FP32
+  Stats: min=-3.946778 max=2.729415 mean=-0.184572 std=0.774598
+  Note: stats computed on first 65536 of 204800 values
+  Preview: [1.130613, 1.383968, 1.322646, 1.627178, 1.669193, 1.392180, 1.428032, 1.334440, ...]
+------------------------------------------------------------
+Layer 194 - SIGMOID#194 (node /model.23/cv2.0/cv2.0.1/act/Sigmoid)
+  Shape: [1,64,80,80]  Precision: FP32
+  Stats: min=0.000123 max=1.000000 mean=0.646883 std=0.281485
+  Note: stats computed on first 65536 of 409600 values
+  Preview: [0.600233, 0.165975, 0.971128, 0.184967, 0.981230, 0.971565, 0.911563, 0.416785, ...]
+------------------------------------------------------------
+Layer 195 - SIGMOID#195 (node /model.23/cv3.0/cv3.0.0/cv3.0.0.1/act/Sigmoid)
+  Shape: [1,80,80,80]  Precision: FP32
+  Stats: min=0.064463 max=0.865404 mean=0.425218 std=0.131402
+  Note: stats computed on first 65536 of 512000 values
+  Preview: [0.341374, 0.376809, 0.389996, 0.401538, 0.404129, 0.404208, 0.392908, 0.391408, ...]
+------------------------------------------------------------
+Layer 196 - SIGMOID#196 (node /model.19/cv1/act/Sigmoid)
+  Shape: [1,128,40,40]  Precision: FP32
+  Stats: min=0.018951 max=0.938740 mean=0.462486 std=0.167803
+  Note: stats computed on first 65536 of 204800 values
+  Preview: [0.755952, 0.799627, 0.789622, 0.835783, 0.841468, 0.800940, 0.806594, 0.791574, ...]
+------------------------------------------------------------
+Layer 197 - MUL#197 (node /model.23/cv2.0/cv2.0.1/act/Mul)
+  Shape: [1,64,80,80]  Precision: FP32
+  Stats: min=-0.278465 max=19.033876 mean=1.242694 std=1.894889
+  Note: stats computed on first 65536 of 409600 values
+  Preview: [0.243955, -0.267954, 3.414096, -0.274315, 3.882312, 3.430872, 2.126552, -0.140034, ...]
+------------------------------------------------------------
+Layer 198 - MUL#198 (node /model.23/cv3.0/cv3.0.0/cv3.0.0.1/act/Mul)
+  Shape: [1,80,80,80]  Precision: FP32
+  Stats: min=-0.278465 max=1.610444 mean=-0.059874 std=0.262670
+  Note: stats computed on first 65536 of 512000 values
+  Preview: [-0.224343, -0.189578, -0.174457, -0.160238, -0.156919, -0.156818, -0.170956, -0.172767, ...]
+------------------------------------------------------------
+Layer 199 - MUL#199 (node /model.19/cv1/act/Mul)
+  Shape: [1,128,40,40]  Precision: FP32
+  Stats: min=-0.278465 max=2.562212 mean=0.043811 std=0.321230
+  Note: stats computed on first 65536 of 204800 values
+  Preview: [0.854689, 1.106659, 1.044389, 1.359967, 1.404573, 1.115053, 1.151843, 1.056308, ...]
+------------------------------------------------------------
+Layer 200 - CONV#200 (node /model.23/cv2.0/cv2.0.2/Conv)
+  Shape: [1,64,80,80]  Precision: FP32
+  Stats: min=-3.408648 max=9.326859 mean=1.597905 std=1.278279
+  Note: stats computed on first 65536 of 409600 values
+  Preview: [6.346535, 4.021379, 2.731750, 1.862204, 1.539987, 1.239656, 0.051283, -0.409816, ...]
+------------------------------------------------------------
+Layer 201 - CONV#201 (node /model.23/cv3.0/cv3.0.1/cv3.0.1.0/conv/Conv)
+  Shape: [1,80,80,80]  Precision: FP32
+  Stats: min=-1.136244 max=3.154244 mean=1.185930 std=0.698583
+  Note: stats computed on first 65536 of 512000 values
+  Preview: [0.811702, 0.171426, 0.219080, 0.207471, 0.181657, 0.168082, 0.256256, 0.264246, ...]
+------------------------------------------------------------
+Layer 202 - SPLIT#202 (node /model.19/Split)
+  Shape: [1,64,40,40]  Precision: FP32
+  Stats: min=-0.278465 max=2.562212 mean=0.043811 std=0.321230
+  Note: stats computed on first 65536 of 102400 values
+  Preview: [0.854689, 1.106659, 1.044389, 1.359967, 1.404573, 1.115053, 1.151843, 1.056308, ...]
+------------------------------------------------------------
+Layer 202 - SPLIT#202 (node /model.19/Split)
+  Shape: [1,64,40,40]  Precision: FP32
+  Stats: min=-0.278465 max=1.832208 mean=-0.059179 std=0.337595
+  Note: stats computed on first 65536 of 102400 values
+  Preview: [-0.114696, -0.161751, -0.222283, -0.245666, -0.230214, -0.211698, -0.208982, -0.212723, ...]
+------------------------------------------------------------
+Layer 203 - SIGMOID#203 (node /model.23/cv3.0/cv3.0.1/cv3.0.1.0/act/Sigmoid)
+  Shape: [1,80,80,80]  Precision: FP32
+  Stats: min=0.243011 max=0.959076 mean=0.747296 std=0.138532
+  Note: stats computed on first 65536 of 512000 values
+  Preview: [0.692472, 0.542752, 0.554552, 0.551682, 0.545290, 0.541922, 0.563716, 0.565680, ...]
+------------------------------------------------------------
+Layer 204 - CONV#204 (node /model.19/m.0/cv1/conv/Conv)
+  Shape: [1,32,40,40]  Precision: FP32
+  Stats: min=-4.312582 max=3.142836 mean=-0.041702 std=1.068671
+  Note: stats computed on all 51200 values
+  Preview: [-0.509317, -0.891560, -1.072016, -0.878279, -0.863586, -0.880834, -0.830641, -0.760807, ...]
+------------------------------------------------------------
+Layer 205 - MUL#205 (node /model.23/cv3.0/cv3.0.1/cv3.0.1.0/act/Mul)
+  Shape: [1,80,80,80]  Precision: FP32
+  Stats: min=-0.276119 max=3.025159 mean=0.981995 std=0.584998
+  Note: stats computed on first 65536 of 512000 values
+  Preview: [0.562081, 0.093042, 0.121491, 0.114458, 0.099056, 0.091087, 0.144455, 0.149478, ...]
+------------------------------------------------------------
+Layer 206 - SIGMOID#206 (node /model.19/m.0/cv1/act/Sigmoid)
+  Shape: [1,32,40,40]  Precision: FP32
+  Stats: min=0.013222 max=0.958626 mean=0.492959 std=0.220386
+  Note: stats computed on all 51200 values
+  Preview: [0.375354, 0.290788, 0.255020, 0.293535, 0.296591, 0.293005, 0.303510, 0.318471, ...]
+------------------------------------------------------------
+Layer 207 - CONV#207 (node /model.23/cv3.0/cv3.0.1/cv3.0.1.1/conv/Conv)
+  Shape: [1,80,80,80]  Precision: FP32
+  Stats: min=-10.357934 max=14.376658 mean=0.906034 std=3.161533
+  Note: stats computed on first 65536 of 512000 values
+  Preview: [1.137573, 1.204750, 1.607412, 1.373618, 1.418687, 1.315406, 1.491477, 1.607527, ...]
+------------------------------------------------------------
+Layer 208 - MUL#208 (node /model.19/m.0/cv1/act/Mul)
+  Shape: [1,32,40,40]  Precision: FP32
+  Stats: min=-0.278465 max=3.012803 mean=0.213165 std=0.566991
+  Note: stats computed on all 51200 values
+  Preview: [-0.191174, -0.259255, -0.273385, -0.257805, -0.256132, -0.258089, -0.252107, -0.242295, ...]
+------------------------------------------------------------
+Layer 209 - SIGMOID#209 (node /model.23/cv3.0/cv3.0.1/cv3.0.1.1/act/Sigmoid)
+  Shape: [1,80,80,80]  Precision: FP32
+  Stats: min=0.000032 max=0.999999 mean=0.534162 std=0.345939
+  Note: stats computed on first 65536 of 512000 values
+  Preview: [0.757234, 0.769369, 0.833052, 0.797964, 0.805133, 0.788416, 0.816300, 0.833068, ...]
+------------------------------------------------------------
+Layer 210 - CONV#210 (node /model.19/m.0/cv2/conv/Conv)
+  Shape: [1,64,40,40]  Precision: FP32
+  Stats: min=-7.741521 max=5.128085 mean=-0.042580 std=1.258576
+  Note: stats computed on first 65536 of 102400 values
+  Preview: [0.578337, 0.812083, 0.433398, 0.543199, 0.511655, 0.450093, 1.059548, 1.397984, ...]
+------------------------------------------------------------
+Layer 211 - MUL#211 (node /model.23/cv3.0/cv3.0.1/cv3.0.1.1/act/Mul)
+  Shape: [1,80,80,80]  Precision: FP32
+  Stats: min=-0.278465 max=14.376650 mean=1.484164 std=2.613373
+  Note: stats computed on first 65536 of 512000 values
+  Preview: [0.861408, 0.926897, 1.339057, 1.096098, 1.142231, 1.037087, 1.217492, 1.339179, ...]
+------------------------------------------------------------
+Layer 212 - SIGMOID#212 (node /model.19/m.0/cv2/act/Sigmoid)
+  Shape: [1,64,40,40]  Precision: FP32
+  Stats: min=0.000434 max=0.994107 mean=0.496866 std=0.240686
+  Note: stats computed on first 65536 of 102400 values
+  Preview: [0.640685, 0.692553, 0.606685, 0.632556, 0.625194, 0.610661, 0.742604, 0.801864, ...]
+------------------------------------------------------------
+Layer 213 - CONV#213 (node /model.23/cv3.0/cv3.0.2/Conv)
+  Shape: [1,80,80,80]  Precision: FP32
+  Stats: min=-19.207294 max=-10.614360 mean=-15.877669 std=0.841117
+  Note: stats computed on first 65536 of 512000 values
+  Preview: [-12.502679, -13.620625, -13.407883, -13.265285, -12.785646, -12.417006, -12.069109, -11.793474, ...]
+------------------------------------------------------------
+Layer 214 - MUL#214 (node /model.19/m.0/cv2/act/Mul)
+  Shape: [1,64,40,40]  Precision: FP32
+  Stats: min=-0.278465 max=5.097865 mean=0.276436 std=0.656547
+  Note: stats computed on first 65536 of 102400 values
+  Preview: [0.370532, 0.562410, 0.262936, 0.343604, 0.319884, 0.274854, 0.786825, 1.120992, ...]
+------------------------------------------------------------
+Layer 215 - CONCAT#215 (node /model.23/Concat)
+  Shape: [1,144,80,80]  Precision: FP32
+  Stats: min=-3.408648 max=9.326859 mean=1.597905 std=1.278279
+  Note: stats computed on first 65536 of 921600 values
+  Preview: [6.346535, 4.021379, 2.731750, 1.862204, 1.539987, 1.239656, 0.051283, -0.409816, ...]
+------------------------------------------------------------
+Layer 216 - ADD#216 (node /model.19/m.0/Add)
+  Shape: [1,64,40,40]  Precision: FP32
+  Stats: min=-0.556895 max=5.970020 mean=0.217257 std=0.688630
+  Note: stats computed on first 65536 of 102400 values
+  Preview: [0.255836, 0.400659, 0.040653, 0.097939, 0.089670, 0.063157, 0.577843, 0.908269, ...]
+------------------------------------------------------------
+Layer 217 - RESHAPE#217 (node /model.23/Reshape)
+  Shape: [1,144,6400]  Precision: FP32
+  Stats: min=-3.408648 max=9.326859 mean=1.597905 std=1.278279
+  Note: stats computed on first 65536 of 921600 values
+  Preview: [6.346535, 4.021379, 2.731750, 1.862204, 1.539987, 1.239656, 0.051283, -0.409816, ...]
+------------------------------------------------------------
+Layer 218 - CONCAT#218 (node /model.19/Concat)
+  Shape: [1,192,40,40]  Precision: FP32
+  Stats: min=-0.278465 max=2.562212 mean=0.043811 std=0.321230
+  Note: stats computed on first 65536 of 307200 values
+  Preview: [0.854689, 1.106659, 1.044389, 1.359967, 1.404573, 1.115053, 1.151843, 1.056308, ...]
+------------------------------------------------------------
+Layer 219 - CONV#219 (node /model.19/cv2/conv/Conv)
+  Shape: [1,128,40,40]  Precision: FP32
+  Stats: min=-5.457124 max=4.035599 mean=-0.391917 std=0.873824
+  Note: stats computed on first 65536 of 204800 values
+  Preview: [0.707411, -0.794935, -0.787543, -0.687211, -0.776813, -1.054226, -0.780324, -0.451720, ...]
+------------------------------------------------------------
+Layer 220 - SIGMOID#220 (node /model.19/cv2/act/Sigmoid)
+  Shape: [1,128,40,40]  Precision: FP32
+  Stats: min=0.004248 max=0.982632 mean=0.416522 std=0.183432
+  Note: stats computed on first 65536 of 204800 values
+  Preview: [0.669829, 0.311110, 0.312697, 0.334654, 0.315007, 0.258414, 0.314250, 0.388952, ...]
+------------------------------------------------------------
+Layer 221 - MUL#221 (node /model.19/cv2/act/Mul)
+  Shape: [1,128,40,40]  Precision: FP32
+  Stats: min=-0.278465 max=3.965509 mean=-0.004850 std=0.367037
+  Note: stats computed on first 65536 of 204800 values
+  Preview: [0.473845, -0.247312, -0.246262, -0.229978, -0.244702, -0.272427, -0.245217, -0.175697, ...]
+------------------------------------------------------------
+Layer 222 - CONV#222 (node /model.20/conv/Conv)
+  Shape: [1,128,20,20]  Precision: FP32
+  Stats: min=-7.044107 max=4.935736 mean=-0.631536 std=0.983940
+  Note: stats computed on all 51200 values
+  Preview: [-1.010067, -0.382115, 0.634729, -0.286103, -0.776984, -0.803275, -0.772857, -0.477673, ...]
+------------------------------------------------------------
+Layer 223 - CONV#223 (node /model.23/cv2.1/cv2.1.0/conv/Conv)
+  Shape: [1,64,40,40]  Precision: FP32
+  Stats: min=-7.450054 max=4.451148 mean=-0.156666 std=1.085918
+  Note: stats computed on first 65536 of 102400 values
+  Preview: [0.171778, -0.503025, 0.546674, 0.659115, 0.916753, -0.040995, -0.496917, -0.153853, ...]
+------------------------------------------------------------
+Layer 224 - CONV#224 (node /model.23/cv3.1/cv3.1.0/cv3.1.0.0/conv/Conv)
+  Shape: [1,128,40,40]  Precision: FP32
+  Stats: min=-3.623627 max=7.661386 mean=0.511447 std=0.830278
+  Note: stats computed on first 65536 of 204800 values
+  Preview: [0.846258, 2.214982, 1.975562, 1.959536, 1.979865, 2.015470, 1.969001, 1.867555, ...]
+------------------------------------------------------------
+Layer 225 - SIGMOID#225 (node /model.20/act/Sigmoid)
+  Shape: [1,128,20,20]  Precision: FP32
+  Stats: min=0.000872 max=0.992866 mean=0.371634 std=0.189711
+  Note: stats computed on all 51200 values
+  Preview: [0.266967, 0.405617, 0.653561, 0.428958, 0.314970, 0.309325, 0.315861, 0.382802, ...]
+------------------------------------------------------------
+Layer 226 - SIGMOID#226 (node /model.23/cv2.1/cv2.1.0/act/Sigmoid)
+  Shape: [1,64,40,40]  Precision: FP32
+  Stats: min=0.000581 max=0.988469 mean=0.470892 std=0.214977
+  Note: stats computed on first 65536 of 102400 values
+  Preview: [0.542839, 0.376830, 0.633364, 0.659062, 0.714380, 0.489753, 0.378265, 0.461612, ...]
+------------------------------------------------------------
+Layer 227 - SIGMOID#227 (node /model.23/cv3.1/cv3.1.0/cv3.1.0.0/act/Sigmoid)
+  Shape: [1,128,40,40]  Precision: FP32
+  Stats: min=0.025992 max=0.999530 mean=0.609700 std=0.170221
+  Note: stats computed on first 65536 of 204800 values
+  Preview: [0.699782, 0.901587, 0.878207, 0.876483, 0.878667, 0.882412, 0.877504, 0.866175, ...]
+------------------------------------------------------------
+Layer 228 - MUL#228 (node /model.20/act/Mul)
+  Shape: [1,128,20,20]  Precision: FP32
+  Stats: min=-0.278465 max=4.900525 mean=-0.052280 std=0.357661
+  Note: stats computed on all 51200 values
+  Preview: [-0.269654, -0.154992, 0.414834, -0.122726, -0.244727, -0.248473, -0.244116, -0.182854, ...]
+------------------------------------------------------------
+Layer 229 - MUL#229 (node /model.23/cv2.1/cv2.1.0/act/Mul)
+  Shape: [1,64,40,40]  Precision: FP32
+  Stats: min=-0.278465 max=4.399823 mean=0.155370 std=0.539072
+  Note: stats computed on first 65536 of 102400 values
+  Preview: [0.093248, -0.189555, 0.346244, 0.434397, 0.654910, -0.020077, -0.187967, -0.071020, ...]
+------------------------------------------------------------
+Layer 230 - MUL#230 (node /model.23/cv3.1/cv3.1.0/cv3.1.0.0/act/Mul)
+  Shape: [1,128,40,40]  Precision: FP32
+  Stats: min=-0.278465 max=7.657782 mean=0.451293 std=0.606667
+  Note: stats computed on first 65536 of 204800 values
+  Preview: [0.592196, 1.996999, 1.734953, 1.717499, 1.739642, 1.778475, 1.727805, 1.617630, ...]
+------------------------------------------------------------
+Layer 231 - CONCAT#231 (node /model.21/Concat)
+  Shape: [1,384,20,20]  Precision: FP32
+  Stats: min=-0.278465 max=4.900525 mean=-0.039426 std=0.389786
+  Note: stats computed on first 65536 of 153600 values
+  Preview: [-0.269654, -0.154992, 0.414834, -0.122726, -0.244727, -0.248473, -0.244116, -0.182854, ...]
+------------------------------------------------------------
+Layer 232 - CONV#232 (node /model.23/cv2.1/cv2.1.1/conv/Conv)
+  Shape: [1,64,40,40]  Precision: FP32
+  Stats: min=-12.786175 max=27.550991 mean=0.952374 std=2.669746
+  Note: stats computed on first 65536 of 102400 values
+  Preview: [-0.709506, 0.228603, -0.083006, -0.267825, -0.294421, -0.263322, -0.612242, -1.028051, ...]
+------------------------------------------------------------
+Layer 233 - CONV#233 (node /model.23/cv3.1/cv3.1.0/cv3.1.0.1/conv/Conv)
+  Shape: [1,80,40,40]  Precision: FP32
+  Stats: min=-5.331789 max=2.434135 mean=-0.255205 std=0.989538
+  Note: stats computed on first 65536 of 128000 values
+  Preview: [0.792911, 0.678196, 1.007658, 0.898970, 0.969950, 1.048548, 1.070328, 1.014366, ...]
+------------------------------------------------------------
+Layer 234 - CONV#234 (node /model.22/cv1/conv/Conv)
+  Shape: [1,256,20,20]  Precision: FP32
+  Stats: min=-6.744490 max=5.028169 mean=-0.663337 std=1.114761
+  Note: stats computed on first 65536 of 102400 values
+  Preview: [0.304707, -0.220026, -0.357826, -0.293492, -0.326142, -0.219248, -0.258215, -0.179735, ...]
+------------------------------------------------------------
+Layer 235 - SIGMOID#235 (node /model.23/cv2.1/cv2.1.1/act/Sigmoid)
+  Shape: [1,64,40,40]  Precision: FP32
+  Stats: min=0.000003 max=1.000000 mean=0.603705 std=0.283550
+  Note: stats computed on first 65536 of 102400 values
+  Preview: [0.329708, 0.556903, 0.479260, 0.433441, 0.426922, 0.434547, 0.351548, 0.263462, ...]
+------------------------------------------------------------
+Layer 236 - SIGMOID#236 (node /model.23/cv3.1/cv3.1.0/cv3.1.0.1/act/Sigmoid)
+  Shape: [1,80,40,40]  Precision: FP32
+  Stats: min=0.004812 max=0.919394 mean=0.458674 std=0.184435
+  Note: stats computed on first 65536 of 128000 values
+  Preview: [0.688456, 0.663336, 0.732561, 0.710738, 0.725110, 0.740496, 0.744659, 0.733874, ...]
+------------------------------------------------------------
+Layer 237 - SIGMOID#237 (node /model.22/cv1/act/Sigmoid)
+  Shape: [1,256,20,20]  Precision: FP32
+  Stats: min=0.001176 max=0.993492 mean=0.372367 std=0.205034
+  Note: stats computed on first 65536 of 102400 values
+  Preview: [0.575593, 0.445214, 0.411486, 0.427149, 0.419180, 0.445406, 0.435803, 0.455187, ...]
+------------------------------------------------------------
+Layer 238 - MUL#238 (node /model.23/cv2.1/cv2.1.1/act/Mul)
+  Shape: [1,64,40,40]  Precision: FP32
+  Stats: min=-0.278465 max=27.550991 mean=1.190340 std=2.327119
+  Note: stats computed on first 65536 of 102400 values
+  Preview: [-0.233930, 0.127310, -0.039782, -0.116086, -0.125695, -0.114426, -0.215232, -0.270853, ...]
+------------------------------------------------------------
+Layer 239 - MUL#239 (node /model.23/cv3.1/cv3.1.0/cv3.1.0.1/act/Mul)
+  Shape: [1,80,40,40]  Precision: FP32
+  Stats: min=-0.278465 max=2.237929 mean=0.059299 std=0.312094
+  Note: stats computed on first 65536 of 128000 values
+  Preview: [0.545884, 0.449872, 0.738171, 0.638932, 0.703320, 0.776446, 0.797030, 0.744417, ...]
+------------------------------------------------------------
+Layer 240 - MUL#240 (node /model.22/cv1/act/Mul)
+  Shape: [1,256,20,20]  Precision: FP32
+  Stats: min=-0.278465 max=4.995444 mean=-0.025021 std=0.393480
+  Note: stats computed on first 65536 of 102400 values
+  Preview: [0.175387, -0.097959, -0.147240, -0.125365, -0.136712, -0.097655, -0.112531, -0.081813, ...]
+------------------------------------------------------------
+Layer 241 - CONV#241 (node /model.23/cv2.1/cv2.1.2/Conv)
+  Shape: [1,64,40,40]  Precision: FP32
+  Stats: min=-4.397372 max=8.513258 mean=1.122686 std=1.514402
+  Note: stats computed on first 65536 of 102400 values
+  Preview: [5.814665, 3.158024, 2.184058, 0.797098, 0.127193, 0.488517, 0.476498, -0.955343, ...]
+------------------------------------------------------------
+Layer 242 - CONV#242 (node /model.23/cv3.1/cv3.1.1/cv3.1.1.0/conv/Conv)
+  Shape: [1,80,40,40]  Precision: FP32
+  Stats: min=-2.253652 max=3.542535 mean=0.710538 std=0.926159
+  Note: stats computed on first 65536 of 128000 values
+  Preview: [1.267991, 1.044363, 1.099830, 1.012821, 1.045799, 1.003425, 0.968168, 0.969464, ...]
+------------------------------------------------------------
+Layer 243 - SPLIT#243 (node /model.22/Split)
+  Shape: [1,128,20,20]  Precision: FP32
+  Stats: min=-0.278465 max=4.032398 mean=-0.023467 std=0.361917
+  Note: stats computed on all 51200 values
+  Preview: [0.175387, -0.097959, -0.147240, -0.125365, -0.136712, -0.097655, -0.112531, -0.081813, ...]
+------------------------------------------------------------
+Layer 243 - SPLIT#243 (node /model.22/Split)
+  Shape: [1,128,20,20]  Precision: FP32
+  Stats: min=-0.278465 max=4.995444 mean=-0.026085 std=0.452673
+  Note: stats computed on all 51200 values
+  Preview: [0.147550, 0.182020, -0.073319, -0.205109, -0.136905, -0.097828, -0.054542, -0.039386, ...]
+------------------------------------------------------------
+Layer 244 - SIGMOID#244 (node /model.23/cv3.1/cv3.1.1/cv3.1.1.0/act/Sigmoid)
+  Shape: [1,80,40,40]  Precision: FP32
+  Stats: min=0.095035 max=0.971874 mean=0.655428 std=0.189797
+  Note: stats computed on first 65536 of 128000 values
+  Preview: [0.780399, 0.739691, 0.750228, 0.733572, 0.739967, 0.731732, 0.724754, 0.725013, ...]
+------------------------------------------------------------
+Layer 245 - CONV#245 (node /model.22/m.0/cv1/conv/Conv)
+  Shape: [1,64,20,20]  Precision: FP32
+  Stats: min=-3.761903 max=1.919651 mean=-0.256407 std=0.687217
+  Note: stats computed on all 25600 values
+  Preview: [0.070534, 0.264063, 0.217299, 0.207176, 0.179623, 0.100023, 0.123825, 0.127628, ...]
+------------------------------------------------------------
+Layer 246 - CONV#246 (node /model.22/m.0/cv2/conv/Conv)
+  Shape: [1,64,20,20]  Precision: FP32
+  Stats: min=-4.351377 max=5.946965 mean=-0.254713 std=1.005376
+  Note: stats computed on all 25600 values
+  Preview: [-1.850497, -1.764770, -1.806569, -1.935023, -1.608137, -1.597654, -1.504917, -1.349626, ...]
+------------------------------------------------------------
+Layer 247 - MUL#247 (node /model.23/cv3.1/cv3.1.1/cv3.1.1.0/act/Mul)
+  Shape: [1,80,40,40]  Precision: FP32
+  Stats: min=-0.278465 max=3.442898 mean=0.640456 std=0.591458
+  Note: stats computed on first 65536 of 128000 values
+  Preview: [0.989539, 0.772506, 0.825123, 0.742977, 0.773858, 0.734238, 0.701684, 0.702873, ...]
+------------------------------------------------------------
+Layer 248 - SIGMOID#248 (node /model.22/m.0/cv1/act/Sigmoid)
+  Shape: [1,64,20,20]  Precision: FP32
+  Stats: min=0.022712 max=0.872100 mean=0.446600 std=0.145525
+  Note: stats computed on all 25600 values
+  Preview: [0.517626, 0.565635, 0.554112, 0.551610, 0.544785, 0.524985, 0.530917, 0.531864, ...]
+------------------------------------------------------------
+Layer 249 - SIGMOID#249 (node /model.22/m.0/cv2/act/Sigmoid)
+  Shape: [1,64,20,20]  Precision: FP32
+  Stats: min=0.012725 max=0.997393 mean=0.444299 std=0.203170
+  Note: stats computed on all 25600 values
+  Preview: [0.135815, 0.146194, 0.141053, 0.126196, 0.166847, 0.168310, 0.181693, 0.205932, ...]
+------------------------------------------------------------
+Layer 250 - CONV#250 (node /model.23/cv3.1/cv3.1.1/cv3.1.1.1/conv/Conv)
+  Shape: [1,80,40,40]  Precision: FP32
+  Stats: min=-10.270359 max=13.034983 mean=0.648105 std=2.854425
+  Note: stats computed on first 65536 of 128000 values
+  Preview: [-1.870870, -2.185654, -1.814265, -1.457905, -1.597344, -1.447870, -1.211822, -1.495609, ...]
+------------------------------------------------------------
+Layer 251 - MUL#251 (node /model.22/m.0/cv1/act/Mul)
+  Shape: [1,64,20,20]  Precision: FP32
+  Stats: min=-0.278465 max=1.674127 mean=-0.015683 std=0.223301
+  Note: stats computed on all 25600 values
+  Preview: [0.036511, 0.149363, 0.120408, 0.114280, 0.097856, 0.052510, 0.065741, 0.067881, ...]
+------------------------------------------------------------
+Layer 252 - MUL#252 (node /model.22/m.0/cv2/act/Mul)
+  Shape: [1,64,20,20]  Precision: FP32
+  Stats: min=-0.278465 max=5.931461 mean=0.088312 std=0.534261
+  Note: stats computed on all 25600 values
+  Preview: [-0.251324, -0.257999, -0.254823, -0.244191, -0.268313, -0.268901, -0.273433, -0.277931, ...]
+------------------------------------------------------------
+Layer 253 - SIGMOID#253 (node /model.23/cv3.1/cv3.1.1/cv3.1.1.1/act/Sigmoid)
+  Shape: [1,80,40,40]  Precision: FP32
+  Stats: min=0.000035 max=0.999998 mean=0.524460 std=0.327643
+  Note: stats computed on first 65536 of 128000 values
+  Preview: [0.133441, 0.101046, 0.140123, 0.188788, 0.168353, 0.190330, 0.229379, 0.183081, ...]
+------------------------------------------------------------
+Layer 254 - CONV#254 (node /model.22/m.0/m/m.0/cv1/conv/Conv)
+  Shape: [1,64,20,20]  Precision: FP32
+  Stats: min=-4.927306 max=2.990440 mean=-0.641730 std=1.007953
+  Note: stats computed on all 25600 values
+  Preview: [-1.706831, -0.018578, -0.441746, -0.943240, -0.846611, -0.915943, -0.769919, -0.660119, ...]
+------------------------------------------------------------
+Layer 255 - MUL#255 (node /model.23/cv3.1/cv3.1.1/cv3.1.1.1/act/Mul)
+  Shape: [1,80,40,40]  Precision: FP32
+  Stats: min=-0.278465 max=13.034954 mean=1.188085 std=2.326500
+  Note: stats computed on first 65536 of 128000 values
+  Preview: [-0.249651, -0.220852, -0.254221, -0.275235, -0.268918, -0.275573, -0.277966, -0.273818, ...]
+------------------------------------------------------------
+Layer 256 - SIGMOID#256 (node /model.22/m.0/m/m.0/cv1/act/Sigmoid)
+  Shape: [1,64,20,20]  Precision: FP32
+  Stats: min=0.007194 max=0.952140 mean=0.371522 std=0.199795
+  Note: stats computed on all 25600 values
+  Preview: [0.153575, 0.495356, 0.391325, 0.280246, 0.300144, 0.285785, 0.316497, 0.340713, ...]
+------------------------------------------------------------
+Layer 257 - CONV#257 (node /model.23/cv3.1/cv3.1.2/Conv)
+  Shape: [1,80,40,40]  Precision: FP32
+  Stats: min=-17.290890 max=-10.097284 mean=-14.620785 std=0.692977
+  Note: stats computed on first 65536 of 128000 values
+  Preview: [-12.835667, -13.199286, -13.610136, -13.864120, -13.561054, -13.400190, -13.209822, -12.875517, ...]
+------------------------------------------------------------
+Layer 258 - MUL#258 (node /model.22/m.0/m/m.0/cv1/act/Mul)
+  Shape: [1,64,20,20]  Precision: FP32
+  Stats: min=-0.278465 max=2.847319 mean=-0.040074 std=0.346588
+  Note: stats computed on all 25600 values
+  Preview: [-0.262127, -0.009203, -0.172866, -0.264340, -0.254105, -0.261763, -0.243677, -0.224911, ...]
+------------------------------------------------------------
+Layer 259 - CONCAT#259 (node /model.23/Concat_1)
+  Shape: [1,144,40,40]  Precision: FP32
+  Stats: min=-4.397372 max=8.513258 mean=1.122686 std=1.514402
+  Note: stats computed on first 65536 of 230400 values
+  Preview: [5.814665, 3.158024, 2.184058, 0.797098, 0.127193, 0.488517, 0.476498, -0.955343, ...]
+------------------------------------------------------------
+Layer 260 - CONV#260 (node /model.22/m.0/m/m.0/cv2/conv/Conv)
+  Shape: [1,64,20,20]  Precision: FP32
+  Stats: min=-4.969359 max=3.760163 mean=-0.255526 std=1.093881
+  Note: stats computed on all 25600 values
+  Preview: [-0.048542, -0.185868, -0.016293, 0.292650, 0.449455, 0.535898, 0.335223, 0.061005, ...]
+------------------------------------------------------------
+Layer 261 - RESHAPE#261 (node /model.23/Reshape_1)
+  Shape: [1,144,1600]  Precision: FP32
+  Stats: min=-4.397372 max=8.513258 mean=1.122686 std=1.514402
+  Note: stats computed on first 65536 of 230400 values
+  Preview: [5.814665, 3.158024, 2.184058, 0.797098, 0.127193, 0.488517, 0.476498, -0.955343, ...]
+------------------------------------------------------------
+Layer 262 - SIGMOID#262 (node /model.22/m.0/m/m.0/cv2/act/Sigmoid)
+  Shape: [1,64,20,20]  Precision: FP32
+  Stats: min=0.006900 max=0.977250 mean=0.450724 std=0.220204
+  Note: stats computed on all 25600 values
+  Preview: [0.487867, 0.453666, 0.495927, 0.572645, 0.610510, 0.630858, 0.583030, 0.515246, ...]
+------------------------------------------------------------
+Layer 263 - MUL#263 (node /model.22/m.0/m/m.0/cv2/act/Mul)
+  Shape: [1,64,20,20]  Precision: FP32
+  Stats: min=-0.278465 max=3.674619 mean=0.122891 std=0.510837
+  Note: stats computed on all 25600 values
+  Preview: [-0.023682, -0.084322, -0.008080, 0.167584, 0.274397, 0.338075, 0.195445, 0.031432, ...]
+------------------------------------------------------------
+Layer 264 - ADD#264 (node /model.22/m.0/m/m.0/Add)
+  Shape: [1,64,20,20]  Precision: FP32
+  Stats: min=-0.556865 max=3.732242 mean=0.107208 std=0.521613
+  Note: stats computed on all 25600 values
+  Preview: [0.012828, 0.065041, 0.112328, 0.281865, 0.372253, 0.390586, 0.261185, 0.099313, ...]
+------------------------------------------------------------
+Layer 265 - CONV#265 (node /model.22/m.0/m/m.1/cv1/conv/Conv)
+  Shape: [1,64,20,20]  Precision: FP32
+  Stats: min=-5.545066 max=2.535163 mean=-0.644098 std=1.051496
+  Note: stats computed on all 25600 values
+  Preview: [-0.526573, -0.673931, -0.544287, -0.321507, -0.273362, -0.738679, -0.907480, -0.921824, ...]
+------------------------------------------------------------
+Layer 266 - SIGMOID#266 (node /model.22/m.0/m/m.1/cv1/act/Sigmoid)
+  Shape: [1,64,20,20]  Precision: FP32
+  Stats: min=0.003891 max=0.926570 mean=0.372540 std=0.206011
+  Note: stats computed on all 25600 values
+  Preview: [0.371316, 0.337617, 0.367191, 0.420309, 0.432082, 0.323293, 0.287516, 0.284586, ...]
+------------------------------------------------------------
+Layer 267 - MUL#267 (node /model.22/m.0/m/m.1/cv1/act/Mul)
+  Shape: [1,64,20,20]  Precision: FP32
+  Stats: min=-0.278465 max=2.349008 mean=-0.027225 std=0.370425
+  Note: stats computed on all 25600 values
+  Preview: [-0.195525, -0.227531, -0.199857, -0.135132, -0.118115, -0.238810, -0.260915, -0.262339, ...]
+------------------------------------------------------------
+Layer 268 - CONV#268 (node /model.22/m.0/m/m.1/cv2/conv/Conv)
+  Shape: [1,64,20,20]  Precision: FP32
+  Stats: min=-12.712752 max=12.733921 mean=0.402905 std=2.020737
+  Note: stats computed on all 25600 values
+  Preview: [-0.177666, -0.148318, -0.153088, -0.485032, -0.196028, -0.009023, 0.144479, 0.073447, ...]
+------------------------------------------------------------
+Layer 269 - SIGMOID#269 (node /model.22/m.0/m/m.1/cv2/act/Sigmoid)
+  Shape: [1,64,20,20]  Precision: FP32
+  Stats: min=0.000003 max=0.999997 mean=0.563329 std=0.283309
+  Note: stats computed on all 25600 values
+  Preview: [0.455700, 0.462988, 0.461803, 0.381065, 0.451149, 0.497744, 0.536057, 0.518354, ...]
+------------------------------------------------------------
+Layer 270 - MUL#270 (node /model.22/m.0/m/m.1/cv2/act/Mul)
+  Shape: [1,64,20,20]  Precision: FP32
+  Stats: min=-0.278465 max=12.733883 mean=0.752746 std=1.394616
+  Note: stats computed on all 25600 values
+  Preview: [-0.080962, -0.068670, -0.070696, -0.184829, -0.088438, -0.004491, 0.077449, 0.038072, ...]
+------------------------------------------------------------
+Layer 271 - ADD#271 (node /model.22/m.0/m/m.1/Add)
+  Shape: [1,64,20,20]  Precision: FP32
+  Stats: min=-0.834317 max=13.072259 mean=0.859954 std=1.477747
+  Note: stats computed on all 25600 values
+  Preview: [-0.068134, -0.003629, 0.041631, 0.097036, 0.283815, 0.386095, 0.338634, 0.137385, ...]
+------------------------------------------------------------
+Layer 272 - CONCAT#272 (node /model.22/m.0/Concat)
+  Shape: [1,128,20,20]  Precision: FP32
+  Stats: min=-0.834317 max=13.072259 mean=0.474133 std=1.176199
+  Note: stats computed on all 51200 values
+  Preview: [-0.068134, -0.003629, 0.041631, 0.097036, 0.283815, 0.386095, 0.338634, 0.137385, ...]
+------------------------------------------------------------
+Layer 273 - CONV#273 (node /model.22/m.0/cv3/conv/Conv)
+  Shape: [1,128,20,20]  Precision: FP32
+  Stats: min=-12.742266 max=6.401474 mean=-0.477965 std=1.553444
+  Note: stats computed on all 51200 values
+  Preview: [0.329033, 0.605844, 0.285557, 0.069991, 0.554398, 0.712903, 0.959205, 1.073641, ...]
+------------------------------------------------------------
+Layer 274 - SIGMOID#274 (node /model.22/m.0/cv3/act/Sigmoid)
+  Shape: [1,128,20,20]  Precision: FP32
+  Stats: min=0.000003 max=0.998344 mean=0.426323 std=0.250780
+  Note: stats computed on all 51200 values
+  Preview: [0.581524, 0.646992, 0.570908, 0.517491, 0.635155, 0.671042, 0.722963, 0.745289, ...]
+------------------------------------------------------------
+Layer 275 - MUL#275 (node /model.22/m.0/cv3/act/Mul)
+  Shape: [1,128,20,20]  Precision: FP32
+  Stats: min=-0.278465 max=6.390871 mean=0.162668 std=0.637548
+  Note: stats computed on all 51200 values
+  Preview: [0.191340, 0.391976, 0.163027, 0.036220, 0.352129, 0.478388, 0.693469, 0.800173, ...]
+------------------------------------------------------------
+Layer 276 - CONCAT#276 (node /model.22/Concat)
+  Shape: [1,384,20,20]  Precision: FP32
+  Stats: min=-0.278465 max=4.995444 mean=-0.025021 std=0.393480
+  Note: stats computed on first 65536 of 153600 values
+  Preview: [0.175387, -0.097959, -0.147240, -0.125365, -0.136712, -0.097655, -0.112531, -0.081813, ...]
+------------------------------------------------------------
+Layer 277 - CONV#277 (node /model.22/cv2/conv/Conv)
+  Shape: [1,256,20,20]  Precision: FP32
+  Stats: min=-9.498575 max=7.424834 mean=-0.594839 std=1.221518
+  Note: stats computed on first 65536 of 102400 values
+  Preview: [-1.641714, -0.776037, -0.242753, -0.506406, -0.809633, -0.401825, 0.131123, 0.431114, ...]
+------------------------------------------------------------
+Layer 278 - SIGMOID#278 (node /model.22/cv2/act/Sigmoid)
+  Shape: [1,256,20,20]  Precision: FP32
+  Stats: min=0.000075 max=0.999404 mean=0.382469 std=0.218817
+  Note: stats computed on first 65536 of 102400 values
+  Preview: [0.162232, 0.315175, 0.439608, 0.376036, 0.307969, 0.400874, 0.532734, 0.606140, ...]
+------------------------------------------------------------
+Layer 279 - MUL#279 (node /model.22/cv2/act/Mul)
+  Shape: [1,256,20,20]  Precision: FP32
+  Stats: min=-0.278465 max=7.420410 mean=0.029502 std=0.560052
+  Note: stats computed on first 65536 of 102400 values
+  Preview: [-0.266339, -0.244587, -0.106716, -0.190427, -0.249342, -0.161081, 0.069854, 0.261315, ...]
+------------------------------------------------------------
+Layer 280 - CONV#280 (node /model.23/cv2.2/cv2.2.0/conv/Conv)
+  Shape: [1,64,20,20]  Precision: FP32
+  Stats: min=-9.251448 max=7.517748 mean=-0.329354 std=1.658937
+  Note: stats computed on all 25600 values
+  Preview: [-0.514778, -1.214721, -1.030342, -1.293773, -1.552615, -1.720842, -1.429392, -1.322181, ...]
+------------------------------------------------------------
+Layer 281 - CONV#281 (node /model.23/cv3.2/cv3.2.0/cv3.2.0.0/conv/Conv)
+  Shape: [1,256,20,20]  Precision: FP32
+  Stats: min=-8.352423 max=8.265459 mean=0.123569 std=0.815321
+  Note: stats computed on first 65536 of 102400 values
+  Preview: [-0.178573, -0.022096, -0.087701, -0.231844, -0.116386, 0.062978, 0.158945, 0.137995, ...]
+------------------------------------------------------------
+Layer 282 - SIGMOID#282 (node /model.23/cv2.2/cv2.2.0/act/Sigmoid)
+  Shape: [1,64,20,20]  Precision: FP32
+  Stats: min=0.000096 max=0.999457 mean=0.446627 std=0.272628
+  Note: stats computed on all 25600 values
+  Preview: [0.374074, 0.228867, 0.263018, 0.215215, 0.174709, 0.151763, 0.193193, 0.210456, ...]
+------------------------------------------------------------
+Layer 283 - SIGMOID#283 (node /model.23/cv3.2/cv3.2.0/cv3.2.0.0/act/Sigmoid)
+  Shape: [1,256,20,20]  Precision: FP32
+  Stats: min=0.000236 max=0.999743 mean=0.527867 std=0.156030
+  Note: stats computed on first 65536 of 102400 values
+  Preview: [0.455475, 0.494476, 0.478089, 0.442297, 0.470936, 0.515739, 0.539653, 0.534444, ...]
+------------------------------------------------------------
+Layer 284 - MUL#284 (node /model.23/cv2.2/cv2.2.0/act/Mul)
+  Shape: [1,64,20,20]  Precision: FP32
+  Stats: min=-0.278465 max=7.513665 mean=0.284371 std=0.845401
+  Note: stats computed on all 25600 values
+  Preview: [-0.192565, -0.278009, -0.270998, -0.278439, -0.271256, -0.261160, -0.276149, -0.278260, ...]
+------------------------------------------------------------
+Layer 285 - MUL#285 (node /model.23/cv3.2/cv3.2.0/cv3.2.0.0/act/Mul)
+  Shape: [1,256,20,20]  Precision: FP32
+  Stats: min=-0.278465 max=8.263333 mean=0.186593 std=0.510967
+  Note: stats computed on first 65536 of 102400 values
+  Preview: [-0.081335, -0.010926, -0.041929, -0.102544, -0.054811, 0.032480, 0.085775, 0.073751, ...]
+------------------------------------------------------------
+Layer 286 - CONV#286 (node /model.23/cv2.2/cv2.2.1/conv/Conv)
+  Shape: [1,64,20,20]  Precision: FP32
+  Stats: min=-23.044643 max=36.446777 mean=1.287867 std=4.166435
+  Note: stats computed on all 25600 values
+  Preview: [1.360339, 5.026179, 4.509608, -0.286123, 1.246939, 2.239682, 1.749968, 0.160816, ...]
+------------------------------------------------------------
+Layer 287 - CONV#287 (node /model.23/cv3.2/cv3.2.0/cv3.2.0.1/conv/Conv)
+  Shape: [1,80,20,20]  Precision: FP32
+  Stats: min=-10.262299 max=5.530560 mean=-0.236304 std=1.096049
+  Note: stats computed on all 32000 values
+  Preview: [-0.346801, -0.342632, -0.075206, 0.129665, -0.200265, -0.620162, -0.539277, -0.852558, ...]
+------------------------------------------------------------
+Layer 288 - SIGMOID#288 (node /model.23/cv2.2/cv2.2.1/act/Sigmoid)
+  Shape: [1,64,20,20]  Precision: FP32
+  Stats: min=0.000000 max=1.000000 mean=0.586256 std=0.334122
+  Note: stats computed on all 25600 values
+  Preview: [0.795815, 0.993479, 0.989117, 0.428953, 0.776770, 0.903757, 0.851949, 0.540118, ...]
+------------------------------------------------------------
+Layer 289 - SIGMOID#289 (node /model.23/cv3.2/cv3.2.0/cv3.2.0.1/act/Sigmoid)
+  Shape: [1,80,20,20]  Precision: FP32
+  Stats: min=0.000035 max=0.996052 mean=0.458557 std=0.205543
+  Note: stats computed on all 32000 values
+  Preview: [0.414158, 0.415170, 0.481207, 0.532371, 0.450100, 0.349745, 0.368356, 0.298897, ...]
+------------------------------------------------------------
+Layer 290 - MUL#290 (node /model.23/cv2.2/cv2.2.1/act/Mul)
+  Shape: [1,64,20,20]  Precision: FP32
+  Stats: min=-0.278465 max=36.446777 mean=1.806055 std=3.636993
+  Note: stats computed on all 25600 values
+  Preview: [1.082578, 4.993402, 4.460530, -0.122733, 0.968584, 2.024128, 1.490883, 0.086860, ...]
+------------------------------------------------------------
+Layer 291 - MUL#291 (node /model.23/cv3.2/cv3.2.0/cv3.2.0.1/act/Mul)
+  Shape: [1,80,20,20]  Precision: FP32
+  Stats: min=-0.278465 max=5.508724 mean=0.110952 std=0.490892
+  Note: stats computed on all 32000 values
+  Preview: [-0.143630, -0.142251, -0.036189, 0.069030, -0.090140, -0.216898, -0.198646, -0.254827, ...]
+------------------------------------------------------------
+Layer 292 - CONV#292 (node /model.23/cv2.2/cv2.2.2/Conv)
+  Shape: [1,64,20,20]  Precision: FP32
+  Stats: min=-5.425255 max=9.005748 mean=0.998521 std=2.050101
+  Note: stats computed on all 25600 values
+  Preview: [5.134947, 3.269201, 2.365916, 1.031885, 0.126060, -0.340782, 0.544445, 0.382421, ...]
+------------------------------------------------------------
+Layer 293 - CONV#293 (node /model.23/cv3.2/cv3.2.1/cv3.2.1.0/conv/Conv)
+  Shape: [1,80,20,20]  Precision: FP32
+  Stats: min=-7.369478 max=11.438485 mean=0.708109 std=1.015162
+  Note: stats computed on all 32000 values
+  Preview: [0.819941, 0.799169, 0.669021, 0.536051, 0.754422, 0.890712, 0.837242, 0.910179, ...]
+------------------------------------------------------------
+Layer 294 - SIGMOID#294 (node /model.23/cv3.2/cv3.2.1/cv3.2.1.0/act/Sigmoid)
+  Shape: [1,80,20,20]  Precision: FP32
+  Stats: min=0.000630 max=0.999989 mean=0.653193 std=0.203929
+  Note: stats computed on all 32000 values
+  Preview: [0.694224, 0.689797, 0.661284, 0.630893, 0.680142, 0.709037, 0.697884, 0.713037, ...]
+------------------------------------------------------------
+Layer 295 - MUL#295 (node /model.23/cv3.2/cv3.2.1/cv3.2.1.0/act/Mul)
+  Shape: [1,80,20,20]  Precision: FP32
+  Stats: min=-0.278465 max=11.438362 mean=0.665534 std=0.641425
+  Note: stats computed on all 32000 values
+  Preview: [0.569223, 0.551264, 0.442413, 0.338191, 0.513114, 0.631548, 0.584297, 0.648991, ...]
+------------------------------------------------------------
+Layer 296 - CONV#296 (node /model.23/cv3.2/cv3.2.1/cv3.2.1.1/conv/Conv)
+  Shape: [1,80,20,20]  Precision: FP32
+  Stats: min=-19.504183 max=43.613712 mean=1.569124 std=2.808866
+  Note: stats computed on all 32000 values
+  Preview: [-0.720096, -1.103952, -1.336112, -1.245968, -1.250679, -1.335438, -1.181323, -1.071231, ...]
+------------------------------------------------------------
+Layer 297 - SIGMOID#297 (node /model.23/cv3.2/cv3.2.1/cv3.2.1.1/act/Sigmoid)
+  Shape: [1,80,20,20]  Precision: FP32
+  Stats: min=0.000000 max=1.000000 mean=0.695243 std=0.292254
+  Note: stats computed on all 32000 values
+  Preview: [0.327372, 0.249000, 0.208150, 0.223399, 0.222583, 0.208261, 0.234814, 0.255169, ...]
+------------------------------------------------------------
+Layer 298 - MUL#298 (node /model.23/cv3.2/cv3.2.1/cv3.2.1.1/act/Mul)
+  Shape: [1,80,20,20]  Precision: FP32
+  Stats: min=-0.278465 max=43.613712 mean=1.768651 std=2.381080
+  Note: stats computed on all 32000 values
+  Preview: [-0.235739, -0.274884, -0.278112, -0.278348, -0.278379, -0.278120, -0.277392, -0.273345, ...]
+------------------------------------------------------------
+Layer 299 - CONV#299 (node /model.23/cv3.2/cv3.2.2/Conv)
+  Shape: [1,80,20,20]  Precision: FP32
+  Stats: min=-31.766853 max=1.183710 mean=-13.119711 std=1.563850
+  Note: stats computed on all 32000 values
+  Preview: [-11.843073, -11.369472, -11.030787, -10.886053, -11.186449, -11.266926, -10.936798, -10.996799, ...]
+------------------------------------------------------------
+Layer 300 - CONCAT#300 (node /model.23/Concat_2)
+  Shape: [1,144,20,20]  Precision: FP32
+  Stats: min=-31.766853 max=9.005748 mean=-6.844941 std=7.241724
+  Note: stats computed on all 57600 values
+  Preview: [5.134947, 3.269201, 2.365916, 1.031885, 0.126060, -0.340782, 0.544445, 0.382421, ...]
+------------------------------------------------------------
+Layer 301 - RESHAPE#301 (node /model.23/Reshape_2)
+  Shape: [1,144,400]  Precision: FP32
+  Stats: min=-31.766853 max=9.005748 mean=-6.844941 std=7.241724
+  Note: stats computed on all 57600 values
+  Preview: [5.134947, 3.269201, 2.365916, 1.031885, 0.126060, -0.340782, 0.544445, 0.382421, ...]
+------------------------------------------------------------
+Layer 302 - CONCAT#302 (node /model.23/Concat_3)
+  Shape: [1,144,8400]  Precision: FP32
+  Stats: min=-5.211568 max=9.326859 mean=1.751824 std=1.422662
+  Note: stats computed on first 65536 of 1209600 values
+  Preview: [6.346535, 4.021379, 2.731750, 1.862204, 1.539987, 1.239656, 0.051283, -0.409816, ...]
+------------------------------------------------------------
+Layer 303 - SPLIT#303 (node /model.23/Split)
+  Shape: [1,64,8400]  Precision: FP32
+  Stats: min=-5.211568 max=9.326859 mean=1.751824 std=1.422662
+  Note: stats computed on first 65536 of 537600 values
+  Preview: [6.346535, 4.021379, 2.731750, 1.862204, 1.539987, 1.239656, 0.051283, -0.409816, ...]
+------------------------------------------------------------
+Layer 303 - SPLIT#303 (node /model.23/Split)
+  Shape: [1,80,8400]  Precision: FP32
+  Stats: min=-31.766853 max=-3.885170 mean=-15.520874 std=1.189423
+  Note: stats computed on first 65536 of 672000 values
+  Preview: [-12.502679, -13.620625, -13.407883, -13.265285, -12.785646, -12.417006, -12.069109, -11.793474, ...]
+------------------------------------------------------------
+Layer 304 - RESHAPE#304 (node /model.23/dfl/Reshape)
+  Shape: [1,4,16,8400]  Precision: FP32
+  Stats: min=-5.211568 max=9.326859 mean=1.751824 std=1.422662
+  Note: stats computed on first 65536 of 537600 values
+  Preview: [6.346535, 4.021379, 2.731750, 1.862204, 1.539987, 1.239656, 0.051283, -0.409816, ...]
+------------------------------------------------------------
+Layer 305 - SIGMOID#305 (node /model.23/Sigmoid)
+  Shape: [1,80,8400]  Precision: FP32
+  Stats: min=0.000000 max=0.020131 mean=0.000002 std=0.000115
+  Note: stats computed on first 65536 of 672000 values
+  Preview: [0.000004, 0.000001, 0.000002, 0.000002, 0.000003, 0.000004, 0.000006, 0.000008, ...]
+------------------------------------------------------------
+Layer 306 - TRANSPOSE#306 (node /model.23/dfl/Transpose)
+  Shape: [1,16,4,8400]  Precision: FP32
+  Stats: min=-5.250866 max=12.391473 mean=1.447815 std=1.763108
+  Note: stats computed on first 65536 of 537600 values
+  Preview: [6.346535, 4.021379, 2.731750, 1.862204, 1.539987, 1.239656, 0.051283, -0.409816, ...]
+------------------------------------------------------------
+Layer 307 - SOFTMAX#307 (node /model.23/dfl/Softmax)
+  Shape: [1,16,4,8400]  Precision: FP32
+  Stats: min=0.000000 max=0.742545 mean=0.073440 std=0.108396
+  Note: stats computed on first 65536 of 537600 values
+  Preview: [0.480881, 0.052107, 0.050440, 0.041615, 0.054053, 0.041427, 0.013195, 0.008213, ...]
+------------------------------------------------------------
+Layer 308 - CONV#308 (node /model.23/dfl/conv/Conv)
+  Shape: [1,1,4,8400]  Precision: FP32
+  Stats: min=0.298697 max=14.410445 mean=4.843410 std=2.096017
+  Note: stats computed on all 33600 values
+  Preview: [0.619722, 1.470088, 2.476964, 3.444733, 4.538290, 4.978910, 6.070845, 7.285586, ...]
+------------------------------------------------------------
+Layer 309 - RESHAPE#309 (node /model.23/dfl/Reshape_1)
+  Shape: [1,4,8400]  Precision: FP32
+  Stats: min=0.298697 max=14.410445 mean=4.843410 std=2.096017
+  Note: stats computed on all 33600 values
+  Preview: [0.619722, 1.470088, 2.476964, 3.444733, 4.538290, 4.978910, 6.070845, 7.285586, ...]
+------------------------------------------------------------
+Layer 310 - SLICE#310 (node /model.23/Slice)
+  Shape: [1,2,8400]  Precision: FP32
+  Stats: min=0.377237 max=14.410445 mean=4.828521 std=2.034172
+  Note: stats computed on all 16800 values
+  Preview: [0.619722, 1.470088, 2.476964, 3.444733, 4.538290, 4.978910, 6.070845, 7.285586, ...]
+------------------------------------------------------------
+Layer 311 - SLICE#311 (node /model.23/Slice_1)
+  Shape: [1,2,8400]  Precision: FP32
+  Stats: min=0.298697 max=14.105049 mean=4.858298 std=2.155986
+  Note: stats computed on all 16800 values
+  Preview: [0.932582, 2.691497, 4.333347, 6.818417, 9.787415, 9.960607, 9.783790, 9.802876, ...]
+------------------------------------------------------------
+Layer 312 - SUB#312 (node /model.23/Sub)
+  Shape: [1,2,8400]  Precision: FP32
+  Stats: min=-1.784042 max=79.120583 mean=29.933388 std=22.922005
+  Note: stats computed on all 16800 values
+  Preview: [-0.119722, 0.029912, 0.023036, 0.055267, -0.038290, 0.521090, 0.429155, 0.214414, ...]
+------------------------------------------------------------
+Layer 313 - ADD#313 (node /model.23/Add_1)
+  Shape: [1,2,8400]  Precision: FP32
+  Stats: min=0.798697 max=81.406860 mean=39.620205 std=22.907997
+  Note: stats computed on all 16800 values
+  Preview: [1.432582, 4.191497, 6.833347, 10.318417, 14.287415, 15.460607, 16.283791, 17.302876, ...]
+------------------------------------------------------------
+Layer 314 - ADD#314 (node /model.23/Add_2)
+  Shape: [1,2,8400]  Precision: FP32
+  Stats: min=0.770240 max=159.098450 mean=69.553589 std=45.678787
+  Note: stats computed on all 16800 values
+  Preview: [1.312859, 4.221409, 6.856383, 10.373684, 14.249125, 15.981696, 16.712946, 17.517288, ...]
+------------------------------------------------------------
+Layer 315 - SUB#315 (node /model.23/Sub_1)
+  Shape: [1,2,8400]  Precision: FP32
+  Stats: min=0.798609 max=24.340508 mean=9.686819 std=3.719934
+  Note: stats computed on all 16800 values
+  Preview: [1.552304, 4.161585, 6.810311, 10.263149, 14.325705, 14.939517, 15.854635, 17.088463, ...]
+------------------------------------------------------------
+Layer 316 - DIV#316 (node /model.23/Div_1)
+  Shape: [1,2,8400]  Precision: FP32
+  Stats: min=0.385120 max=79.549225 mean=34.776794 std=22.839394
+  Note: stats computed on all 16800 values
+  Preview: [0.656430, 2.110704, 3.428191, 5.186842, 7.124562, 7.990848, 8.356473, 8.758644, ...]
+------------------------------------------------------------
+Layer 317 - CONCAT#317 (node /model.23/Concat_4)
+  Shape: [1,4,8400]  Precision: FP32
+  Stats: min=0.385120 max=79.549225 mean=22.231806 std=20.618309
+  Note: stats computed on all 33600 values
+  Preview: [0.656430, 2.110704, 3.428191, 5.186842, 7.124562, 7.990848, 8.356473, 8.758644, ...]
+------------------------------------------------------------
+Layer 318 - MUL#318 (node /model.23/Mul_2)
+  Shape: [1,4,8400]  Precision: FP32
+  Stats: min=3.106290 max=636.393799 mean=214.147964 std=179.107971
+  Note: stats computed on all 33600 values
+  Preview: [5.251437, 16.885635, 27.425531, 41.494736, 56.996498, 63.926785, 66.851784, 70.069153, ...]
+------------------------------------------------------------

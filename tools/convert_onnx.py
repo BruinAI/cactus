@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 import argparse
 import json
+import itertools
 import os
 import struct
 from collections import deque
 
 import numpy as np
 import onnx
-from onnx import numpy_helper
+from onnx import numpy_helper, TensorProto
 
 
 def parse_args():
@@ -24,6 +25,11 @@ def parse_args():
         "--weights-dir",
         default="weights",
         help="Directory to store weight .weights files (default: weights)",
+    )
+    parser.add_argument(
+        "--out-bin",
+        default="graph.bin",
+        help="Path to output binary IR file (default: graph.bin)",
     )
     parser.add_argument(
         "--precision",
@@ -143,6 +149,187 @@ def attr_to_python(attr):
         return f"<unsupported_attr_type_{attr.type}>"
 
 
+def value_info_to_shape(value_info):
+    """Return the list of static dims for a ValueInfoProto, or None if unknown."""
+    tensor_type = getattr(value_info.type, "tensor_type", None)
+    if tensor_type is None:
+        return None
+    shape_proto = getattr(tensor_type, "shape", None)
+    if shape_proto is None or len(shape_proto.dim) == 0:
+        return None
+
+    dims = []
+    for dim in shape_proto.dim:
+        if dim.HasField("dim_value"):
+            dims.append(int(dim.dim_value))
+        else:
+            dims.append(-1)
+    return dims
+
+
+PRECISION_NAME_TO_CODE = {"INT8": 0, "FP16": 1, "FP32": 2}
+
+NODE_TYPE_ORDER = [
+    "Input",
+    "Weight",
+    "Add",
+    "BatchNormalization",
+    "Concat",
+    "Conv",
+    "ConvTranspose",
+    "Cos",
+    "Div",
+    "Flatten",
+    "Gather",
+    "Gemm",
+    "GlobalAveragePool",
+    "MatMul",
+    "Max",
+    "MaxPool",
+    "Min",
+    "Mul",
+    "Reshape",
+    "Resize",
+    "Sigmoid",
+    "Sin",
+    "Slice",
+    "Softmax",
+    "Split",
+    "Sub",
+    "Transpose",
+    "Unsqueeze",
+]
+
+NODE_TYPE_TO_ID = {name: idx for idx, name in enumerate(NODE_TYPE_ORDER)}
+
+ATTR_TYPE_FLOAT = 0
+ATTR_TYPE_INT64 = 1
+ATTR_TYPE_BOOL = 2
+ATTR_TYPE_STRING = 3
+ATTR_TYPE_FLOAT_ARRAY = 4
+ATTR_TYPE_INT64_ARRAY = 5
+
+
+def onnx_dtype_to_precision_name(elem_type):
+    if elem_type == TensorProto.INT8:
+        return "INT8"
+    if elem_type == TensorProto.FLOAT16:
+        return "FP16"
+    return "FP32"
+
+
+def _normalize_attr_value(value):
+    if isinstance(value, np.ndarray):
+        if value.ndim == 0:
+            return _normalize_attr_value(value.item())
+        return [_normalize_attr_value(x) for x in value.tolist()]
+    if isinstance(value, np.generic):
+        if isinstance(value, (np.floating, float)):
+            return float(value)
+        return int(value)
+    if isinstance(value, (list, tuple)):
+        return [_normalize_attr_value(x) for x in value]
+    if isinstance(value, (bool, int, float, str)) or value is None:
+        return value
+    raise TypeError(f"Unsupported attribute type: {type(value)}")
+
+
+def normalize_attributes(attrs):
+    return {k: _normalize_attr_value(v) for k, v in attrs.items()}
+
+
+def _write_string(stream, text):
+    encoded = text.encode("utf-8")
+    stream.write(struct.pack("<I", len(encoded)))
+    stream.write(encoded)
+
+
+def _write_attr_value(stream, key, value):
+    if key == "input_precision":
+        if isinstance(value, str):
+            code = PRECISION_NAME_TO_CODE.get(value.upper(), 2)
+        else:
+            code = int(value)
+        stream.write(struct.pack("<B", ATTR_TYPE_INT64))
+        stream.write(struct.pack("<q", code))
+        return
+
+    if isinstance(value, bool):
+        stream.write(struct.pack("<B", ATTR_TYPE_BOOL))
+        stream.write(struct.pack("<B", 1 if value else 0))
+        return
+
+    if isinstance(value, float):
+        stream.write(struct.pack("<B", ATTR_TYPE_FLOAT))
+        stream.write(struct.pack("<f", value))
+        return
+
+    if isinstance(value, int):
+        stream.write(struct.pack("<B", ATTR_TYPE_INT64))
+        stream.write(struct.pack("<q", value))
+        return
+
+    if isinstance(value, str):
+        stream.write(struct.pack("<B", ATTR_TYPE_STRING))
+        _write_string(stream, value)
+        return
+
+    if isinstance(value, (list, tuple)):
+        if not value:
+            stream.write(struct.pack("<B", ATTR_TYPE_INT64_ARRAY))
+            stream.write(struct.pack("<I", 0))
+            return
+
+        contains_float = any(isinstance(x, float) for x in value)
+        if contains_float:
+            stream.write(struct.pack("<B", ATTR_TYPE_FLOAT_ARRAY))
+            stream.write(struct.pack("<I", len(value)))
+            for item in value:
+                stream.write(struct.pack("<f", float(item)))
+            return
+
+        stream.write(struct.pack("<B", ATTR_TYPE_INT64_ARRAY))
+        stream.write(struct.pack("<I", len(value)))
+        for item in value:
+            stream.write(struct.pack("<q", int(item)))
+        return
+
+    raise RuntimeError(f"Unsupported attribute value for '{key}': {value!r}")
+
+
+def write_binary_ir(nodes, output_path):
+    os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
+    value_ids = [out for node in nodes for out in node["outputs"]]
+    max_value_id = max(value_ids) if value_ids else -1
+    value_count = max_value_id + 1 if max_value_id >= 0 else 0
+
+    with open(output_path, "wb") as stream:
+        stream.write(b"CAIR")
+        stream.write(struct.pack("<B", 1))  # version
+        stream.write(struct.pack("<I", len(nodes)))
+        stream.write(struct.pack("<I", value_count))
+
+        for node in nodes:
+            node_type = node["type"]
+            if node_type not in NODE_TYPE_TO_ID:
+                raise RuntimeError(f"Unsupported node type '{node_type}' for binary IR")
+
+            stream.write(struct.pack("<I", node["id"]))
+            stream.write(struct.pack("<B", NODE_TYPE_TO_ID[node_type]))
+
+            stream.write(struct.pack("<I", len(node["inputs"])))
+            for input_value in node["inputs"]:
+                stream.write(struct.pack("<I", input_value))
+
+            stream.write(struct.pack("<I", len(node["outputs"])))
+            for output_value in node["outputs"]:
+                stream.write(struct.pack("<I", output_value))
+
+            attrs = node["attributes"]
+            stream.write(struct.pack("<I", len(attrs)))
+            for key, value in attrs.items():
+                _write_string(stream, key)
+                _write_attr_value(stream, key, value)
 def main():
     args = parse_args()
 
@@ -180,6 +367,9 @@ def main():
             continue
         vid = get_value_id(inp.name)
         values[vid]["kind"] = "Input"
+        shape = value_info_to_shape(inp)
+        if shape is not None:
+            values[vid]["shape"] = shape
 
     # Initializers as weights: save to .weights and mark in value table
     for init in graph.initializer:
@@ -191,6 +381,12 @@ def main():
         weight_path = os.path.join(args.weights_dir, f"{safe_name}.weights")
         save_tensor_with_header(arr, weight_path, precision=args.precision)
         values[vid]["weight_file"] = weight_path
+
+    value_shape_map = {}
+    for value_info in itertools.chain(graph.input, graph.value_info, graph.output):
+        shape = value_info_to_shape(value_info)
+        if shape is not None:
+            value_shape_map[value_info.name] = shape
 
     # ---- OP NODES ----
     ops = []  # each op: {id, type, inputs:[value_ids], outputs:[value_ids], attributes }
@@ -244,6 +440,30 @@ def main():
                     f"{axes_name}; dynamic axes not baked into attributes."
                 )
 
+        def _normalize_axes(axes_list, tensor_name):
+            if axes_list is None:
+                return None
+            shape = value_shape_map.get(tensor_name)
+            rank = len(shape) if shape is not None else None
+            normalized = []
+            for axis in axes_list:
+                adjusted = axis
+                if rank is not None and adjusted < 0:
+                    adjusted += rank
+                normalized.append(adjusted)
+            if rank is not None:
+                for axis in normalized:
+                    if axis < 0 or axis >= rank:
+                        raise RuntimeError(
+                            f"Slice node {node.name} has axis {axis} outside input rank {rank}"
+                        )
+            elif any(axis < 0 for axis in normalized):
+                print(
+                    f"WARNING: Slice node {node.name} uses negative axis values {axes_list}; "
+                    "input rank unknown so they remain unadjusted."
+                )
+            return normalized
+
         # --- Slice: bake static starts/ends/axes/steps ---
         if node.op_type == "Slice":
             def _load_slice_input(index: int, attr_name: str, desc: str):
@@ -268,6 +488,7 @@ def main():
             ends = _load_slice_input(2, "ends", "ends")
             axes = _load_slice_input(3, "axes", "axes")
             steps = _load_slice_input(4, "steps", "steps")
+            axes = _normalize_axes(axes, node.input[0] if node.input else None)
 
             if axes is not None and len(axes) > 1:
                 print(
@@ -293,6 +514,9 @@ def main():
             attrs["slice_starts"] = starts
             attrs["slice_ends"] = ends
             attrs["axes"] = axes
+            if steps is None:
+                ref_length = len(axes) if axes else (len(starts) if starts else 1)
+                steps = [1] * max(1, ref_length)
             attrs["slice_steps"] = steps
 
         # --- Resize: bake static roi/scales/sizes tensors ---
@@ -382,30 +606,85 @@ def main():
             f"(sorted {len(topo_ops)} of {num_ops} ops)"
         )
 
-    # ---- BUILD FINAL JSON ----
-    json_ops = []
-    for op_id in topo_ops:
-        op = ops[op_id]
-        json_ops.append(
+    # ---- BUILD NODE LIST ----
+    input_nodes = []
+    for inp in graph.input:
+        if inp.name in initializer_names:
+            continue
+        vid = get_value_id(inp.name)
+        attrs = {}
+        shape = value_info_to_shape(inp)
+        if shape is not None:
+            attrs["input_shape"] = shape
+
+        tensor_type = getattr(inp.type, "tensor_type", None)
+        elem_type = getattr(tensor_type, "elem_type", None) if tensor_type else None
+        attrs["input_precision"] = onnx_dtype_to_precision_name(elem_type)
+        input_nodes.append(
             {
-                "id": op["id"],
-                "type": op["type"],
-                "inputs": op["inputs"],   # value IDs
-                "outputs": op["outputs"], # value IDs
-                "attributes": op["attributes"],
+                "type": "Input",
+                "inputs": [],
+                "outputs": [vid],
+                "attributes": attrs,
             }
         )
 
+    weight_nodes = []
+    for init in graph.initializer:
+        vid = get_value_id(init.name)
+        weight_path = values[vid].get("weight_file")
+        if not weight_path:
+            continue
+        weight_nodes.append(
+            {
+                "type": "Weight",
+                "inputs": [],
+                "outputs": [vid],
+                "attributes": {
+                    "path_to_weights": os.path.abspath(weight_path)
+                },
+            }
+        )
+
+    final_nodes = []
+    node_id = 0
+
+    def append_node(node_type, inputs, outputs, attributes):
+        nonlocal node_id
+        final_nodes.append(
+            {
+                "id": node_id,
+                "type": node_type,
+                "inputs": inputs,
+                "outputs": outputs,
+                "attributes": normalize_attributes(attributes),
+            }
+        )
+        node_id += 1
+
+    for node in input_nodes:
+        append_node(node["type"], node["inputs"], node["outputs"], node["attributes"])
+
+    for node in weight_nodes:
+        append_node(node["type"], node["inputs"], node["outputs"], node["attributes"])
+
+    for op_index in topo_ops:
+        op = ops[op_index]
+        append_node(op["type"], op["inputs"], op["outputs"], op["attributes"])
+
     out_obj = {
         "model_path": os.path.abspath(args.model),
-        "values": values,  # each has id, name, kind, maybe weight_file, producer, ...
-        "nodes": json_ops, # topo-sorted ops
+        "value_count": len(values),
+        "nodes": final_nodes,
     }
 
     with open(args.out_json, "w", encoding="utf-8") as f:
         json.dump(out_obj, f, indent=2, sort_keys=True)
 
+    write_binary_ir(final_nodes, args.out_bin)
+
     print(f"Wrote graph JSON to {args.out_json}")
+    print(f"Wrote binary IR to {args.out_bin}")
     print(f"Wrote weights to directory {args.weights_dir}")
 
 

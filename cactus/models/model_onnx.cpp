@@ -3,26 +3,258 @@
 #include <cmath>
 #include <stdexcept>
 #include <algorithm>
+#include <cstdint>
+#include <fstream>
+#include <iostream>
+#include <string>
 namespace cactus {
 namespace engine {
 
-OnnxModel::OnnxModel() {
-    cactus_graph_ = nullptr;
-    input_node_id_ = 0;
-    output_node_id_ = 0;
+namespace {
+
+std::vector<unsigned char> convert_to_rgb(
+    const unsigned char* img_data, int width, int height, int channels) {
+    std::vector<unsigned char> rgb_data(width * height * 3);
+
+    if (channels == 1) {
+        for (int i = 0; i < width * height; ++i) {
+            rgb_data[i * 3 + 0] = img_data[i];
+            rgb_data[i * 3 + 1] = img_data[i];
+            rgb_data[i * 3 + 2] = img_data[i];
+        }
+    } else if (channels == 4) {
+        for (int i = 0; i < width * height; ++i) {
+            rgb_data[i * 3 + 0] = img_data[i * 4 + 0];
+            rgb_data[i * 3 + 1] = img_data[i * 4 + 1];
+            rgb_data[i * 3 + 2] = img_data[i * 4 + 2];
+        }
+    } else if (channels == 2) {
+        for (int i = 0; i < width * height; ++i) {
+            rgb_data[i * 3 + 0] = img_data[i * 2 + 0];
+            rgb_data[i * 3 + 1] = img_data[i * 2 + 0];
+            rgb_data[i * 3 + 2] = img_data[i * 2 + 0];
+        }
+    } else {
+        throw std::runtime_error("Unsupported number of channels: " + std::to_string(channels));
+    }
+
+    return rgb_data;
 }
 
-size_t OnnxModel::forward(const OnnxGraphConfig& graph_config) {
-    // TODO: Implement graph construction
+std::vector<float> resize_image(
+    const unsigned char* img_data, int src_width, int src_height,
+    int dst_width, int dst_height, int channels) {
+    const size_t src_elements = static_cast<size_t>(src_width) * src_height * channels;
+    std::vector<float> src_float(src_elements);
+    for (size_t idx = 0; idx < src_elements; ++idx) {
+        src_float[idx] = static_cast<float>(img_data[idx]);
+    }
+
+    std::vector<float> resized_data(static_cast<size_t>(dst_width) * dst_height * channels);
+
+    stbir_pixel_layout layout = (channels == 1) ? STBIR_1CHANNEL :
+                                (channels == 3) ? STBIR_RGB : STBIR_RGBA;
+
+    float* result = stbir_resize_float_linear(
+        src_float.data(), src_width, src_height, 0,
+        resized_data.data(), dst_width, dst_height, 0,
+        layout
+    );
+
+    if (!result) {
+        throw std::runtime_error("Failed to resize image");
+    }
+
+    return resized_data;
+}
+
+} // namespace
+
+static const char* get_onnx_op_name(OnnxModel::OnnxOpType op) {
+    switch (op) {
+        case OnnxModel::OnnxOpType::INPUT: return "INPUT";
+        case OnnxModel::OnnxOpType::WEIGHT: return "WEIGHT";
+        case OnnxModel::OnnxOpType::ADD: return "ADD";
+        case OnnxModel::OnnxOpType::BATCH_NORMALIZATION: return "BATCH_NORM";
+        case OnnxModel::OnnxOpType::CONCAT: return "CONCAT";
+        case OnnxModel::OnnxOpType::CONV: return "CONV";
+        case OnnxModel::OnnxOpType::CONV_TRANSPOSE: return "CONV_TRANSPOSE";
+        case OnnxModel::OnnxOpType::COS: return "COS";
+        case OnnxModel::OnnxOpType::DIV: return "DIV";
+        case OnnxModel::OnnxOpType::FLATTEN: return "FLATTEN";
+        case OnnxModel::OnnxOpType::GATHER: return "GATHER";
+        case OnnxModel::OnnxOpType::GEMM: return "GEMM";
+        case OnnxModel::OnnxOpType::GLOBAL_AVERAGE_POOL: return "GLOBAL_AVG_POOL";
+        case OnnxModel::OnnxOpType::MATMUL: return "MATMUL";
+        case OnnxModel::OnnxOpType::MAX: return "MAX";
+        case OnnxModel::OnnxOpType::MAX_POOL: return "MAX_POOL";
+        case OnnxModel::OnnxOpType::MIN: return "MIN";
+        case OnnxModel::OnnxOpType::MUL: return "MUL";
+        case OnnxModel::OnnxOpType::RESHAPE: return "RESHAPE";
+        case OnnxModel::OnnxOpType::RESIZE: return "RESIZE";
+        case OnnxModel::OnnxOpType::SIGMOID: return "SIGMOID";
+        case OnnxModel::OnnxOpType::SIN: return "SIN";
+        case OnnxModel::OnnxOpType::SLICE: return "SLICE";
+        case OnnxModel::OnnxOpType::SOFTMAX: return "SOFTMAX";
+        case OnnxModel::OnnxOpType::SPLIT: return "SPLIT";
+        case OnnxModel::OnnxOpType::SUB: return "SUB";
+        case OnnxModel::OnnxOpType::TRANSPOSE: return "TRANSPOSE";
+        case OnnxModel::OnnxOpType::UNSQUEEZE: return "UNSQUEEZE";
+    }
+    return "UNKNOWN";
+}
+
+static std::string make_debug_node_name(const OnnxModel::OnnxNodeConfig& node) {
+    return std::string(get_onnx_op_name(node.op_type)) + "#" + std::to_string(node.onnx_node_id);
+}
+
+OnnxModel::OnnxModel()
+    : cactus_graph_(new CactusGraph()),
+      input_node_id_(0),
+      output_node_id_(0) {
+}
+
+OnnxModel::OnnxModel(const std::string& ir_path, const std::string& default_input_path)
+    : OnnxModel() {
+    default_input_path_ = default_input_path;
+    graph_config_ = load_graph_config_from_blob(ir_path);
+    build_graph(graph_config_);
+}
+
+OnnxModel::~OnnxModel() {
+    delete cactus_graph_;
+    cactus_graph_ = nullptr;
+}
+
+size_t OnnxModel::build_graph(const OnnxGraphConfig& graph_config) {
+    graph_config_ = graph_config;
+    for (const auto& node : graph_config.nodes) {
+        size_t node_output_id = 0;
+        switch (node.op_type) {
+            case OnnxOpType::INPUT:
+                node_output_id = build_input(cactus_graph_, node);
+                break;
+            case OnnxOpType::WEIGHT:
+                node_output_id = build_weight(cactus_graph_, node);
+                break;
+            case OnnxOpType::ADD:
+                node_output_id = build_add(cactus_graph_, node);
+                break;
+            case OnnxOpType::BATCH_NORMALIZATION:
+                node_output_id = build_batch_normalization(cactus_graph_, node);
+                break;
+            case OnnxOpType::CONCAT:
+                node_output_id = build_concat(cactus_graph_, node);
+                break;
+            case OnnxOpType::CONV_TRANSPOSE:
+                node_output_id = build_conv_transpose(cactus_graph_, node);
+                break;
+            case OnnxOpType::CONV:
+                node_output_id = build_conv(cactus_graph_, node);
+                break;
+            case OnnxOpType::COS:
+                node_output_id = build_cos(cactus_graph_, node);
+                break;
+            case OnnxOpType::DIV:
+                node_output_id = build_div(cactus_graph_, node);
+                break;
+            case OnnxOpType::SIN:
+                node_output_id = build_sin(cactus_graph_, node);
+                break;
+            case OnnxOpType::SLICE:
+                node_output_id = build_slice(cactus_graph_, node);
+                break;
+            case OnnxOpType::SOFTMAX:
+                node_output_id = build_softmax(cactus_graph_, node);
+                break;
+            case OnnxOpType::FLATTEN:
+                node_output_id = build_flatten(cactus_graph_, node);
+                break;
+            case OnnxOpType::GATHER:
+                node_output_id = build_gather(cactus_graph_, node);
+                break;
+            case OnnxOpType::GEMM:
+                node_output_id = build_gemm(cactus_graph_, node);
+                break;
+            case OnnxOpType::GLOBAL_AVERAGE_POOL:
+                node_output_id = build_global_average_pool(cactus_graph_, node);
+                break;
+            case OnnxOpType::MATMUL:
+                node_output_id = build_matmul(cactus_graph_, node);
+                break;
+            case OnnxOpType::MAX:
+                node_output_id = build_max(cactus_graph_, node);
+                break;
+            case OnnxOpType::MAX_POOL:
+                node_output_id = build_max_pool(cactus_graph_, node);
+                break;
+            case OnnxOpType::MIN:
+                node_output_id = build_min(cactus_graph_, node);
+                break;
+            case OnnxOpType::MUL:
+                node_output_id = build_mul(cactus_graph_, node);
+                break;
+            case OnnxOpType::RESHAPE:
+                node_output_id = build_reshape(cactus_graph_, node);
+                break;
+            case OnnxOpType::RESIZE:
+                node_output_id = build_resize(cactus_graph_, node);
+                break;
+            case OnnxOpType::SIGMOID:
+                node_output_id = build_sigmoid(cactus_graph_, node);
+                break;
+            case OnnxOpType::SPLIT:
+                node_output_id = build_split(cactus_graph_, node);
+                break;
+            case OnnxOpType::SUB:
+                node_output_id = build_sub(cactus_graph_, node);
+                break;
+            case OnnxOpType::TRANSPOSE:
+                node_output_id = build_transpose(cactus_graph_, node);
+                break;
+            case OnnxOpType::UNSQUEEZE:
+                node_output_id = build_unsqueeze(cactus_graph_, node);
+                break;
+            default:
+                throw std::runtime_error("Unsupported operation: " + std::to_string(static_cast<int>(node.op_type)));
+        }
+
+        if (!node.outputs.empty()) {
+            if (node_output_id == 0) {
+                auto it = onnx_to_cactus_id_.find(node.outputs[0]);
+                if (it != onnx_to_cactus_id_.end()) {
+                    node_output_id = it->second;
+                }
+            }
+
+            if (node_output_id != 0 && cactus_graph_) {
+                cactus_graph_->capture_debug_node(
+                    static_cast<uint32_t>(node.onnx_node_id),
+                    make_debug_node_name(node),
+                    node_output_id);
+            }
+        }
+    }
     return output_node_id_;
+}
+std::vector<float> OnnxModel::forward(const OnnxGraphConfig& graph_config){
+    cactus_graph_->execute();
+    const BufferDesc& output_buffer = cactus_graph_->get_output_buffer(onnx_to_cactus_id_[graph_config.output_node_id]);
+    auto return_data = std::vector<float>(output_buffer.data_as<float>(), output_buffer.data_as<float>() + output_buffer.total_size);
+    cactus_graph_->soft_reset();
+    return return_data;
 }
 
 std::vector<float> OnnxModel::run() {
-    // TODO: Implement execution
-    std::vector<float> result;
-    return result;
+    if (graph_config_.nodes.empty()) {
+        throw std::runtime_error("Graph configuration missing");
+    }
+    return forward(graph_config_);
 }
 
+void OnnxModel::set_default_input_path(const std::string& path) {
+    default_input_path_ = path;
+}
 
 size_t OnnxModel::build_add(CactusGraph* gb, const OnnxNodeConfig& node) {
     if (node.inputs.size() != 2) {
@@ -277,12 +509,9 @@ size_t OnnxModel::build_conv(CactusGraph* gb, const OnnxNodeConfig& node) {
         }
     }
 
-    // Get kernel shape
-    if (attrs.kernel_shape.size() != 2) {
-        throw std::runtime_error("Conv requires a 2D kernel_shape");
-    }
-    size_t kernel_h = static_cast<size_t>(attrs.kernel_shape[0]);
-    size_t kernel_w = static_cast<size_t>(attrs.kernel_shape[1]);
+    // Get kernel shape from weight tensor (shape is [C_out, C_in/groups, kH, kW])
+    size_t kernel_h = weight_buffer.shape[2];
+    size_t kernel_w = weight_buffer.shape[3];
     if (kernel_h == 0 || kernel_w == 0) {
         throw std::runtime_error("Conv kernel dimensions must be > 0");
     }
@@ -395,12 +624,9 @@ size_t OnnxModel::build_conv_transpose(CactusGraph* gb, const OnnxNodeConfig& no
         }
     }
 
-    // Get kernel shape
-    if (attrs.kernel_shape.size() != 2) {
-        throw std::runtime_error("ConvTranspose requires a 2D kernel_shape");
-    }
-    size_t kernel_h = static_cast<size_t>(attrs.kernel_shape[0]);
-    size_t kernel_w = static_cast<size_t>(attrs.kernel_shape[1]);
+    // Get kernel shape from weight tensor (shape is [C_in, C_out/groups, kH, kW])
+    size_t kernel_h = weight_buffer.shape[2];
+    size_t kernel_w = weight_buffer.shape[3];
     if (kernel_h == 0 || kernel_w == 0) {
         throw std::runtime_error("ConvTranspose kernel dimensions must be > 0");
     }
@@ -678,7 +904,7 @@ size_t OnnxModel::build_matmul(CactusGraph* gb, const OnnxNodeConfig& node) {
     size_t input2_id = onnx_to_cactus_id_[node.inputs[1]];
     
     // Perform matrix multiplication (no transpose)
-    size_t output_id = gb->matmul(input1_id, input2_id, false);
+    size_t output_id = gb->matmul_nd(input1_id, input2_id, false);
     
     // Store output mapping
     if (!node.outputs.empty()) {
@@ -773,11 +999,11 @@ size_t OnnxModel::build_reshape(CactusGraph* gb, const OnnxNodeConfig& node) {
     size_t input_id = onnx_to_cactus_id_[node.inputs[0]];
     
     // Check for shape attribute
-    if (node.attributes.kernel_shape.empty()) {
+    if (node.attributes.shape.empty()) {
         throw std::runtime_error("Reshape operation requires 'shape' attribute");
     }
     
-    const std::vector<int64_t>& shape_attr = node.attributes.kernel_shape;
+    const std::vector<int64_t>& shape_attr = node.attributes.shape;
     
     // Validate no zeros in shape (not supported)
     for (size_t i = 0; i < shape_attr.size(); ++i) {
@@ -1120,6 +1346,9 @@ size_t OnnxModel::build_split(CactusGraph* gb, const OnnxNodeConfig& node) {
     for (int i = 0; i < node.outputs.size(); i++) {
         output_id = gb->slice(input_id, axis, static_cast<size_t>(index), splits[i]);
         index += splits[i];
+        if (!node.outputs.empty() && i < node.outputs.size()) {
+            onnx_to_cactus_id_[node.outputs[i]] = output_id;
+        }
     }
     return output_id;
 }
@@ -1240,11 +1469,435 @@ size_t OnnxModel::build_unsqueeze(CactusGraph* gb, const OnnxNodeConfig& node) {
 }
 
 size_t OnnxModel::build_input(CactusGraph* gb, const OnnxNodeConfig& node) {
-    throw std::runtime_error("Input node not yet implemented");
+    std::string path_to_weights = node.attributes.path_to_weights; 
+    if (path_to_weights.empty()) {
+        path_to_weights = default_input_path_;
+    }
+    Precision input_precision = node.attributes.input_precision;
+    if (path_to_weights.empty()) {
+        throw std::runtime_error("Input node requires 'path_to_weights' attribute or default input path");
+    }
+    auto input_data = OnnxModel::preprocess_input(path_to_weights, node);
+
+    std::vector<size_t> input_shape = node.attributes.input_shape;
+    size_t output_id = gb->input(input_shape, input_precision);
+    gb->set_input(output_id, input_data.data(), input_precision);
+    if (!node.outputs.empty()) {
+        onnx_to_cactus_id_[node.outputs[0]] = output_id;
+    }
+    return output_id;
+
 }
 
 size_t OnnxModel::build_weight(CactusGraph* gb, const OnnxNodeConfig& node) {
-    throw std::runtime_error("Weight node not yet implemented");
+    std::string path_to_weights = node.attributes.path_to_weights;
+    size_t output_id = gb->mmap_weights(path_to_weights);
+    if (!node.outputs.empty()) {
+        onnx_to_cactus_id_[node.outputs[0]] = output_id;
+    }
+    return output_id;
+}
+
+std::vector<float> OnnxModel::preprocess_input(const std::string& path_to_weights, const OnnxNodeConfig& node) {
+    if (path_to_weights.empty()) {
+        throw std::runtime_error("Input node requires path_to_weights pointing to an image file");
+    }
+
+    const auto& shape = node.attributes.input_shape;
+    if (shape.size() < 3) {
+        throw std::runtime_error("Input shape must include at least C, H, W dimensions");
+    }
+
+    size_t channels = shape[shape.size() - 3];
+    size_t height = shape[shape.size() - 2];
+    size_t width = shape[shape.size() - 1];
+
+    if (channels == 0 || height == 0 || width == 0) {
+        throw std::runtime_error("Input shape dimensions must be positive");
+    }
+
+    int target_height = static_cast<int>(height);
+    int target_width = static_cast<int>(width);
+
+    int src_width = 0;
+    int src_height = 0;
+    int src_channels = 0;
+    unsigned char* img_data = stbi_load(path_to_weights.c_str(), &src_width, &src_height, &src_channels, 0);
+    if (!img_data) {
+        throw std::runtime_error("Failed to load image: " + path_to_weights);
+    }
+
+    std::vector<unsigned char> rgb_data;
+    const unsigned char* source_data = img_data;
+    int active_channels = src_channels;
+    if (active_channels != 3) {
+        rgb_data = convert_to_rgb(img_data, src_width, src_height, active_channels);
+        source_data = rgb_data.data();
+        active_channels = 3;
+    }
+
+    auto resized = resize_image(source_data, src_width, src_height, target_width, target_height, active_channels);
+    stbi_image_free(img_data);
+    img_data = nullptr;
+
+    if (static_cast<size_t>(active_channels) != channels) {
+        throw std::runtime_error("Input shape channel count does not match loaded image channels");
+    }
+
+    std::vector<float> input_data(channels * height * width);
+    size_t hw = height * width;
+    for (size_t c = 0; c < channels; ++c) {
+        for (size_t y = 0; y < height; ++y) {
+            for (size_t x = 0; x < width; ++x) {
+                size_t dst_idx = c * hw + y * width + x;
+                size_t src_idx = (y * width + x) * active_channels + c;
+                input_data[dst_idx] = resized[src_idx] / 255.0f;
+            }
+        }
+    }
+
+    return input_data;
+}
+
+
+
+namespace {
+
+constexpr char kBinaryMagic[] = "CAIR";
+constexpr uint8_t kBinaryVersion = 1;
+
+enum class BinaryAttrType : uint8_t {
+    Float = 0,
+    Int64 = 1,
+    Bool = 2,
+    String = 3,
+    FloatArray = 4,
+    Int64Array = 5,
+};
+
+using AttrConfig = OnnxModel::OnnxAttrConfig;
+
+template <typename T>
+T read_scalar(std::ifstream& stream) {
+    T value;
+    if (!stream.read(reinterpret_cast<char*>(&value), sizeof(value))) {
+        throw std::runtime_error("Failed to read binary IR");
+    }
+    return value;
+}
+
+std::string read_binary_string(std::ifstream& stream) {
+    uint32_t length = read_scalar<uint32_t>(stream);
+    std::string result(length, '\0');
+    if (length > 0 && !stream.read(result.data(), length)) {
+        throw std::runtime_error("Failed to read binary IR string");
+    }
+    return result;
+}
+
+std::vector<float> read_float_array(std::ifstream& stream) {
+    uint32_t count = read_scalar<uint32_t>(stream);
+    std::vector<float> values(count);
+    if (count > 0 && !stream.read(reinterpret_cast<char*>(values.data()), count * sizeof(float))) {
+        throw std::runtime_error("Failed to read binary IR float array");
+    }
+    return values;
+}
+
+std::vector<int64_t> read_int64_array(std::ifstream& stream) {
+    uint32_t count = read_scalar<uint32_t>(stream);
+    std::vector<int64_t> values(count);
+    if (count > 0 && !stream.read(reinterpret_cast<char*>(values.data()), count * sizeof(int64_t))) {
+        throw std::runtime_error("Failed to read binary IR int64 array");
+    }
+    return values;
+}
+
+std::vector<int> to_int(const std::vector<int64_t>& values) {
+    std::vector<int> result;
+    result.reserve(values.size());
+    for (int64_t value : values) {
+        result.push_back(static_cast<int>(value));
+    }
+    return result;
+}
+
+std::vector<int64_t> copy_int64(const std::vector<int64_t>& values) {
+    return values;
+}
+
+std::vector<size_t> to_size_t(const std::vector<int64_t>& values) {
+    std::vector<size_t> result;
+    result.reserve(values.size());
+    for (int64_t value : values) {
+        result.push_back(static_cast<size_t>(value < 0 ? 0 : value));
+    }
+    return result;
+}
+
+bool apply_attr_float(AttrConfig& attrs, const std::string& key, float value) {
+    if (key == "epsilon") {
+        attrs.epsilon = value;
+        return true;
+    }
+    if (key == "alpha") {
+        attrs.alpha = value;
+        return true;
+    }
+    if (key == "beta") {
+        attrs.beta = value;
+        return true;
+    }
+    if (key == "cubic_coeff_a") {
+        attrs.cubic_coeff_a = value;
+        return true;
+    }
+    if (key == "momentum") {
+        attrs.momentum = value;
+        return true;
+    }
+    if (key == "extrapolation_value") {
+        attrs.extrapolation_value = value;
+        return true;
+    }
+    return false;
+}
+
+bool apply_attr_int64(AttrConfig& attrs, const std::string& key, int64_t value) {
+    if (key == "axis") {
+        attrs.axis = value;
+        return true;
+    }
+    if (key == "transB") {
+        attrs.transB = value;
+        return true;
+    }
+    if (key == "allowzero") {
+        attrs.allowzero = value;
+        return true;
+    }
+    if (key == "ceil_mode") {
+        attrs.ceil_mode = value;
+        return true;
+    }
+    if (key == "exclude_outside") {
+        attrs.exclude_outside = value;
+        return true;
+    }
+    if (key == "storage_order") {
+        attrs.storage_order = value;
+        return true;
+    }
+    if (key == "group") {
+        attrs.group = value;
+        return true;
+    }
+    if (key == "num_outputs") {
+        attrs.num_outputs = value;
+        return true;
+    }
+    if (key == "input_precision") {
+        if (value >= 0 && value <= static_cast<int64_t>(Precision::FP32)) {
+            attrs.input_precision = static_cast<Precision>(value);
+        }
+        return true;
+    }
+    return false;
+}
+
+bool apply_attr_bool(AttrConfig& attrs, const std::string& key, bool value) {
+    if (key == "antialias") {
+        attrs.antialias = value;
+        return true;
+    }
+    if (key == "roi") {
+        attrs.roi = value;
+        return true;
+    }
+    return false;
+}
+
+bool apply_attr_string(AttrConfig& attrs, const std::string& key, const std::string& value) {
+    if (key == "path_to_weights") {
+        attrs.path_to_weights = value;
+        return true;
+    }
+    if (key == "auto_pad") {
+        attrs.auto_pad = value;
+        return true;
+    }
+    if (key == "keep_aspect_ratio_policy") {
+        attrs.keep_aspect_ratio_policy = value;
+        return true;
+    }
+    if (key == "mode") {
+        attrs.mode = value;
+        return true;
+    }
+    if (key == "coordinate_transformation_mode") {
+        attrs.coordinate_transformation_mode = value;
+        return true;
+    }
+    if (key == "nearest_mode") {
+        attrs.nearest_mode = value;
+        return true;
+    }
+    return false;
+}
+
+bool apply_attr_int_list(AttrConfig& attrs, const std::string& key, const std::vector<int64_t>& values) {
+    if (key == "input_shape") {
+        attrs.input_shape = to_size_t(values);
+        return true;
+    }
+    if (key == "axes") {
+        attrs.axes = to_int(values);
+        return true;
+    }
+    if (key == "slice_starts") {
+        attrs.slice_starts = to_int(values);
+        return true;
+    }
+    if (key == "slice_ends") {
+        attrs.slice_ends = to_int(values);
+        return true;
+    }
+    if (key == "slice_steps") {
+        attrs.slice_steps = to_int(values);
+        return true;
+    }
+    if (key == "splits") {
+        attrs.splits = to_int(values);
+        return true;
+    }
+    if (key == "perm") {
+        attrs.perm = copy_int64(values);
+        return true;
+    }
+    if (key == "pads") {
+        attrs.pads = copy_int64(values);
+        return true;
+    }
+    if (key == "kernel_shape") {
+        attrs.kernel_shape = copy_int64(values);
+        return true;
+    }
+    if (key == "shape") {
+        attrs.shape = copy_int64(values);
+        return true;
+    }
+    if (key == "strides") {
+        attrs.strides = copy_int64(values);
+        return true;
+    }
+    if (key == "dilations") {
+        attrs.dilations = copy_int64(values);
+        return true;
+    }
+    if (key == "sizes") {
+        attrs.sizes = copy_int64(values);
+        return true;
+    }
+    return false;
+}
+
+bool apply_attr_float_list(AttrConfig& attrs, const std::string& key, const std::vector<float>& values) {
+    if (key == "scales") {
+        attrs.scales = values;
+        return true;
+    }
+    return false;
+}
+
+} // namespace
+
+OnnxModel::OnnxGraphConfig OnnxModel::load_graph_config_from_blob(const std::string& ir_path) {
+    std::ifstream stream(ir_path, std::ios::binary);
+    if (!stream) {
+        throw std::runtime_error("Failed to open IR file: " + ir_path);
+    }
+
+    char magic[4];
+    stream.read(magic, sizeof(magic));
+    if (std::string(magic, sizeof(magic)) != kBinaryMagic) {
+        throw std::runtime_error("Invalid IR magic header");
+    }
+
+    uint8_t version = read_scalar<uint8_t>(stream);
+    if (version != kBinaryVersion) {
+        throw std::runtime_error("Unsupported IR version");
+    }
+
+    uint32_t node_count = read_scalar<uint32_t>(stream);
+    read_scalar<uint32_t>(stream); // value count
+
+    OnnxGraphConfig config;
+    config.nodes.reserve(node_count);
+
+    const uint8_t max_op = static_cast<uint8_t>(OnnxOpType::UNSQUEEZE);
+    for (uint32_t idx = 0; idx < node_count; ++idx) {
+        uint32_t node_id = read_scalar<uint32_t>(stream);
+        uint8_t op_type_byte = read_scalar<uint8_t>(stream);
+        if (op_type_byte > max_op) {
+            throw std::runtime_error("Unsupported op type in IR");
+        }
+
+        OnnxNodeConfig node;
+        node.onnx_node_id = static_cast<size_t>(node_id);
+        node.op_type = static_cast<OnnxOpType>(op_type_byte);
+
+        uint32_t input_count = read_scalar<uint32_t>(stream);
+        node.inputs.resize(input_count);
+        for (uint32_t i = 0; i < input_count; ++i) {
+            node.inputs[i] = static_cast<int>(read_scalar<uint32_t>(stream));
+        }
+
+        uint32_t output_count = read_scalar<uint32_t>(stream);
+        node.outputs.resize(output_count);
+        for (uint32_t i = 0; i < output_count; ++i) {
+            node.outputs[i] = static_cast<int>(read_scalar<uint32_t>(stream));
+        }
+
+        uint32_t attr_count = read_scalar<uint32_t>(stream);
+        for (uint32_t attr_index = 0; attr_index < attr_count; ++attr_index) {
+            std::string key = read_binary_string(stream);
+            BinaryAttrType type = static_cast<BinaryAttrType>(read_scalar<uint8_t>(stream));
+            switch (type) {
+                case BinaryAttrType::Float:
+                    apply_attr_float(node.attributes, key, read_scalar<float>(stream));
+                    break;
+                case BinaryAttrType::Int64:
+                    apply_attr_int64(node.attributes, key, read_scalar<int64_t>(stream));
+                    break;
+                case BinaryAttrType::Bool:
+                    apply_attr_bool(node.attributes, key, read_scalar<uint8_t>(stream) != 0);
+                    break;
+                case BinaryAttrType::String:
+                    apply_attr_string(node.attributes, key, read_binary_string(stream));
+                    break;
+                case BinaryAttrType::FloatArray:
+                    apply_attr_float_list(node.attributes, key, read_float_array(stream));
+                    break;
+                case BinaryAttrType::Int64Array:
+                    apply_attr_int_list(node.attributes, key, read_int64_array(stream));
+                    break;
+                default:
+                    throw std::runtime_error("Unknown attribute type in IR");
+            }
+        }
+
+        config.nodes.push_back(std::move(node));
+    }
+
+    if (!config.nodes.empty()) {
+        config.input_node_id = 0;
+        config.output_node_id = static_cast<int>(config.nodes.size() - 1);
+    } else {
+        config.input_node_id = -1;
+        config.output_node_id = -1;
+    }
+
+    return config;
 }
 
 }

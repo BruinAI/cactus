@@ -17,7 +17,7 @@
 static const char* op_type_names[] = {
     "INPUT", "PRECISION_CAST",
     "ADD", "ADD_CLIPPED", "SUBTRACT", "MULTIPLY", "DIVIDE",
-    "MATMUL", "TRANSPOSE", "RESHAPE", "SLICE", "GATHER", "EMBEDDING",
+    "MATMUL", "MATMUL_ND", "TRANSPOSE", "RESHAPE", "SLICE", "GATHER", "EMBEDDING",
     "BILINEAR_INTERPOLATION", "RESIZE",
     "SUM", "MEAN", "VARIANCE", "MIN", "MAX", "MAXPOOL", "GLOBAL_AVG_POOL", "CONV2D", "CONV_TRANSPOSE2D",
     "ELEM_WISE_MIN", "ELEM_WISE_MAX",
@@ -132,6 +132,8 @@ size_t CactusGraph::matmul(size_t input1, size_t input2, bool pretransposed_rhs,
     const auto& rhs_buffer = get_output_buffer(input2);
     
     if (lhs_buffer.shape.size() != 2 || rhs_buffer.shape.size() != 2) {
+        std::cout << "lhs_buffer.shape: " << lhs_buffer.shape.size() << std::endl;
+        std::cout << "rhs_buffer.shape: " << rhs_buffer.shape.size() << std::endl;
         throw std::invalid_argument("Matrix multiplication requires 2D tensors");
     }
     
@@ -147,6 +149,54 @@ size_t CactusGraph::matmul(size_t input1, size_t input2, bool pretransposed_rhs,
     std::vector<size_t> output_shape = {M, N};
     OpParams params{.pretransposed_rhs = pretransposed_rhs, .backend = backend};
     return add_node(OpType::MATMUL, {input1, input2}, output_shape, params);
+}
+
+size_t CactusGraph::matmul_nd(size_t input1, size_t input2, bool pretransposed_rhs, ComputeBackend backend) {
+    const auto& lhs_buffer = get_output_buffer(input1);
+    const auto& rhs_buffer = get_output_buffer(input2);
+    
+    if (lhs_buffer.shape.size() < 2 || rhs_buffer.shape.size() < 2) {
+        throw std::invalid_argument("N-D matrix multiplication requires tensors with at least 2 dimensions");
+    }
+    
+    // Get the last two dimensions for matrix multiplication
+    size_t lhs_ndim = lhs_buffer.shape.size();
+    size_t rhs_ndim = rhs_buffer.shape.size();
+    
+    size_t M = lhs_buffer.shape[lhs_ndim - 2];
+    size_t K = lhs_buffer.shape[lhs_ndim - 1];
+    size_t rhs_K = pretransposed_rhs ? rhs_buffer.shape[rhs_ndim - 1] : rhs_buffer.shape[rhs_ndim - 2];
+    size_t N = pretransposed_rhs ? rhs_buffer.shape[rhs_ndim - 2] : rhs_buffer.shape[rhs_ndim - 1];
+    
+    if (K != rhs_K) {
+        throw std::invalid_argument("Matrix dimensions incompatible for N-D multiplication");
+    }
+    
+    // Compute batch dimensions - broadcast lhs batch dims with rhs batch dims
+    std::vector<size_t> lhs_batch(lhs_buffer.shape.begin(), lhs_buffer.shape.end() - 2);
+    std::vector<size_t> rhs_batch(rhs_buffer.shape.begin(), rhs_buffer.shape.end() - 2);
+    
+    // Broadcast batch dimensions (similar to numpy broadcasting)
+    size_t max_batch_ndim = std::max(lhs_batch.size(), rhs_batch.size());
+    std::vector<size_t> output_batch(max_batch_ndim);
+    
+    for (size_t i = 0; i < max_batch_ndim; ++i) {
+        size_t lhs_dim = (i < lhs_batch.size()) ? lhs_batch[lhs_batch.size() - 1 - i] : 1;
+        size_t rhs_dim = (i < rhs_batch.size()) ? rhs_batch[rhs_batch.size() - 1 - i] : 1;
+        
+        if (lhs_dim != rhs_dim && lhs_dim != 1 && rhs_dim != 1) {
+            throw std::invalid_argument("Batch dimensions are not broadcastable");
+        }
+        output_batch[max_batch_ndim - 1 - i] = std::max(lhs_dim, rhs_dim);
+    }
+    
+    // Build output shape: batch dims + [M, N]
+    std::vector<size_t> output_shape = output_batch;
+    output_shape.push_back(M);
+    output_shape.push_back(N);
+    
+    OpParams params{.pretransposed_rhs = pretransposed_rhs, .backend = backend};
+    return add_node(OpType::MATMUL_ND, {input1, input2}, output_shape, params);
 }
 
 size_t CactusGraph::transpose(size_t input, ComputeBackend backend) {

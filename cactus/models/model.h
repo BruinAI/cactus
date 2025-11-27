@@ -448,8 +448,43 @@ private:
 
 class OnnxModel {
 public:
+
+    enum class OnnxOpType {
+        INPUT,
+        WEIGHT,
+        ADD,
+        BATCH_NORMALIZATION,
+        CONCAT,
+        CONV,
+        CONV_TRANSPOSE,
+        COS,
+        DIV,
+        FLATTEN,
+        GATHER,
+        GEMM,
+        GLOBAL_AVERAGE_POOL,
+        MATMUL,
+        MAX,
+        MAX_POOL,
+        MIN,
+        MUL,
+        RESHAPE,
+        RESIZE,
+        SIGMOID,
+        SIN,
+        SLICE,
+        SOFTMAX,
+        SPLIT,
+        SUB,
+        TRANSPOSE,
+        UNSQUEEZE,
+    };
+
     struct OnnxAttrConfig {
         // Attribute parameters for ONNX operators
+        std::string path_to_weights;
+        std::vector<size_t> input_shape;
+        Precision input_precision = Precision::FP16;
         bool antialias = false;
         std::string keep_aspect_ratio_policy;
         std::vector<float> scales;
@@ -483,10 +518,11 @@ public:
         int64_t storage_order = 0;
         int64_t group = 1;
         std::vector<int> splits;
+        std::vector<int64_t> shape;
     };
 
     struct OnnxNodeConfig {
-        std::string op_type;
+        OnnxOpType op_type;
         size_t onnx_node_id;
         std::vector<int> inputs;
         std::vector<int> outputs;
@@ -495,18 +531,22 @@ public:
 
     struct OnnxGraphConfig {
         std::vector<OnnxNodeConfig> nodes;
-        std::vector<std::string> input_names;
-        std::vector<std::string> output_names;
+        int input_node_id;
+        int output_node_id;
     };
 
     OnnxModel();
-    ~OnnxModel() = default;
+    explicit OnnxModel(const std::string& ir_path, const std::string& default_input_path = "");
+    ~OnnxModel();
+
+    virtual std::vector<float> preprocess_input(const std::string& path_to_weights, const OnnxNodeConfig& node);
 
     // Load ONNX graph and return final output node ID
-    size_t forward(const OnnxGraphConfig& graph_config);
-
-    // Run the ONNX graph and get output
+    size_t build_graph(const OnnxGraphConfig& graph_config);
+    std::vector<float> forward(const OnnxGraphConfig& graph_config);
     std::vector<float> run();
+    void set_default_input_path(const std::string& path);
+    static OnnxGraphConfig load_graph_config_from_blob(const std::string& ir_path);
 
 private:
     // ONNX operator implementation methods
@@ -550,6 +590,8 @@ private:
     // Input and output node IDs
     size_t input_node_id_ = 0;
     size_t output_node_id_ = 0;
+    OnnxGraphConfig graph_config_;
+    std::string default_input_path_;
 };
 
 }
