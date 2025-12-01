@@ -579,6 +579,11 @@ private:
     size_t build_sub(CactusGraph* gb, const OnnxNodeConfig& node);
     size_t build_transpose(CactusGraph* gb, const OnnxNodeConfig& node);
     size_t build_unsqueeze(CactusGraph* gb, const OnnxNodeConfig& node);
+    size_t build_conv2d_gemm(CactusGraph* gb, size_t input, size_t weight, size_t bias,
+                                size_t kernel_h, size_t kernel_w,
+                                size_t stride,
+                                size_t pad,
+                                size_t groups);
     
     // Special node types
     size_t build_input(CactusGraph* gb, const OnnxNodeConfig& node);

@@ -336,8 +336,6 @@ size_t OnnxModel::build_add(CactusGraph* gb, const OnnxNodeConfig& node) {
     size_t input1_id = onnx_to_cactus_id_[node.inputs[0]];
     size_t input2_id = onnx_to_cactus_id_[node.inputs[1]];
     
-    // TODO: For now assuming scalar operations, need to handle tensor-tensor ops
-    // Placeholder: use scalar_add - actual implementation needs element-wise add
     size_t output_id = gb->add(input1_id, input2_id);
     
     // Store output mapping
@@ -645,33 +643,78 @@ size_t OnnxModel::build_conv(CactusGraph* gb, const OnnxNodeConfig& node) {
         throw std::runtime_error("Conv: C_out must be divisible by groups");
     }
 
-    size_t output_id;
-    
-    // Check if we should use GEMM-based convolution (im2col + matmul)
-    const char* use_gemm = std::getenv("CACTUS_CONV_GEMM");
-    bool prefer_gemm = use_gemm && std::string(use_gemm) == "1";
-    
-    if (prefer_gemm && groups == 1) {
-        // Use im2col + GEMM approach for non-grouped convolutions
-        output_id = gb->conv2d_gemm(input_id, weight_id, bias_id,
+    size_t output_id = build_conv2d_gemm(gb, input_id, weight_id, bias_id,
                                      kernel_h, kernel_w,
                                      stride,
                                      pad,
                                      groups);
-    } else {
-        // Use direct convolution
-        output_id = gb->conv2d(input_id, weight_id, bias_id,
-                               kernel_h, kernel_w,
-                               stride,
-                               pad,
-                               groups);
-    }
+
+    // auto& output_buffer = gb->get_output_buffer(output_id);
+
+    // auto output_shape = output_buffer.shape;
 
     if (!node.outputs.empty()) {
         onnx_to_cactus_id_[node.outputs[0]] = output_id;
     }
-
+    
     return output_id;
+}
+
+size_t OnnxModel::build_conv2d_gemm(CactusGraph* gb, size_t input, size_t weight, size_t bias,
+                                size_t kernel_h, size_t kernel_w,
+                                size_t stride,
+                                size_t pad,
+                                size_t groups) {
+    const auto& input_buffer = gb->get_output_buffer(input);
+    const auto& weight_buffer = gb->get_output_buffer(weight);
+    
+    if (input_buffer.shape.size() != 4) {
+        throw std::runtime_error("conv2d_gemm expects a 4D input tensor [N, C, H, W]");
+    }
+    if (weight_buffer.shape.size() != 4) {
+        throw std::runtime_error("conv2d_gemm expects a 4D weight tensor [C_out, C_in/groups, kH, kW]");
+    }
+    
+    size_t N = input_buffer.shape[0];
+    size_t C_in = input_buffer.shape[1];
+    size_t H = input_buffer.shape[2];
+    size_t W = input_buffer.shape[3];
+    size_t C_out = weight_buffer.shape[0];
+    
+    if (groups != 1) {
+        // For grouped convolutions, fall back to direct conv2d
+        return gb->conv2d(input, weight, bias, kernel_h, kernel_w, stride, pad, groups);
+    }
+    
+    size_t H_out = (H + 2 * pad - kernel_h) / stride + 1;
+    size_t W_out = (W + 2 * pad - kernel_w) / stride + 1;
+    size_t patch_size = C_in * kernel_h * kernel_w;
+    
+    // Step 1: im2col - extract patches
+    // Input: [N, C_in, H, W] -> [N, H_out * W_out, C_in * kernel_h * kernel_w]
+    size_t col_id = gb->im2col(input, kernel_h, kernel_w, stride, stride, pad, pad);
+    
+    // Step 2: Reshape weights from [C_out, C_in, kH, kW] to [C_out, C_in * kH * kW]
+    size_t weight_reshaped = gb->reshape(weight, {C_out, patch_size});
+    
+    // Step 3: Matrix multiply: [N, H_out * W_out, patch_size] @ [patch_size, C_out] = [N, H_out * W_out, C_out]
+    // We need col @ weight.T, which is matmul_nd with pretransposed_rhs=true
+    size_t matmul_result = gb->matmul_nd(col_id, weight_reshaped, true);
+    
+    // Step 4: Add bias if present (broadcast over spatial dimensions)
+    size_t result = matmul_result;
+    if (bias != 0) {
+        result = gb->add(matmul_result, bias);
+    }
+    
+    // Step 5: Reshape from [N, H_out * W_out, C_out] to [N, C_out, H_out, W_out]
+    // First reshape to [N, H_out, W_out, C_out]
+    size_t reshaped = gb->reshape(result, {N, H_out, W_out, C_out});
+    
+    // Then transpose to [N, C_out, H_out, W_out] using permutation [0, 3, 1, 2]
+    size_t output = gb->transposeN(reshaped, {0, 3, 1, 2});
+
+    return output;
 }
 
 size_t OnnxModel::build_conv_transpose(CactusGraph* gb, const OnnxNodeConfig& node) {
@@ -1422,6 +1465,10 @@ size_t OnnxModel::build_split(CactusGraph* gb, const OnnxNodeConfig& node) {
         sum_splits += s;
     }
     if (sum_splits != axis_size) {
+        std::cerr << "Split: sum of splits (" << sum_splits << ") does not equal axis size (" << axis_size << ")" << std::endl;
+        for (size_t i = 0; i < splits.size(); ++i) {
+            std::cerr << "  splits[" << i << "] = " << splits[i] << std::endl;
+        }
         throw std::runtime_error("Split: sum of splits must equal axis size");
     }
 

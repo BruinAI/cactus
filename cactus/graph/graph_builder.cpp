@@ -624,63 +624,6 @@ size_t CactusGraph::im2col(size_t input,
     return add_node(OpType::IM2COL, {input}, output_shape, params);
 }
 
-size_t CactusGraph::conv2d_gemm(size_t input, size_t weight, size_t bias,
-                                size_t kernel_h, size_t kernel_w,
-                                size_t stride,
-                                size_t pad,
-                                size_t groups) {
-    const auto& input_buffer = get_output_buffer(input);
-    const auto& weight_buffer = get_output_buffer(weight);
-    
-    if (input_buffer.shape.size() != 4) {
-        throw std::runtime_error("conv2d_gemm expects a 4D input tensor [N, C, H, W]");
-    }
-    if (weight_buffer.shape.size() != 4) {
-        throw std::runtime_error("conv2d_gemm expects a 4D weight tensor [C_out, C_in/groups, kH, kW]");
-    }
-    
-    size_t N = input_buffer.shape[0];
-    size_t C_in = input_buffer.shape[1];
-    size_t H = input_buffer.shape[2];
-    size_t W = input_buffer.shape[3];
-    size_t C_out = weight_buffer.shape[0];
-    
-    if (groups != 1) {
-        // For grouped convolutions, fall back to direct conv2d
-        return conv2d(input, weight, bias, kernel_h, kernel_w, stride, pad, groups);
-    }
-    
-    size_t H_out = (H + 2 * pad - kernel_h) / stride + 1;
-    size_t W_out = (W + 2 * pad - kernel_w) / stride + 1;
-    size_t patch_size = C_in * kernel_h * kernel_w;
-    
-    // Step 1: im2col - extract patches
-    // Input: [N, C_in, H, W] -> [N, H_out * W_out, C_in * kernel_h * kernel_w]
-    size_t col_id = im2col(input, kernel_h, kernel_w, stride, stride, pad, pad);
-    
-    // Step 2: Reshape weights from [C_out, C_in, kH, kW] to [C_out, C_in * kH * kW]
-    size_t weight_reshaped = reshape(weight, {C_out, patch_size});
-    
-    // Step 3: Matrix multiply: [N, H_out * W_out, patch_size] @ [patch_size, C_out] = [N, H_out * W_out, C_out]
-    // We need col @ weight.T, which is matmul_nd with pretransposed_rhs=true
-    size_t matmul_result = matmul_nd(col_id, weight_reshaped, true);
-    
-    // Step 4: Add bias if present (broadcast over spatial dimensions)
-    size_t result = matmul_result;
-    if (bias != 0) {
-        result = add(matmul_result, bias);
-    }
-    
-    // Step 5: Reshape from [N, H_out * W_out, C_out] to [N, C_out, H_out, W_out]
-    // First reshape to [N, H_out, W_out, C_out]
-    size_t reshaped = reshape(result, {N, H_out, W_out, C_out});
-    
-    // Then transpose to [N, C_out, H_out, W_out] using permutation [0, 3, 1, 2]
-    size_t output = transposeN(reshaped, {0, 3, 1, 2});
-    
-    return output;
-}
-
 size_t CactusGraph::concat(size_t input1, size_t input2, int axis) {
     const auto& buffer1 = get_output_buffer(input1);
     const auto& buffer2 = get_output_buffer(input2);

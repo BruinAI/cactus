@@ -293,13 +293,6 @@ public:
                   size_t stride_h, size_t stride_w,
                   size_t pad_h, size_t pad_w);
     
-    // GEMM-based Conv2D using im2col + matmul
-    size_t conv2d_gemm(size_t input, size_t weight, size_t bias,
-                       size_t kernel_h, size_t kernel_w,
-                       size_t stride,
-                       size_t pad,
-                       size_t groups);
-    
     size_t sample(size_t logits, float temperature = 0.6f, float top_p = 0.95f, size_t top_k = 20);
     
     size_t concat(size_t input1, size_t input2, int axis = 0);
