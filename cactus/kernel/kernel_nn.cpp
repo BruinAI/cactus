@@ -8,38 +8,109 @@
 #include <limits>
 #include <random>
 
+namespace {
+
+// Fast vectorized exp approximation using polynomial + bit manipulation
+// Accurate to ~1e-6 relative error for inputs in [-87, 87]
+inline float32x4_t fast_exp_neon(float32x4_t x) {
+    const float32x4_t log2e = vdupq_n_f32(1.4426950408889634f);
+    const float32x4_t ln2 = vdupq_n_f32(0.6931471805599453f);
+    
+    // Polynomial coefficients for 2^f where f in [0, 1]
+    const float32x4_t c0 = vdupq_n_f32(1.0f);
+    const float32x4_t c1 = vdupq_n_f32(0.6931471805599453f);
+    const float32x4_t c2 = vdupq_n_f32(0.2402265069591007f);
+    const float32x4_t c3 = vdupq_n_f32(0.05550410866482158f);
+    const float32x4_t c4 = vdupq_n_f32(0.009618129842071803f);
+    const float32x4_t c5 = vdupq_n_f32(0.001333355814670656f);
+    
+    // Clamp to avoid overflow/underflow
+    const float32x4_t clamp_min = vdupq_n_f32(-87.0f);
+    const float32x4_t clamp_max = vdupq_n_f32(87.0f);
+    x = vmaxq_f32(x, clamp_min);
+    x = vminq_f32(x, clamp_max);
+    
+    // Convert to base-2: x * log2(e)
+    float32x4_t x_log2 = vmulq_f32(x, log2e);
+    
+    // Split into integer and fractional parts
+    int32x4_t xi = vcvtq_s32_f32(x_log2);
+    float32x4_t xf = vsubq_f32(x_log2, vcvtq_f32_s32(xi));
+    
+    // Polynomial approximation of 2^xf using Horner's method
+    float32x4_t p = c5;
+    p = vfmaq_f32(c4, p, xf);
+    p = vfmaq_f32(c3, p, xf);
+    p = vfmaq_f32(c2, p, xf);
+    p = vfmaq_f32(c1, p, xf);
+    p = vfmaq_f32(c0, p, xf);
+    
+    // Compute 2^xi by manipulating the exponent bits of IEEE 754 float
+    int32x4_t exponent = vaddq_s32(xi, vdupq_n_s32(127));
+    exponent = vshlq_n_s32(exponent, 23);
+    float32x4_t scale = vreinterpretq_f32_s32(exponent);
+    
+    return vmulq_f32(p, scale);
+}
+
+// Fast reciprocal with Newton-Raphson refinement
+inline float32x4_t fast_reciprocal_neon(float32x4_t x) {
+    float32x4_t recip = vrecpeq_f32(x);
+    recip = vmulq_f32(recip, vrecpsq_f32(x, recip));
+    recip = vmulq_f32(recip, vrecpsq_f32(x, recip));
+    return recip;
+}
+
+} // anonymous namespace
+
 
 void cactus_silu_f32(const float* input, float* output, size_t num_elements) {
     CactusThreading::parallel_for(num_elements, CactusThreading::Thresholds::SCALAR_EXPENSIVE,
         [&](size_t start_idx, size_t end_idx) {
             constexpr size_t SIMD_WIDTH = 4;
+            constexpr size_t UNROLL = 4;
+            constexpr size_t BLOCK = SIMD_WIDTH * UNROLL;
+            
+            const size_t block_end = start_idx + ((end_idx - start_idx) / BLOCK) * BLOCK;
             const size_t vectorized_end = start_idx + ((end_idx - start_idx) / SIMD_WIDTH) * SIMD_WIDTH;
             
             const float32x4_t one = vdupq_n_f32(1.0f);
             
-            for (size_t i = start_idx; i < vectorized_end; i += SIMD_WIDTH) {
-                float32x4_t x = vld1q_f32(&input[i]);
+            // Unrolled loop: process 16 elements at a time
+            for (size_t i = start_idx; i < block_end; i += BLOCK) {
+                float32x4_t x0 = vld1q_f32(&input[i]);
+                float32x4_t x1 = vld1q_f32(&input[i + 4]);
+                float32x4_t x2 = vld1q_f32(&input[i + 8]);
+                float32x4_t x3 = vld1q_f32(&input[i + 12]);
                 
-                float32x4_t neg_x = vnegq_f32(x);
+                // Compute exp(-x) using fast approximation
+                float32x4_t exp0 = fast_exp_neon(vnegq_f32(x0));
+                float32x4_t exp1 = fast_exp_neon(vnegq_f32(x1));
+                float32x4_t exp2 = fast_exp_neon(vnegq_f32(x2));
+                float32x4_t exp3 = fast_exp_neon(vnegq_f32(x3));
                 
-                float32x4_t exp_vals[4];
-                float neg_vals[4], result_vals[4];
-                vst1q_f32(neg_vals, neg_x);
+                // sigmoid = 1 / (1 + exp(-x))
+                float32x4_t sig0 = fast_reciprocal_neon(vaddq_f32(one, exp0));
+                float32x4_t sig1 = fast_reciprocal_neon(vaddq_f32(one, exp1));
+                float32x4_t sig2 = fast_reciprocal_neon(vaddq_f32(one, exp2));
+                float32x4_t sig3 = fast_reciprocal_neon(vaddq_f32(one, exp3));
                 
-                for (int j = 0; j < 4; j++) {
-                    result_vals[j] = expf(neg_vals[j]);
-                }
-                exp_vals[0] = vld1q_f32(result_vals);
-                
-                float32x4_t one_plus_exp = vaddq_f32(one, exp_vals[0]);
-                
-                float32x4_t sigmoid = vdivq_f32(one, one_plus_exp);
-                
-                float32x4_t silu = vmulq_f32(x, sigmoid);
-                
-                vst1q_f32(&output[i], silu);
+                // silu = x * sigmoid(x)
+                vst1q_f32(&output[i], vmulq_f32(x0, sig0));
+                vst1q_f32(&output[i + 4], vmulq_f32(x1, sig1));
+                vst1q_f32(&output[i + 8], vmulq_f32(x2, sig2));
+                vst1q_f32(&output[i + 12], vmulq_f32(x3, sig3));
             }
             
+            // Handle remaining 4-element blocks
+            for (size_t i = block_end; i < vectorized_end; i += SIMD_WIDTH) {
+                float32x4_t x = vld1q_f32(&input[i]);
+                float32x4_t exp_neg_x = fast_exp_neon(vnegq_f32(x));
+                float32x4_t sigmoid = fast_reciprocal_neon(vaddq_f32(one, exp_neg_x));
+                vst1q_f32(&output[i], vmulq_f32(x, sigmoid));
+            }
+            
+            // Scalar tail
             for (size_t i = vectorized_end; i < end_idx; ++i) {
                 float sigmoid = 1.0f / (1.0f + expf(-input[i]));
                 output[i] = input[i] * sigmoid;
@@ -227,6 +298,170 @@ void cactus_gelu_int8(const int8_t* input, int8_t* output, size_t num_elements,
             }
         });
 }
+
+void cactus_sigmoid_f32(const float* input, float* output, size_t num_elements) {
+    CactusThreading::parallel_for(num_elements, CactusThreading::Thresholds::SCALAR_EXPENSIVE,
+        [&](size_t start_idx, size_t end_idx) {
+            constexpr size_t SIMD_WIDTH = 4;
+            // Process 16 elements per iteration for better throughput
+            constexpr size_t UNROLL = 4;
+            constexpr size_t BLOCK = SIMD_WIDTH * UNROLL;
+            
+            const size_t block_end = start_idx + ((end_idx - start_idx) / BLOCK) * BLOCK;
+            const size_t vectorized_end = start_idx + ((end_idx - start_idx) / SIMD_WIDTH) * SIMD_WIDTH;
+
+            const float32x4_t one = vdupq_n_f32(1.0f);
+
+            // Unrolled loop: process 16 elements at a time
+            for (size_t i = start_idx; i < block_end; i += BLOCK) {
+                float32x4_t x0 = vld1q_f32(&input[i]);
+                float32x4_t x1 = vld1q_f32(&input[i + 4]);
+                float32x4_t x2 = vld1q_f32(&input[i + 8]);
+                float32x4_t x3 = vld1q_f32(&input[i + 12]);
+                
+                // Compute exp(-x) using fast approximation
+                float32x4_t exp0 = fast_exp_neon(vnegq_f32(x0));
+                float32x4_t exp1 = fast_exp_neon(vnegq_f32(x1));
+                float32x4_t exp2 = fast_exp_neon(vnegq_f32(x2));
+                float32x4_t exp3 = fast_exp_neon(vnegq_f32(x3));
+                
+                // sigmoid = 1 / (1 + exp(-x))
+                float32x4_t denom0 = vaddq_f32(one, exp0);
+                float32x4_t denom1 = vaddq_f32(one, exp1);
+                float32x4_t denom2 = vaddq_f32(one, exp2);
+                float32x4_t denom3 = vaddq_f32(one, exp3);
+                
+                // Use fast reciprocal for better performance
+                float32x4_t sig0 = fast_reciprocal_neon(denom0);
+                float32x4_t sig1 = fast_reciprocal_neon(denom1);
+                float32x4_t sig2 = fast_reciprocal_neon(denom2);
+                float32x4_t sig3 = fast_reciprocal_neon(denom3);
+                
+                vst1q_f32(&output[i], sig0);
+                vst1q_f32(&output[i + 4], sig1);
+                vst1q_f32(&output[i + 8], sig2);
+                vst1q_f32(&output[i + 12], sig3);
+            }
+            
+            // Handle remaining 4-element blocks
+            for (size_t i = block_end; i < vectorized_end; i += SIMD_WIDTH) {
+                float32x4_t x = vld1q_f32(&input[i]);
+                float32x4_t exp_neg_x = fast_exp_neon(vnegq_f32(x));
+                float32x4_t denom = vaddq_f32(one, exp_neg_x);
+                float32x4_t sigmoid = fast_reciprocal_neon(denom);
+                vst1q_f32(&output[i], sigmoid);
+            }
+
+            // Scalar tail
+            for (size_t i = vectorized_end; i < end_idx; ++i) {
+                float x = input[i];
+                output[i] = 1.0f / (1.0f + expf(-x));
+            }
+        });
+}
+
+void cactus_sigmoid_f16(const __fp16* input, __fp16* output, size_t num_elements) {
+    CactusThreading::parallel_for(num_elements, CactusThreading::Thresholds::SCALAR_EXPENSIVE,
+        [&](size_t start_idx, size_t end_idx) {
+            constexpr size_t SIMD_WIDTH = 8;
+            // Process 32 elements per iteration for better throughput
+            constexpr size_t UNROLL = 4;
+            constexpr size_t BLOCK = SIMD_WIDTH * UNROLL;
+            
+            const size_t block_end = start_idx + ((end_idx - start_idx) / BLOCK) * BLOCK;
+            const size_t vectorized_end = start_idx + ((end_idx - start_idx) / SIMD_WIDTH) * SIMD_WIDTH;
+            
+            const float32x4_t one_f32 = vdupq_n_f32(1.0f);
+
+            // Unrolled loop: process 32 elements at a time
+            for (size_t i = start_idx; i < block_end; i += BLOCK) {
+                // Load 4 x 8 = 32 FP16 values
+                float16x8_t x0_f16 = vld1q_f16(&input[i]);
+                float16x8_t x1_f16 = vld1q_f16(&input[i + 8]);
+                float16x8_t x2_f16 = vld1q_f16(&input[i + 16]);
+                float16x8_t x3_f16 = vld1q_f16(&input[i + 24]);
+                
+                // Convert to FP32 (8 vectors of 4 elements each)
+                float32x4_t x0_lo = vcvt_f32_f16(vget_low_f16(x0_f16));
+                float32x4_t x0_hi = vcvt_f32_f16(vget_high_f16(x0_f16));
+                float32x4_t x1_lo = vcvt_f32_f16(vget_low_f16(x1_f16));
+                float32x4_t x1_hi = vcvt_f32_f16(vget_high_f16(x1_f16));
+                float32x4_t x2_lo = vcvt_f32_f16(vget_low_f16(x2_f16));
+                float32x4_t x2_hi = vcvt_f32_f16(vget_high_f16(x2_f16));
+                float32x4_t x3_lo = vcvt_f32_f16(vget_low_f16(x3_f16));
+                float32x4_t x3_hi = vcvt_f32_f16(vget_high_f16(x3_f16));
+                
+                // Compute exp(-x) using fast approximation
+                float32x4_t exp0_lo = fast_exp_neon(vnegq_f32(x0_lo));
+                float32x4_t exp0_hi = fast_exp_neon(vnegq_f32(x0_hi));
+                float32x4_t exp1_lo = fast_exp_neon(vnegq_f32(x1_lo));
+                float32x4_t exp1_hi = fast_exp_neon(vnegq_f32(x1_hi));
+                float32x4_t exp2_lo = fast_exp_neon(vnegq_f32(x2_lo));
+                float32x4_t exp2_hi = fast_exp_neon(vnegq_f32(x2_hi));
+                float32x4_t exp3_lo = fast_exp_neon(vnegq_f32(x3_lo));
+                float32x4_t exp3_hi = fast_exp_neon(vnegq_f32(x3_hi));
+                
+                // sigmoid = 1 / (1 + exp(-x))
+                float32x4_t sig0_lo = fast_reciprocal_neon(vaddq_f32(one_f32, exp0_lo));
+                float32x4_t sig0_hi = fast_reciprocal_neon(vaddq_f32(one_f32, exp0_hi));
+                float32x4_t sig1_lo = fast_reciprocal_neon(vaddq_f32(one_f32, exp1_lo));
+                float32x4_t sig1_hi = fast_reciprocal_neon(vaddq_f32(one_f32, exp1_hi));
+                float32x4_t sig2_lo = fast_reciprocal_neon(vaddq_f32(one_f32, exp2_lo));
+                float32x4_t sig2_hi = fast_reciprocal_neon(vaddq_f32(one_f32, exp2_hi));
+                float32x4_t sig3_lo = fast_reciprocal_neon(vaddq_f32(one_f32, exp3_lo));
+                float32x4_t sig3_hi = fast_reciprocal_neon(vaddq_f32(one_f32, exp3_hi));
+                
+                // Convert back to FP16 and store
+                vst1q_f16(&output[i], vcombine_f16(vcvt_f16_f32(sig0_lo), vcvt_f16_f32(sig0_hi)));
+                vst1q_f16(&output[i + 8], vcombine_f16(vcvt_f16_f32(sig1_lo), vcvt_f16_f32(sig1_hi)));
+                vst1q_f16(&output[i + 16], vcombine_f16(vcvt_f16_f32(sig2_lo), vcvt_f16_f32(sig2_hi)));
+                vst1q_f16(&output[i + 24], vcombine_f16(vcvt_f16_f32(sig3_lo), vcvt_f16_f32(sig3_hi)));
+            }
+            
+            // Handle remaining 8-element blocks
+            for (size_t i = block_end; i < vectorized_end; i += SIMD_WIDTH) {
+                float16x8_t x_f16 = vld1q_f16(&input[i]);
+
+                float32x4_t x_low  = vcvt_f32_f16(vget_low_f16(x_f16));
+                float32x4_t x_high = vcvt_f32_f16(vget_high_f16(x_f16));
+
+                float32x4_t exp_low  = fast_exp_neon(vnegq_f32(x_low));
+                float32x4_t exp_high = fast_exp_neon(vnegq_f32(x_high));
+
+                float32x4_t sigmoid_low  = fast_reciprocal_neon(vaddq_f32(one_f32, exp_low));
+                float32x4_t sigmoid_high = fast_reciprocal_neon(vaddq_f32(one_f32, exp_high));
+
+                float16x4_t sigmoid_low_f16  = vcvt_f16_f32(sigmoid_low);
+                float16x4_t sigmoid_high_f16 = vcvt_f16_f32(sigmoid_high);
+                float16x8_t sigmoid_f16 = vcombine_f16(sigmoid_low_f16, sigmoid_high_f16);
+
+                vst1q_f16(&output[i], sigmoid_f16);
+            }
+
+            // Scalar tail
+            for (size_t i = vectorized_end; i < end_idx; ++i) {
+                float x = static_cast<float>(input[i]);
+                float sigmoid = 1.0f / (1.0f + expf(-x));
+                output[i] = static_cast<__fp16>(sigmoid);
+            }
+        });
+}
+
+void cactus_sigmoid_int8(const int8_t* input, int8_t* output, size_t num_elements,
+                         float input_scale, float output_scale) {
+    CactusThreading::parallel_for(num_elements, CactusThreading::Thresholds::SCALAR_EXPENSIVE,
+        [&](size_t start_idx, size_t end_idx) {
+            for (size_t i = start_idx; i < end_idx; ++i) {
+                float x = input[i] * input_scale;
+                float sigmoid = 1.0f / (1.0f + expf(-x));
+                float scaled = sigmoid / output_scale;
+
+                float clamped = std::max(-128.0f, std::min(127.0f, roundf(scaled)));
+                output[i] = static_cast<int8_t>(clamped);
+            }
+        });
+}
+
 
 
 namespace CactusSoftmax {

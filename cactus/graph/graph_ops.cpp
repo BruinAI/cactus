@@ -1,5 +1,6 @@
 #include "graph.h"
 #include "../kernel/kernel.h"
+#include "../kernel/kernel_utils.h"
 #include <cstring>
 #include <vector>
 #include <stdexcept>
@@ -11,6 +12,8 @@
 #include <algorithm>
 #include <cmath>
 #include <assert.h>
+#include <string>
+#include <type_traits>
 
 namespace {
     thread_local std::vector<int8_t> transpose_buffer_int8;
@@ -39,6 +42,31 @@ namespace {
     void ensure_quantization_buffer_int8(size_t required_size) {
         if (quantization_buffer_int8.size() < required_size) {
             quantization_buffer_int8.resize(required_size);
+        }
+    }
+
+    template<typename TensorT, typename IndexT>
+    void gather_memcpy(const TensorT* tensor_data,
+                       TensorT* output,
+                       const IndexT* indices,
+                       size_t num_indices,
+                       size_t first_dim,
+                       size_t element_size,
+                       size_t bytes_per_element) {
+        using SignedIndex = std::make_signed_t<size_t>;
+        const SignedIndex signed_first_dim = static_cast<SignedIndex>(first_dim);
+        for (size_t i = 0; i < num_indices; ++i) {
+            SignedIndex signed_idx = static_cast<SignedIndex>(indices[i]);
+            if (signed_idx < 0) {
+                signed_idx += signed_first_dim;
+            }
+            if (signed_idx >= signed_first_dim || signed_idx < 0) {
+                size_t idx = static_cast<size_t>(signed_idx);
+                throw std::runtime_error("Gather index " + std::to_string(idx) +
+                                         " out of bounds for dimension " + std::to_string(first_dim));
+            }
+            size_t idx = static_cast<size_t>(signed_idx);
+            std::memcpy(output + i * element_size, tensor_data + idx * element_size, bytes_per_element);
         }
     }
 }
@@ -189,15 +217,14 @@ void compute_fused_node(GraphNode& node, const std::vector<std::unique_ptr<Graph
             
             if (tensor_buffer.precision == Precision::INT8) {
                 const int8_t* tensor_data = tensor_buffer.data_as<int8_t>();
-                const int8_t* indices = indices_buffer.data_as<int8_t>();
                 int8_t* output = node.output_buffer.data_as<int8_t>();
-                
-                    for (size_t i = 0; i < num_indices; i++) {
-                        size_t idx = static_cast<size_t>(indices[i]);
-                        if (idx >= first_dim) {
-                            throw std::runtime_error("Gather index " + std::to_string(idx) + " out of bounds for dimension " + std::to_string(first_dim));
-                        }
-                        std::memcpy(output + i * element_size, tensor_data + idx * element_size, bytes_per_element);
+
+                if (indices_buffer.precision == Precision::INT8) {
+                    const int8_t* indices = indices_buffer.data_as<int8_t>();
+                    gather_memcpy(tensor_data, output, indices, num_indices, first_dim, element_size, bytes_per_element);
+                } else {
+                    const float* indices = indices_buffer.data_as<float>();
+                    gather_memcpy(tensor_data, output, indices, num_indices, first_dim, element_size, bytes_per_element);
                 }
             } else if (tensor_buffer.precision == Precision::FP16) {
                 const __fp16* tensor_data = tensor_buffer.data_as<__fp16>();
@@ -205,22 +232,10 @@ void compute_fused_node(GraphNode& node, const std::vector<std::unique_ptr<Graph
                 
                 if (indices_buffer.precision == Precision::INT8) {
                     const int8_t* indices = indices_buffer.data_as<int8_t>();
-                    for (size_t i = 0; i < num_indices; i++) {
-                        size_t idx = static_cast<size_t>(indices[i]);
-                        if (idx >= first_dim) {
-                            throw std::runtime_error("Gather index " + std::to_string(idx) + " out of bounds for dimension " + std::to_string(first_dim));
-                        }
-                        std::memcpy(output + i * element_size, tensor_data + idx * element_size, bytes_per_element);
-                    }
+                    gather_memcpy(tensor_data, output, indices, num_indices, first_dim, element_size, bytes_per_element);
                 } else {
                     const float* indices = indices_buffer.data_as<float>();
-                    for (size_t i = 0; i < num_indices; i++) {
-                        size_t idx = static_cast<size_t>(indices[i]);
-                        if (idx >= first_dim) {
-                            throw std::runtime_error("Gather index " + std::to_string(idx) + " out of bounds for dimension " + std::to_string(first_dim));
-                        }
-                        std::memcpy(output + i * element_size, tensor_data + idx * element_size, bytes_per_element);
-                    }
+                    gather_memcpy(tensor_data, output, indices, num_indices, first_dim, element_size, bytes_per_element);
                 }
             } else {
                 const float* tensor_data = tensor_buffer.data_as<float>();
@@ -228,22 +243,10 @@ void compute_fused_node(GraphNode& node, const std::vector<std::unique_ptr<Graph
                 
                 if (indices_buffer.precision == Precision::INT8) {
                     const int8_t* indices = indices_buffer.data_as<int8_t>();
-                    for (size_t i = 0; i < num_indices; i++) {
-                        size_t idx = static_cast<size_t>(indices[i]);
-                        if (idx >= first_dim) {
-                            throw std::runtime_error("Gather index " + std::to_string(idx) + " out of bounds for dimension " + std::to_string(first_dim));
-                        }
-                        std::memcpy(output + i * element_size, tensor_data + idx * element_size, bytes_per_element);
-                    }
+                    gather_memcpy(tensor_data, output, indices, num_indices, first_dim, element_size, bytes_per_element);
                 } else {
                     const float* indices = indices_buffer.data_as<float>();
-                    for (size_t i = 0; i < num_indices; i++) {
-                        size_t idx = static_cast<size_t>(indices[i]);
-                        if (idx >= first_dim) {
-                            throw std::runtime_error("Gather index " + std::to_string(idx) + " out of bounds for dimension " + std::to_string(first_dim));
-                        }
-                        std::memcpy(output + i * element_size, tensor_data + idx * element_size, bytes_per_element);
-                    }
+                    gather_memcpy(tensor_data, output, indices, num_indices, first_dim, element_size, bytes_per_element);
                 }
             }
             break;
@@ -449,6 +452,326 @@ void compute_fused_node(GraphNode& node, const std::vector<std::unique_ptr<Graph
             cactus_bilinear_interpolation_fp32(pos_embed_fp32.data(), output, 
                                               src_height, src_width, embed_dim,
                                               dst_height, dst_width);
+            break;
+        }
+        case OpType::RESIZE: {
+            const auto& input_buffer = nodes[node_index_map.at(node.input_ids[0])]->output_buffer;
+            const auto& shape = input_buffer.shape;
+            
+            if (shape.size() != 3) {
+                throw std::runtime_error("Resize nearest asymmetric requires 3D input tensor [outer_count, src_height, src_width], got " + 
+                                        std::to_string(shape.size()) + "D tensor");
+            }
+
+            size_t outer_count = shape[0];
+            size_t src_height = shape[1];
+            size_t src_width = shape[2];
+
+            size_t dst_height = node.params.dst_height;
+            size_t dst_width = node.params.dst_width;
+            
+            if (input_buffer.precision == Precision::INT8) {
+                cactus_resize_nearest_asymmetric_int8(input_buffer.data_as<int8_t>(), node.output_buffer.data_as<int8_t>(), 
+                                                       outer_count, src_height, src_width,
+                                                       dst_height, dst_width);
+            } else if (input_buffer.precision == Precision::FP16) {
+                cactus_resize_nearest_asymmetric_fp16(input_buffer.data_as<__fp16>(), node.output_buffer.data_as<__fp16>(), 
+                                                       outer_count, src_height, src_width,
+                                                       dst_height, dst_width);
+            } else {
+                cactus_resize_nearest_asymmetric_fp32(input_buffer.data_as<float>(), node.output_buffer.data_as<float>(), 
+                                                       outer_count, src_height, src_width,
+                                                       dst_height, dst_width);
+            }
+            break;
+        }
+        case OpType::MAXPOOL: {
+            const auto& input_buffer = nodes[node_index_map.at(node.input_ids[0])]->output_buffer;
+
+            if (input_buffer.shape.size() != 4) {
+                throw std::runtime_error("MaxPool operation requires a 4D input tensor [N,C,H,W]");
+            }
+
+            size_t N = input_buffer.shape[0];
+            size_t C = input_buffer.shape[1];
+            size_t H = input_buffer.shape[2];
+            size_t W = input_buffer.shape[3];
+
+            size_t kernel_h = node.params.kernel_h;
+            size_t kernel_w = node.params.kernel_w;
+            size_t stride = node.params.stride;
+            size_t dilation = node.params.dilation;
+            size_t pad = node.params.pad;
+
+            if (kernel_h == 0 || kernel_w == 0) {
+                throw std::runtime_error("MaxPool kernel dimensions must be > 0");
+            }
+            if (stride == 0) {
+                throw std::runtime_error("MaxPool stride must be > 0");
+            }
+            if (dilation == 0) {
+                throw std::runtime_error("MaxPool dilation must be > 0");
+            }
+
+            size_t eff_h = (kernel_h - 1) * dilation + 1;
+            size_t eff_w = (kernel_w - 1) * dilation + 1;
+
+            if (H + 2 * pad < eff_h || W + 2 * pad < eff_w) {
+                throw std::runtime_error("MaxPool kernel (with padding/dilation) is larger than the input spatial dimensions");
+            }
+
+            size_t out_h = (H + 2 * pad - eff_h) / stride + 1;
+            size_t out_w = (W + 2 * pad - eff_w) / stride + 1;
+
+            node.output_buffer.shape = {N, C, out_h, out_w};
+            node.output_buffer.precision = input_buffer.precision;
+            node.output_buffer.quantization_scale = input_buffer.quantization_scale;
+
+            if (input_buffer.precision == Precision::INT8) {
+                cactus_maxpool2d_int8(
+                    input_buffer.data_as<int8_t>(),
+                    node.output_buffer.data_as<int8_t>(),
+                    N, C, H, W,
+                    kernel_h, kernel_w,
+                    stride, stride,
+                    pad, pad,
+                    pad, pad,
+                    dilation, dilation);
+            } else if (input_buffer.precision == Precision::FP16) {
+                cactus_maxpool2d_f16(
+                    input_buffer.data_as<__fp16>(),
+                    node.output_buffer.data_as<__fp16>(),
+                    N, C, H, W,
+                    kernel_h, kernel_w,
+                    stride, stride,
+                    pad, pad,
+                    pad, pad,
+                    dilation, dilation);
+            } else {
+                cactus_maxpool2d_f32(
+                    input_buffer.data_as<float>(),
+                    node.output_buffer.data_as<float>(),
+                    N, C, H, W,
+                    kernel_h, kernel_w,
+                    stride, stride,
+                    pad, pad,
+                    pad, pad,
+                    dilation, dilation);
+            }
+
+            break;
+        }
+        case OpType::GLOBAL_AVG_POOL: {
+            const auto& input_buffer = nodes[node_index_map.at(node.input_ids[0])]->output_buffer;
+
+            if (input_buffer.shape.size() != 4) {
+                throw std::runtime_error("GlobalAveragePool requires a 4D input tensor [N,C,H,W]");
+            }
+
+            size_t N = input_buffer.shape[0];
+            size_t C = input_buffer.shape[1];
+            size_t H = input_buffer.shape[2];
+            size_t W = input_buffer.shape[3];
+
+            node.output_buffer.shape = {N, C, 1, 1};
+            node.output_buffer.precision = input_buffer.precision;
+            node.output_buffer.quantization_scale = input_buffer.quantization_scale;
+
+            if (input_buffer.precision == Precision::INT8) {
+                cactus_global_avg_pool2d_int8(
+                    input_buffer.data_as<int8_t>(),
+                    node.output_buffer.data_as<int8_t>(),
+                    N, C, H, W,
+                    input_buffer.quantization_scale,
+                    node.output_buffer.quantization_scale);
+            } else if (input_buffer.precision == Precision::FP16) {
+                cactus_global_avg_pool2d_f16(
+                    input_buffer.data_as<__fp16>(),
+                    node.output_buffer.data_as<__fp16>(),
+                    N, C, H, W);
+            } else {
+                cactus_global_avg_pool2d_f32(
+                    input_buffer.data_as<float>(),
+                    node.output_buffer.data_as<float>(),
+                    N, C, H, W);
+            }
+
+            break;
+        }
+        case OpType::CONV2D: {
+            const auto& input_buffer = nodes[node_index_map.at(node.input_ids[0])]->output_buffer;
+            const auto& weight_buffer = nodes[node_index_map.at(node.input_ids[1])]->output_buffer;
+
+            if (input_buffer.shape.size() != 4) {
+                throw std::runtime_error("Conv2D requires a 4D input tensor [N,C_in,H,W]");
+            }
+
+            size_t N = input_buffer.shape[0];
+            size_t C_in = input_buffer.shape[1];
+            size_t H = input_buffer.shape[2];
+            size_t W = input_buffer.shape[3];
+            size_t C_out = weight_buffer.shape[0];
+
+            size_t kernel_h = node.params.kernel_h;
+            size_t kernel_w = node.params.kernel_w;
+            size_t stride = node.params.stride;
+            size_t pad = node.params.pad;
+            size_t groups = node.params.groups;
+
+            size_t H_out = (H + 2 * pad - kernel_h) / stride + 1;
+            size_t W_out = (W + 2 * pad - kernel_w) / stride + 1;
+
+            node.output_buffer.shape = {N, C_out, H_out, W_out};
+            node.output_buffer.precision = input_buffer.precision;
+            node.output_buffer.quantization_scale = input_buffer.quantization_scale;
+
+            bool has_bias = node.input_ids.size() > 2;
+
+            if (input_buffer.precision == Precision::FP16) {
+                const __fp16* bias_ptr = nullptr;
+                if (has_bias) {
+                    bias_ptr = nodes[node_index_map.at(node.input_ids[2])]->output_buffer.data_as<__fp16>();
+                }
+                cactus_conv2d_f16(
+                    input_buffer.data_as<__fp16>(),
+                    weight_buffer.data_as<__fp16>(),
+                    bias_ptr,
+                    node.output_buffer.data_as<__fp16>(),
+                    N, C_in, H, W,
+                    C_out,
+                    kernel_h, kernel_w,
+                    stride, stride,
+                    pad, pad, pad, pad,
+                    groups);
+            } else {
+                const float* bias_ptr = nullptr;
+                if (has_bias) {
+                    bias_ptr = nodes[node_index_map.at(node.input_ids[2])]->output_buffer.data_as<float>();
+                }
+                cactus_conv2d_f32(
+                    input_buffer.data_as<float>(),
+                    weight_buffer.data_as<float>(),
+                    bias_ptr,
+                    node.output_buffer.data_as<float>(),
+                    N, C_in, H, W,
+                    C_out,
+                    kernel_h, kernel_w,
+                    stride, stride,
+                    pad, pad, pad, pad,
+                    groups);
+            }
+
+            break;
+        }
+        case OpType::CONV_TRANSPOSE2D: {
+            const auto& input_buffer = nodes[node_index_map.at(node.input_ids[0])]->output_buffer;
+            const auto& weight_buffer = nodes[node_index_map.at(node.input_ids[1])]->output_buffer;
+
+            if (input_buffer.shape.size() != 4) {
+                throw std::runtime_error("ConvTranspose2D requires a 4D input tensor [N,C_in,H,W]");
+            }
+
+            size_t N = input_buffer.shape[0];
+            size_t C_in = input_buffer.shape[1];
+            size_t H_in = input_buffer.shape[2];
+            size_t W_in = input_buffer.shape[3];
+            // Weight shape for ConvTranspose: [C_in, C_out_per_group, kH, kW]
+            size_t groups = node.params.groups;
+            size_t C_out = weight_buffer.shape[1] * groups;
+
+            size_t kernel_h = node.params.kernel_h;
+            size_t kernel_w = node.params.kernel_w;
+            size_t stride = node.params.stride;
+            size_t pad = node.params.pad;
+
+            // Output size formula for ConvTranspose
+            size_t H_out = (H_in - 1) * stride - 2 * pad + kernel_h;
+            size_t W_out = (W_in - 1) * stride - 2 * pad + kernel_w;
+
+            node.output_buffer.shape = {N, C_out, H_out, W_out};
+            node.output_buffer.precision = input_buffer.precision;
+            node.output_buffer.quantization_scale = input_buffer.quantization_scale;
+
+            bool has_bias = node.input_ids.size() > 2;
+
+            if (input_buffer.precision == Precision::FP16) {
+                const __fp16* bias_ptr = nullptr;
+                if (has_bias) {
+                    bias_ptr = nodes[node_index_map.at(node.input_ids[2])]->output_buffer.data_as<__fp16>();
+                }
+                cactus_conv_transpose2d_f16(
+                    input_buffer.data_as<__fp16>(),
+                    weight_buffer.data_as<__fp16>(),
+                    bias_ptr,
+                    node.output_buffer.data_as<__fp16>(),
+                    N, C_in, H_in, W_in,
+                    C_out,
+                    kernel_h, kernel_w,
+                    stride, pad,
+                    groups,
+                    H_out, W_out);
+            } else {
+                const float* bias_ptr = nullptr;
+                if (has_bias) {
+                    bias_ptr = nodes[node_index_map.at(node.input_ids[2])]->output_buffer.data_as<float>();
+                }
+                cactus_conv_transpose2d_f32(
+                    input_buffer.data_as<float>(),
+                    weight_buffer.data_as<float>(),
+                    bias_ptr,
+                    node.output_buffer.data_as<float>(),
+                    N, C_in, H_in, W_in,
+                    C_out,
+                    kernel_h, kernel_w,
+                    stride, pad,
+                    groups,
+                    H_out, W_out);
+            }
+
+            break;
+        }
+        case OpType::IM2COL: {
+            const auto& input_buffer = nodes[node_index_map.at(node.input_ids[0])]->output_buffer;
+            
+            if (input_buffer.shape.size() != 4) {
+                throw std::runtime_error("im2col requires a 4D input tensor [N, C, H, W]");
+            }
+            
+            size_t N = input_buffer.shape[0];
+            size_t C = input_buffer.shape[1];
+            size_t H = input_buffer.shape[2];
+            size_t W = input_buffer.shape[3];
+            
+            size_t kernel_h = node.params.kernel_h;
+            size_t kernel_w = node.params.kernel_w;
+            size_t stride = node.params.stride;
+            size_t pad = node.params.pad;
+            
+            size_t H_out = (H + 2 * pad - kernel_h) / stride + 1;
+            size_t W_out = (W + 2 * pad - kernel_w) / stride + 1;
+            
+            node.output_buffer.precision = input_buffer.precision;
+            
+            if (input_buffer.precision == Precision::FP16) {
+                cactus_im2col_f16(
+                    input_buffer.data_as<__fp16>(),
+                    node.output_buffer.data_as<__fp16>(),
+                    N, C, H, W,
+                    kernel_h, kernel_w,
+                    stride, stride,
+                    pad, pad,
+                    H_out, W_out);
+            } else {
+                cactus_im2col_f32(
+                    input_buffer.data_as<float>(),
+                    node.output_buffer.data_as<float>(),
+                    N, C, H, W,
+                    kernel_h, kernel_w,
+                    stride, stride,
+                    pad, pad,
+                    H_out, W_out);
+            }
+            
             break;
         }
         case OpType::RMS_NORM: {
@@ -786,29 +1109,33 @@ void compute_transpose_node(GraphNode& node, const std::vector<std::unique_ptr<G
 }
 
 
-void compute_matmul_node(GraphNode& node, const std::vector<std::unique_ptr<GraphNode>>& nodes, const std::unordered_map<size_t, size_t>& node_index_map) {
-    const auto& lhs_buffer = nodes[node_index_map.at(node.input_ids[0])]->output_buffer;
-    const auto& rhs_buffer = nodes[node_index_map.at(node.input_ids[1])]->output_buffer;
-    const auto& lhs_shape = lhs_buffer.shape;
-    const auto& rhs_shape = rhs_buffer.shape;
+// Helper struct for 2D matmul parameters
+struct Matmul2DParams {
+    size_t M, K, N;
+    bool pretransposed_rhs;
+    Precision lhs_precision;
+    Precision rhs_precision;
+    float lhs_scale;
+    float rhs_scale;
+    float output_scale;
+};
+
+// 2D matmul helper - performs a single [M, K] x [K, N] matrix multiplication
+// This is called by both compute_matmul_node (for 2D) and compute_matmul_nd_node (for batched N-D)
+static void compute_matmul_2d(
+    const void* lhs_data, const void* rhs_data, void* output_data,
+    const Matmul2DParams& params) {
     
-    size_t M = lhs_shape[lhs_shape.size() - 2];
-    size_t K = lhs_shape[lhs_shape.size() - 1];
-    size_t N = node.params.pretransposed_rhs ? 
-               rhs_shape[rhs_shape.size() - 2] : rhs_shape[rhs_shape.size() - 1];
+    size_t M = params.M;
+    size_t K = params.K;
+    size_t N = params.N;
+    bool pretransposed_rhs = params.pretransposed_rhs;
     
-    bool pretransposed_rhs = node.params.pretransposed_rhs;
-    
-    ComputeBackend backend = node.params.backend;
-    
-    if (backend == ComputeBackend::NPU) {
-        throw std::runtime_error("NPU matrix multiplication not yet implemented");
-    }
-    
-    if (lhs_buffer.precision == Precision::FP16 && rhs_buffer.precision == Precision::INT8) {
-        const __fp16* lhs = lhs_buffer.data_as<__fp16>();
-        const int8_t* rhs = rhs_buffer.data_as<int8_t>();
-        __fp16* output = node.output_buffer.data_as<__fp16>();
+    // Handle mixed precision: FP16 lhs with INT8 rhs
+    if (params.lhs_precision == Precision::FP16 && params.rhs_precision == Precision::INT8) {
+        const __fp16* lhs = static_cast<const __fp16*>(lhs_data);
+        const int8_t* rhs = static_cast<const int8_t*>(rhs_data);
+        __fp16* output = static_cast<__fp16*>(output_data);
         
         size_t lhs_size = M * K;
         size_t output_size = M * N;
@@ -820,96 +1147,214 @@ void compute_matmul_node(GraphNode& node, const std::vector<std::unique_ptr<Grap
         
         Quantization::fp16_to_int8(lhs, quantization_buffer_int8.data(), lhs_size, lhs_scale);
         
-        float rhs_scale = rhs_buffer.quantization_scale;
+        float rhs_scale = params.rhs_scale;
         
         std::vector<int32_t> int32_output(output_size);
         
         if (pretransposed_rhs) {
             cactus_matmul_int8_to_int32(quantization_buffer_int8.data(), rhs, 
-                                           int32_output.data(), M, K, N);
+                                        int32_output.data(), M, K, N);
         } else {
-            size_t transpose_size = rhs_shape[0] * rhs_shape[1];
+            size_t transpose_size = K * N;
             ensure_transpose_buffer_int8(transpose_size);
             
+            size_t rhs_dims[] = {K, N};
             size_t rhs_perm[] = {1, 0};
-            cactus_transpose_int8(rhs, transpose_buffer_int8.data(), rhs_shape.data(), rhs_perm, 2, 0, rhs_shape[0]);
+            cactus_transpose_int8(rhs, transpose_buffer_int8.data(), rhs_dims, rhs_perm, 2, 0, K);
             cactus_matmul_int8_to_int32(quantization_buffer_int8.data(), transpose_buffer_int8.data(), 
-                                     int32_output.data(), M, K, N);
+                                        int32_output.data(), M, K, N);
         }
         
         float combined_scale = lhs_scale * rhs_scale;
         cactus_int32_to_fp16_scaled(int32_output.data(), output, output_size, combined_scale);
         
     } else {
-        switch (lhs_buffer.precision) {
+        switch (params.lhs_precision) {
             case Precision::INT8: {
-                const int8_t* lhs = lhs_buffer.data_as<int8_t>();
-                const int8_t* rhs = rhs_buffer.data_as<int8_t>();
-                
-                float lhs_scale = lhs_buffer.quantization_scale;
-                float rhs_scale = rhs_buffer.quantization_scale;
-                
-                if (node.output_buffer.quantization_scale == 1.0f) {
-                    float estimated_scale = lhs_scale * rhs_scale;
-                    estimated_scale = std::max(0.001f, std::min(estimated_scale, 10.0f));
-                    
-                    node.output_buffer.quantization_scale = estimated_scale;
-                    
-                }
-                
-                int8_t* output = node.output_buffer.data_as<int8_t>();
+                const int8_t* lhs = static_cast<const int8_t*>(lhs_data);
+                const int8_t* rhs = static_cast<const int8_t*>(rhs_data);
+                int8_t* output = static_cast<int8_t*>(output_data);
                 
                 if (pretransposed_rhs) {
-                    cactus_matmul_int8(lhs, rhs, output, M, K, N, lhs_scale, rhs_scale, node.output_buffer.quantization_scale);
+                    cactus_matmul_int8(lhs, rhs, output, M, K, N, 
+                                       params.lhs_scale, params.rhs_scale, params.output_scale);
                 } else {
-                    size_t transpose_size = rhs_shape[0] * rhs_shape[1];
+                    size_t transpose_size = K * N;
                     ensure_transpose_buffer_int8(transpose_size);
                     
+                    size_t rhs_dims[] = {K, N};
                     size_t rhs_perm[] = {1, 0};
-                    cactus_transpose_int8(rhs, transpose_buffer_int8.data(), rhs_shape.data(), rhs_perm, 2, 0, rhs_shape[0]);
-                    cactus_matmul_int8(lhs, transpose_buffer_int8.data(), output, M, K, N, lhs_scale, rhs_scale, node.output_buffer.quantization_scale);
+                    cactus_transpose_int8(rhs, transpose_buffer_int8.data(), rhs_dims, rhs_perm, 2, 0, K);
+                    cactus_matmul_int8(lhs, transpose_buffer_int8.data(), output, M, K, N, 
+                                       params.lhs_scale, params.rhs_scale, params.output_scale);
                 }
-                
                 break;
             }
             case Precision::FP16: {
-                const __fp16* lhs = lhs_buffer.data_as<__fp16>();
-                const __fp16* rhs = rhs_buffer.data_as<__fp16>();
-                __fp16* output = node.output_buffer.data_as<__fp16>();
+                const __fp16* lhs = static_cast<const __fp16*>(lhs_data);
+                const __fp16* rhs = static_cast<const __fp16*>(rhs_data);
+                __fp16* output = static_cast<__fp16*>(output_data);
                 
                 if (pretransposed_rhs) {
                     cactus_matmul_f16(lhs, rhs, output, M, K, N);
                 } else {
-                    size_t transpose_size = rhs_shape[0] * rhs_shape[1];
+                    size_t transpose_size = K * N;
                     ensure_transpose_buffer_fp16(transpose_size);
                     
                     cactus_transpose_2d_f32(reinterpret_cast<const float*>(rhs), 
                                             reinterpret_cast<float*>(transpose_buffer_fp16.data()), 
-                                            rhs_shape[0], rhs_shape[1], 0, rhs_shape[0]);
+                                            K, N, 0, K);
                     cactus_matmul_f16(lhs, transpose_buffer_fp16.data(), output, M, K, N);
                 }
-                
                 break;
             }
             case Precision::FP32: {
-                const float* lhs = lhs_buffer.data_as<float>();
-                const float* rhs = rhs_buffer.data_as<float>();
-                float* output = node.output_buffer.data_as<float>();
+                const float* lhs = static_cast<const float*>(lhs_data);
+                const float* rhs = static_cast<const float*>(rhs_data);
+                float* output = static_cast<float*>(output_data);
                 
                 if (pretransposed_rhs) {
                     cactus_matmul_f32(lhs, rhs, output, M, K, N);
                 } else {
-                    size_t transpose_size = rhs_shape[0] * rhs_shape[1];
+                    size_t transpose_size = K * N;
                     ensure_transpose_buffer_fp32(transpose_size);
                     
+                    size_t rhs_dims[] = {K, N};
                     size_t rhs_perm[] = {1, 0};
-                    cactus_transpose_f32(rhs, transpose_buffer_fp32.data(), rhs_shape.data(), rhs_perm, 2, 0, rhs_shape[0]);
+                    cactus_transpose_f32(rhs, transpose_buffer_fp32.data(), rhs_dims, rhs_perm, 2, 0, K);
                     cactus_matmul_f32(lhs, transpose_buffer_fp32.data(), output, M, K, N);
                 }
                 break;
             }
         }
     }
+}
+
+void compute_matmul_node(GraphNode& node, const std::vector<std::unique_ptr<GraphNode>>& nodes, const std::unordered_map<size_t, size_t>& node_index_map) {
+    const auto& lhs_buffer = nodes[node_index_map.at(node.input_ids[0])]->output_buffer;
+    const auto& rhs_buffer = nodes[node_index_map.at(node.input_ids[1])]->output_buffer;
+    const auto& lhs_shape = lhs_buffer.shape;
+    const auto& rhs_shape = rhs_buffer.shape;
+    
+    size_t M = lhs_shape[lhs_shape.size() - 2];
+    size_t K = lhs_shape[lhs_shape.size() - 1];
+    size_t N = node.params.pretransposed_rhs ? 
+               rhs_shape[rhs_shape.size() - 2] : rhs_shape[rhs_shape.size() - 1];
+    
+    ComputeBackend backend = node.params.backend;
+    
+    if (backend == ComputeBackend::NPU) {
+        throw std::runtime_error("NPU matrix multiplication not yet implemented");
+    }
+    
+    // For INT8 output, compute scale if not set
+    if (lhs_buffer.precision == Precision::INT8 && node.output_buffer.quantization_scale == 1.0f) {
+        float estimated_scale = lhs_buffer.quantization_scale * rhs_buffer.quantization_scale;
+        estimated_scale = std::max(0.001f, std::min(estimated_scale, 10.0f));
+        node.output_buffer.quantization_scale = estimated_scale;
+    }
+    
+    Matmul2DParams params{
+        .M = M,
+        .K = K,
+        .N = N,
+        .pretransposed_rhs = node.params.pretransposed_rhs,
+        .lhs_precision = lhs_buffer.precision,
+        .rhs_precision = rhs_buffer.precision,
+        .lhs_scale = lhs_buffer.quantization_scale,
+        .rhs_scale = rhs_buffer.quantization_scale,
+        .output_scale = node.output_buffer.quantization_scale
+    };
+    
+    compute_matmul_2d(lhs_buffer.get_data(), rhs_buffer.get_data(), 
+                      node.output_buffer.get_data(), params);
+}
+
+void compute_matmul_nd_node(GraphNode& node, const std::vector<std::unique_ptr<GraphNode>>& nodes, const std::unordered_map<size_t, size_t>& node_index_map) {
+    const auto& lhs_buffer = nodes[node_index_map.at(node.input_ids[0])]->output_buffer;
+    const auto& rhs_buffer = nodes[node_index_map.at(node.input_ids[1])]->output_buffer;
+    const auto& lhs_shape = lhs_buffer.shape;
+    const auto& rhs_shape = rhs_buffer.shape;
+    const auto& out_shape = node.output_buffer.shape;
+    
+    ComputeBackend backend = node.params.backend;
+    
+    if (backend == ComputeBackend::NPU) {
+        throw std::runtime_error("NPU N-D matrix multiplication not yet implemented");
+    }
+    
+    size_t lhs_ndim = lhs_shape.size();
+    size_t rhs_ndim = rhs_shape.size();
+    size_t out_ndim = out_shape.size();
+    
+    size_t M = lhs_shape[lhs_ndim - 2];
+    size_t K = lhs_shape[lhs_ndim - 1];
+    size_t N = node.params.pretransposed_rhs ? 
+               rhs_shape[rhs_ndim - 2] : rhs_shape[rhs_ndim - 1];
+    
+    // Compute batch size from output shape (all dims except last 2)
+    size_t batch_size = 1;
+    for (size_t i = 0; i < out_ndim - 2; ++i) {
+        batch_size *= out_shape[i];
+    }
+    
+    // Compute strides for batch indexing
+    size_t lhs_matrix_size = M * K;
+    size_t rhs_matrix_size = K * N;
+    size_t out_matrix_size = M * N;
+    
+    // Compute lhs batch stride (product of all lhs batch dims)
+    size_t lhs_batch_size = 1;
+    for (size_t i = 0; i < lhs_ndim - 2; ++i) {
+        lhs_batch_size *= lhs_shape[i];
+    }
+    
+    // Compute rhs batch stride (product of all rhs batch dims)  
+    size_t rhs_batch_size = 1;
+    for (size_t i = 0; i < rhs_ndim - 2; ++i) {
+        rhs_batch_size *= rhs_shape[i];
+    }
+    
+    // For INT8 output, compute scale if not set
+    if (lhs_buffer.precision == Precision::INT8 && node.output_buffer.quantization_scale == 1.0f) {
+        float estimated_scale = lhs_buffer.quantization_scale * rhs_buffer.quantization_scale;
+        estimated_scale = std::max(0.001f, std::min(estimated_scale, 10.0f));
+        node.output_buffer.quantization_scale = estimated_scale;
+    }
+    
+    size_t element_size = PrecisionTraits::size_of(lhs_buffer.precision);
+    
+    // Parallel loop over batch dimension using CactusThreading
+    CactusThreading::parallel_for(batch_size, 1, [&](size_t start, size_t end) {
+        for (size_t b = start; b < end; ++b) {
+            // Compute batch indices for broadcasting
+            // For lhs: if lhs has fewer batch dims, wrap around
+            size_t lhs_batch_idx = (lhs_batch_size == 1) ? 0 : (b % lhs_batch_size);
+            // For rhs: if rhs has fewer batch dims, wrap around
+            size_t rhs_batch_idx = (rhs_batch_size == 1) ? 0 : (b % rhs_batch_size);
+            
+            const char* lhs_ptr = static_cast<const char*>(lhs_buffer.get_data()) + 
+                                  lhs_batch_idx * lhs_matrix_size * element_size;
+            const char* rhs_ptr = static_cast<const char*>(rhs_buffer.get_data()) + 
+                                  rhs_batch_idx * rhs_matrix_size * element_size;
+            char* out_ptr = static_cast<char*>(node.output_buffer.get_data()) + 
+                            b * out_matrix_size * element_size;
+            
+            Matmul2DParams params{
+                .M = M,
+                .K = K,
+                .N = N,
+                .pretransposed_rhs = node.params.pretransposed_rhs,
+                .lhs_precision = lhs_buffer.precision,
+                .rhs_precision = rhs_buffer.precision,
+                .lhs_scale = lhs_buffer.quantization_scale,
+                .rhs_scale = rhs_buffer.quantization_scale,
+                .output_scale = node.output_buffer.quantization_scale
+            };
+            
+            compute_matmul_2d(lhs_ptr, rhs_ptr, out_ptr, params);
+        }
+    });
 }
 
 void compute_sample_node(GraphNode& node, const std::vector<std::unique_ptr<GraphNode>>& nodes, const std::unordered_map<size_t, size_t>& node_index_map) {
@@ -1128,6 +1573,157 @@ void compute_layernorm_node(GraphNode& node, const std::vector<std::unique_ptr<G
         std::memcpy(node.output_buffer.data_as<float>(), output_float.data(), input_buffer.total_size * sizeof(float));
     }
 }
+
+void compute_batchnorm_node(GraphNode& node,
+                            const std::vector<std::unique_ptr<GraphNode>>& nodes,
+                            const std::unordered_map<size_t, size_t>& node_index_map) {
+    // Inputs: x, gamma, beta, running_mean, running_var
+    const auto& input_buffer    = nodes.at(node_index_map.at(node.input_ids[0]))->output_buffer;
+    const auto& weight_buffer   = nodes.at(node_index_map.at(node.input_ids[1]))->output_buffer; // gamma
+    const auto& bias_buffer     = nodes.at(node_index_map.at(node.input_ids[2]))->output_buffer; // beta
+    const auto& mean_buffer     = nodes.at(node_index_map.at(node.input_ids[3]))->output_buffer; // running_mean
+    const auto& variance_buffer = nodes.at(node_index_map.at(node.input_ids[4]))->output_buffer; // running_var
+
+    float epsilon = node.params.epsilon;
+    const auto& shape = input_buffer.shape;
+
+    if (shape.size() < 2) {
+        throw std::runtime_error("BatchNorm requires at least 2D input tensor");
+    }
+
+    // For NCHW format: shape is [N, C, H, W] or [N, C, ...spatial dims...]
+    // Channel dimension is at index 1
+    size_t num_channels = shape[1];
+    size_t total_size = input_buffer.total_size;
+    
+    // Compute spatial size (product of all dims after channel dim)
+    size_t spatial_size = 1;
+    for (size_t i = 2; i < shape.size(); ++i) {
+        spatial_size *= shape[i];
+    }
+    
+    // Batch size is shape[0]
+    size_t batch_size = shape[0];
+
+    // Validate that BatchNorm parameters match channel count
+    if (weight_buffer.total_size   != num_channels ||
+        bias_buffer.total_size     != num_channels ||
+        mean_buffer.total_size     != num_channels ||
+        variance_buffer.total_size != num_channels) {
+        std::cout << "weight_buffer.total_size: " << weight_buffer.total_size << std::endl;
+        std::cout << "bias_buffer.total_size: " << bias_buffer.total_size << std::endl;
+        std::cout << "mean_buffer.total_size: " << mean_buffer.total_size << std::endl;
+        std::cout << "variance_buffer.total_size: " << variance_buffer.total_size << std::endl;
+        std::cout << "num_channels: " << num_channels << std::endl;
+        throw std::runtime_error("BatchNorm parameter sizes must match number of channels");
+    }
+
+    // ----- Convert gamma (weight) to float -----
+    std::vector<float> weight_float(num_channels);
+    if (weight_buffer.precision == Precision::INT8) {
+        throw std::runtime_error("BatchNorm currently does not support INT8 weight");
+    } else if (weight_buffer.precision == Precision::FP16) {
+        const __fp16* w_fp16 = weight_buffer.data_as<__fp16>();
+        for (size_t i = 0; i < num_channels; ++i) {
+            weight_float[i] = static_cast<float>(w_fp16[i]);
+        }
+    } else {
+        std::memcpy(weight_float.data(), weight_buffer.data_as<float>(),
+                    num_channels * sizeof(float));
+    }
+
+    // ----- Convert beta (bias) to float -----
+    std::vector<float> bias_float(num_channels);
+    if (bias_buffer.precision == Precision::INT8) {
+        throw std::runtime_error("BatchNorm currently does not support INT8 bias");
+    } else if (bias_buffer.precision == Precision::FP16) {
+        const __fp16* b_fp16 = bias_buffer.data_as<__fp16>();
+        for (size_t i = 0; i < num_channels; ++i) {
+            bias_float[i] = static_cast<float>(b_fp16[i]);
+        }
+    } else {
+        std::memcpy(bias_float.data(), bias_buffer.data_as<float>(),
+                    num_channels * sizeof(float));
+    }
+
+    // ----- Convert running mean to float -----
+    std::vector<float> mean_float(num_channels);
+    if (mean_buffer.precision == Precision::INT8) {
+        throw std::runtime_error("BatchNorm currently does not support INT8 running mean");
+    } else if (mean_buffer.precision == Precision::FP16) {
+        const __fp16* m_fp16 = mean_buffer.data_as<__fp16>();
+        for (size_t i = 0; i < num_channels; ++i) {
+            mean_float[i] = static_cast<float>(m_fp16[i]);
+        }
+    } else {
+        std::memcpy(mean_float.data(), mean_buffer.data_as<float>(),
+                    num_channels * sizeof(float));
+    }
+
+    // ----- Convert running variance to float -----
+    std::vector<float> var_float(num_channels);
+    if (variance_buffer.precision == Precision::INT8) {
+        throw std::runtime_error("BatchNorm currently does not support INT8 running variance");
+    } else if (variance_buffer.precision == Precision::FP16) {
+        const __fp16* v_fp16 = variance_buffer.data_as<__fp16>();
+        for (size_t i = 0; i < num_channels; ++i) {
+            var_float[i] = static_cast<float>(v_fp16[i]);
+        }
+    } else {
+        std::memcpy(var_float.data(), variance_buffer.data_as<float>(),
+                    num_channels * sizeof(float));
+    }
+
+    // ----- Precompute scale and shift per channel -----
+    std::vector<float> scale(num_channels);
+    std::vector<float> shift(num_channels);
+
+    for (size_t c = 0; c < num_channels; ++c) {
+        float inv_std = 1.0f / std::sqrt(var_float[c] + epsilon);
+        scale[c] = weight_float[c] * inv_std;
+        shift[c] = bias_float[c] - mean_float[c] * scale[c];
+    }
+
+    // ----- Apply BN in parallel over channels -----
+    // For NCHW: each channel has (batch_size * spatial_size) elements
+    // We parallelize over (batch_size * num_channels) and each thread processes spatial_size elements
+    
+    size_t channel_stride = spatial_size;  // Elements per channel per batch
+    size_t batch_stride = num_channels * spatial_size;  // Elements per batch
+    
+    CactusThreading::parallel_for(batch_size * num_channels, 1, [&](size_t start, size_t end) {
+        for (size_t bc = start; bc < end; ++bc) {
+            size_t n = bc / num_channels;  // Batch index
+            size_t c = bc % num_channels;  // Channel index
+            
+            size_t base_idx = n * batch_stride + c * channel_stride;
+            float s = scale[c];
+            float t = shift[c];
+            
+            if (input_buffer.precision == Precision::FP16) {
+                const __fp16* input_fp16 = input_buffer.data_as<__fp16>();
+                __fp16* output_fp16 = node.output_buffer.data_as<__fp16>();
+                
+                for (size_t i = 0; i < spatial_size; ++i) {
+                    size_t idx = base_idx + i;
+                    float val = static_cast<float>(input_fp16[idx]);
+                    output_fp16[idx] = static_cast<__fp16>(val * s + t);
+                }
+            } else if (input_buffer.precision == Precision::FP32) {
+                const float* input_fp32 = input_buffer.data_as<float>();
+                float* output_fp32 = node.output_buffer.data_as<float>();
+                
+                for (size_t i = 0; i < spatial_size; ++i) {
+                    size_t idx = base_idx + i;
+                    output_fp32[idx] = input_fp32[idx] * s + t;
+                }
+            } else {
+                throw std::runtime_error("BatchNorm currently does not support INT8");
+            }
+        }
+    });
+}
+
 
 void compute_index_node(GraphNode& node, const std::vector<std::unique_ptr<GraphNode>>& nodes, const std::unordered_map<size_t, size_t>& node_index_map) {
     const auto& input_buffer = nodes[node_index_map.at(node.input_ids[0])]->output_buffer;

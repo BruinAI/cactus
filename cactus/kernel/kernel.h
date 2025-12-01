@@ -20,6 +20,8 @@ void cactus_add_int8(const int8_t* a, const int8_t* b, int8_t* output, size_t nu
 void cactus_subtract_int8(const int8_t* a, const int8_t* b, int8_t* output, size_t num_elements);
 void cactus_multiply_int8(const int8_t* a, const int8_t* b, int8_t* output, size_t num_elements);
 void cactus_divide_int8(const int8_t* a, const int8_t* b, int8_t* output, size_t num_elements);
+void cactus_elemwise_max_int8(const int8_t* a, const int8_t* b, int8_t* output, size_t num_elements);
+void cactus_elemwise_min_int8(const int8_t* a, const int8_t* b, int8_t* output, size_t num_elements);
 
 
 void cactus_add_f16(const __fp16* a, const __fp16* b, __fp16* output, size_t num_elements);
@@ -27,12 +29,16 @@ void cactus_add_f16_clipped(const __fp16* a, const __fp16* b, __fp16* output, si
 void cactus_subtract_f16(const __fp16* a, const __fp16* b, __fp16* output, size_t num_elements);
 void cactus_multiply_f16(const __fp16* a, const __fp16* b, __fp16* output, size_t num_elements);
 void cactus_divide_f16(const __fp16* a, const __fp16* b, __fp16* output, size_t num_elements);
+void cactus_elemwise_max_f16(const __fp16* a, const __fp16* b, __fp16* output, size_t num_elements);
+void cactus_elemwise_min_f16(const __fp16* a, const __fp16* b, __fp16* output, size_t num_elements);
 
 
 void cactus_add_f32(const float* a, const float* b, float* output, size_t num_elements);
 void cactus_subtract_f32(const float* a, const float* b, float* output, size_t num_elements);
 void cactus_multiply_f32(const float* a, const float* b, float* output, size_t num_elements);
 void cactus_divide_f32(const float* a, const float* b, float* output, size_t num_elements);
+void cactus_elemwise_max_f32(const float* a, const float* b, float* output, size_t num_elements);
+void cactus_elemwise_min_f32(const float* a, const float* b, float* output, size_t num_elements);
 
 
 void cactus_add_broadcast_int8(const int8_t* a, const int8_t* b, int8_t* output,
@@ -47,6 +53,12 @@ void cactus_multiply_broadcast_int8(const int8_t* a, const int8_t* b, int8_t* ou
 void cactus_divide_broadcast_int8(const int8_t* a, const int8_t* b, int8_t* output,
                                   const size_t* a_strides, const size_t* b_strides,
                                   const size_t* output_shape, size_t ndim);
+void cactus_elemwise_max_broadcast_int8(const int8_t* a, const int8_t* b, int8_t* output,
+                                         const size_t* a_strides, const size_t* b_strides,
+                                         const size_t* output_shape, size_t ndim);
+void cactus_elemwise_min_broadcast_int8(const int8_t* a, const int8_t* b, int8_t* output,
+                                         const size_t* a_strides, const size_t* b_strides,
+                                         const size_t* output_shape, size_t ndim);
 
 
 void cactus_add_broadcast_f16(const __fp16* a, const __fp16* b, __fp16* output,
@@ -61,6 +73,12 @@ void cactus_multiply_broadcast_f16(const __fp16* a, const __fp16* b, __fp16* out
 void cactus_divide_broadcast_f16(const __fp16* a, const __fp16* b, __fp16* output,
                                  const size_t* a_strides, const size_t* b_strides,
                                  const size_t* output_shape, size_t ndim);
+void cactus_elemwise_max_broadcast_f16(const __fp16* a, const __fp16* b, __fp16* output,
+                                        const size_t* a_strides, const size_t* b_strides,
+                                        const size_t* output_shape, size_t ndim);
+void cactus_elemwise_min_broadcast_f16(const __fp16* a, const __fp16* b, __fp16* output,
+                                        const size_t* a_strides, const size_t* b_strides,
+                                        const size_t* output_shape, size_t ndim);
 
 
 void cactus_add_broadcast_f32(const float* a, const float* b, float* output,
@@ -75,6 +93,12 @@ void cactus_multiply_broadcast_f32(const float* a, const float* b, float* output
 void cactus_divide_broadcast_f32(const float* a, const float* b, float* output,
                                  const size_t* a_strides, const size_t* b_strides,
                                  const size_t* output_shape, size_t ndim);
+void cactus_elemwise_max_broadcast_f32(const float* a, const float* b, float* output,
+                                        const size_t* a_strides, const size_t* b_strides,
+                                        const size_t* output_shape, size_t ndim);
+void cactus_elemwise_min_broadcast_f32(const float* a, const float* b, float* output,
+                                        const size_t* a_strides, const size_t* b_strides,
+                                        const size_t* output_shape, size_t ndim);
 
 
 void cactus_scalar_op_int8(const int8_t* input, int8_t* output, size_t num_elements, float scalar_value, ScalarOpType op_type);
@@ -174,6 +198,11 @@ void cactus_gelu_f16(const __fp16* input, __fp16* output, size_t num_elements);
 void cactus_gelu_int8(const int8_t* input, int8_t* output, size_t num_elements,
                       float input_scale, float output_scale);
 
+void cactus_sigmoid_int8(const int8_t* input, int8_t* output, size_t num_elements,
+                          float input_scale, float output_scale);
+void cactus_sigmoid_f16(const __fp16* input, __fp16* output, size_t num_elements);
+void cactus_sigmoid_f32(const float* input, float* output, size_t num_elements);
+
                       
 void cactus_attention_int8(const int8_t* queries, const int8_t* keys, const int8_t* values, int8_t* output,
                             size_t batch_size, size_t seq_len, size_t kv_seq_len, size_t num_q_heads, size_t num_kv_heads,
@@ -245,6 +274,105 @@ void cactus_conv1d_f16_k3(
 
 void cactus_bilinear_interpolation_fp32(const float* input, float* output, size_t src_height, size_t src_width, size_t embed_dim,
                                         size_t dst_height, size_t dst_width);
+
+void cactus_resize_nearest_asymmetric_fp32(const float* input, float* output, size_t outer_count, size_t src_height, size_t src_width, size_t dst_height, size_t dst_width);
+void cactus_resize_nearest_asymmetric_fp16(const __fp16* input, __fp16* output, size_t outer_count, size_t src_height, size_t src_width, size_t dst_height, size_t dst_width);
+void cactus_resize_nearest_asymmetric_int8(const int8_t* input, int8_t* output, size_t outer_count, size_t src_height, size_t src_width, size_t dst_height, size_t dst_width);
+
+void cactus_maxpool2d_f32(
+    const float* input, float* output,
+    size_t N, size_t C, size_t H, size_t W,
+    size_t kernel_h, size_t kernel_w,
+    size_t stride_h, size_t stride_w,
+    size_t pad_top, size_t pad_left,
+    size_t pad_bottom, size_t pad_right,
+    size_t dilation_h, size_t dilation_w);
+
+void cactus_maxpool2d_f16(
+    const __fp16* input, __fp16* output,
+    size_t N, size_t C, size_t H, size_t W,
+    size_t kernel_h, size_t kernel_w,
+    size_t stride_h, size_t stride_w,
+    size_t pad_top, size_t pad_left,
+    size_t pad_bottom, size_t pad_right,
+    size_t dilation_h, size_t dilation_w);
+
+void cactus_maxpool2d_int8(
+    const int8_t* input, int8_t* output,
+    size_t N, size_t C, size_t H, size_t W,
+    size_t kernel_h, size_t kernel_w,
+    size_t stride_h, size_t stride_w,
+    size_t pad_top, size_t pad_left,
+    size_t pad_bottom, size_t pad_right,
+    size_t dilation_h, size_t dilation_w);
+
+void cactus_global_avg_pool2d_f32(
+    const float* input, float* output,
+    size_t N, size_t C, size_t H, size_t W);
+
+void cactus_global_avg_pool2d_f16(
+    const __fp16* input, __fp16* output,
+    size_t N, size_t C, size_t H, size_t W);
+
+void cactus_global_avg_pool2d_int8(
+    const int8_t* input, int8_t* output,
+    size_t N, size_t C, size_t H, size_t W,
+    float input_scale, float output_scale);
+
+void cactus_conv2d_f32(
+    const float* input, const float* weights, const float* bias, float* output,
+    size_t N, size_t C_in, size_t H, size_t W_in,
+    size_t C_out,
+    size_t kernel_h, size_t kernel_w,
+    size_t stride_h, size_t stride_w,
+    size_t pad_top, size_t pad_left,
+    size_t pad_bottom, size_t pad_right,
+    size_t groups);
+
+void cactus_conv2d_f16(
+    const __fp16* input, const __fp16* weights, const __fp16* bias, __fp16* output,
+    size_t N, size_t C_in, size_t H, size_t W_in,
+    size_t C_out,
+    size_t kernel_h, size_t kernel_w,
+    size_t stride_h, size_t stride_w,
+    size_t pad_top, size_t pad_left,
+    size_t pad_bottom, size_t pad_right,
+    size_t groups);
+
+void cactus_conv_transpose2d_f32(
+    const float* input, const float* weights, const float* bias, float* output,
+    size_t N, size_t C_in, size_t H_in, size_t W_in,
+    size_t C_out,
+    size_t kernel_h, size_t kernel_w,
+    size_t stride, size_t pad,
+    size_t groups,
+    size_t H_out, size_t W_out);
+
+void cactus_conv_transpose2d_f16(
+    const __fp16* input, const __fp16* weights, const __fp16* bias, __fp16* output,
+    size_t N, size_t C_in, size_t H_in, size_t W_in,
+    size_t C_out,
+    size_t kernel_h, size_t kernel_w,
+    size_t stride, size_t pad,
+    size_t groups,
+    size_t H_out, size_t W_out);
+
+// im2col: Extract patches from input for GEMM-based convolution
+void cactus_im2col_f32(
+    const float* input, float* output,
+    size_t N, size_t C, size_t H, size_t W,
+    size_t kernel_h, size_t kernel_w,
+    size_t stride_h, size_t stride_w,
+    size_t pad_h, size_t pad_w,
+    size_t H_out, size_t W_out);
+
+void cactus_im2col_f16(
+    const __fp16* input, __fp16* output,
+    size_t N, size_t C, size_t H, size_t W,
+    size_t kernel_h, size_t kernel_w,
+    size_t stride_h, size_t stride_w,
+    size_t pad_h, size_t pad_w,
+    size_t H_out, size_t W_out);
 
 void cactus_sample_f32(const float* logits, uint32_t* output, size_t vocab_size,
                        float temperature, float top_p, size_t top_k, size_t random_seed);

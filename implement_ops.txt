@@ -1,0 +1,453 @@
+You’re in a good spot now: that signature dump basically tells you **exactly** which slices of the ONNX spec you need to care about.
+
+Below I’ll go op-by-op and say:
+
+* **What you must support** for *your* YOLO models
+* **What you can safely ignore** from the full ONNX operator spec
+
+I’m basing this on the official operator docs ([ONNX][1]) plus the signatures you posted.
+
+---
+
+## Global assumptions you can make
+
+From your models:
+
+* **DTypes**
+
+  * Activations & weights: `float32`
+  * Indices/axes/etc: `int64`
+* **Layout**
+
+  * Convs, pooling, resize, etc. are all on **4D NCHW** `[N, C, H, W]`
+  * Batch is fixed `N = 1` in your inputs, but still conceptually batch dim
+* **Broadcasting**
+
+  * All elementwise ops (`Add`, `Mul`, etc.) use standard ONNX / NumPy broadcasting rules. ([GitHub][2])
+* **Opset style**
+
+  * `Slice` with tensor inputs, `Unsqueeze` with axes as input, `Split` with `num_outputs` → you’re in the **modern (≥11/13)** operator world, not legacy `starts`/`ends` attributes.
+
+---
+
+## 1. Simple elementwise ops
+
+**Ops:** `Add`, `Sub`, `Mul`, `Div`, `Max`, `Min`, `Sigmoid`, `Sin`, `Cos`
+
+* **Signatures in your models**
+
+  * 2 inputs, 1 output, no attributes (except Sigmoid/Sin/Cos → 1 input, 1 output)
+* **What to implement**
+
+  * Support `float32` tensors
+  * Standard broadcasting on inputs (same as NumPy)
+  * For Sigmoid: `y = 1 / (1 + exp(-x))`
+  * For Sin/Cos: standard math functions
+* **What you can ignore**
+
+  * Other dtypes (int8, float16, etc.)
+  * Gradient / backward rules (you’re doing inference)
+
+---
+
+## 2. Convolution / pooling family
+
+### `Conv`
+
+You saw:
+
+* `(inputs=2, attrs: dilations, group, kernel_shape, pads, strides)` → **no bias**
+* `(inputs=3, attrs: dilations, group, kernel_shape, pads, strides)` → **with bias**
+* `(inputs=3, attrs: auto_pad, dilations, group, pads, strides)` → kernel shape inferred from weights
+
+**What to implement**
+
+* 2D Conv on `[N, C_in, H, W]` → `[N, C_out, H_out, W_out]`
+* Inputs:
+
+  * `X` (data): `float32`
+  * `W` (weights) shape `[C_out, C_in/group, kH, kW]`
+  * Optional `B` (bias): `[C_out]`
+* Attributes:
+
+  * `strides`: `[sH, sW]`
+  * `pads`: `[pad_top, pad_left, pad_bottom, pad_right]`
+  * `dilations`: usually `[1,1]` but support arbitrary positive ints
+  * `group`: normal & depthwise conv (group might be >1)
+  * `kernel_shape`: if missing, infer from `W`
+  * `auto_pad`:
+
+    * In your models it’s present only on some Conv; just implement `"NOTSET"` (respect `pads`) and you’re fine.
+* **Shape formula**: exactly as in ONNX spec for Conv. ([GitHub][2])
+
+**You can ignore**
+
+* 1D/3D conv
+* Non-float dtypes
+* `auto_pad` modes you don’t actually see (`SAME_UPPER`, `SAME_LOWER`) *unless* they show up in attributes.
+
+---
+
+### `ConvTranspose`
+
+* Signature: 3 inputs, attrs `dilations, group, kernel_shape, pads, strides`
+
+* Exactly like Conv but **transposed** (upsampling)
+
+* Implement the ONNX formula for output spatial size: ([GitHub][2])
+
+  ```text
+  out = stride * (in - 1) + output_padding + ((kernel - 1) * dilation + 1) - 2*pad
+  ```
+
+* You do **not** need to support `output_shape` input; just attributes + weights you see.
+
+---
+
+### `MaxPool`
+
+You saw:
+
+* One variant with: `ceil_mode, dilations, kernel_shape, pads, strides`
+* Another also adding: `auto_pad`, `storage_order` (yolov11 only)
+
+**What to implement**
+
+* 2D MaxPool on `[N, C, H, W]`
+* Attributes:
+
+  * `kernel_shape` `[kH, kW]` (required)
+  * `strides` `[sH, sW]` (default `[1,1]` if missing)
+  * `pads` `[top, left, bottom, right]`
+  * `ceil_mode` (0 or 1) → whether to ceil the output size
+  * `dilations`: usually `[1,1]`
+  * `auto_pad`: you can again implement `"NOTSET"` and read `pads`
+  * `storage_order`: you can support default `0` (`NCHW` layout) and assert it’s 0
+
+**You can skip**
+
+* Indices outputs (your MaxPool doesn’t return argmax)
+* Non-2D pooling
+
+---
+
+## 3. Linear / “dense” bits
+
+### `Gemm`
+
+* Signature in your model: 3 inputs, attrs `alpha`, `beta`, `transB`
+* Spec: `Y = alpha * A @ (Bᵀ if transB) + beta * C` ([GitHub][2])
+
+**What to implement**
+
+* 2D matrices only (`[M, K] @ [K, N]`)
+* `transB` attribute (docs show `transA` also exists; you only need `transB` if that’s what you see)
+* `alpha` / `beta` as scalars (float)
+
+### `MatMul`
+
+* 2 inputs, 1 output, no attributes
+* Implement:
+
+  * Standard matrix multiply + broadcasting (batched MatMul) per spec. ([GitHub][2])
+
+---
+
+## 4. Normalization / pooling / flattening
+
+### `BatchNormalization`
+
+* Signature: 5 inputs, attrs `epsilon`, `momentum`
+
+* Inputs: `X, scale, B, mean, var`
+
+* You only need **inference mode**:
+
+  ```text
+  Y = (X - mean) / sqrt(var + epsilon) * scale + B
+  ```
+
+* `momentum` is irrelevant at inference; you can parse it but don’t need to use it.
+
+---
+
+### `GlobalAveragePool`
+
+* 1 input, 1 output
+* For `[N, C, H, W]` → `[N, C, 1, 1]`
+* Just average over spatial dims (last two dims).
+
+---
+
+### `Flatten`
+
+* 1 input, 1 output, attr `axis`
+* For tensor of rank `r`:
+
+  * Keep dims `0..axis-1` as outer product
+  * Collapse dims `axis..r-1` into a single dimension
+* You probably only see `axis=1` on `[N,C,H,W]`, giving `[N, C*H*W]`.
+
+---
+
+## 5. Shape / layout transforms
+
+### `Reshape`
+
+* 2 inputs, attr `allowzero`
+* Implement:
+
+  * `Y = reshape(X, shape)` where `shape` is a 1D `int64` tensor
+  * Support **single `-1`** dimension to infer size
+* `allowzero`:
+
+  * If `0` or absent: zeros in `shape` mean “copy corresponding input dimension”
+  * If `1`: zeros mean “real zero dim” (rare; check if any of your Reshape have non-zero allowzero)
+
+### `Transpose`
+
+* 1 input, 1 output, attr `perm`
+* Implement generic permutation of axes
+* YOLO usually uses permutations like `[0, 2, 3, 1]` or `[0, 3, 1, 2]` for channel/feature rearrange.
+
+### `Unsqueeze` (2 inputs)
+
+* Signature you have: 2 inputs, no attr
+
+  * `data`, `axes` (int64 tensor)
+* Implement according to modern Unsqueeze spec: add new dimensions at given axes indices. ([ONNX Runtime][3])
+
+---
+
+## 6. Indexing / slicing family
+
+These are the trickiest and most important for YOLO post-proc.
+
+### `Slice` (4 or 5 inputs)
+
+You saw:
+
+* 4-input: `data, starts, ends, axes`
+* 5-input: `data, starts, ends, axes, steps`
+
+Spec: `Slice(data, starts, ends, axes, steps)` with `axes/steps` optional. ([GitHub][4])
+
+**What to implement**
+
+* All parameters as **1D int64 tensors**
+
+* `axes` length == `starts` length == `ends` length
+
+* For each dimension `d` in `axes[i]`:
+
+  ```text
+  start = starts[i]
+  end   = ends[i]      # can be big (INT_MAX means “to end”)
+  step  = steps[i] or 1 if steps missing
+  apply Python-style [start:end:step] along that axis
+  ```
+
+* Negative indices and negative steps should follow ONNX rules (very similar to NumPy slicing; spec has details). ([GitHub][5])
+
+**You probably don’t need**
+
+* Dynamic (non-constant) `starts/ends` for YOLO; most exporters make them initializers.
+
+---
+
+### `Split`
+
+You saw 3 forms:
+
+1. **Inputs=1, attrs `axis`, `num_outputs`**
+
+   * Equal chunks along `axis`, count = `num_outputs`. ([GitHub][6])
+2. **Inputs=2, outputs=2 or 3, attr `axis`**
+
+   * Second input is a 1D `split` tensor like `[32,32,64]` specifying chunk sizes
+3. No `split` attr anywhere (so you don’t need old attribute form)
+
+**What to implement**
+
+* With `split` input:
+
+  * split sizes = that tensor’s values
+  * #outputs must match length
+* With `num_outputs`:
+
+  * size of axis dim = `D`
+  * split into `num_outputs` chunks:
+
+    * equal sizes if divisible
+    * last chunk can be smaller (per Split-18). ([GitHub][6])
+
+---
+
+### `Gather`
+
+* Inputs: `data`, `indices`, attr `axis`
+
+* Implement:
+
+  ```text
+  out = np.take(data, indices, axis=axis)
+  ```
+
+* `indices`: `int64` tensor (scalar or 1D in your cases)
+
+* This is used in your YOLOv11 model for picking specific coords (index 0 or 1) along some axis.
+
+---
+
+## 7. Concatenation & softmax
+
+### `Concat`
+
+* Inputs: 2, 3, or 4; attr: `axis`
+
+* Implement:
+
+  ```text
+  Y = concat(inputs, axis=axis)
+  ```
+
+* All input shapes must match on non-axis dims.
+
+### `Softmax`
+
+* 1 input, 1 output, attr `axis`
+
+* Implement:
+
+  ```text
+  ex = exp(x - max(x, axis, keepdims=True))  # for stability
+  y = ex / sum(ex, axis=axis, keepdims=True)
+  ```
+
+* Make sure `axis` is honored (not always last dim).
+
+---
+
+## 8. Resizing / upsample
+
+### `Resize` (3 inputs, bunch of attrs)
+
+Official spec here. ([ONNX][1])
+
+Your signatures:
+
+* Inputs = 3 → some combo of `(X, roi, scales)` or `(X, roi, sizes)`
+* Attributes used:
+
+  * `mode` (likely `"nearest"` or `"linear"`)
+  * `nearest_mode`
+  * `coordinate_transformation_mode`
+  * `cubic_coeff_a` (you can keep default, but your models probably don’t use `"cubic"`)
+  * Sometimes: `antialias`, `exclude_outside`, `extrapolation_value`, `keep_aspect_ratio_policy` (but they likely sit at defaults)
+
+**What you actually need for YOLO:**
+
+* 4D NCHW images
+* **Modes**:
+
+  * `mode="nearest"` with `nearest_mode` (often `"floor"` or `"round_prefer_floor"`) ([GitHub][7])
+  * `mode="linear"` with bilinear interpolation on H/W
+* **Coordinate transformation**:
+
+  * You’ll probably see `"asymmetric"` or `"pytorch_half_pixel"`. Handle both. ([ONNX][8])
+* Inputs:
+
+  * Support both:
+
+    * scale-based: `X, roi (unused), scales`
+    * size-based: `X, roi (unused), sizes`
+
+You do **not** need to support:
+
+* 1D/3D resize
+* ROI-based fancy cropping (roi is often a fixed placeholder)
+* `cubic` mode unless you see it explicitly in attributes.
+
+---
+
+## 9. Misc
+
+### `Flatten`, `Transpose`, `Unsqueeze`, `Reshape`
+
+Already covered above; they’re simple layout ops and you only need the straightforward paths.
+
+### `Cos` / `Sin`
+
+Used in OBB (oriented bounding box) model for angle handling; just standard trig.
+
+---
+
+## Minimal implementation checklist
+
+To *just* run these YOLO graphs, your engine needs:
+
+1. **Core tensor engine**
+
+   * float32 tensor arithmetic
+   * int64 index tensors
+   * broadcasting
+
+2. **NCHW conv/pool/resize stack**
+
+   * `Conv` (bias/no-bias, 2D, groups)
+   * `ConvTranspose` (2D)
+   * `MaxPool` (2D)
+   * `Resize` (nearest + linear, NCHW, 2D, scales/sizes)
+
+3. **Linear / head ops**
+
+   * `Gemm`, `MatMul`, `GlobalAveragePool`, `Flatten`, `Reshape`
+
+4. **Indexing / slicing**
+
+   * `Slice` (4/5 inputs, int64 starts/ends/axes/steps)
+   * `Split` (1-input + num_outputs, 2-input + split tensor)
+   * `Gather` (axis, scalar/vector indices)
+
+5. **Elementwise & activations**
+
+   * `Add/Sub/Mul/Div/Max/Min`
+   * `Sigmoid`, `Sin`, `Cos`
+   * `Softmax` (axis)
+
+6. **Shape & layout**
+
+   * `Concat`, `Transpose`, `Unsqueeze`
+
+If you implement **only** the pieces above, following the behavior in the ONNX operator docs for those attributes and input forms, you’ll be able to execute all the YOLO models you listed end-to-end. ([ONNX][1])
+
+If you want, next step I can do is:
+**“Given these ops, write me a tiny pseudo-runtime skeleton in Python/C++ that calls out where each op implementation should go.”**
+
+[1]: https://onnx.ai/onnx/operators/?utm_source=chatgpt.com "ONNX Operators - ONNX 1.21.0 documentation"
+[2]: https://raw.githubusercontent.com/onnx/onnx/main/docs/Operators.md?utm_source=chatgpt.com "https://raw.githubusercontent.com/onnx/onnx/main/d..."
+[3]: https://onnxruntime.ai/docs/extensions/add-op.html?utm_source=chatgpt.com "Creating custom operators using Python functions"
+[4]: https://github.com/microsoft/onnxruntime/issues/8735?utm_source=chatgpt.com "While i was doing the inference with onnxruntime, i got ..."
+[5]: https://github.com/microsoft/onnxruntime/issues/2463?utm_source=chatgpt.com "Resize operator need to support 4-D inputs with more than ..."
+[6]: https://github.com/onnx/onnx/issues/2501?utm_source=chatgpt.com "Why upsample operator was deprecated?? · Issue #2501"
+[7]: https://github.com/onnx/tensorflow-onnx/issues/2168?utm_source=chatgpt.com "Update resize node default value of nearest_mode attribute"
+[8]: https://onnx.ai/onnx/operators/text_diff_Add_13_14.html?utm_source=chatgpt.com "Add - 13 vs 14 - ONNX 1.21.0 documentation"
+
+
+Progress:
+    Done:
+        add, sub, mul, div
+        sin, cos, sigmoid,
+        concat,
+        gemm, matmul,
+        reshape, flatten, transpose, Unsqueeze
+        max, min,
+        BatchNormalization,
+        Slice, Split, Gather,
+        Resize,
+        MaxPool, 
+    Not started:
+        GlobalAveragePool,
+        Conv, ConvTranspose
+    Will need kernels:
+        Conv, ConvTranspose, GlobalAveragePool, MaxPool

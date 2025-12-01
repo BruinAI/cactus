@@ -517,3 +517,976 @@ void cactus_bilinear_interpolation_fp32(const float* input, float* output, size_
         }
     }
 }
+
+void cactus_resize_nearest_asymmetric_fp32(const float* input,
+                                           float* output,
+                                           size_t outer_count,
+                                           size_t src_height,
+                                           size_t src_width,
+                                           size_t dst_height,
+                                           size_t dst_width)
+{
+    if (src_height == 0 || src_width == 0 || dst_height == 0 || dst_width == 0) {
+        throw std::runtime_error("Resize nearest asymmetric: invalid input dimensions");
+    }
+
+    const float scale_h = static_cast<float>(src_height) / static_cast<float>(dst_height);
+    const float scale_w = static_cast<float>(src_width) / static_cast<float>(dst_width);
+    const size_t src_plane = src_height * src_width;
+    const size_t dst_plane = dst_height * dst_width;
+
+    CactusThreading::parallel_for(
+        outer_count * dst_plane,
+        CactusThreading::Thresholds::ELEMENT_WISE,
+        [&](size_t start, size_t end) {
+            for (size_t idx = start; idx < end; ++idx) {
+                size_t o = idx / dst_plane;
+                size_t rem = idx % dst_plane;
+                size_t dst_y = rem / dst_width;
+                size_t dst_x = rem % dst_width;
+
+                int src_y = static_cast<int>(std::floor(static_cast<float>(dst_y) * scale_h));
+                src_y = std::max(0, std::min(src_y, static_cast<int>(src_height) - 1));
+
+                int src_x = static_cast<int>(std::floor(static_cast<float>(dst_x) * scale_w));
+                src_x = std::max(0, std::min(src_x, static_cast<int>(src_width) - 1));
+
+                size_t src_idx = o * src_plane + static_cast<size_t>(src_y) * src_width + static_cast<size_t>(src_x);
+                size_t dst_idx = o * dst_plane + dst_y * dst_width + dst_x;
+                output[dst_idx] = input[src_idx];
+            }
+        });
+}
+
+void cactus_resize_nearest_asymmetric_fp16(const __fp16* input,
+                                           __fp16* output,
+                                           size_t outer_count,
+                                           size_t src_height,
+                                           size_t src_width,
+                                           size_t dst_height,
+                                           size_t dst_width)
+{
+    if (src_height == 0 || src_width == 0 || dst_height == 0 || dst_width == 0) {
+        throw std::runtime_error("Resize nearest asymmetric: invalid input dimensions");
+    }
+
+    const float scale_h = static_cast<float>(src_height) / static_cast<float>(dst_height);
+    const float scale_w = static_cast<float>(src_width) / static_cast<float>(dst_width);
+    const size_t src_plane = src_height * src_width;
+    const size_t dst_plane = dst_height * dst_width;
+
+    CactusThreading::parallel_for(
+        outer_count * dst_plane,
+        CactusThreading::Thresholds::ELEMENT_WISE,
+        [&](size_t start, size_t end) {
+            for (size_t idx = start; idx < end; ++idx) {
+                size_t o = idx / dst_plane;
+                size_t rem = idx % dst_plane;
+                size_t dst_y = rem / dst_width;
+                size_t dst_x = rem % dst_width;
+
+                int src_y = static_cast<int>(std::floor(static_cast<float>(dst_y) * scale_h));
+                src_y = std::max(0, std::min(src_y, static_cast<int>(src_height) - 1));
+
+                int src_x = static_cast<int>(std::floor(static_cast<float>(dst_x) * scale_w));
+                src_x = std::max(0, std::min(src_x, static_cast<int>(src_width) - 1));
+
+                size_t src_idx = o * src_plane + static_cast<size_t>(src_y) * src_width + static_cast<size_t>(src_x);
+                size_t dst_idx = o * dst_plane + dst_y * dst_width + dst_x;
+                output[dst_idx] = input[src_idx];
+            }
+        });
+}
+
+void cactus_resize_nearest_asymmetric_int8(const int8_t* input,
+                                           int8_t* output,
+                                           size_t outer_count,
+                                           size_t src_height,
+                                           size_t src_width,
+                                           size_t dst_height,
+                                           size_t dst_width)
+{
+    if (src_height == 0 || src_width == 0 || dst_height == 0 || dst_width == 0) {
+        throw std::runtime_error("Resize nearest asymmetric: invalid input dimensions");
+    }
+
+    const float scale_h = static_cast<float>(src_height) / static_cast<float>(dst_height);
+    const float scale_w = static_cast<float>(src_width) / static_cast<float>(dst_width);
+    const size_t src_plane = src_height * src_width;
+    const size_t dst_plane = dst_height * dst_width;
+
+    CactusThreading::parallel_for(
+        outer_count * dst_plane,
+        CactusThreading::Thresholds::ELEMENT_WISE,
+        [&](size_t start, size_t end) {
+            for (size_t idx = start; idx < end; ++idx) {
+                size_t o = idx / dst_plane;
+                size_t rem = idx % dst_plane;
+                size_t dst_y = rem / dst_width;
+                size_t dst_x = rem % dst_width;
+
+                int src_y = static_cast<int>(std::floor(static_cast<float>(dst_y) * scale_h));
+                src_y = std::max(0, std::min(src_y, static_cast<int>(src_height) - 1));
+
+                int src_x = static_cast<int>(std::floor(static_cast<float>(dst_x) * scale_w));
+                src_x = std::max(0, std::min(src_x, static_cast<int>(src_width) - 1));
+
+                size_t src_idx = o * src_plane + static_cast<size_t>(src_y) * src_width + static_cast<size_t>(src_x);
+                size_t dst_idx = o * dst_plane + dst_y * dst_width + dst_x;
+                output[dst_idx] = input[src_idx];
+            }
+        });
+}
+
+void cactus_maxpool2d_f32(
+    const float* input,
+    float* output,
+    size_t N, size_t C, size_t H, size_t W,
+    size_t kernel_h, size_t kernel_w,
+    size_t stride_h, size_t stride_w,
+    size_t pad_top, size_t pad_left,
+    size_t pad_bottom, size_t pad_right,
+    size_t dilation_h, size_t dilation_w)
+{
+    const size_t k_eff_h = (kernel_h - 1) * dilation_h + 1;
+    const size_t k_eff_w = (kernel_w - 1) * dilation_w + 1;
+
+    const size_t out_h = (H + pad_top + pad_bottom - k_eff_h) / stride_h + 1;
+    const size_t out_w = (W + pad_left + pad_right - k_eff_w) / stride_w + 1;
+
+    const size_t in_stride_c = H * W;
+    const size_t in_stride_n = C * in_stride_c;
+    const size_t out_stride_c = out_h * out_w;
+    const size_t out_stride_n = C * out_stride_c;
+
+    CactusThreading::parallel_for_2d(N, C, 4, [&](size_t n, size_t c) {
+        const float* in_nc = input + n * in_stride_n + c * in_stride_c;
+        float* out_nc = output + n * out_stride_n + c * out_stride_c;
+
+        for (size_t oh = 0; oh < out_h; ++oh) {
+            for (size_t ow = 0; ow < out_w; ++ow) {
+                const ptrdiff_t in_h_start = static_cast<ptrdiff_t>(oh * stride_h) - static_cast<ptrdiff_t>(pad_top);
+                const ptrdiff_t in_w_start = static_cast<ptrdiff_t>(ow * stride_w) - static_cast<ptrdiff_t>(pad_left);
+
+                float max_val = -std::numeric_limits<float>::infinity();
+
+                for (size_t kh = 0; kh < kernel_h; ++kh) {
+                    const ptrdiff_t in_h = in_h_start + static_cast<ptrdiff_t>(kh * dilation_h);
+                    if (in_h < 0 || in_h >= static_cast<ptrdiff_t>(H)) continue;
+
+                    for (size_t kw = 0; kw < kernel_w; ++kw) {
+                        const ptrdiff_t in_w = in_w_start + static_cast<ptrdiff_t>(kw * dilation_w);
+                        if (in_w < 0 || in_w >= static_cast<ptrdiff_t>(W)) continue;
+
+                        const size_t in_idx = static_cast<size_t>(in_h) * W + static_cast<size_t>(in_w);
+                        const float val = in_nc[in_idx];
+                        if (val > max_val) max_val = val;
+                    }
+                }
+
+                out_nc[oh * out_w + ow] = max_val;
+            }
+        }
+    });
+}
+
+void cactus_maxpool2d_f16(
+    const __fp16* input,
+    __fp16* output,
+    size_t N, size_t C, size_t H, size_t W,
+    size_t kernel_h, size_t kernel_w,
+    size_t stride_h, size_t stride_w,
+    size_t pad_top, size_t pad_left,
+    size_t pad_bottom, size_t pad_right,
+    size_t dilation_h, size_t dilation_w)
+{
+    const size_t k_eff_h = (kernel_h - 1) * dilation_h + 1;
+    const size_t k_eff_w = (kernel_w - 1) * dilation_w + 1;
+
+    const size_t out_h = (H + pad_top + pad_bottom - k_eff_h) / stride_h + 1;
+    const size_t out_w = (W + pad_left + pad_right - k_eff_w) / stride_w + 1;
+
+    const size_t in_stride_c = H * W;
+    const size_t in_stride_n = C * in_stride_c;
+    const size_t out_stride_c = out_h * out_w;
+    const size_t out_stride_n = C * out_stride_c;
+
+    CactusThreading::parallel_for_2d(N, C, 4, [&](size_t n, size_t c) {
+        const __fp16* in_nc = input + n * in_stride_n + c * in_stride_c;
+        __fp16* out_nc = output + n * out_stride_n + c * out_stride_c;
+
+        for (size_t oh = 0; oh < out_h; ++oh) {
+            for (size_t ow = 0; ow < out_w; ++ow) {
+                const ptrdiff_t in_h_start = static_cast<ptrdiff_t>(oh * stride_h) - static_cast<ptrdiff_t>(pad_top);
+                const ptrdiff_t in_w_start = static_cast<ptrdiff_t>(ow * stride_w) - static_cast<ptrdiff_t>(pad_left);
+
+                float max_val = -std::numeric_limits<float>::infinity();
+
+                for (size_t kh = 0; kh < kernel_h; ++kh) {
+                    const ptrdiff_t in_h = in_h_start + static_cast<ptrdiff_t>(kh * dilation_h);
+                    if (in_h < 0 || in_h >= static_cast<ptrdiff_t>(H)) continue;
+
+                    for (size_t kw = 0; kw < kernel_w; ++kw) {
+                        const ptrdiff_t in_w = in_w_start + static_cast<ptrdiff_t>(kw * dilation_w);
+                        if (in_w < 0 || in_w >= static_cast<ptrdiff_t>(W)) continue;
+
+                        const size_t in_idx = static_cast<size_t>(in_h) * W + static_cast<size_t>(in_w);
+                        const float val = static_cast<float>(in_nc[in_idx]);
+                        if (val > max_val) max_val = val;
+                    }
+                }
+
+                out_nc[oh * out_w + ow] = static_cast<__fp16>(max_val);
+            }
+        }
+    });
+}
+
+void cactus_maxpool2d_int8(
+    const int8_t* input,
+    int8_t* output,
+    size_t N, size_t C, size_t H, size_t W,
+    size_t kernel_h, size_t kernel_w,
+    size_t stride_h, size_t stride_w,
+    size_t pad_top, size_t pad_left,
+    size_t pad_bottom, size_t pad_right,
+    size_t dilation_h, size_t dilation_w)
+{
+    const size_t k_eff_h = (kernel_h - 1) * dilation_h + 1;
+    const size_t k_eff_w = (kernel_w - 1) * dilation_w + 1;
+
+    const size_t out_h = (H + pad_top + pad_bottom - k_eff_h) / stride_h + 1;
+    const size_t out_w = (W + pad_left + pad_right - k_eff_w) / stride_w + 1;
+
+    const size_t in_stride_c = H * W;
+    const size_t in_stride_n = C * in_stride_c;
+    const size_t out_stride_c = out_h * out_w;
+    const size_t out_stride_n = C * out_stride_c;
+
+    CactusThreading::parallel_for_2d(N, C, 4, [&](size_t n, size_t c) {
+        const int8_t* in_nc = input + n * in_stride_n + c * in_stride_c;
+        int8_t* out_nc = output + n * out_stride_n + c * out_stride_c;
+
+        for (size_t oh = 0; oh < out_h; ++oh) {
+            for (size_t ow = 0; ow < out_w; ++ow) {
+                const ptrdiff_t in_h_start = static_cast<ptrdiff_t>(oh * stride_h) - static_cast<ptrdiff_t>(pad_top);
+                const ptrdiff_t in_w_start = static_cast<ptrdiff_t>(ow * stride_w) - static_cast<ptrdiff_t>(pad_left);
+
+                int8_t max_val = std::numeric_limits<int8_t>::lowest();
+
+                for (size_t kh = 0; kh < kernel_h; ++kh) {
+                    const ptrdiff_t in_h = in_h_start + static_cast<ptrdiff_t>(kh * dilation_h);
+                    if (in_h < 0 || in_h >= static_cast<ptrdiff_t>(H)) continue;
+
+                    for (size_t kw = 0; kw < kernel_w; ++kw) {
+                        const ptrdiff_t in_w = in_w_start + static_cast<ptrdiff_t>(kw * dilation_w);
+                        if (in_w < 0 || in_w >= static_cast<ptrdiff_t>(W)) continue;
+
+                        const size_t in_idx = static_cast<size_t>(in_h) * W + static_cast<size_t>(in_w);
+                        const int8_t val = in_nc[in_idx];
+                        if (val > max_val) max_val = val;
+                    }
+                }
+
+                out_nc[oh * out_w + ow] = max_val;
+            }
+        }
+    });
+}
+
+void cactus_global_avg_pool2d_f32(
+    const float* input,
+    float* output,
+    size_t N, size_t C, size_t H, size_t W)
+{
+    const size_t spatial_size = H * W;
+    const float inv_spatial = 1.0f / static_cast<float>(spatial_size);
+    const size_t in_stride_c = H * W;
+    const size_t in_stride_n = C * in_stride_c;
+
+    CactusThreading::parallel_for_2d(N, C, 4, [&](size_t n, size_t c) {
+        const float* in_nc = input + n * in_stride_n + c * in_stride_c;
+
+        float sum = 0.0f;
+        for (size_t i = 0; i < spatial_size; ++i) {
+            sum += in_nc[i];
+        }
+
+        output[n * C + c] = sum * inv_spatial;
+    });
+}
+
+void cactus_global_avg_pool2d_f16(
+    const __fp16* input,
+    __fp16* output,
+    size_t N, size_t C, size_t H, size_t W)
+{
+    const size_t spatial_size = H * W;
+    const float inv_spatial = 1.0f / static_cast<float>(spatial_size);
+    const size_t in_stride_c = H * W;
+    const size_t in_stride_n = C * in_stride_c;
+
+    CactusThreading::parallel_for_2d(N, C, 4, [&](size_t n, size_t c) {
+        const __fp16* in_nc = input + n * in_stride_n + c * in_stride_c;
+
+        float sum = 0.0f;
+        for (size_t i = 0; i < spatial_size; ++i) {
+            sum += static_cast<float>(in_nc[i]);
+        }
+
+        output[n * C + c] = static_cast<__fp16>(sum * inv_spatial);
+    });
+}
+
+void cactus_global_avg_pool2d_int8(
+    const int8_t* input,
+    int8_t* output,
+    size_t N, size_t C, size_t H, size_t W,
+    float input_scale, float output_scale)
+{
+    const size_t spatial_size = H * W;
+    const float inv_spatial = 1.0f / static_cast<float>(spatial_size);
+    const size_t in_stride_c = H * W;
+    const size_t in_stride_n = C * in_stride_c;
+
+    CactusThreading::parallel_for_2d(N, C, 4, [&](size_t n, size_t c) {
+        const int8_t* in_nc = input + n * in_stride_n + c * in_stride_c;
+
+        int32_t sum = 0;
+        for (size_t i = 0; i < spatial_size; ++i) {
+            sum += static_cast<int32_t>(in_nc[i]);
+        }
+
+        float avg = static_cast<float>(sum) * input_scale * inv_spatial;
+        float quantized = avg / output_scale;
+        quantized = std::max(-128.0f, std::min(127.0f, std::round(quantized)));
+        output[n * C + c] = static_cast<int8_t>(quantized);
+    });
+}
+
+// Optimized 3x3 convolution kernel using NEON
+// Processes multiple output pixels and uses vectorized weight application
+static void conv2d_3x3_neon_f32(
+    const float* input,
+    const float* weights,
+    const float* bias,
+    float* output,
+    size_t N, size_t C_in, size_t H, size_t W_in,
+    size_t C_out,
+    size_t stride,
+    size_t pad,
+    size_t groups)
+{
+    const size_t C_in_per_group = C_in / groups;
+    const size_t C_out_per_group = C_out / groups;
+    const size_t H_out = (H + 2 * pad - 3) / stride + 1;
+    const size_t W_out = (W_in + 2 * pad - 3) / stride + 1;
+
+    const size_t stride_n_in = C_in * H * W_in;
+    const size_t stride_c_in = H * W_in;
+    const size_t stride_n_out = C_out * H_out * W_out;
+    const size_t stride_c_out = H_out * W_out;
+    const size_t stride_co_w = C_in_per_group * 9;
+
+    CactusThreading::parallel_for_2d(N, C_out, 4, [&](size_t n, size_t c_out_index) {
+        const size_t g = c_out_index / C_out_per_group;
+        const size_t c_in_group_start = g * C_in_per_group;
+        const float* in_n = input + n * stride_n_in;
+        float* out_nc = output + n * stride_n_out + c_out_index * stride_c_out;
+        const float* w_co = weights + c_out_index * stride_co_w;
+        const float b_val = bias ? bias[c_out_index] : 0.0f;
+
+        for (size_t oh = 0; oh < H_out; ++oh) {
+            const ptrdiff_t in_h_base = static_cast<ptrdiff_t>(oh * stride) - static_cast<ptrdiff_t>(pad);
+            
+            for (size_t ow = 0; ow < W_out; ++ow) {
+                const ptrdiff_t in_w_base = static_cast<ptrdiff_t>(ow * stride) - static_cast<ptrdiff_t>(pad);
+                
+                float32x4_t acc_vec = vdupq_n_f32(0.0f);
+                float acc_scalar = 0.0f;
+                
+                // Process input channels in groups of 4
+                size_t ci = 0;
+                for (; ci + 4 <= C_in_per_group; ci += 4) {
+                    // For each kernel row
+                    for (size_t kh = 0; kh < 3; ++kh) {
+                        const ptrdiff_t in_h = in_h_base + static_cast<ptrdiff_t>(kh);
+                        if (in_h < 0 || in_h >= static_cast<ptrdiff_t>(H)) continue;
+                        
+                        // For each kernel column
+                        for (size_t kw = 0; kw < 3; ++kw) {
+                            const ptrdiff_t in_w = in_w_base + static_cast<ptrdiff_t>(kw);
+                            if (in_w < 0 || in_w >= static_cast<ptrdiff_t>(W_in)) continue;
+                            
+                            const size_t in_spatial_idx = static_cast<size_t>(in_h) * W_in + static_cast<size_t>(in_w);
+                            const size_t w_idx = kh * 3 + kw;
+                            
+                            // Load 4 input values from consecutive channels
+                            float in_vals[4];
+                            float w_vals[4];
+                            for (size_t k = 0; k < 4; ++k) {
+                                const size_t c_in_index = c_in_group_start + ci + k;
+                                in_vals[k] = in_n[c_in_index * stride_c_in + in_spatial_idx];
+                                w_vals[k] = w_co[(ci + k) * 9 + w_idx];
+                            }
+                            
+                            float32x4_t in_vec = vld1q_f32(in_vals);
+                            float32x4_t w_vec = vld1q_f32(w_vals);
+                            acc_vec = vfmaq_f32(acc_vec, in_vec, w_vec);
+                        }
+                    }
+                }
+                
+                // Sum up the vector accumulator
+                acc_scalar = vaddvq_f32(acc_vec);
+                
+                // Handle remaining input channels
+                for (; ci < C_in_per_group; ++ci) {
+                    const size_t c_in_index = c_in_group_start + ci;
+                    const float* in_nc = in_n + c_in_index * stride_c_in;
+                    const float* w_ci = w_co + ci * 9;
+                    
+                    for (size_t kh = 0; kh < 3; ++kh) {
+                        const ptrdiff_t in_h = in_h_base + static_cast<ptrdiff_t>(kh);
+                        if (in_h < 0 || in_h >= static_cast<ptrdiff_t>(H)) continue;
+                        
+                        const float* row = in_nc + static_cast<size_t>(in_h) * W_in;
+                        
+                        for (size_t kw = 0; kw < 3; ++kw) {
+                            const ptrdiff_t in_w = in_w_base + static_cast<ptrdiff_t>(kw);
+                            if (in_w >= 0 && in_w < static_cast<ptrdiff_t>(W_in)) {
+                                acc_scalar += row[in_w] * w_ci[kh * 3 + kw];
+                            }
+                        }
+                    }
+                }
+                
+                out_nc[oh * W_out + ow] = acc_scalar + b_val;
+            }
+        }
+    });
+}
+
+// Highly optimized general convolution using NEON with input channel vectorization
+static void conv2d_general_neon_f32(
+    const float* input,
+    const float* weights,
+    const float* bias,
+    float* output,
+    size_t N, size_t C_in, size_t H, size_t W_in,
+    size_t C_out,
+    size_t kernel_h, size_t kernel_w,
+    size_t stride_h, size_t stride_w,
+    size_t pad_top, size_t pad_left,
+    size_t pad_bottom, size_t pad_right,
+    size_t groups)
+{
+    const size_t C_in_per_group = C_in / groups;
+    const size_t C_out_per_group = C_out / groups;
+
+    const size_t H_out = (H + pad_top + pad_bottom - kernel_h) / stride_h + 1;
+    const size_t W_out = (W_in + pad_left + pad_right - kernel_w) / stride_w + 1;
+
+    const size_t stride_n_in = C_in * H * W_in;
+    const size_t stride_c_in = H * W_in;
+    const size_t stride_n_out = C_out * H_out * W_out;
+    const size_t stride_c_out = H_out * W_out;
+
+    const size_t stride_co_w = C_in_per_group * kernel_h * kernel_w;
+    const size_t stride_ci_w = kernel_h * kernel_w;
+    const size_t kernel_size = kernel_h * kernel_w;
+
+    CactusThreading::parallel_for_2d(N, C_out, 4, [&](size_t n, size_t c_out_index) {
+        const size_t g = c_out_index / C_out_per_group;
+        const size_t c_in_group_start = g * C_in_per_group;
+        const float* in_n = input + n * stride_n_in;
+        float* out_nc = output + n * stride_n_out + c_out_index * stride_c_out;
+
+        const float* w_co = weights + c_out_index * stride_co_w;
+        const float b_val = bias ? bias[c_out_index] : 0.0f;
+
+        // Process output positions
+        for (size_t oh = 0; oh < H_out; ++oh) {
+            const ptrdiff_t in_h_start = static_cast<ptrdiff_t>(oh * stride_h) - static_cast<ptrdiff_t>(pad_top);
+
+            for (size_t ow = 0; ow < W_out; ++ow) {
+                const ptrdiff_t in_w_start = static_cast<ptrdiff_t>(ow * stride_w) - static_cast<ptrdiff_t>(pad_left);
+
+                float32x4_t acc_vec = vdupq_n_f32(0.0f);
+                float acc_scalar = 0.0f;
+
+                // Process input channels in groups of 4 for NEON
+                size_t ci = 0;
+                for (; ci + 4 <= C_in_per_group; ci += 4) {
+                    // For each kernel position
+                    for (size_t kh = 0; kh < kernel_h; ++kh) {
+                        const ptrdiff_t in_h = in_h_start + static_cast<ptrdiff_t>(kh);
+                        if (in_h < 0 || in_h >= static_cast<ptrdiff_t>(H)) continue;
+
+                        for (size_t kw = 0; kw < kernel_w; ++kw) {
+                            const ptrdiff_t in_w = in_w_start + static_cast<ptrdiff_t>(kw);
+                            if (in_w < 0 || in_w >= static_cast<ptrdiff_t>(W_in)) continue;
+
+                            const size_t in_spatial_idx = static_cast<size_t>(in_h) * W_in + static_cast<size_t>(in_w);
+                            const size_t w_spatial_idx = kh * kernel_w + kw;
+
+                            // Load 4 input values from consecutive channels
+                            float in_vals[4];
+                            float w_vals[4];
+                            for (size_t k = 0; k < 4; ++k) {
+                                const size_t c_in_index = c_in_group_start + ci + k;
+                                in_vals[k] = in_n[c_in_index * stride_c_in + in_spatial_idx];
+                                w_vals[k] = w_co[(ci + k) * stride_ci_w + w_spatial_idx];
+                            }
+
+                            float32x4_t in_vec = vld1q_f32(in_vals);
+                            float32x4_t w_vec = vld1q_f32(w_vals);
+                            acc_vec = vfmaq_f32(acc_vec, in_vec, w_vec);
+                        }
+                    }
+                }
+
+                // Sum up the vector accumulator
+                acc_scalar = vaddvq_f32(acc_vec);
+
+                // Handle remaining input channels
+                for (; ci < C_in_per_group; ++ci) {
+                    const size_t c_in_index = c_in_group_start + ci;
+                    const float* in_nc = in_n + c_in_index * stride_c_in;
+                    const float* w_ci = w_co + ci * stride_ci_w;
+
+                    for (size_t kh = 0; kh < kernel_h; ++kh) {
+                        const ptrdiff_t in_h = in_h_start + static_cast<ptrdiff_t>(kh);
+                        if (in_h < 0 || in_h >= static_cast<ptrdiff_t>(H)) continue;
+
+                        for (size_t kw = 0; kw < kernel_w; ++kw) {
+                            const ptrdiff_t in_w = in_w_start + static_cast<ptrdiff_t>(kw);
+                            if (in_w < 0 || in_w >= static_cast<ptrdiff_t>(W_in)) continue;
+
+                            const size_t in_idx = static_cast<size_t>(in_h) * W_in + static_cast<size_t>(in_w);
+                            const size_t w_idx = kh * kernel_w + kw;
+                            acc_scalar += in_nc[in_idx] * w_ci[w_idx];
+                        }
+                    }
+                }
+
+                out_nc[oh * W_out + ow] = acc_scalar + b_val;
+            }
+        }
+    });
+}
+
+void cactus_conv2d_f32(
+    const float* input,
+    const float* weights,
+    const float* bias,
+    float* output,
+    size_t N, size_t C_in, size_t H, size_t W_in,
+    size_t C_out,
+    size_t kernel_h, size_t kernel_w,
+    size_t stride_h, size_t stride_w,
+    size_t pad_top, size_t pad_left,
+    size_t pad_bottom, size_t pad_right,
+    size_t groups)
+{
+    // Use specialized 3x3 kernel when applicable
+    if (kernel_h == 3 && kernel_w == 3 && stride_h == stride_w && pad_top == pad_left && pad_top == pad_bottom && pad_left == pad_right) {
+        conv2d_3x3_neon_f32(input, weights, bias, output, N, C_in, H, W_in, C_out, stride_h, pad_top, groups);
+        return;
+    }
+
+    // Use general NEON-optimized kernel
+    conv2d_general_neon_f32(input, weights, bias, output, N, C_in, H, W_in, C_out,
+                            kernel_h, kernel_w, stride_h, stride_w,
+                            pad_top, pad_left, pad_bottom, pad_right, groups);
+}
+
+// Optimized FP16 convolution using NEON with FP32 accumulation
+static void conv2d_general_neon_f16(
+    const __fp16* input,
+    const __fp16* weights,
+    const __fp16* bias,
+    __fp16* output,
+    size_t N, size_t C_in, size_t H, size_t W_in,
+    size_t C_out,
+    size_t kernel_h, size_t kernel_w,
+    size_t stride_h, size_t stride_w,
+    size_t pad_top, size_t pad_left,
+    size_t pad_bottom, size_t pad_right,
+    size_t groups)
+{
+    const size_t C_in_per_group = C_in / groups;
+    const size_t C_out_per_group = C_out / groups;
+
+    const size_t H_out = (H + pad_top + pad_bottom - kernel_h) / stride_h + 1;
+    const size_t W_out = (W_in + pad_left + pad_right - kernel_w) / stride_w + 1;
+
+    const size_t stride_n_in = C_in * H * W_in;
+    const size_t stride_c_in = H * W_in;
+    const size_t stride_n_out = C_out * H_out * W_out;
+    const size_t stride_c_out = H_out * W_out;
+
+    const size_t stride_co_w = C_in_per_group * kernel_h * kernel_w;
+    const size_t stride_ci_w = kernel_h * kernel_w;
+
+    CactusThreading::parallel_for_2d(N, C_out, 4, [&](size_t n, size_t c_out_index) {
+        const size_t g = c_out_index / C_out_per_group;
+        const size_t c_in_group_start = g * C_in_per_group;
+        const __fp16* in_n = input + n * stride_n_in;
+        __fp16* out_nc = output + n * stride_n_out + c_out_index * stride_c_out;
+
+        const __fp16* w_co = weights + c_out_index * stride_co_w;
+        const float b_val = bias ? static_cast<float>(bias[c_out_index]) : 0.0f;
+
+        for (size_t oh = 0; oh < H_out; ++oh) {
+            const ptrdiff_t in_h_start = static_cast<ptrdiff_t>(oh * stride_h) - static_cast<ptrdiff_t>(pad_top);
+
+            for (size_t ow = 0; ow < W_out; ++ow) {
+                const ptrdiff_t in_w_start = static_cast<ptrdiff_t>(ow * stride_w) - static_cast<ptrdiff_t>(pad_left);
+
+                float32x4_t acc_vec = vdupq_n_f32(0.0f);
+                float acc_scalar = 0.0f;
+
+                // Process input channels in groups of 4 for NEON
+                size_t ci = 0;
+                for (; ci + 4 <= C_in_per_group; ci += 4) {
+                    for (size_t kh = 0; kh < kernel_h; ++kh) {
+                        const ptrdiff_t in_h = in_h_start + static_cast<ptrdiff_t>(kh);
+                        if (in_h < 0 || in_h >= static_cast<ptrdiff_t>(H)) continue;
+
+                        for (size_t kw = 0; kw < kernel_w; ++kw) {
+                            const ptrdiff_t in_w = in_w_start + static_cast<ptrdiff_t>(kw);
+                            if (in_w < 0 || in_w >= static_cast<ptrdiff_t>(W_in)) continue;
+
+                            const size_t in_spatial_idx = static_cast<size_t>(in_h) * W_in + static_cast<size_t>(in_w);
+                            const size_t w_spatial_idx = kh * kernel_w + kw;
+
+                            // Load 4 input values and weights, convert to FP32
+                            __fp16 in_vals_h[4];
+                            __fp16 w_vals_h[4];
+                            for (size_t k = 0; k < 4; ++k) {
+                                const size_t c_in_index = c_in_group_start + ci + k;
+                                in_vals_h[k] = in_n[c_in_index * stride_c_in + in_spatial_idx];
+                                w_vals_h[k] = w_co[(ci + k) * stride_ci_w + w_spatial_idx];
+                            }
+
+                            float16x4_t in_h4 = vld1_f16(in_vals_h);
+                            float16x4_t w_h4 = vld1_f16(w_vals_h);
+                            float32x4_t in_vec = vcvt_f32_f16(in_h4);
+                            float32x4_t w_vec = vcvt_f32_f16(w_h4);
+                            acc_vec = vfmaq_f32(acc_vec, in_vec, w_vec);
+                        }
+                    }
+                }
+
+                // Sum up the vector accumulator
+                acc_scalar = vaddvq_f32(acc_vec);
+
+                // Handle remaining input channels
+                for (; ci < C_in_per_group; ++ci) {
+                    const size_t c_in_index = c_in_group_start + ci;
+                    const __fp16* in_nc = in_n + c_in_index * stride_c_in;
+                    const __fp16* w_ci = w_co + ci * stride_ci_w;
+
+                    for (size_t kh = 0; kh < kernel_h; ++kh) {
+                        const ptrdiff_t in_h = in_h_start + static_cast<ptrdiff_t>(kh);
+                        if (in_h < 0 || in_h >= static_cast<ptrdiff_t>(H)) continue;
+
+                        for (size_t kw = 0; kw < kernel_w; ++kw) {
+                            const ptrdiff_t in_w = in_w_start + static_cast<ptrdiff_t>(kw);
+                            if (in_w < 0 || in_w >= static_cast<ptrdiff_t>(W_in)) continue;
+
+                            const size_t in_idx = static_cast<size_t>(in_h) * W_in + static_cast<size_t>(in_w);
+                            const size_t w_idx = kh * kernel_w + kw;
+                            acc_scalar += static_cast<float>(in_nc[in_idx]) * static_cast<float>(w_ci[w_idx]);
+                        }
+                    }
+                }
+
+                out_nc[oh * W_out + ow] = static_cast<__fp16>(acc_scalar + b_val);
+            }
+        }
+    });
+}
+
+void cactus_conv2d_f16(
+    const __fp16* input,
+    const __fp16* weights,
+    const __fp16* bias,
+    __fp16* output,
+    size_t N, size_t C_in, size_t H, size_t W_in,
+    size_t C_out,
+    size_t kernel_h, size_t kernel_w,
+    size_t stride_h, size_t stride_w,
+    size_t pad_top, size_t pad_left,
+    size_t pad_bottom, size_t pad_right,
+    size_t groups)
+{
+    conv2d_general_neon_f16(input, weights, bias, output, N, C_in, H, W_in, C_out,
+                            kernel_h, kernel_w, stride_h, stride_w,
+                            pad_top, pad_left, pad_bottom, pad_right, groups);
+}
+
+void cactus_conv_transpose2d_f32(
+    const float* input,
+    const float* weights,
+    const float* bias,
+    float* output,
+    size_t N, size_t C_in, size_t H_in, size_t W_in,
+    size_t C_out,
+    size_t kernel_h, size_t kernel_w,
+    size_t stride,
+    size_t pad,
+    size_t groups,
+    size_t H_out, size_t W_out)
+{
+    const size_t C_in_per_group = C_in / groups;
+    const size_t C_out_per_group = C_out / groups;
+
+    const size_t stride_n_in = C_in * H_in * W_in;
+    const size_t stride_c_in = H_in * W_in;
+    const size_t stride_n_out = C_out * H_out * W_out;
+    const size_t stride_c_out = H_out * W_out;
+
+    // Weight layout: [C_in, C_out_per_group, kH, kW]
+    const size_t stride_ci_w = C_out_per_group * kernel_h * kernel_w;
+    const size_t stride_co_w = kernel_h * kernel_w;
+
+    // Initialize output with bias or zeros
+    CactusThreading::parallel_for_2d(N, C_out, 4, [&](size_t n, size_t co) {
+        float* out_nc = output + n * stride_n_out + co * stride_c_out;
+        const float b_val = bias ? bias[co] : 0.0f;
+        for (size_t i = 0; i < stride_c_out; ++i) {
+            out_nc[i] = b_val;
+        }
+    });
+
+    // Main loop: scatter input contributions into output
+    for (size_t n = 0; n < N; ++n) {
+        const float* in_n = input + n * stride_n_in;
+        float* out_n = output + n * stride_n_out;
+
+        for (size_t g = 0; g < groups; ++g) {
+            const size_t c_in_group_start = g * C_in_per_group;
+            const size_t c_out_group_start = g * C_out_per_group;
+
+            const float* w_group = weights + c_in_group_start * stride_ci_w;
+
+            for (size_t ci = 0; ci < C_in_per_group; ++ci) {
+                const size_t c_in_index = c_in_group_start + ci;
+                const float* in_nc = in_n + c_in_index * stride_c_in;
+                const float* w_ci = w_group + ci * stride_ci_w;
+
+                for (size_t ih = 0; ih < H_in; ++ih) {
+                    for (size_t iw = 0; iw < W_in; ++iw) {
+                        const float x_val = in_nc[ih * W_in + iw];
+                        if (x_val == 0.0f) continue;
+
+                        const ptrdiff_t out_h_base = static_cast<ptrdiff_t>(ih * stride) - static_cast<ptrdiff_t>(pad);
+                        const ptrdiff_t out_w_base = static_cast<ptrdiff_t>(iw * stride) - static_cast<ptrdiff_t>(pad);
+
+                        for (size_t kh = 0; kh < kernel_h; ++kh) {
+                            const ptrdiff_t oh = out_h_base + static_cast<ptrdiff_t>(kh);
+                            if (oh < 0 || oh >= static_cast<ptrdiff_t>(H_out)) continue;
+
+                            for (size_t kw = 0; kw < kernel_w; ++kw) {
+                                const ptrdiff_t ow = out_w_base + static_cast<ptrdiff_t>(kw);
+                                if (ow < 0 || ow >= static_cast<ptrdiff_t>(W_out)) continue;
+
+                                const size_t w_idx = kh * kernel_w + kw;
+
+                                for (size_t co = 0; co < C_out_per_group; ++co) {
+                                    const size_t c_out_index = c_out_group_start + co;
+                                    float* out_nc = out_n + c_out_index * stride_c_out;
+                                    const float* w_co = w_ci + co * stride_co_w;
+
+                                    out_nc[static_cast<size_t>(oh) * W_out + static_cast<size_t>(ow)] +=
+                                        x_val * w_co[w_idx];
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+void cactus_conv_transpose2d_f16(
+    const __fp16* input,
+    const __fp16* weights,
+    const __fp16* bias,
+    __fp16* output,
+    size_t N, size_t C_in, size_t H_in, size_t W_in,
+    size_t C_out,
+    size_t kernel_h, size_t kernel_w,
+    size_t stride,
+    size_t pad,
+    size_t groups,
+    size_t H_out, size_t W_out)
+{
+    const size_t C_in_per_group = C_in / groups;
+    const size_t C_out_per_group = C_out / groups;
+
+    const size_t stride_n_in = C_in * H_in * W_in;
+    const size_t stride_c_in = H_in * W_in;
+    const size_t stride_n_out = C_out * H_out * W_out;
+    const size_t stride_c_out = H_out * W_out;
+
+    const size_t stride_ci_w = C_out_per_group * kernel_h * kernel_w;
+    const size_t stride_co_w = kernel_h * kernel_w;
+
+    // Initialize output with bias or zeros
+    CactusThreading::parallel_for_2d(N, C_out, 4, [&](size_t n, size_t co) {
+        __fp16* out_nc = output + n * stride_n_out + co * stride_c_out;
+        const float b_val = bias ? static_cast<float>(bias[co]) : 0.0f;
+        for (size_t i = 0; i < stride_c_out; ++i) {
+            out_nc[i] = static_cast<__fp16>(b_val);
+        }
+    });
+
+    // Main loop: scatter input contributions into output
+    for (size_t n = 0; n < N; ++n) {
+        const __fp16* in_n = input + n * stride_n_in;
+        __fp16* out_n = output + n * stride_n_out;
+
+        for (size_t g = 0; g < groups; ++g) {
+            const size_t c_in_group_start = g * C_in_per_group;
+            const size_t c_out_group_start = g * C_out_per_group;
+
+            const __fp16* w_group = weights + c_in_group_start * stride_ci_w;
+
+            for (size_t ci = 0; ci < C_in_per_group; ++ci) {
+                const size_t c_in_index = c_in_group_start + ci;
+                const __fp16* in_nc = in_n + c_in_index * stride_c_in;
+                const __fp16* w_ci = w_group + ci * stride_ci_w;
+
+                for (size_t ih = 0; ih < H_in; ++ih) {
+                    for (size_t iw = 0; iw < W_in; ++iw) {
+                        const float x_val = static_cast<float>(in_nc[ih * W_in + iw]);
+                        if (x_val == 0.0f) continue;
+
+                        const ptrdiff_t out_h_base = static_cast<ptrdiff_t>(ih * stride) - static_cast<ptrdiff_t>(pad);
+                        const ptrdiff_t out_w_base = static_cast<ptrdiff_t>(iw * stride) - static_cast<ptrdiff_t>(pad);
+
+                        for (size_t kh = 0; kh < kernel_h; ++kh) {
+                            const ptrdiff_t oh = out_h_base + static_cast<ptrdiff_t>(kh);
+                            if (oh < 0 || oh >= static_cast<ptrdiff_t>(H_out)) continue;
+
+                            for (size_t kw = 0; kw < kernel_w; ++kw) {
+                                const ptrdiff_t ow = out_w_base + static_cast<ptrdiff_t>(kw);
+                                if (ow < 0 || ow >= static_cast<ptrdiff_t>(W_out)) continue;
+
+                                const size_t w_idx = kh * kernel_w + kw;
+
+                                for (size_t co = 0; co < C_out_per_group; ++co) {
+                                    const size_t c_out_index = c_out_group_start + co;
+                                    __fp16* out_nc = out_n + c_out_index * stride_c_out;
+                                    const __fp16* w_co = w_ci + co * stride_co_w;
+
+                                    float current = static_cast<float>(out_nc[static_cast<size_t>(oh) * W_out + static_cast<size_t>(ow)]);
+                                    current += x_val * static_cast<float>(w_co[w_idx]);
+                                    out_nc[static_cast<size_t>(oh) * W_out + static_cast<size_t>(ow)] = static_cast<__fp16>(current);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ============================================================================
+// im2col implementations
+// ============================================================================
+
+void cactus_im2col_f32(
+    const float* input, float* output,
+    size_t N, size_t C, size_t H, size_t W,
+    size_t kernel_h, size_t kernel_w,
+    size_t stride_h, size_t stride_w,
+    size_t pad_h, size_t pad_w,
+    size_t H_out, size_t W_out) {
+    
+    const size_t patch_size = C * kernel_h * kernel_w;
+    const size_t spatial_out = H_out * W_out;
+    
+    // Output shape: [N, H_out * W_out, C * kernel_h * kernel_w]
+    CactusThreading::parallel_for(N * spatial_out, CactusThreading::Thresholds::ELEMENT_WISE,
+        [&](size_t start, size_t end) {
+            for (size_t idx = start; idx < end; ++idx) {
+                const size_t n = idx / spatial_out;
+                const size_t spatial_idx = idx % spatial_out;
+                const size_t oh = spatial_idx / W_out;
+                const size_t ow = spatial_idx % W_out;
+                
+                float* out_ptr = output + n * spatial_out * patch_size + spatial_idx * patch_size;
+                const float* in_n = input + n * C * H * W;
+                
+                size_t patch_idx = 0;
+                for (size_t c = 0; c < C; ++c) {
+                    const float* in_c = in_n + c * H * W;
+                    for (size_t kh = 0; kh < kernel_h; ++kh) {
+                        for (size_t kw = 0; kw < kernel_w; ++kw) {
+                            const int ih = static_cast<int>(oh * stride_h + kh) - static_cast<int>(pad_h);
+                            const int iw = static_cast<int>(ow * stride_w + kw) - static_cast<int>(pad_w);
+                            
+                            if (ih >= 0 && ih < static_cast<int>(H) && 
+                                iw >= 0 && iw < static_cast<int>(W)) {
+                                out_ptr[patch_idx] = in_c[ih * W + iw];
+                            } else {
+                                out_ptr[patch_idx] = 0.0f;
+                            }
+                            ++patch_idx;
+                        }
+                    }
+                }
+            }
+        });
+}
+
+void cactus_im2col_f16(
+    const __fp16* input, __fp16* output,
+    size_t N, size_t C, size_t H, size_t W,
+    size_t kernel_h, size_t kernel_w,
+    size_t stride_h, size_t stride_w,
+    size_t pad_h, size_t pad_w,
+    size_t H_out, size_t W_out) {
+    
+    const size_t patch_size = C * kernel_h * kernel_w;
+    const size_t spatial_out = H_out * W_out;
+    
+    CactusThreading::parallel_for(N * spatial_out, CactusThreading::Thresholds::ELEMENT_WISE,
+        [&](size_t start, size_t end) {
+            for (size_t idx = start; idx < end; ++idx) {
+                const size_t n = idx / spatial_out;
+                const size_t spatial_idx = idx % spatial_out;
+                const size_t oh = spatial_idx / W_out;
+                const size_t ow = spatial_idx % W_out;
+                
+                __fp16* out_ptr = output + n * spatial_out * patch_size + spatial_idx * patch_size;
+                const __fp16* in_n = input + n * C * H * W;
+                
+                size_t patch_idx = 0;
+                for (size_t c = 0; c < C; ++c) {
+                    const __fp16* in_c = in_n + c * H * W;
+                    for (size_t kh = 0; kh < kernel_h; ++kh) {
+                        for (size_t kw = 0; kw < kernel_w; ++kw) {
+                            const int ih = static_cast<int>(oh * stride_h + kh) - static_cast<int>(pad_h);
+                            const int iw = static_cast<int>(ow * stride_w + kw) - static_cast<int>(pad_w);
+                            
+                            if (ih >= 0 && ih < static_cast<int>(H) && 
+                                iw >= 0 && iw < static_cast<int>(W)) {
+                                out_ptr[patch_idx] = in_c[ih * W + iw];
+                            } else {
+                                out_ptr[patch_idx] = static_cast<__fp16>(0.0f);
+                            }
+                            ++patch_idx;
+                        }
+                    }
+                }
+            }
+        });
+}
+

@@ -27,16 +27,18 @@ enum class ComputeBackend {
 enum class OpType {
     INPUT, PRECISION_CAST,
     ADD, ADD_CLIPPED, SUBTRACT, MULTIPLY, DIVIDE,
-    MATMUL, TRANSPOSE, RESHAPE, SLICE, GATHER, EMBEDDING,
-    BILINEAR_INTERPOLATION,
-    SUM, MEAN, VARIANCE, MIN, MAX,
+    MATMUL, MATMUL_ND, TRANSPOSE, RESHAPE, SLICE, GATHER, EMBEDDING,
+    BILINEAR_INTERPOLATION, RESIZE,
+    SUM, MEAN, VARIANCE, MIN, MAX, MAXPOOL, GLOBAL_AVG_POOL, CONV2D, CONV_TRANSPOSE2D,
+    ELEM_WISE_MIN, ELEM_WISE_MAX,
     RMS_NORM, ROPE, SOFTMAX, ATTENTION, CONV1D_CAUSAL, CONV1D_K3,
     SCALAR_ADD, SCALAR_SUBTRACT, SCALAR_MULTIPLY, SCALAR_DIVIDE, SCALAR_EXP, SCALAR_SQRT, SCALAR_COS, SCALAR_SIN,
-    SILU, GELU,
+    SILU, GELU, SIGMOID,
     SAMPLE, CONCAT,
     SCATTER_TOPK,
-    TOPK, LAYERNORM,
+    TOPK, LAYERNORM, BATCHNORM,
     INDEX,
+    IM2COL,  // Image to column transform for GEMM-based convolution
 };
 
 struct PrecisionTraits {
@@ -141,6 +143,10 @@ struct OpParams {
 
     size_t dilation = 1;
     size_t stride = 1;
+    size_t pad = 0;
+    size_t kernel_h = 1;
+    size_t kernel_w = 1;
+    size_t groups = 1;
     float temperature = 1.0f;
     float top_p = 1.0f;
     size_t top_k = 0;
@@ -170,6 +176,7 @@ void dispatch_unary_op(OpType op, const T* input, T* output, size_t count, float
 
 void compute_node_optimized(GraphNode& node, const std::vector<std::unique_ptr<GraphNode>>& nodes, const std::unordered_map<size_t, size_t>& node_index_map);
 void compute_matmul_node(GraphNode& node, const std::vector<std::unique_ptr<GraphNode>>& nodes, const std::unordered_map<size_t, size_t>& node_index_map);
+void compute_matmul_nd_node(GraphNode& node, const std::vector<std::unique_ptr<GraphNode>>& nodes, const std::unordered_map<size_t, size_t>& node_index_map);
 void compute_transpose_node(GraphNode& node, const std::vector<std::unique_ptr<GraphNode>>& nodes, const std::unordered_map<size_t, size_t>& node_index_map);
 void compute_reduce_node(GraphNode& node, const std::vector<std::unique_ptr<GraphNode>>& nodes, const std::unordered_map<size_t, size_t>& node_index_map);
 void compute_fused_node(GraphNode& node, const std::vector<std::unique_ptr<GraphNode>>& nodes, const std::unordered_map<size_t, size_t>& node_index_map);
@@ -179,6 +186,7 @@ void compute_sample_node(GraphNode& node, const std::vector<std::unique_ptr<Grap
 void compute_scatter_topk_node(GraphNode& node, const std::vector<std::unique_ptr<GraphNode>>& nodes, const std::unordered_map<size_t, size_t>& node_index_map);
 void compute_topk_node(GraphNode& node, const std::vector<std::unique_ptr<GraphNode>>& nodes, const std::unordered_map<size_t, size_t>& node_index_map);
 void compute_layernorm_node(GraphNode& node, const std::vector<std::unique_ptr<GraphNode>>& nodes, const std::unordered_map<size_t, size_t>& node_index_map);
+void compute_batchnorm_node(GraphNode& node, const std::vector<std::unique_ptr<GraphNode>>& nodes, const std::unordered_map<size_t, size_t>& node_index_map);
 void compute_index_node(GraphNode& node, const std::vector<std::unique_ptr<GraphNode>>& nodes, const std::unordered_map<size_t, size_t>& node_index_map);
 
 namespace ValidationUtils {
@@ -219,8 +227,10 @@ public:
     
     size_t silu(size_t input);
     size_t gelu(size_t input);
+    size_t sigmoid(size_t input);
     
     size_t matmul(size_t input1, size_t input2, bool pretransposed_rhs = false, ComputeBackend backend = ComputeBackend::CPU);
+    size_t matmul_nd(size_t input1, size_t input2, bool pretransposed_rhs = false, ComputeBackend backend = ComputeBackend::CPU);
     size_t transpose(size_t input, ComputeBackend backend = ComputeBackend::CPU);
     size_t transposeN(size_t input, const std::vector<size_t>& permutation, ComputeBackend backend = ComputeBackend::CPU);
     size_t reshape(size_t input, const std::vector<size_t>& new_shape);
@@ -232,6 +242,9 @@ public:
     size_t variance(size_t input, int axis);
     size_t min(size_t input, int axis);
     size_t max(size_t input, int axis);
+
+    size_t elem_wise_min(size_t input1, size_t input2);
+    size_t elem_wise_max(size_t input1, size_t input2);
     
     size_t gather(size_t embeddings, size_t indices);
     size_t mmap_embeddings(const std::string& filename);
@@ -241,8 +254,10 @@ public:
     size_t embedding(const std::string& filename, size_t indices);
     size_t embedding(size_t embedding_tensor, size_t indices);
     size_t bilinear_interpolation(size_t pos_embeds, size_t dst_height, size_t dst_width);
+    size_t resize_nearest_asymmetric(size_t input, size_t dst_height, size_t dst_width);
 
     size_t layernorm(size_t input, size_t weight, size_t bias, float epsilon = 1e-5f);
+    size_t batchnorm(size_t input, size_t weight, size_t bias, size_t mean, size_t variance, float epsilon = 1e-5f);
     size_t topk(size_t input, size_t k);
     size_t rms_norm(size_t input, size_t weight, float epsilon = 1e-5f);
     size_t rope(size_t input, float theta, size_t position_offset = 0, ComputeBackend backend = ComputeBackend::CPU);
@@ -253,6 +268,37 @@ public:
 
     size_t conv1d_causal(size_t input, size_t weight, size_t kernel_size, size_t dilation = 1);
     size_t conv1d_k3(size_t input, size_t weight, size_t stride);
+    size_t maxpool(size_t input,
+                   size_t kernel_h, size_t kernel_w,
+                   size_t stride,
+                   size_t pad,
+                   size_t dilation = 1);
+    size_t global_avg_pool(size_t input);
+    size_t conv2d(size_t input, size_t weight, size_t bias,
+                  size_t kernel_h, size_t kernel_w,
+                  size_t stride,
+                  size_t pad,
+                  size_t groups);
+    size_t conv_transpose2d(size_t input, size_t weight, size_t bias,
+                            size_t kernel_h, size_t kernel_w,
+                            size_t stride,
+                            size_t pad,
+                            size_t groups);
+    
+    // im2col: Extract patches from input for GEMM-based convolution
+    // Input:  [N, C, H, W]
+    // Output: [N, H_out * W_out, C * kernel_h * kernel_w]
+    size_t im2col(size_t input,
+                  size_t kernel_h, size_t kernel_w,
+                  size_t stride_h, size_t stride_w,
+                  size_t pad_h, size_t pad_w);
+    
+    // GEMM-based Conv2D using im2col + matmul
+    size_t conv2d_gemm(size_t input, size_t weight, size_t bias,
+                       size_t kernel_h, size_t kernel_w,
+                       size_t stride,
+                       size_t pad,
+                       size_t groups);
     
     size_t sample(size_t logits, float temperature = 0.6f, float top_p = 0.95f, size_t top_k = 20);
     

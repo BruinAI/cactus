@@ -17,16 +17,18 @@
 static const char* op_type_names[] = {
     "INPUT", "PRECISION_CAST",
     "ADD", "ADD_CLIPPED", "SUBTRACT", "MULTIPLY", "DIVIDE",
-    "MATMUL", "TRANSPOSE", "RESHAPE", "SLICE", "GATHER", "EMBEDDING",
-    "BILINEAR_INTERPOLATION",
-    "SUM", "MEAN", "VARIANCE", "MIN", "MAX",
+    "MATMUL", "MATMUL_ND", "TRANSPOSE", "RESHAPE", "SLICE", "GATHER", "EMBEDDING",
+    "BILINEAR_INTERPOLATION", "RESIZE",
+    "SUM", "MEAN", "VARIANCE", "MIN", "MAX", "MAXPOOL", "GLOBAL_AVG_POOL", "CONV2D", "CONV_TRANSPOSE2D",
+    "ELEM_WISE_MIN", "ELEM_WISE_MAX",
     "RMS_NORM", "ROPE", "SOFTMAX", "ATTENTION", "CONV1D_CAUSAL", "CONV1D_K3",
     "SCALAR_ADD", "SCALAR_SUBTRACT", "SCALAR_MULTIPLY", "SCALAR_DIVIDE",
     "SCALAR_EXP", "SCALAR_SQRT", "SCALAR_COS", "SCALAR_SIN",
-    "SILU", "GELU", "SAMPLE", "CONCAT",
+    "SILU", "GELU", "SIGMOID", "SAMPLE", "CONCAT",
     "SCATTER_TOPK",
-    "TOPK", "LAYERNORM",
-    "INDEX"
+    "TOPK", "LAYERNORM", "BATCHNORM",
+    "INDEX",
+    "IM2COL"
 };
 
 static const char* get_op_name(OpType op) {
@@ -107,12 +109,32 @@ size_t CactusGraph::divide(size_t input1, size_t input2) {
     return add_node(OpType::DIVIDE, {input1, input2}, broadcast_info.output_shape, params);
 }
 
+size_t CactusGraph::elem_wise_max(size_t input1, size_t input2) {
+    const auto& lhs_buffer = get_output_buffer(input1);
+    const auto& rhs_buffer = get_output_buffer(input2);
+    
+    BroadcastInfo broadcast_info = BroadcastInfo::compute(lhs_buffer.shape, rhs_buffer.shape);
+    OpParams params{.broadcast_info = broadcast_info};
+    return add_node(OpType::ELEM_WISE_MAX, {input1, input2}, broadcast_info.output_shape, params);
+}
+
+size_t CactusGraph::elem_wise_min(size_t input1, size_t input2) {
+    const auto& lhs_buffer = get_output_buffer(input1);
+    const auto& rhs_buffer = get_output_buffer(input2);
+    
+    BroadcastInfo broadcast_info = BroadcastInfo::compute(lhs_buffer.shape, rhs_buffer.shape);
+    OpParams params{.broadcast_info = broadcast_info};
+    return add_node(OpType::ELEM_WISE_MIN, {input1, input2}, broadcast_info.output_shape, params);
+}
+
 
 size_t CactusGraph::matmul(size_t input1, size_t input2, bool pretransposed_rhs, ComputeBackend backend) {
     const auto& lhs_buffer = get_output_buffer(input1);
     const auto& rhs_buffer = get_output_buffer(input2);
     
     if (lhs_buffer.shape.size() != 2 || rhs_buffer.shape.size() != 2) {
+        std::cout << "lhs_buffer.shape: " << lhs_buffer.shape.size() << std::endl;
+        std::cout << "rhs_buffer.shape: " << rhs_buffer.shape.size() << std::endl;
         throw std::invalid_argument("Matrix multiplication requires 2D tensors");
     }
     
@@ -128,6 +150,54 @@ size_t CactusGraph::matmul(size_t input1, size_t input2, bool pretransposed_rhs,
     std::vector<size_t> output_shape = {M, N};
     OpParams params{.pretransposed_rhs = pretransposed_rhs, .backend = backend};
     return add_node(OpType::MATMUL, {input1, input2}, output_shape, params);
+}
+
+size_t CactusGraph::matmul_nd(size_t input1, size_t input2, bool pretransposed_rhs, ComputeBackend backend) {
+    const auto& lhs_buffer = get_output_buffer(input1);
+    const auto& rhs_buffer = get_output_buffer(input2);
+    
+    if (lhs_buffer.shape.size() < 2 || rhs_buffer.shape.size() < 2) {
+        throw std::invalid_argument("N-D matrix multiplication requires tensors with at least 2 dimensions");
+    }
+    
+    // Get the last two dimensions for matrix multiplication
+    size_t lhs_ndim = lhs_buffer.shape.size();
+    size_t rhs_ndim = rhs_buffer.shape.size();
+    
+    size_t M = lhs_buffer.shape[lhs_ndim - 2];
+    size_t K = lhs_buffer.shape[lhs_ndim - 1];
+    size_t rhs_K = pretransposed_rhs ? rhs_buffer.shape[rhs_ndim - 1] : rhs_buffer.shape[rhs_ndim - 2];
+    size_t N = pretransposed_rhs ? rhs_buffer.shape[rhs_ndim - 2] : rhs_buffer.shape[rhs_ndim - 1];
+    
+    if (K != rhs_K) {
+        throw std::invalid_argument("Matrix dimensions incompatible for N-D multiplication");
+    }
+    
+    // Compute batch dimensions - broadcast lhs batch dims with rhs batch dims
+    std::vector<size_t> lhs_batch(lhs_buffer.shape.begin(), lhs_buffer.shape.end() - 2);
+    std::vector<size_t> rhs_batch(rhs_buffer.shape.begin(), rhs_buffer.shape.end() - 2);
+    
+    // Broadcast batch dimensions (similar to numpy broadcasting)
+    size_t max_batch_ndim = std::max(lhs_batch.size(), rhs_batch.size());
+    std::vector<size_t> output_batch(max_batch_ndim);
+    
+    for (size_t i = 0; i < max_batch_ndim; ++i) {
+        size_t lhs_dim = (i < lhs_batch.size()) ? lhs_batch[lhs_batch.size() - 1 - i] : 1;
+        size_t rhs_dim = (i < rhs_batch.size()) ? rhs_batch[rhs_batch.size() - 1 - i] : 1;
+        
+        if (lhs_dim != rhs_dim && lhs_dim != 1 && rhs_dim != 1) {
+            throw std::invalid_argument("Batch dimensions are not broadcastable");
+        }
+        output_batch[max_batch_ndim - 1 - i] = std::max(lhs_dim, rhs_dim);
+    }
+    
+    // Build output shape: batch dims + [M, N]
+    std::vector<size_t> output_shape = output_batch;
+    output_shape.push_back(M);
+    output_shape.push_back(N);
+    
+    OpParams params{.pretransposed_rhs = pretransposed_rhs, .backend = backend};
+    return add_node(OpType::MATMUL_ND, {input1, input2}, output_shape, params);
 }
 
 size_t CactusGraph::transpose(size_t input, ComputeBackend backend) {
@@ -334,6 +404,11 @@ size_t CactusGraph::layernorm(size_t input, size_t weight, size_t bias, float ep
     return add_node(OpType::LAYERNORM, {input, weight, bias}, {}, params);
 }
 
+size_t CactusGraph::batchnorm(size_t input, size_t weight, size_t bias, size_t mean, size_t variance, float epsilon) {
+    OpParams params{.epsilon = epsilon};
+    return add_node(OpType::BATCHNORM, {input, weight, bias, mean, variance}, {}, params);
+}
+
 size_t CactusGraph::attention(size_t query, size_t key, size_t value, float scale, bool is_causal, ComputeBackend backend) {
     OpParams params{.scale = scale, .is_causal = is_causal, .backend = backend};
     return add_node(OpType::ATTENTION, {query, key, value}, {}, params);
@@ -359,6 +434,252 @@ size_t CactusGraph::conv1d_k3(size_t input, size_t weight, size_t stride){
     return add_node(OpType::CONV1D_K3, {input, weight}, {}, params);
 }
 
+size_t CactusGraph::maxpool(size_t input,
+                            size_t kernel_h, size_t kernel_w,
+                            size_t stride,
+                            size_t pad,
+                            size_t dilation) {
+    const auto& input_buffer = get_output_buffer(input);
+
+    if (input_buffer.shape.size() != 4) {
+        throw std::runtime_error("MaxPool2D expects a 4D tensor in NCHW layout");
+    }
+
+    if (kernel_h == 0 || kernel_w == 0) {
+        throw std::runtime_error("MaxPool kernel dimensions must be > 0");
+    }
+    if (stride == 0) {
+        throw std::runtime_error("MaxPool stride must be > 0");
+    }
+    if (dilation == 0) {
+        throw std::runtime_error("MaxPool dilation must be > 0");
+    }
+
+    size_t N = input_buffer.shape[0];
+    size_t C = input_buffer.shape[1];
+    size_t H = input_buffer.shape[2];
+    size_t W = input_buffer.shape[3];
+
+    size_t eff_h = (kernel_h - 1) * dilation + 1;
+    size_t eff_w = (kernel_w - 1) * dilation + 1;
+
+    if (H + 2 * pad < eff_h || W + 2 * pad < eff_w) {
+        throw std::runtime_error("MaxPool kernel (with padding/dilation) is larger than the input spatial dimensions");
+    }
+
+    size_t out_h = (H + 2 * pad - eff_h) / stride + 1;
+    size_t out_w = (W + 2 * pad - eff_w) / stride + 1;
+
+    OpParams params{};
+    params.kernel_h = kernel_h;
+    params.kernel_w = kernel_w;
+    params.stride = stride;
+    params.pad = pad;
+    params.dilation = dilation;
+
+    std::vector<size_t> output_shape = {N, C, out_h, out_w};
+    return add_node(OpType::MAXPOOL, {input}, output_shape, params);
+}
+
+size_t CactusGraph::global_avg_pool(size_t input) {
+    const auto& input_buffer = get_output_buffer(input);
+
+    if (input_buffer.shape.size() != 4) {
+        throw std::runtime_error("GlobalAveragePool expects a 4D tensor in NCHW layout");
+    }
+
+    size_t N = input_buffer.shape[0];
+    size_t C = input_buffer.shape[1];
+
+    // Output shape is [N, C, 1, 1]
+    std::vector<size_t> output_shape = {N, C, 1, 1};
+    return add_node(OpType::GLOBAL_AVG_POOL, {input}, output_shape, {});
+}
+
+size_t CactusGraph::conv2d(size_t input, size_t weight, size_t bias,
+                           size_t kernel_h, size_t kernel_w,
+                           size_t stride,
+                           size_t pad,
+                           size_t groups) {
+    const auto& input_buffer = get_output_buffer(input);
+    const auto& weight_buffer = get_output_buffer(weight);
+
+    if (input_buffer.shape.size() != 4) {
+        throw std::runtime_error("Conv2D expects a 4D input tensor in NCHW layout");
+    }
+    if (weight_buffer.shape.size() != 4) {
+        throw std::runtime_error("Conv2D expects a 4D weight tensor [C_out, C_in/groups, kH, kW]");
+    }
+
+    size_t N = input_buffer.shape[0];
+    size_t C_in = input_buffer.shape[1];
+    size_t H = input_buffer.shape[2];
+    size_t W = input_buffer.shape[3];
+    size_t C_out = weight_buffer.shape[0];
+
+    if (C_in % groups != 0) {
+        throw std::runtime_error("Conv2D: C_in must be divisible by groups");
+    }
+    if (C_out % groups != 0) {
+        throw std::runtime_error("Conv2D: C_out must be divisible by groups");
+    }
+
+    size_t H_out = (H + 2 * pad - kernel_h) / stride + 1;
+    size_t W_out = (W + 2 * pad - kernel_w) / stride + 1;
+
+    OpParams params{};
+    params.kernel_h = kernel_h;
+    params.kernel_w = kernel_w;
+    params.stride = stride;
+    params.pad = pad;
+    params.groups = groups;
+
+    std::vector<size_t> inputs = {input, weight};
+    if (bias != 0) {
+        inputs.push_back(bias);
+    }
+
+    std::vector<size_t> output_shape = {N, C_out, H_out, W_out};
+    return add_node(OpType::CONV2D, inputs, output_shape, params);
+}
+
+size_t CactusGraph::conv_transpose2d(size_t input, size_t weight, size_t bias,
+                                      size_t kernel_h, size_t kernel_w,
+                                      size_t stride,
+                                      size_t pad,
+                                      size_t groups) {
+    const auto& input_buffer = get_output_buffer(input);
+    const auto& weight_buffer = get_output_buffer(weight);
+
+    if (input_buffer.shape.size() != 4) {
+        throw std::runtime_error("ConvTranspose2D expects a 4D input tensor in NCHW layout");
+    }
+    if (weight_buffer.shape.size() != 4) {
+        throw std::runtime_error("ConvTranspose2D expects a 4D weight tensor [C_in, C_out/groups, kH, kW]");
+    }
+
+    size_t N = input_buffer.shape[0];
+    size_t C_in = input_buffer.shape[1];
+    size_t H_in = input_buffer.shape[2];
+    size_t W_in = input_buffer.shape[3];
+    // Weight shape for ConvTranspose: [C_in, C_out_per_group, kH, kW]
+    size_t C_out = weight_buffer.shape[1] * groups;
+
+    if (C_in % groups != 0) {
+        throw std::runtime_error("ConvTranspose2D: C_in must be divisible by groups");
+    }
+    if (C_out % groups != 0) {
+        throw std::runtime_error("ConvTranspose2D: C_out must be divisible by groups");
+    }
+
+    // Output size formula for ConvTranspose:
+    // H_out = (H_in - 1) * stride - 2*pad + kernel_h
+    // W_out = (W_in - 1) * stride - 2*pad + kernel_w
+    size_t H_out = (H_in - 1) * stride - 2 * pad + kernel_h;
+    size_t W_out = (W_in - 1) * stride - 2 * pad + kernel_w;
+
+    OpParams params{};
+    params.kernel_h = kernel_h;
+    params.kernel_w = kernel_w;
+    params.stride = stride;
+    params.pad = pad;
+    params.groups = groups;
+
+    std::vector<size_t> inputs = {input, weight};
+    if (bias != 0) {
+        inputs.push_back(bias);
+    }
+
+    std::vector<size_t> output_shape = {N, C_out, H_out, W_out};
+    return add_node(OpType::CONV_TRANSPOSE2D, inputs, output_shape, params);
+}
+
+size_t CactusGraph::im2col(size_t input,
+                           size_t kernel_h, size_t kernel_w,
+                           size_t stride_h, size_t stride_w,
+                           size_t pad_h, size_t pad_w) {
+    const auto& input_buffer = get_output_buffer(input);
+    
+    if (input_buffer.shape.size() != 4) {
+        throw std::runtime_error("im2col expects a 4D input tensor [N, C, H, W]");
+    }
+    
+    size_t N = input_buffer.shape[0];
+    size_t C = input_buffer.shape[1];
+    size_t H = input_buffer.shape[2];
+    size_t W = input_buffer.shape[3];
+    
+    size_t H_out = (H + 2 * pad_h - kernel_h) / stride_h + 1;
+    size_t W_out = (W + 2 * pad_w - kernel_w) / stride_w + 1;
+    size_t patch_size = C * kernel_h * kernel_w;
+    
+    OpParams params{};
+    params.kernel_h = kernel_h;
+    params.kernel_w = kernel_w;
+    params.stride = stride_h;
+    params.pad = pad_h;
+    
+    // Output shape: [N, H_out * W_out, C * kernel_h * kernel_w]
+    std::vector<size_t> output_shape = {N, H_out * W_out, patch_size};
+    return add_node(OpType::IM2COL, {input}, output_shape, params);
+}
+
+size_t CactusGraph::conv2d_gemm(size_t input, size_t weight, size_t bias,
+                                size_t kernel_h, size_t kernel_w,
+                                size_t stride,
+                                size_t pad,
+                                size_t groups) {
+    const auto& input_buffer = get_output_buffer(input);
+    const auto& weight_buffer = get_output_buffer(weight);
+    
+    if (input_buffer.shape.size() != 4) {
+        throw std::runtime_error("conv2d_gemm expects a 4D input tensor [N, C, H, W]");
+    }
+    if (weight_buffer.shape.size() != 4) {
+        throw std::runtime_error("conv2d_gemm expects a 4D weight tensor [C_out, C_in/groups, kH, kW]");
+    }
+    
+    size_t N = input_buffer.shape[0];
+    size_t C_in = input_buffer.shape[1];
+    size_t H = input_buffer.shape[2];
+    size_t W = input_buffer.shape[3];
+    size_t C_out = weight_buffer.shape[0];
+    
+    if (groups != 1) {
+        // For grouped convolutions, fall back to direct conv2d
+        return conv2d(input, weight, bias, kernel_h, kernel_w, stride, pad, groups);
+    }
+    
+    size_t H_out = (H + 2 * pad - kernel_h) / stride + 1;
+    size_t W_out = (W + 2 * pad - kernel_w) / stride + 1;
+    size_t patch_size = C_in * kernel_h * kernel_w;
+    
+    // Step 1: im2col - extract patches
+    // Input: [N, C_in, H, W] -> [N, H_out * W_out, C_in * kernel_h * kernel_w]
+    size_t col_id = im2col(input, kernel_h, kernel_w, stride, stride, pad, pad);
+    
+    // Step 2: Reshape weights from [C_out, C_in, kH, kW] to [C_out, C_in * kH * kW]
+    size_t weight_reshaped = reshape(weight, {C_out, patch_size});
+    
+    // Step 3: Matrix multiply: [N, H_out * W_out, patch_size] @ [patch_size, C_out] = [N, H_out * W_out, C_out]
+    // We need col @ weight.T, which is matmul_nd with pretransposed_rhs=true
+    size_t matmul_result = matmul_nd(col_id, weight_reshaped, true);
+    
+    // Step 4: Add bias if present (broadcast over spatial dimensions)
+    size_t result = matmul_result;
+    if (bias != 0) {
+        result = add(matmul_result, bias);
+    }
+    
+    // Step 5: Reshape from [N, H_out * W_out, C_out] to [N, C_out, H_out, W_out]
+    // First reshape to [N, H_out, W_out, C_out]
+    size_t reshaped = reshape(result, {N, H_out, W_out, C_out});
+    
+    // Then transpose to [N, C_out, H_out, W_out] using permutation [0, 3, 1, 2]
+    size_t output = transposeN(reshaped, {0, 3, 1, 2});
+    
+    return output;
+}
 
 size_t CactusGraph::concat(size_t input1, size_t input2, int axis) {
     const auto& buffer1 = get_output_buffer(input1);
@@ -478,6 +799,10 @@ size_t CactusGraph::silu(size_t input) {
 
 size_t CactusGraph::gelu(size_t input) {
     return add_node(OpType::GELU, {input}, {});
+}
+
+size_t CactusGraph::sigmoid(size_t input) {
+    return add_node(OpType::SIGMOID, {input}, {});
 }
 
 size_t CactusGraph::gather(size_t tensor, size_t indices) {
@@ -715,9 +1040,28 @@ size_t CactusGraph::bilinear_interpolation(size_t pos_embeds, size_t dst_height,
     params.dst_height = dst_height;
     params.dst_width = dst_width;
     params.output_precision = Precision::FP32;
+
     
     return add_node(OpType::BILINEAR_INTERPOLATION, {pos_embeds}, output_shape, params);
 }   
+
+size_t CactusGraph::resize_nearest_asymmetric(size_t input, size_t dst_height, size_t dst_width) {
+    const auto& input_buffer = get_output_buffer(input);
+    if (input_buffer.shape.size() != 3) {
+        throw std::runtime_error("Resize nearest asymmetric input must be 3D [outer_count, src_height, src_width]");
+    }
+
+    size_t outer_count = input_buffer.shape[0];
+
+    std::vector<size_t> output_shape = {outer_count, dst_height, dst_width};
+
+    OpParams params;
+    params.dst_height = dst_height;
+    params.dst_width = dst_width;
+    params.output_precision = input_buffer.precision;
+
+    return add_node(OpType::RESIZE, {input}, output_shape, params);
+}
 
 size_t CactusGraph::precision_cast(size_t input, Precision target_precision) {
     OpParams params{};

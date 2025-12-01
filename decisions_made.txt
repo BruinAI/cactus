@@ -1,0 +1,17 @@
+1. No support for dynamically calculated shape reshapes
+2. No support for 0 dimensions
+3. No support for dynamically calculated Unsqueeze axes
+4. For now no support for INT8 min and max operations
+5. splits is always an attribute, always static, never a runtime tensor
+6. No support for slice with more than one axis
+7. Resize works for this specific configuration of attributes:
+        "antialias": 0,
+        "coordinate_transformation_mode": "asymmetric",
+        "cubic_coeff_a": -0.75, (or any this doesn't matter for mode nearest)
+        "exclude_outside": 0,
+        "extrapolation_value": 0.0,
+        "keep_aspect_ratio_policy": "stretch",
+        "mode": "nearest",
+        "nearest_mode": "floor",
+8. MaxPool works on the last two dimensions of a input 4D tensor N, C, H, W
+9. Same with Conv and ConvTranspose

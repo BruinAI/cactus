@@ -109,6 +109,24 @@ void dispatch_binary_op(OpType op, const T* lhs, const T* rhs, T* output, size_t
                 cactus_divide_f32(lhs, rhs, output, count);
             }
             break;
+        case OpType::ELEM_WISE_MAX:
+            if constexpr (std::is_same_v<T, int8_t>) {
+                throw std::runtime_error("Elem-wise max not implemented for int8");
+            } else if constexpr (std::is_same_v<T, __fp16>) {
+                cactus_elemwise_max_f16(lhs, rhs, output, count);
+            } else {
+                cactus_elemwise_max_f32(lhs, rhs, output, count);
+            }
+            break;
+        case OpType::ELEM_WISE_MIN:
+            if constexpr (std::is_same_v<T, int8_t>) {
+                throw std::runtime_error("Elem-wise min not implemented for int8");
+            } else if constexpr (std::is_same_v<T, __fp16>) {
+                cactus_elemwise_min_f16(lhs, rhs, output, count);
+            } else {
+                cactus_elemwise_min_f32(lhs, rhs, output, count);
+            }
+            break;
         default:
             break;
     }
@@ -154,7 +172,9 @@ void compute_node_optimized(GraphNode& node, const std::vector<std::unique_ptr<G
         case OpType::ADD_CLIPPED:
         case OpType::SUBTRACT:
         case OpType::MULTIPLY:
-        case OpType::DIVIDE: {
+        case OpType::DIVIDE: 
+        case OpType::ELEM_WISE_MAX:
+        case OpType::ELEM_WISE_MIN: {
             const auto& lhs = nodes[node_index_map.at(node.input_ids[0])]->output_buffer;
             const auto& rhs = nodes[node_index_map.at(node.input_ids[1])]->output_buffer;
             
@@ -193,6 +213,12 @@ void compute_node_optimized(GraphNode& node, const std::vector<std::unique_ptr<G
                                                         node.params.broadcast_info.output_shape.data(),
                                                         node.params.broadcast_info.output_shape.size());
                             break;
+                        case OpType::ELEM_WISE_MAX:
+                            throw std::runtime_error("Elem-wise max not implemented for int8");
+                            break;
+                        case OpType::ELEM_WISE_MIN:
+                            throw std::runtime_error("Elem-wise min not implemented for int8");
+                            break;
                         default: break;
                     }
                 } else if (lhs.precision == Precision::FP16) {
@@ -226,6 +252,20 @@ void compute_node_optimized(GraphNode& node, const std::vector<std::unique_ptr<G
                                                         node.params.broadcast_info.output_shape.data(),
                                                         node.params.broadcast_info.output_shape.size());
                             break;
+                        case OpType::ELEM_WISE_MAX:
+                            cactus_elemwise_max_broadcast_f16(lhs.data_as<__fp16>(), rhs.data_as<__fp16>(),
+                                                              node.output_buffer.data_as<__fp16>(),
+                                                              lhs_strides.data(), rhs_strides.data(),
+                                                              node.params.broadcast_info.output_shape.data(),
+                                                              node.params.broadcast_info.output_shape.size());
+                            break;
+                        case OpType::ELEM_WISE_MIN:
+                            cactus_elemwise_min_broadcast_f16(lhs.data_as<__fp16>(), rhs.data_as<__fp16>(),
+                                                              node.output_buffer.data_as<__fp16>(),
+                                                              lhs_strides.data(), rhs_strides.data(),
+                                                              node.params.broadcast_info.output_shape.data(),
+                                                              node.params.broadcast_info.output_shape.size());
+                            break;
                         default: break;
                     }
                 } else {
@@ -258,6 +298,20 @@ void compute_node_optimized(GraphNode& node, const std::vector<std::unique_ptr<G
                                                         lhs_strides.data(), rhs_strides.data(),
                                                         node.params.broadcast_info.output_shape.data(),
                                                         node.params.broadcast_info.output_shape.size());
+                            break;
+                        case OpType::ELEM_WISE_MAX:
+                            cactus_elemwise_max_broadcast_f32(lhs.data_as<float>(), rhs.data_as<float>(),
+                                                              node.output_buffer.data_as<float>(),
+                                                              lhs_strides.data(), rhs_strides.data(),
+                                                              node.params.broadcast_info.output_shape.data(),
+                                                              node.params.broadcast_info.output_shape.size());
+                            break;
+                        case OpType::ELEM_WISE_MIN:
+                            cactus_elemwise_min_broadcast_f32(lhs.data_as<float>(), rhs.data_as<float>(),
+                                                              node.output_buffer.data_as<float>(),
+                                                              lhs_strides.data(), rhs_strides.data(),
+                                                              node.params.broadcast_info.output_shape.data(),
+                                                              node.params.broadcast_info.output_shape.size());
                             break;
                         default: break;
                     }
@@ -344,8 +398,31 @@ void compute_node_optimized(GraphNode& node, const std::vector<std::unique_ptr<G
             }
             break;
         }
+        case OpType::SIGMOID: {
+            const auto& input = nodes[node_index_map.at(node.input_ids[0])]->output_buffer;
+
+            if (input.precision == Precision::INT8) {
+                cactus_sigmoid_int8(input.data_as<int8_t>(),
+                                   node.output_buffer.data_as<int8_t>(),
+                                   node.output_buffer.total_size,
+                                   input.quantization_scale,
+                                   node.output_buffer.quantization_scale);
+            } else if (input.precision == Precision::FP16) {
+                cactus_sigmoid_f16(input.data_as<__fp16>(),
+                                   node.output_buffer.data_as<__fp16>(),
+                                   node.output_buffer.total_size);
+            } else {
+                cactus_sigmoid_f32(input.data_as<float>(),
+                                   node.output_buffer.data_as<float>(),
+                                   node.output_buffer.total_size);
+            }
+            break;
+        }
         case OpType::MATMUL:
             compute_matmul_node(node, nodes, node_index_map);
+            break;
+        case OpType::MATMUL_ND:
+            compute_matmul_nd_node(node, nodes, node_index_map);
             break;
         case OpType::TRANSPOSE:
             compute_transpose_node(node, nodes, node_index_map);
@@ -367,6 +444,12 @@ void compute_node_optimized(GraphNode& node, const std::vector<std::unique_ptr<G
         case OpType::SLICE:
         case OpType::EMBEDDING:
         case OpType::BILINEAR_INTERPOLATION:
+        case OpType::RESIZE:
+        case OpType::MAXPOOL:
+        case OpType::GLOBAL_AVG_POOL:
+        case OpType::CONV2D:
+        case OpType::CONV_TRANSPOSE2D:
+        case OpType::IM2COL:
             compute_fused_node(node, nodes, node_index_map);
             break;
         case OpType::SAMPLE:
@@ -383,6 +466,9 @@ void compute_node_optimized(GraphNode& node, const std::vector<std::unique_ptr<G
             break;
         case OpType::LAYERNORM:
             compute_layernorm_node(node, nodes, node_index_map);
+            break;
+        case OpType::BATCHNORM:
+            compute_batchnorm_node(node, nodes, node_index_map);
             break;
         case OpType::PRECISION_CAST:
             compute_precision_cast_node(node, nodes, node_index_map);
