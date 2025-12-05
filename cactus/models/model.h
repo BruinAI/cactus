@@ -537,7 +537,8 @@ public:
     };
 
     OnnxModel();
-    explicit OnnxModel(const std::string& ir_path, const std::string& default_input_path = "");
+    explicit OnnxModel(const std::string& ir_path, const std::string& default_input_path = "", 
+                       Precision input_precision = Precision::FP16);
     ~OnnxModel();
 
     virtual std::vector<float> preprocess_input(const std::string& path_to_weights, const OnnxNodeConfig& node);
@@ -549,6 +550,7 @@ public:
     void set_default_input_path(const std::string& path);
     void set_output_path(const std::string& path);
     void set_profile_path(const std::string& path);
+    void set_input_precision(Precision precision);
     static OnnxGraphConfig load_graph_config_from_blob(const std::string& ir_path);
 
 private:
@@ -602,6 +604,7 @@ private:
     std::string default_input_path_;
     std::string output_path_;
     std::string profile_path_;
+    Precision input_precision_ = Precision::FP16;
     
     // Helper to write output buffer to file
     void write_output_to_file(const BufferDesc& buffer, const std::string& path);

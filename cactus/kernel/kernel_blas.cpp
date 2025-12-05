@@ -814,6 +814,97 @@ void cactus_transpose_f32(const float* source, float* destination, const size_t*
     }
 } 
 
+void cactus_transpose_f16(const __fp16* source, __fp16* destination, const size_t* shape, const size_t* permutation, size_t ndim, size_t start_idx, size_t end_idx) {
+    if (ndim == 2 && permutation[0] == 1 && permutation[1] == 0) {
+        size_t num_rows = shape[0];
+        size_t num_cols = shape[1];
+        
+        constexpr size_t THRESHOLD = 8192;
+        constexpr size_t TILE_ROWS = 32;
+        if (num_rows * num_cols >= THRESHOLD) {
+            const size_t num_row_blocks = (num_rows + TILE_ROWS - 1) / TILE_ROWS;
+            
+            CactusThreading::parallel_for(num_row_blocks, CactusThreading::Thresholds::SCALAR_EXPENSIVE,
+                [=](size_t start_block, size_t end_block) {
+                    for (size_t block_idx = start_block; block_idx < end_block; ++block_idx) {
+                        size_t start_row = block_idx * TILE_ROWS;
+                        size_t end_row = std::min(start_row + TILE_ROWS, num_rows);
+                        
+                        cactus_transpose_2d_f16(source, destination, num_rows, num_cols, start_row, end_row);
+                    }
+                });
+        } else {
+            cactus_transpose_2d_f16(source, destination, num_rows, num_cols, 0, num_rows);
+        }
+    } else {
+        // Precompute source strides (row-major order)
+        size_t src_strides[8];
+        src_strides[ndim - 1] = 1;
+        for (int i = static_cast<int>(ndim) - 2; i >= 0; --i) {
+            src_strides[i] = src_strides[i + 1] * shape[i + 1];
+        }
+        
+        // Precompute destination shape and strides
+        size_t dst_shape[8];
+        size_t dst_strides[8];
+        for (size_t i = 0; i < ndim; ++i) {
+            dst_shape[i] = shape[permutation[i]];
+        }
+        dst_strides[ndim - 1] = 1;
+        for (int i = static_cast<int>(ndim) - 2; i >= 0; --i) {
+            dst_strides[i] = dst_strides[i + 1] * dst_shape[i + 1];
+        }
+        
+        // Precompute permuted source strides (for mapping dst coords to src index)
+        size_t perm_src_strides[8];
+        for (size_t i = 0; i < ndim; ++i) {
+            perm_src_strides[i] = src_strides[permutation[i]];
+        }
+        
+        size_t total_elements = end_idx - start_idx;
+        
+        // Parallelize the transpose
+        CactusThreading::parallel_for(total_elements, CactusThreading::Thresholds::ELEMENT_WISE,
+            [=](size_t local_start, size_t local_end) {
+                // For each output index, compute the source index
+                for (size_t idx = start_idx + local_start; idx < start_idx + local_end; ++idx) {
+                    size_t src_idx = 0;
+                    size_t tmp_idx = idx;
+                    
+                    // Unroll for common dimensions
+                    if (ndim == 4) {
+                        size_t c0 = tmp_idx / dst_strides[0];
+                        tmp_idx -= c0 * dst_strides[0];
+                        size_t c1 = tmp_idx / dst_strides[1];
+                        tmp_idx -= c1 * dst_strides[1];
+                        size_t c2 = tmp_idx / dst_strides[2];
+                        size_t c3 = tmp_idx - c2 * dst_strides[2];
+                        
+                        src_idx = c0 * perm_src_strides[0] + c1 * perm_src_strides[1] +
+                                  c2 * perm_src_strides[2] + c3 * perm_src_strides[3];
+                    } else if (ndim == 3) {
+                        size_t c0 = tmp_idx / dst_strides[0];
+                        tmp_idx -= c0 * dst_strides[0];
+                        size_t c1 = tmp_idx / dst_strides[1];
+                        size_t c2 = tmp_idx - c1 * dst_strides[1];
+                        
+                        src_idx = c0 * perm_src_strides[0] + c1 * perm_src_strides[1] +
+                                  c2 * perm_src_strides[2];
+                    } else {
+                        // General case
+                        for (size_t i = 0; i < ndim; ++i) {
+                            size_t coord = tmp_idx / dst_strides[i];
+                            tmp_idx -= coord * dst_strides[i];
+                            src_idx += coord * perm_src_strides[i];
+                        }
+                    }
+                    
+                    destination[idx] = source[src_idx];
+                }
+            });
+    }
+}
+
 void cactus_concat_f32(const float* input1, const float* input2, float* output,
                        const size_t* shape1, const size_t* shape2, const size_t* output_shape,
                        size_t ndims, int axis) {
@@ -999,6 +1090,106 @@ void cactus_transpose_2d_int8(const int8_t* source, int8_t* destination, size_t 
     }
 }
 
+void cactus_transpose_2d_f16(const __fp16* source, __fp16* destination, size_t num_rows, size_t num_cols, size_t start_row, size_t end_row) {
+    constexpr size_t TILE_SIZE = 32;
+    constexpr size_t VECTOR_WIDTH = 8;  // FP16 NEON width
+
+    if (start_row >= end_row) {
+        return;
+    }
+
+    const size_t total_rows = end_row - start_row;
+    const size_t num_row_tiles = (total_rows + TILE_SIZE - 1) / TILE_SIZE;
+
+    auto process_tiles = [&](size_t tile_begin, size_t tile_end) {
+        for (size_t tile_idx = tile_begin; tile_idx < tile_end; ++tile_idx) {
+            const size_t row_tile_start = start_row + tile_idx * TILE_SIZE;
+            const size_t row_tile_end = std::min(row_tile_start + TILE_SIZE, end_row);
+
+            for (size_t col_tile_start = 0; col_tile_start < num_cols; col_tile_start += TILE_SIZE) {
+                const size_t col_tile_end = std::min(col_tile_start + TILE_SIZE, num_cols);
+
+                for (size_t row_block = row_tile_start; row_block < row_tile_end; row_block += VECTOR_WIDTH) {
+                    const size_t row_block_end = std::min(row_block + VECTOR_WIDTH, row_tile_end);
+
+                    for (size_t col_block = col_tile_start; col_block < col_tile_end; col_block += VECTOR_WIDTH) {
+                        const size_t col_block_end = std::min(col_block + VECTOR_WIDTH, col_tile_end);
+
+                        if ((row_block_end - row_block) >= VECTOR_WIDTH && (col_block_end - col_block) >= VECTOR_WIDTH) {
+                            // Load 8 rows of 8 FP16 values each
+                            float16x8_t rows[8];
+                            for (size_t i = 0; i < 8; ++i) {
+                                rows[i] = vld1q_f16(&source[(row_block + i) * num_cols + col_block]);
+                            }
+
+                            // Step 1: Transpose pairs of adjacent rows (16-bit level)
+                            float16x8x2_t p01 = vtrnq_f16(rows[0], rows[1]);
+                            float16x8x2_t p23 = vtrnq_f16(rows[2], rows[3]);
+                            float16x8x2_t p45 = vtrnq_f16(rows[4], rows[5]);
+                            float16x8x2_t p67 = vtrnq_f16(rows[6], rows[7]);
+
+                            // Step 2: Transpose at 32-bit level
+                            uint32x4x2_t q02 = vtrnq_u32(vreinterpretq_u32_f16(p01.val[0]), vreinterpretq_u32_f16(p23.val[0]));
+                            uint32x4x2_t q13 = vtrnq_u32(vreinterpretq_u32_f16(p01.val[1]), vreinterpretq_u32_f16(p23.val[1]));
+                            uint32x4x2_t q46 = vtrnq_u32(vreinterpretq_u32_f16(p45.val[0]), vreinterpretq_u32_f16(p67.val[0]));
+                            uint32x4x2_t q57 = vtrnq_u32(vreinterpretq_u32_f16(p45.val[1]), vreinterpretq_u32_f16(p67.val[1]));
+
+                            // Step 3: Combine halves at 64-bit level to get final transposed columns
+                            // Each output column contains elements from 8 input rows
+                            float16x8_t col0 = vreinterpretq_f16_u64(vcombine_u64(
+                                vget_low_u64(vreinterpretq_u64_u32(q02.val[0])),
+                                vget_low_u64(vreinterpretq_u64_u32(q46.val[0]))));
+                            float16x8_t col1 = vreinterpretq_f16_u64(vcombine_u64(
+                                vget_low_u64(vreinterpretq_u64_u32(q13.val[0])),
+                                vget_low_u64(vreinterpretq_u64_u32(q57.val[0]))));
+                            float16x8_t col2 = vreinterpretq_f16_u64(vcombine_u64(
+                                vget_low_u64(vreinterpretq_u64_u32(q02.val[1])),
+                                vget_low_u64(vreinterpretq_u64_u32(q46.val[1]))));
+                            float16x8_t col3 = vreinterpretq_f16_u64(vcombine_u64(
+                                vget_low_u64(vreinterpretq_u64_u32(q13.val[1])),
+                                vget_low_u64(vreinterpretq_u64_u32(q57.val[1]))));
+                            float16x8_t col4 = vreinterpretq_f16_u64(vcombine_u64(
+                                vget_high_u64(vreinterpretq_u64_u32(q02.val[0])),
+                                vget_high_u64(vreinterpretq_u64_u32(q46.val[0]))));
+                            float16x8_t col5 = vreinterpretq_f16_u64(vcombine_u64(
+                                vget_high_u64(vreinterpretq_u64_u32(q13.val[0])),
+                                vget_high_u64(vreinterpretq_u64_u32(q57.val[0]))));
+                            float16x8_t col6 = vreinterpretq_f16_u64(vcombine_u64(
+                                vget_high_u64(vreinterpretq_u64_u32(q02.val[1])),
+                                vget_high_u64(vreinterpretq_u64_u32(q46.val[1]))));
+                            float16x8_t col7 = vreinterpretq_f16_u64(vcombine_u64(
+                                vget_high_u64(vreinterpretq_u64_u32(q13.val[1])),
+                                vget_high_u64(vreinterpretq_u64_u32(q57.val[1]))));
+
+                            // Store transposed columns as rows in destination
+                            vst1q_f16(&destination[(col_block + 0) * num_rows + row_block], col0);
+                            vst1q_f16(&destination[(col_block + 1) * num_rows + row_block], col1);
+                            vst1q_f16(&destination[(col_block + 2) * num_rows + row_block], col2);
+                            vst1q_f16(&destination[(col_block + 3) * num_rows + row_block], col3);
+                            vst1q_f16(&destination[(col_block + 4) * num_rows + row_block], col4);
+                            vst1q_f16(&destination[(col_block + 5) * num_rows + row_block], col5);
+                            vst1q_f16(&destination[(col_block + 6) * num_rows + row_block], col6);
+                            vst1q_f16(&destination[(col_block + 7) * num_rows + row_block], col7);
+                        } else {
+                            // Scalar fallback for edge cases
+                            for (size_t row = row_block; row < row_block_end; ++row) {
+                                for (size_t col = col_block; col < col_block_end; ++col) {
+                                    destination[col * num_rows + row] = source[row * num_cols + col];
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    };
+
+    CactusThreading::parallel_for(num_row_tiles, CactusThreading::Thresholds::SCALAR_EXPENSIVE,
+        [&](size_t tile_begin, size_t tile_end) {
+            process_tiles(tile_begin, tile_end);
+        });
+}
+
 void cactus_transpose_2d_f32(const float* source, float* destination, size_t num_rows, size_t num_cols, size_t start_row, size_t end_row) {
     constexpr size_t TILE_SIZE = 32;
     constexpr size_t VECTOR_WIDTH = 4;
@@ -1089,7 +1280,6 @@ void cactus_transpose_2d_f32(const float* source, float* destination, size_t num
         }
     }
 }
-
 
 void cactus_transpose_int8(const int8_t* source, int8_t* destination, const size_t* shape, const size_t* permutation, size_t ndim, size_t start_idx, size_t end_idx) {
     if (ndim == 2 && permutation[0] == 1 && permutation[1] == 0) {

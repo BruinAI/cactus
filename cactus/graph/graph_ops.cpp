@@ -20,6 +20,7 @@ namespace {
     thread_local std::vector<__fp16> transpose_buffer_fp16;
     thread_local std::vector<float> transpose_buffer_fp32;
     thread_local std::vector<int8_t> quantization_buffer_int8;
+    thread_local std::vector<int32_t> int32_accumulator_buffer;
     
     void ensure_transpose_buffer_int8(size_t required_size) {
         if (transpose_buffer_int8.size() < required_size) {
@@ -42,6 +43,12 @@ namespace {
     void ensure_quantization_buffer_int8(size_t required_size) {
         if (quantization_buffer_int8.size() < required_size) {
             quantization_buffer_int8.resize(required_size);
+        }
+    }
+    
+    void ensure_int32_accumulator_buffer(size_t required_size) {
+        if (int32_accumulator_buffer.size() < required_size) {
+            int32_accumulator_buffer.resize(required_size);
         }
     }
 
@@ -628,13 +635,34 @@ void compute_fused_node(GraphNode& node, const std::vector<std::unique_ptr<Graph
             bool has_bias = node.input_ids.size() > 2;
 
             if (input_buffer.precision == Precision::FP16) {
+                // Handle mixed precision: convert INT8 weights/bias to FP16 if needed
+                const __fp16* weight_ptr = nullptr;
+                std::vector<__fp16> weight_fp16;
+                if (weight_buffer.precision == Precision::INT8) {
+                    weight_fp16.resize(weight_buffer.total_size);
+                    Quantization::int8_to_fp16(weight_buffer.data_as<int8_t>(), weight_fp16.data(), 
+                                               weight_buffer.total_size, weight_buffer.quantization_scale);
+                    weight_ptr = weight_fp16.data();
+                } else {
+                    weight_ptr = weight_buffer.data_as<__fp16>();
+                }
+                
                 const __fp16* bias_ptr = nullptr;
+                std::vector<__fp16> bias_fp16;
                 if (has_bias) {
-                    bias_ptr = nodes[node_index_map.at(node.input_ids[2])]->output_buffer.data_as<__fp16>();
+                    const auto& bias_buffer = nodes[node_index_map.at(node.input_ids[2])]->output_buffer;
+                    if (bias_buffer.precision == Precision::INT8) {
+                        bias_fp16.resize(bias_buffer.total_size);
+                        Quantization::int8_to_fp16(bias_buffer.data_as<int8_t>(), bias_fp16.data(),
+                                                   bias_buffer.total_size, bias_buffer.quantization_scale);
+                        bias_ptr = bias_fp16.data();
+                    } else {
+                        bias_ptr = bias_buffer.data_as<__fp16>();
+                    }
                 }
                 cactus_conv2d_f16(
                     input_buffer.data_as<__fp16>(),
-                    weight_buffer.data_as<__fp16>(),
+                    weight_ptr,
                     bias_ptr,
                     node.output_buffer.data_as<__fp16>(),
                     N, C_in, H, W,
@@ -1096,7 +1124,9 @@ void compute_transpose_node(GraphNode& node, const std::vector<std::unique_ptr<G
                                  0, input_buffer.total_size);
             break;
         case Precision::FP16: {
-            throw std::runtime_error("FP16 transpose not yet implemented");
+            cactus_transpose_f16(input_buffer.data_as<__fp16>(), node.output_buffer.data_as<__fp16>(), 
+                                input_buffer.shape.data(), permutation.data(), permutation.size(),
+                                0, input_buffer.total_size);
             break;
         }
         case Precision::FP32: {
@@ -1149,11 +1179,11 @@ static void compute_matmul_2d(
         
         float rhs_scale = params.rhs_scale;
         
-        std::vector<int32_t> int32_output(output_size);
+        ensure_int32_accumulator_buffer(output_size);
         
         if (pretransposed_rhs) {
             cactus_matmul_int8_to_int32(quantization_buffer_int8.data(), rhs, 
-                                        int32_output.data(), M, K, N);
+                                        int32_accumulator_buffer.data(), M, K, N);
         } else {
             size_t transpose_size = K * N;
             ensure_transpose_buffer_int8(transpose_size);
@@ -1162,11 +1192,12 @@ static void compute_matmul_2d(
             size_t rhs_perm[] = {1, 0};
             cactus_transpose_int8(rhs, transpose_buffer_int8.data(), rhs_dims, rhs_perm, 2, 0, K);
             cactus_matmul_int8_to_int32(quantization_buffer_int8.data(), transpose_buffer_int8.data(), 
-                                        int32_output.data(), M, K, N);
+                                        int32_accumulator_buffer.data(), M, K, N);
         }
         
         float combined_scale = lhs_scale * rhs_scale;
-        cactus_int32_to_fp16_scaled(int32_output.data(), output, output_size, combined_scale);
+        
+        cactus_int32_to_fp16_scaled(int32_accumulator_buffer.data(), output, output_size, combined_scale);
         
     } else {
         switch (params.lhs_precision) {
@@ -1195,23 +1226,66 @@ static void compute_matmul_2d(
                 const __fp16* rhs = static_cast<const __fp16*>(rhs_data);
                 __fp16* output = static_cast<__fp16*>(output_data);
                 
+                // DEBUG: Print first few values of inputs
+                // std::cout << "[MATMUL_ND FP16 DEBUG] M=" << params.M << " K=" << params.K << " N=" << params.N << std::endl;
+                // std::cout << "  LHS first 10: ";
+                // for (size_t i = 0; i < std::min((size_t)10, params.M * params.K); ++i) {
+                //     std::cout << static_cast<float>(lhs[i]) << " ";
+                // }
+                // std::cout << std::endl;
+                // std::cout << "  RHS first 10: ";
+                // for (size_t i = 0; i < std::min((size_t)10, params.K * params.N); ++i) {
+                //     std::cout << static_cast<float>(rhs[i]) << " ";
+                // }
+                // std::cout << std::endl;
+                
+                // std::cout << "  pretransposed_rhs=" << pretransposed_rhs << std::endl;
+                
                 if (pretransposed_rhs) {
                     cactus_matmul_f16(lhs, rhs, output, M, K, N);
                 } else {
                     size_t transpose_size = K * N;
                     ensure_transpose_buffer_fp16(transpose_size);
                     
-                    cactus_transpose_2d_f32(reinterpret_cast<const float*>(rhs), 
-                                            reinterpret_cast<float*>(transpose_buffer_fp16.data()), 
-                                            K, N, 0, K);
+                    cactus_transpose_2d_f16(rhs, transpose_buffer_fp16.data(), K, N, 0, K);
+                    
+                    // DEBUG: Print transposed RHS
+                    // std::cout << "  RHS transposed first 10: ";
+                    // for (size_t i = 0; i < std::min((size_t)10, transpose_size); ++i) {
+                    //     std::cout << static_cast<float>(transpose_buffer_fp16[i]) << " ";
+                    // }
+                    // std::cout << std::endl;
+                    
                     cactus_matmul_f16(lhs, transpose_buffer_fp16.data(), output, M, K, N);
                 }
+                
+                // DEBUG: Print output
+                // std::cout << "  Output first 10: ";
+                // for (size_t i = 0; i < std::min((size_t)10, params.M * params.N); ++i) {
+                //     std::cout << static_cast<float>(output[i]) << " ";
+                // }
+                // std::cout << std::endl;
+                
                 break;
             }
             case Precision::FP32: {
                 const float* lhs = static_cast<const float*>(lhs_data);
                 const float* rhs = static_cast<const float*>(rhs_data);
                 float* output = static_cast<float*>(output_data);
+                
+                // DEBUG: Print first few values of inputs
+                // std::cout << "[MATMUL_ND FP32 DEBUG] M=" << params.M << " K=" << params.K << " N=" << params.N << std::endl;
+                // std::cout << "  LHS first 10: ";
+                // for (size_t i = 0; i < std::min((size_t)10, params.M * params.K); ++i) {
+                //     std::cout << lhs[i] << " ";
+                // }
+                // std::cout << std::endl;
+                // std::cout << "  RHS first 10: ";
+                // for (size_t i = 0; i < std::min((size_t)10, params.K * params.N); ++i) {
+                //     std::cout << rhs[i] << " ";
+                // }
+                // std::cout << std::endl;
+                // std::cout << "  pretransposed_rhs=" << pretransposed_rhs << std::endl;
                 
                 if (pretransposed_rhs) {
                     cactus_matmul_f32(lhs, rhs, output, M, K, N);
@@ -1224,6 +1298,14 @@ static void compute_matmul_2d(
                     cactus_transpose_f32(rhs, transpose_buffer_fp32.data(), rhs_dims, rhs_perm, 2, 0, K);
                     cactus_matmul_f32(lhs, transpose_buffer_fp32.data(), output, M, K, N);
                 }
+                
+                // DEBUG: Print output
+                // std::cout << "  Output first 10: ";
+                // for (size_t i = 0; i < std::min((size_t)10, params.M * params.N); ++i) {
+                //     std::cout << output[i] << " ";
+                // }
+                // std::cout << std::endl;
+                
                 break;
             }
         }
@@ -1318,11 +1400,14 @@ void compute_matmul_nd_node(GraphNode& node, const std::vector<std::unique_ptr<G
     // For INT8 output, compute scale if not set
     if (lhs_buffer.precision == Precision::INT8 && node.output_buffer.quantization_scale == 1.0f) {
         float estimated_scale = lhs_buffer.quantization_scale * rhs_buffer.quantization_scale;
-        estimated_scale = std::max(0.001f, std::min(estimated_scale, 10.0f));
+        estimated_scale = std::max(0.001f, std::min(estimated_scale, 100.0f));
         node.output_buffer.quantization_scale = estimated_scale;
     }
     
-    size_t element_size = PrecisionTraits::size_of(lhs_buffer.precision);
+    // Each tensor may have different element sizes in mixed precision mode
+    size_t lhs_element_size = PrecisionTraits::size_of(lhs_buffer.precision);
+    size_t rhs_element_size = PrecisionTraits::size_of(rhs_buffer.precision);
+    size_t out_element_size = PrecisionTraits::size_of(node.output_buffer.precision);
     
     // Parallel loop over batch dimension using CactusThreading
     CactusThreading::parallel_for(batch_size, 1, [&](size_t start, size_t end) {
@@ -1334,11 +1419,11 @@ void compute_matmul_nd_node(GraphNode& node, const std::vector<std::unique_ptr<G
             size_t rhs_batch_idx = (rhs_batch_size == 1) ? 0 : (b % rhs_batch_size);
             
             const char* lhs_ptr = static_cast<const char*>(lhs_buffer.get_data()) + 
-                                  lhs_batch_idx * lhs_matrix_size * element_size;
+                                  lhs_batch_idx * lhs_matrix_size * lhs_element_size;
             const char* rhs_ptr = static_cast<const char*>(rhs_buffer.get_data()) + 
-                                  rhs_batch_idx * rhs_matrix_size * element_size;
+                                  rhs_batch_idx * rhs_matrix_size * rhs_element_size;
             char* out_ptr = static_cast<char*>(node.output_buffer.get_data()) + 
-                            b * out_matrix_size * element_size;
+                            b * out_matrix_size * out_element_size;
             
             Matmul2DParams params{
                 .M = M,

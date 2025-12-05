@@ -133,8 +133,8 @@ size_t CactusGraph::matmul(size_t input1, size_t input2, bool pretransposed_rhs,
     const auto& rhs_buffer = get_output_buffer(input2);
     
     if (lhs_buffer.shape.size() != 2 || rhs_buffer.shape.size() != 2) {
-        std::cout << "lhs_buffer.shape: " << lhs_buffer.shape.size() << std::endl;
-        std::cout << "rhs_buffer.shape: " << rhs_buffer.shape.size() << std::endl;
+        // std::cout << "lhs_buffer.shape: " << lhs_buffer.shape.size() << std::endl;
+        // std::cout << "rhs_buffer.shape: " << rhs_buffer.shape.size() << std::endl;
         throw std::invalid_argument("Matrix multiplication requires 2D tensors");
     }
     
@@ -1042,6 +1042,19 @@ void* CactusGraph::get_output(size_t node_id) {
     return buffer.get_data();
 }
 
+// Helper to get the higher precision between two (FP32 > FP16 > INT8)
+static Precision get_higher_precision(Precision a, Precision b) {
+    // FP32 = 2, FP16 = 1, INT8 = 0
+    return (static_cast<int>(a) > static_cast<int>(b)) ? a : b;
+}
+
+// Check if op is a binary element-wise operation
+static bool is_binary_elementwise_op(OpType op) {
+    return op == OpType::ADD || op == OpType::ADD_CLIPPED || 
+           op == OpType::SUBTRACT || op == OpType::MULTIPLY || 
+           op == OpType::DIVIDE || op == OpType::ELEM_WISE_MAX || 
+           op == OpType::ELEM_WISE_MIN;
+}
 
 size_t CactusGraph::add_node(OpType op_type, const std::vector<size_t>& inputs, const std::vector<size_t>& output_shape, const OpParams& params) {
     auto node = std::make_unique<GraphNode>(next_node_id_, op_type);
@@ -1057,7 +1070,14 @@ size_t CactusGraph::add_node(OpType op_type, const std::vector<size_t>& inputs, 
     if (op_type == OpType::PRECISION_CAST) {
         result_precision = params.output_precision;
     } else if (result_precision == Precision::INT8 && !inputs.empty()) {
-        result_precision = nodes_[node_index_map_[inputs[0]]]->output_buffer.precision;
+        // For binary ops, use the higher precision of the two inputs
+        if (is_binary_elementwise_op(op_type) && inputs.size() >= 2) {
+            Precision lhs_prec = nodes_[node_index_map_[inputs[0]]]->output_buffer.precision;
+            Precision rhs_prec = nodes_[node_index_map_[inputs[1]]]->output_buffer.precision;
+            result_precision = get_higher_precision(lhs_prec, rhs_prec);
+        } else {
+            result_precision = nodes_[node_index_map_[inputs[0]]]->output_buffer.precision;
+        }
     }
     
     node->output_buffer = BufferDesc(result_shape, result_precision);
@@ -1075,6 +1095,8 @@ const BufferDesc& CactusGraph::get_output_buffer(size_t node_id) const {
 
 void CactusGraph::execute(const std::string& profile_file) {
     allocate_buffers();
+    
+    // std::cerr << "[DEBUG execute] debug_nodes_.size() = " << debug_nodes_.size() << std::endl;
 
     auto get_env_int = [](const char* name, int fallback) -> int {
         const char* val = std::getenv(name);

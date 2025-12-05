@@ -4,6 +4,7 @@
 #include <stdexcept>
 #include <cstring>
 #include <cmath>
+#include <iostream>
 
 namespace Quantization {
     void int8_to_fp32(const int8_t* src, float* dst, size_t count, float scale) {
@@ -221,6 +222,106 @@ void compute_node_optimized(GraphNode& node, const std::vector<std::unique_ptr<G
                             break;
                         default: break;
                     }
+                } else if (lhs.precision == Precision::FP16 && rhs.precision == Precision::INT8) {
+                    // Mixed precision broadcast: convert INT8 rhs to FP16
+                    std::vector<__fp16> rhs_fp16(rhs.total_size);
+                    Quantization::int8_to_fp16(rhs.data_as<int8_t>(), rhs_fp16.data(), rhs.total_size, rhs.quantization_scale);
+                    switch (node.op_type) {
+                        case OpType::ADD:
+                        case OpType::ADD_CLIPPED:
+                            cactus_add_broadcast_f16(lhs.data_as<__fp16>(), rhs_fp16.data(),
+                                                     node.output_buffer.data_as<__fp16>(),
+                                                     lhs_strides.data(), rhs_strides.data(),
+                                                     node.params.broadcast_info.output_shape.data(),
+                                                     node.params.broadcast_info.output_shape.size());
+                            break;
+                        case OpType::SUBTRACT:
+                            cactus_subtract_broadcast_f16(lhs.data_as<__fp16>(), rhs_fp16.data(), 
+                                                          node.output_buffer.data_as<__fp16>(),
+                                                          lhs_strides.data(), rhs_strides.data(),
+                                                          node.params.broadcast_info.output_shape.data(),
+                                                          node.params.broadcast_info.output_shape.size());
+                            break;
+                        case OpType::MULTIPLY:
+                            cactus_multiply_broadcast_f16(lhs.data_as<__fp16>(), rhs_fp16.data(), 
+                                                          node.output_buffer.data_as<__fp16>(),
+                                                          lhs_strides.data(), rhs_strides.data(),
+                                                          node.params.broadcast_info.output_shape.data(),
+                                                          node.params.broadcast_info.output_shape.size());
+                            break;
+                        case OpType::DIVIDE:
+                            cactus_divide_broadcast_f16(lhs.data_as<__fp16>(), rhs_fp16.data(), 
+                                                        node.output_buffer.data_as<__fp16>(),
+                                                        lhs_strides.data(), rhs_strides.data(),
+                                                        node.params.broadcast_info.output_shape.data(),
+                                                        node.params.broadcast_info.output_shape.size());
+                            break;
+                        case OpType::ELEM_WISE_MAX:
+                            cactus_elemwise_max_broadcast_f16(lhs.data_as<__fp16>(), rhs_fp16.data(),
+                                                              node.output_buffer.data_as<__fp16>(),
+                                                              lhs_strides.data(), rhs_strides.data(),
+                                                              node.params.broadcast_info.output_shape.data(),
+                                                              node.params.broadcast_info.output_shape.size());
+                            break;
+                        case OpType::ELEM_WISE_MIN:
+                            cactus_elemwise_min_broadcast_f16(lhs.data_as<__fp16>(), rhs_fp16.data(),
+                                                              node.output_buffer.data_as<__fp16>(),
+                                                              lhs_strides.data(), rhs_strides.data(),
+                                                              node.params.broadcast_info.output_shape.data(),
+                                                              node.params.broadcast_info.output_shape.size());
+                            break;
+                        default: break;
+                    }
+                } else if (lhs.precision == Precision::INT8 && rhs.precision == Precision::FP16) {
+                    // Mixed precision broadcast: convert INT8 lhs to FP16
+                    std::vector<__fp16> lhs_fp16(lhs.total_size);
+                    Quantization::int8_to_fp16(lhs.data_as<int8_t>(), lhs_fp16.data(), lhs.total_size, lhs.quantization_scale);
+                    switch (node.op_type) {
+                        case OpType::ADD:
+                        case OpType::ADD_CLIPPED:
+                            cactus_add_broadcast_f16(lhs_fp16.data(), rhs.data_as<__fp16>(),
+                                                     node.output_buffer.data_as<__fp16>(),
+                                                     lhs_strides.data(), rhs_strides.data(),
+                                                     node.params.broadcast_info.output_shape.data(),
+                                                     node.params.broadcast_info.output_shape.size());
+                            break;
+                        case OpType::SUBTRACT:
+                            cactus_subtract_broadcast_f16(lhs_fp16.data(), rhs.data_as<__fp16>(), 
+                                                          node.output_buffer.data_as<__fp16>(),
+                                                          lhs_strides.data(), rhs_strides.data(),
+                                                          node.params.broadcast_info.output_shape.data(),
+                                                          node.params.broadcast_info.output_shape.size());
+                            break;
+                        case OpType::MULTIPLY:
+                            cactus_multiply_broadcast_f16(lhs_fp16.data(), rhs.data_as<__fp16>(), 
+                                                          node.output_buffer.data_as<__fp16>(),
+                                                          lhs_strides.data(), rhs_strides.data(),
+                                                          node.params.broadcast_info.output_shape.data(),
+                                                          node.params.broadcast_info.output_shape.size());
+                            break;
+                        case OpType::DIVIDE:
+                            cactus_divide_broadcast_f16(lhs_fp16.data(), rhs.data_as<__fp16>(), 
+                                                        node.output_buffer.data_as<__fp16>(),
+                                                        lhs_strides.data(), rhs_strides.data(),
+                                                        node.params.broadcast_info.output_shape.data(),
+                                                        node.params.broadcast_info.output_shape.size());
+                            break;
+                        case OpType::ELEM_WISE_MAX:
+                            cactus_elemwise_max_broadcast_f16(lhs_fp16.data(), rhs.data_as<__fp16>(),
+                                                              node.output_buffer.data_as<__fp16>(),
+                                                              lhs_strides.data(), rhs_strides.data(),
+                                                              node.params.broadcast_info.output_shape.data(),
+                                                              node.params.broadcast_info.output_shape.size());
+                            break;
+                        case OpType::ELEM_WISE_MIN:
+                            cactus_elemwise_min_broadcast_f16(lhs_fp16.data(), rhs.data_as<__fp16>(),
+                                                              node.output_buffer.data_as<__fp16>(),
+                                                              lhs_strides.data(), rhs_strides.data(),
+                                                              node.params.broadcast_info.output_shape.data(),
+                                                              node.params.broadcast_info.output_shape.size());
+                            break;
+                        default: break;
+                    }
                 } else if (lhs.precision == Precision::FP16) {
                     switch (node.op_type) {
                         case OpType::ADD:
@@ -317,18 +418,47 @@ void compute_node_optimized(GraphNode& node, const std::vector<std::unique_ptr<G
                     }
                 }
             } else {
-                if (lhs.precision == Precision::INT8) {
-                    dispatch_binary_op<int8_t>(node.op_type, lhs.data_as<int8_t>(), 
-                                              rhs.data_as<int8_t>(), node.output_buffer.data_as<int8_t>(), 
-                                              node.output_buffer.total_size);
-                } else if (lhs.precision == Precision::FP16) {
+                // Non-broadcast binary operations
+                // Dispatch based on output precision, dequantizing inputs as needed
+                if (lhs.precision == Precision::FP16 && rhs.precision == Precision::FP16) {
+                    // Both FP16 - direct dispatch
                     dispatch_binary_op<__fp16>(node.op_type, lhs.data_as<__fp16>(), 
                                               rhs.data_as<__fp16>(), node.output_buffer.data_as<__fp16>(), 
                                               node.output_buffer.total_size);
-                } else {
+                } else if (lhs.precision == Precision::FP16 && rhs.precision == Precision::INT8) {
+                    // FP16 lhs, INT8 rhs - dequantize rhs
+                    std::vector<__fp16> rhs_fp16(rhs.total_size);
+                    Quantization::int8_to_fp16(rhs.data_as<int8_t>(), rhs_fp16.data(), 
+                                               rhs.total_size, rhs.quantization_scale);
+                    dispatch_binary_op<__fp16>(node.op_type, lhs.data_as<__fp16>(), 
+                                              rhs_fp16.data(), node.output_buffer.data_as<__fp16>(), 
+                                              node.output_buffer.total_size);
+                } else if (lhs.precision == Precision::INT8 && rhs.precision == Precision::FP16) {
+                    // INT8 lhs, FP16 rhs - dequantize lhs
+                    std::vector<__fp16> lhs_fp16(lhs.total_size);
+                    Quantization::int8_to_fp16(lhs.data_as<int8_t>(), lhs_fp16.data(), 
+                                               lhs.total_size, lhs.quantization_scale);
+                    dispatch_binary_op<__fp16>(node.op_type, lhs_fp16.data(), 
+                                              rhs.data_as<__fp16>(), node.output_buffer.data_as<__fp16>(), 
+                                              node.output_buffer.total_size);
+                } else if (lhs.precision == Precision::INT8 && rhs.precision == Precision::INT8) {
+                    // Both INT8 - dequantize both to FP16
+                    std::vector<__fp16> lhs_fp16(lhs.total_size);
+                    std::vector<__fp16> rhs_fp16(rhs.total_size);
+                    Quantization::int8_to_fp16(lhs.data_as<int8_t>(), lhs_fp16.data(), 
+                                               lhs.total_size, lhs.quantization_scale);
+                    Quantization::int8_to_fp16(rhs.data_as<int8_t>(), rhs_fp16.data(), 
+                                               rhs.total_size, rhs.quantization_scale);
+                    dispatch_binary_op<__fp16>(node.op_type, lhs_fp16.data(), 
+                                              rhs_fp16.data(), node.output_buffer.data_as<__fp16>(), 
+                                              node.output_buffer.total_size);
+                } else if (lhs.precision == Precision::FP32) {
+                    // FP32 path
                     dispatch_binary_op<float>(node.op_type, lhs.data_as<float>(), 
                                              rhs.data_as<float>(), node.output_buffer.data_as<float>(), 
                                              node.output_buffer.total_size);
+                } else {
+                    throw std::runtime_error("Unsupported precision combination in binary op");
                 }
             }
             break;
@@ -591,6 +721,16 @@ const void* BufferDesc::get_data() const {
 
 void BufferDesc::allocate() {
     if (!data && !external_data) {
+        // Sanity check: verify byte_size matches total_size * element_size
+        size_t expected_byte_size = total_size * PrecisionTraits::size_of(precision);
+        if (byte_size != expected_byte_size) {
+            std::cerr << "[ERROR] BufferDesc::allocate() byte_size mismatch! "
+                      << "byte_size=" << byte_size 
+                      << " expected=" << expected_byte_size 
+                      << " total_size=" << total_size 
+                      << " precision=" << static_cast<int>(precision) << std::endl;
+            throw std::runtime_error("BufferDesc byte_size mismatch");
+        }
         data = std::make_unique<char[]>(byte_size);
     }
 }

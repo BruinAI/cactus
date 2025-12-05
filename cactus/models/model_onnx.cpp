@@ -114,12 +114,14 @@ static std::string make_debug_node_name(const OnnxModel::OnnxNodeConfig& node) {
 OnnxModel::OnnxModel()
     : cactus_graph_(new CactusGraph()),
       input_node_id_(0),
-      output_node_id_(0) {
+      output_node_id_(0),
+      input_precision_(Precision::FP16) {
 }
 
-OnnxModel::OnnxModel(const std::string& ir_path, const std::string& default_input_path)
+OnnxModel::OnnxModel(const std::string& ir_path, const std::string& default_input_path, Precision input_precision)
     : OnnxModel() {
     default_input_path_ = default_input_path;
+    input_precision_ = input_precision;
     graph_config_ = load_graph_config_from_blob(ir_path);
     build_graph(graph_config_);
 }
@@ -127,6 +129,10 @@ OnnxModel::OnnxModel(const std::string& ir_path, const std::string& default_inpu
 OnnxModel::~OnnxModel() {
     delete cactus_graph_;
     cactus_graph_ = nullptr;
+}
+
+void OnnxModel::set_input_precision(Precision precision) {
+    input_precision_ = precision;
 }
 
 size_t OnnxModel::build_graph(const OnnxGraphConfig& graph_config) {
@@ -241,7 +247,9 @@ size_t OnnxModel::build_graph(const OnnxGraphConfig& graph_config) {
     return output_node_id_;
 }
 std::vector<float> OnnxModel::forward(const OnnxGraphConfig& graph_config){
+    std::cerr << "[DEBUG forward] Before execute: " << cactus_graph_->get_debug_nodes().size() << " debug nodes" << std::endl;
     cactus_graph_->execute(profile_path_);
+    std::cerr << "[DEBUG forward] After execute: " << cactus_graph_->get_debug_nodes().size() << " debug nodes" << std::endl;
     
     auto it = onnx_to_cactus_id_.find(graph_config.output_node_id);
     if (it == onnx_to_cactus_id_.end()) {
@@ -255,7 +263,25 @@ std::vector<float> OnnxModel::forward(const OnnxGraphConfig& graph_config){
     //     write_output_to_file(output_buffer, output_path_);
     // }
     
-    auto return_data = std::vector<float>(output_buffer.data_as<float>(), output_buffer.data_as<float>() + output_buffer.total_size);
+    // Convert output to FP32 vector regardless of internal precision
+    std::vector<float> return_data(output_buffer.total_size);
+    if (output_buffer.precision == Precision::FP32) {
+        std::copy(output_buffer.data_as<float>(), 
+                  output_buffer.data_as<float>() + output_buffer.total_size, 
+                  return_data.begin());
+    } else if (output_buffer.precision == Precision::FP16) {
+        const __fp16* fp16_data = output_buffer.data_as<__fp16>();
+        for (size_t i = 0; i < output_buffer.total_size; ++i) {
+            return_data[i] = static_cast<float>(fp16_data[i]);
+        }
+    } else if (output_buffer.precision == Precision::INT8) {
+        const int8_t* int8_data = output_buffer.data_as<int8_t>();
+        float scale = output_buffer.quantization_scale;
+        for (size_t i = 0; i < output_buffer.total_size; ++i) {
+            return_data[i] = static_cast<float>(int8_data[i]) * scale;
+        }
+    }
+    std::cout << "Output buffer has " << output_buffer.total_size << " elements." << std::endl;
     return return_data;
 }
 
@@ -268,6 +294,9 @@ std::vector<float> OnnxModel::run() {
     cactus_graph_->soft_reset();
     onnx_to_cactus_id_.clear();
     build_graph(graph_config_);
+    
+    // Debug: print number of registered debug nodes
+    // std::cerr << "[DEBUG] Registered " << cactus_graph_->get_debug_nodes().size() << " debug nodes" << std::endl;
     
     return forward(graph_config_);
 }
@@ -695,7 +724,9 @@ size_t OnnxModel::build_conv2d_gemm(CactusGraph* gb, size_t input, size_t weight
     size_t col_id = gb->im2col(input, kernel_h, kernel_w, stride, stride, pad, pad);
     
     // Step 2: Reshape weights from [C_out, C_in, kH, kW] to [C_out, C_in * kH * kW]
+
     size_t weight_reshaped = gb->reshape(weight, {C_out, patch_size});
+    gb->set_quantization_scale(weight_reshaped, weight_buffer.quantization_scale);
     
     // Step 3: Matrix multiply: [N, H_out * W_out, patch_size] @ [patch_size, C_out] = [N, H_out * W_out, C_out]
     // We need col @ weight.T, which is matmul_nd with pretransposed_rhs=true
@@ -1607,7 +1638,8 @@ size_t OnnxModel::build_input(CactusGraph* gb, const OnnxNodeConfig& node) {
     if (path_to_weights.empty()) {
         path_to_weights = default_input_path_;
     }
-    Precision input_precision = node.attributes.input_precision;
+    // Use member variable input_precision_ instead of node attribute
+    Precision input_precision = input_precision_;
     if (path_to_weights.empty()) {
         throw std::runtime_error("Input node requires 'path_to_weights' attribute or default input path");
     }
@@ -1615,7 +1647,16 @@ size_t OnnxModel::build_input(CactusGraph* gb, const OnnxNodeConfig& node) {
 
     std::vector<size_t> input_shape = node.attributes.input_shape;
     size_t output_id = gb->input(input_shape, input_precision);
-    gb->set_input(output_id, input_data.data(), input_precision);
+    
+    // preprocess_input returns FP32 data, but we need to convert if input_precision is FP16
+    if (input_precision == Precision::FP16) {
+        std::vector<__fp16> fp16_data(input_data.size());
+        Quantization::fp32_to_fp16(input_data.data(), fp16_data.data(), input_data.size());
+        gb->set_input(output_id, fp16_data.data(), input_precision);
+    } else {
+        gb->set_input(output_id, input_data.data(), input_precision);
+    }
+    
     if (!node.outputs.empty()) {
         onnx_to_cactus_id_[node.outputs[0]] = output_id;
     }
@@ -1865,9 +1906,7 @@ bool apply_attr_int64(AttrConfig& attrs, const std::string& key, int64_t value) 
         return true;
     }
     if (key == "input_precision") {
-        if (value >= 0 && value <= static_cast<int64_t>(Precision::FP32)) {
-            attrs.input_precision = static_cast<Precision>(value);
-        }
+        attrs.input_precision = Precision::FP16;
         return true;
     }
     return false;

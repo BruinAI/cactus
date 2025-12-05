@@ -20,7 +20,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.0.conv.weight.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.0.conv.weight.weights"
       },
       "id": 1,
       "inputs": [],
@@ -31,7 +31,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.0.conv.bias.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.0.conv.bias.weights"
       },
       "id": 2,
       "inputs": [],
@@ -42,7 +42,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.1.conv.weight.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.1.conv.weight.weights"
       },
       "id": 3,
       "inputs": [],
@@ -53,7 +53,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.1.conv.bias.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.1.conv.bias.weights"
       },
       "id": 4,
       "inputs": [],
@@ -64,7 +64,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.2.cv1.conv.weight.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.2.cv1.conv.weight.weights"
       },
       "id": 5,
       "inputs": [],
@@ -75,7 +75,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.2.cv1.conv.bias.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.2.cv1.conv.bias.weights"
       },
       "id": 6,
       "inputs": [],
@@ -86,7 +86,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/onnx__Split_185.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/onnx__Split_185.weights"
       },
       "id": 7,
       "inputs": [],
@@ -97,7 +97,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.2.m.0.cv1.conv.weight.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.2.m.0.cv1.conv.weight.weights"
       },
       "id": 8,
       "inputs": [],
@@ -108,7 +108,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.2.m.0.cv1.conv.bias.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.2.m.0.cv1.conv.bias.weights"
       },
       "id": 9,
       "inputs": [],
@@ -119,7 +119,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.2.m.0.cv2.conv.weight.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.2.m.0.cv2.conv.weight.weights"
       },
       "id": 10,
       "inputs": [],
@@ -130,7 +130,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.2.m.0.cv2.conv.bias.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.2.m.0.cv2.conv.bias.weights"
       },
       "id": 11,
       "inputs": [],
@@ -141,7 +141,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.2.cv2.conv.weight.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.2.cv2.conv.weight.weights"
       },
       "id": 12,
       "inputs": [],
@@ -152,7 +152,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.2.cv2.conv.bias.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.2.cv2.conv.bias.weights"
       },
       "id": 13,
       "inputs": [],
@@ -163,7 +163,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.3.conv.weight.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.3.conv.weight.weights"
       },
       "id": 14,
       "inputs": [],
@@ -174,7 +174,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.3.conv.bias.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.3.conv.bias.weights"
       },
       "id": 15,
       "inputs": [],
@@ -185,7 +185,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.4.cv1.conv.weight.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.4.cv1.conv.weight.weights"
       },
       "id": 16,
       "inputs": [],
@@ -196,7 +196,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.4.cv1.conv.bias.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.4.cv1.conv.bias.weights"
       },
       "id": 17,
       "inputs": [],
@@ -207,7 +207,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/onnx__Split_205.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/onnx__Split_205.weights"
       },
       "id": 18,
       "inputs": [],
@@ -218,7 +218,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.4.m.0.cv1.conv.weight.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.4.m.0.cv1.conv.weight.weights"
       },
       "id": 19,
       "inputs": [],
@@ -229,7 +229,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.4.m.0.cv1.conv.bias.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.4.m.0.cv1.conv.bias.weights"
       },
       "id": 20,
       "inputs": [],
@@ -240,7 +240,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.4.m.0.cv2.conv.weight.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.4.m.0.cv2.conv.weight.weights"
       },
       "id": 21,
       "inputs": [],
@@ -251,7 +251,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.4.m.0.cv2.conv.bias.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.4.m.0.cv2.conv.bias.weights"
       },
       "id": 22,
       "inputs": [],
@@ -262,7 +262,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.4.cv2.conv.weight.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.4.cv2.conv.weight.weights"
       },
       "id": 23,
       "inputs": [],
@@ -273,7 +273,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.4.cv2.conv.bias.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.4.cv2.conv.bias.weights"
       },
       "id": 24,
       "inputs": [],
@@ -284,7 +284,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.5.conv.weight.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.5.conv.weight.weights"
       },
       "id": 25,
       "inputs": [],
@@ -295,7 +295,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.5.conv.bias.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.5.conv.bias.weights"
       },
       "id": 26,
       "inputs": [],
@@ -306,7 +306,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.6.cv1.conv.weight.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.6.cv1.conv.weight.weights"
       },
       "id": 27,
       "inputs": [],
@@ -317,7 +317,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.6.cv1.conv.bias.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.6.cv1.conv.bias.weights"
       },
       "id": 28,
       "inputs": [],
@@ -328,7 +328,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/onnx__Split_225.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/onnx__Split_225.weights"
       },
       "id": 29,
       "inputs": [],
@@ -339,7 +339,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.6.m.0.cv1.conv.weight.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.6.m.0.cv1.conv.weight.weights"
       },
       "id": 30,
       "inputs": [],
@@ -350,7 +350,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.6.m.0.cv1.conv.bias.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.6.m.0.cv1.conv.bias.weights"
       },
       "id": 31,
       "inputs": [],
@@ -361,7 +361,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.6.m.0.cv2.conv.weight.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.6.m.0.cv2.conv.weight.weights"
       },
       "id": 32,
       "inputs": [],
@@ -372,7 +372,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.6.m.0.cv2.conv.bias.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.6.m.0.cv2.conv.bias.weights"
       },
       "id": 33,
       "inputs": [],
@@ -383,7 +383,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.6.m.0.m.0.cv1.conv.weight.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.6.m.0.m.0.cv1.conv.weight.weights"
       },
       "id": 34,
       "inputs": [],
@@ -394,7 +394,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.6.m.0.m.0.cv1.conv.bias.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.6.m.0.m.0.cv1.conv.bias.weights"
       },
       "id": 35,
       "inputs": [],
@@ -405,7 +405,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.6.m.0.m.0.cv2.conv.weight.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.6.m.0.m.0.cv2.conv.weight.weights"
       },
       "id": 36,
       "inputs": [],
@@ -416,7 +416,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.6.m.0.m.0.cv2.conv.bias.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.6.m.0.m.0.cv2.conv.bias.weights"
       },
       "id": 37,
       "inputs": [],
@@ -427,7 +427,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.6.m.0.m.1.cv1.conv.weight.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.6.m.0.m.1.cv1.conv.weight.weights"
       },
       "id": 38,
       "inputs": [],
@@ -438,7 +438,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.6.m.0.m.1.cv1.conv.bias.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.6.m.0.m.1.cv1.conv.bias.weights"
       },
       "id": 39,
       "inputs": [],
@@ -449,7 +449,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.6.m.0.m.1.cv2.conv.weight.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.6.m.0.m.1.cv2.conv.weight.weights"
       },
       "id": 40,
       "inputs": [],
@@ -460,7 +460,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.6.m.0.m.1.cv2.conv.bias.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.6.m.0.m.1.cv2.conv.bias.weights"
       },
       "id": 41,
       "inputs": [],
@@ -471,7 +471,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.6.m.0.cv3.conv.weight.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.6.m.0.cv3.conv.weight.weights"
       },
       "id": 42,
       "inputs": [],
@@ -482,7 +482,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.6.m.0.cv3.conv.bias.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.6.m.0.cv3.conv.bias.weights"
       },
       "id": 43,
       "inputs": [],
@@ -493,7 +493,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.6.cv2.conv.weight.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.6.cv2.conv.weight.weights"
       },
       "id": 44,
       "inputs": [],
@@ -504,7 +504,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.6.cv2.conv.bias.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.6.cv2.conv.bias.weights"
       },
       "id": 45,
       "inputs": [],
@@ -515,7 +515,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.7.conv.weight.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.7.conv.weight.weights"
       },
       "id": 46,
       "inputs": [],
@@ -526,7 +526,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.7.conv.bias.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.7.conv.bias.weights"
       },
       "id": 47,
       "inputs": [],
@@ -537,7 +537,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.8.cv1.conv.weight.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.8.cv1.conv.weight.weights"
       },
       "id": 48,
       "inputs": [],
@@ -548,7 +548,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.8.cv1.conv.bias.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.8.cv1.conv.bias.weights"
       },
       "id": 49,
       "inputs": [],
@@ -559,7 +559,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/onnx__Split_262.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/onnx__Split_262.weights"
       },
       "id": 50,
       "inputs": [],
@@ -570,7 +570,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.8.m.0.cv1.conv.weight.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.8.m.0.cv1.conv.weight.weights"
       },
       "id": 51,
       "inputs": [],
@@ -581,7 +581,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.8.m.0.cv1.conv.bias.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.8.m.0.cv1.conv.bias.weights"
       },
       "id": 52,
       "inputs": [],
@@ -592,7 +592,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.8.m.0.cv2.conv.weight.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.8.m.0.cv2.conv.weight.weights"
       },
       "id": 53,
       "inputs": [],
@@ -603,7 +603,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.8.m.0.cv2.conv.bias.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.8.m.0.cv2.conv.bias.weights"
       },
       "id": 54,
       "inputs": [],
@@ -614,7 +614,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.8.m.0.m.0.cv1.conv.weight.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.8.m.0.m.0.cv1.conv.weight.weights"
       },
       "id": 55,
       "inputs": [],
@@ -625,7 +625,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.8.m.0.m.0.cv1.conv.bias.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.8.m.0.m.0.cv1.conv.bias.weights"
       },
       "id": 56,
       "inputs": [],
@@ -636,7 +636,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.8.m.0.m.0.cv2.conv.weight.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.8.m.0.m.0.cv2.conv.weight.weights"
       },
       "id": 57,
       "inputs": [],
@@ -647,7 +647,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.8.m.0.m.0.cv2.conv.bias.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.8.m.0.m.0.cv2.conv.bias.weights"
       },
       "id": 58,
       "inputs": [],
@@ -658,7 +658,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.8.m.0.m.1.cv1.conv.weight.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.8.m.0.m.1.cv1.conv.weight.weights"
       },
       "id": 59,
       "inputs": [],
@@ -669,7 +669,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.8.m.0.m.1.cv1.conv.bias.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.8.m.0.m.1.cv1.conv.bias.weights"
       },
       "id": 60,
       "inputs": [],
@@ -680,7 +680,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.8.m.0.m.1.cv2.conv.weight.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.8.m.0.m.1.cv2.conv.weight.weights"
       },
       "id": 61,
       "inputs": [],
@@ -691,7 +691,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.8.m.0.m.1.cv2.conv.bias.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.8.m.0.m.1.cv2.conv.bias.weights"
       },
       "id": 62,
       "inputs": [],
@@ -702,7 +702,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.8.m.0.cv3.conv.weight.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.8.m.0.cv3.conv.weight.weights"
       },
       "id": 63,
       "inputs": [],
@@ -713,7 +713,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.8.m.0.cv3.conv.bias.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.8.m.0.cv3.conv.bias.weights"
       },
       "id": 64,
       "inputs": [],
@@ -724,7 +724,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.8.cv2.conv.weight.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.8.cv2.conv.weight.weights"
       },
       "id": 65,
       "inputs": [],
@@ -735,7 +735,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.8.cv2.conv.bias.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.8.cv2.conv.bias.weights"
       },
       "id": 66,
       "inputs": [],
@@ -746,7 +746,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.9.cv1.conv.weight.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.9.cv1.conv.weight.weights"
       },
       "id": 67,
       "inputs": [],
@@ -757,7 +757,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.9.cv1.conv.bias.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.9.cv1.conv.bias.weights"
       },
       "id": 68,
       "inputs": [],
@@ -768,7 +768,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.9.cv2.conv.weight.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.9.cv2.conv.weight.weights"
       },
       "id": 69,
       "inputs": [],
@@ -779,7 +779,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.9.cv2.conv.bias.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.9.cv2.conv.bias.weights"
       },
       "id": 70,
       "inputs": [],
@@ -790,7 +790,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.10.cv1.conv.weight.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.10.cv1.conv.weight.weights"
       },
       "id": 71,
       "inputs": [],
@@ -801,7 +801,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.10.cv1.conv.bias.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.10.cv1.conv.bias.weights"
       },
       "id": 72,
       "inputs": [],
@@ -812,7 +812,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.10.m.0.attn.qkv.conv.weight.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.10.m.0.attn.qkv.conv.weight.weights"
       },
       "id": 73,
       "inputs": [],
@@ -823,7 +823,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.10.m.0.attn.qkv.conv.bias.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.10.m.0.attn.qkv.conv.bias.weights"
       },
       "id": 74,
       "inputs": [],
@@ -834,7 +834,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/_model.10_m_m.0_attn_Constant_output_0.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/_model.10_m_m.0_attn_Constant_output_0.weights"
       },
       "id": 75,
       "inputs": [],
@@ -845,7 +845,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/onnx__Split_326.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/onnx__Split_326.weights"
       },
       "id": 76,
       "inputs": [],
@@ -856,7 +856,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/_model.10_m_m.0_attn_Constant_3_output_0.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/_model.10_m_m.0_attn_Constant_3_output_0.weights"
       },
       "id": 77,
       "inputs": [],
@@ -867,7 +867,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.10.m.0.attn.pe.conv.weight.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.10.m.0.attn.pe.conv.weight.weights"
       },
       "id": 78,
       "inputs": [],
@@ -878,7 +878,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.10.m.0.attn.pe.conv.bias.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.10.m.0.attn.pe.conv.bias.weights"
       },
       "id": 79,
       "inputs": [],
@@ -889,7 +889,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/_model.10_m_m.0_attn_Constant_1_output_0.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/_model.10_m_m.0_attn_Constant_1_output_0.weights"
       },
       "id": 80,
       "inputs": [],
@@ -900,7 +900,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.10.m.0.attn.proj.conv.weight.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.10.m.0.attn.proj.conv.weight.weights"
       },
       "id": 81,
       "inputs": [],
@@ -911,7 +911,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.10.m.0.attn.proj.conv.bias.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.10.m.0.attn.proj.conv.bias.weights"
       },
       "id": 82,
       "inputs": [],
@@ -922,7 +922,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.10.m.0.ffn.0.conv.weight.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.10.m.0.ffn.0.conv.weight.weights"
       },
       "id": 83,
       "inputs": [],
@@ -933,7 +933,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.10.m.0.ffn.0.conv.bias.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.10.m.0.ffn.0.conv.bias.weights"
       },
       "id": 84,
       "inputs": [],
@@ -944,7 +944,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.10.m.0.ffn.1.conv.weight.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.10.m.0.ffn.1.conv.weight.weights"
       },
       "id": 85,
       "inputs": [],
@@ -955,7 +955,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.10.m.0.ffn.1.conv.bias.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.10.m.0.ffn.1.conv.bias.weights"
       },
       "id": 86,
       "inputs": [],
@@ -966,7 +966,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.10.cv2.conv.weight.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.10.cv2.conv.weight.weights"
       },
       "id": 87,
       "inputs": [],
@@ -977,7 +977,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.10.cv2.conv.bias.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.10.cv2.conv.bias.weights"
       },
       "id": 88,
       "inputs": [],
@@ -988,7 +988,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/_model.11_Constant_output_0.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/_model.11_Constant_output_0.weights"
       },
       "id": 89,
       "inputs": [],
@@ -999,7 +999,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.13.cv1.conv.weight.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.13.cv1.conv.weight.weights"
       },
       "id": 90,
       "inputs": [],
@@ -1010,7 +1010,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.13.cv1.conv.bias.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.13.cv1.conv.bias.weights"
       },
       "id": 91,
       "inputs": [],
@@ -1021,7 +1021,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.13.m.0.cv1.conv.weight.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.13.m.0.cv1.conv.weight.weights"
       },
       "id": 92,
       "inputs": [],
@@ -1032,7 +1032,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.13.m.0.cv1.conv.bias.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.13.m.0.cv1.conv.bias.weights"
       },
       "id": 93,
       "inputs": [],
@@ -1043,7 +1043,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.13.m.0.cv2.conv.weight.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.13.m.0.cv2.conv.weight.weights"
       },
       "id": 94,
       "inputs": [],
@@ -1054,7 +1054,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.13.m.0.cv2.conv.bias.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.13.m.0.cv2.conv.bias.weights"
       },
       "id": 95,
       "inputs": [],
@@ -1065,7 +1065,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.13.cv2.conv.weight.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.13.cv2.conv.weight.weights"
       },
       "id": 96,
       "inputs": [],
@@ -1076,7 +1076,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.13.cv2.conv.bias.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.13.cv2.conv.bias.weights"
       },
       "id": 97,
       "inputs": [],
@@ -1087,7 +1087,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.16.cv1.conv.weight.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.16.cv1.conv.weight.weights"
       },
       "id": 98,
       "inputs": [],
@@ -1098,7 +1098,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.16.cv1.conv.bias.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.16.cv1.conv.bias.weights"
       },
       "id": 99,
       "inputs": [],
@@ -1109,7 +1109,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.16.m.0.cv1.conv.weight.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.16.m.0.cv1.conv.weight.weights"
       },
       "id": 100,
       "inputs": [],
@@ -1120,7 +1120,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.16.m.0.cv1.conv.bias.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.16.m.0.cv1.conv.bias.weights"
       },
       "id": 101,
       "inputs": [],
@@ -1131,7 +1131,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.16.m.0.cv2.conv.weight.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.16.m.0.cv2.conv.weight.weights"
       },
       "id": 102,
       "inputs": [],
@@ -1142,7 +1142,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.16.m.0.cv2.conv.bias.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.16.m.0.cv2.conv.bias.weights"
       },
       "id": 103,
       "inputs": [],
@@ -1153,7 +1153,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.16.cv2.conv.weight.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.16.cv2.conv.weight.weights"
       },
       "id": 104,
       "inputs": [],
@@ -1164,7 +1164,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.16.cv2.conv.bias.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.16.cv2.conv.bias.weights"
       },
       "id": 105,
       "inputs": [],
@@ -1175,7 +1175,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.17.conv.weight.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.17.conv.weight.weights"
       },
       "id": 106,
       "inputs": [],
@@ -1186,7 +1186,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.17.conv.bias.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.17.conv.bias.weights"
       },
       "id": 107,
       "inputs": [],
@@ -1197,7 +1197,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.23.cv2.0.0.conv.weight.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.23.cv2.0.0.conv.weight.weights"
       },
       "id": 108,
       "inputs": [],
@@ -1208,7 +1208,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.23.cv2.0.0.conv.bias.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.23.cv2.0.0.conv.bias.weights"
       },
       "id": 109,
       "inputs": [],
@@ -1219,7 +1219,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.23.cv3.0.0.0.conv.weight.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.23.cv3.0.0.0.conv.weight.weights"
       },
       "id": 110,
       "inputs": [],
@@ -1230,7 +1230,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.23.cv3.0.0.0.conv.bias.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.23.cv3.0.0.0.conv.bias.weights"
       },
       "id": 111,
       "inputs": [],
@@ -1241,7 +1241,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.23.cv2.0.1.conv.weight.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.23.cv2.0.1.conv.weight.weights"
       },
       "id": 112,
       "inputs": [],
@@ -1252,7 +1252,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.23.cv2.0.1.conv.bias.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.23.cv2.0.1.conv.bias.weights"
       },
       "id": 113,
       "inputs": [],
@@ -1263,7 +1263,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.23.cv3.0.0.1.conv.weight.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.23.cv3.0.0.1.conv.weight.weights"
       },
       "id": 114,
       "inputs": [],
@@ -1274,7 +1274,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.23.cv3.0.0.1.conv.bias.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.23.cv3.0.0.1.conv.bias.weights"
       },
       "id": 115,
       "inputs": [],
@@ -1285,7 +1285,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.19.cv1.conv.weight.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.19.cv1.conv.weight.weights"
       },
       "id": 116,
       "inputs": [],
@@ -1296,7 +1296,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.19.cv1.conv.bias.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.19.cv1.conv.bias.weights"
       },
       "id": 117,
       "inputs": [],
@@ -1307,7 +1307,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.23.cv2.0.2.weight.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.23.cv2.0.2.weight.weights"
       },
       "id": 118,
       "inputs": [],
@@ -1318,7 +1318,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.23.cv2.0.2.bias.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.23.cv2.0.2.bias.weights"
       },
       "id": 119,
       "inputs": [],
@@ -1329,7 +1329,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.23.cv3.0.1.0.conv.weight.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.23.cv3.0.1.0.conv.weight.weights"
       },
       "id": 120,
       "inputs": [],
@@ -1340,7 +1340,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.23.cv3.0.1.0.conv.bias.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.23.cv3.0.1.0.conv.bias.weights"
       },
       "id": 121,
       "inputs": [],
@@ -1351,7 +1351,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.19.m.0.cv1.conv.weight.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.19.m.0.cv1.conv.weight.weights"
       },
       "id": 122,
       "inputs": [],
@@ -1362,7 +1362,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.19.m.0.cv1.conv.bias.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.19.m.0.cv1.conv.bias.weights"
       },
       "id": 123,
       "inputs": [],
@@ -1373,7 +1373,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.23.cv3.0.1.1.conv.weight.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.23.cv3.0.1.1.conv.weight.weights"
       },
       "id": 124,
       "inputs": [],
@@ -1384,7 +1384,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.23.cv3.0.1.1.conv.bias.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.23.cv3.0.1.1.conv.bias.weights"
       },
       "id": 125,
       "inputs": [],
@@ -1395,7 +1395,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.19.m.0.cv2.conv.weight.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.19.m.0.cv2.conv.weight.weights"
       },
       "id": 126,
       "inputs": [],
@@ -1406,7 +1406,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.19.m.0.cv2.conv.bias.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.19.m.0.cv2.conv.bias.weights"
       },
       "id": 127,
       "inputs": [],
@@ -1417,7 +1417,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.23.cv3.0.2.weight.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.23.cv3.0.2.weight.weights"
       },
       "id": 128,
       "inputs": [],
@@ -1428,7 +1428,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.23.cv3.0.2.bias.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.23.cv3.0.2.bias.weights"
       },
       "id": 129,
       "inputs": [],
@@ -1439,7 +1439,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/_model.23_Constant_output_0.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/_model.23_Constant_output_0.weights"
       },
       "id": 130,
       "inputs": [],
@@ -1450,7 +1450,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.19.cv2.conv.weight.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.19.cv2.conv.weight.weights"
       },
       "id": 131,
       "inputs": [],
@@ -1461,7 +1461,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.19.cv2.conv.bias.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.19.cv2.conv.bias.weights"
       },
       "id": 132,
       "inputs": [],
@@ -1472,7 +1472,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.20.conv.weight.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.20.conv.weight.weights"
       },
       "id": 133,
       "inputs": [],
@@ -1483,7 +1483,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.20.conv.bias.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.20.conv.bias.weights"
       },
       "id": 134,
       "inputs": [],
@@ -1494,7 +1494,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.23.cv2.1.0.conv.weight.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.23.cv2.1.0.conv.weight.weights"
       },
       "id": 135,
       "inputs": [],
@@ -1505,7 +1505,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.23.cv2.1.0.conv.bias.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.23.cv2.1.0.conv.bias.weights"
       },
       "id": 136,
       "inputs": [],
@@ -1516,7 +1516,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.23.cv3.1.0.0.conv.weight.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.23.cv3.1.0.0.conv.weight.weights"
       },
       "id": 137,
       "inputs": [],
@@ -1527,7 +1527,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.23.cv3.1.0.0.conv.bias.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.23.cv3.1.0.0.conv.bias.weights"
       },
       "id": 138,
       "inputs": [],
@@ -1538,7 +1538,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.23.cv2.1.1.conv.weight.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.23.cv2.1.1.conv.weight.weights"
       },
       "id": 139,
       "inputs": [],
@@ -1549,7 +1549,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.23.cv2.1.1.conv.bias.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.23.cv2.1.1.conv.bias.weights"
       },
       "id": 140,
       "inputs": [],
@@ -1560,7 +1560,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.23.cv3.1.0.1.conv.weight.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.23.cv3.1.0.1.conv.weight.weights"
       },
       "id": 141,
       "inputs": [],
@@ -1571,7 +1571,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.23.cv3.1.0.1.conv.bias.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.23.cv3.1.0.1.conv.bias.weights"
       },
       "id": 142,
       "inputs": [],
@@ -1582,7 +1582,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.22.cv1.conv.weight.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.22.cv1.conv.weight.weights"
       },
       "id": 143,
       "inputs": [],
@@ -1593,7 +1593,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.22.cv1.conv.bias.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.22.cv1.conv.bias.weights"
       },
       "id": 144,
       "inputs": [],
@@ -1604,7 +1604,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.23.cv2.1.2.weight.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.23.cv2.1.2.weight.weights"
       },
       "id": 145,
       "inputs": [],
@@ -1615,7 +1615,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.23.cv2.1.2.bias.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.23.cv2.1.2.bias.weights"
       },
       "id": 146,
       "inputs": [],
@@ -1626,7 +1626,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.23.cv3.1.1.0.conv.weight.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.23.cv3.1.1.0.conv.weight.weights"
       },
       "id": 147,
       "inputs": [],
@@ -1637,7 +1637,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.23.cv3.1.1.0.conv.bias.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.23.cv3.1.1.0.conv.bias.weights"
       },
       "id": 148,
       "inputs": [],
@@ -1648,7 +1648,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.22.m.0.cv1.conv.weight.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.22.m.0.cv1.conv.weight.weights"
       },
       "id": 149,
       "inputs": [],
@@ -1659,7 +1659,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.22.m.0.cv1.conv.bias.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.22.m.0.cv1.conv.bias.weights"
       },
       "id": 150,
       "inputs": [],
@@ -1670,7 +1670,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.22.m.0.cv2.conv.weight.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.22.m.0.cv2.conv.weight.weights"
       },
       "id": 151,
       "inputs": [],
@@ -1681,7 +1681,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.22.m.0.cv2.conv.bias.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.22.m.0.cv2.conv.bias.weights"
       },
       "id": 152,
       "inputs": [],
@@ -1692,7 +1692,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.23.cv3.1.1.1.conv.weight.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.23.cv3.1.1.1.conv.weight.weights"
       },
       "id": 153,
       "inputs": [],
@@ -1703,7 +1703,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.23.cv3.1.1.1.conv.bias.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.23.cv3.1.1.1.conv.bias.weights"
       },
       "id": 154,
       "inputs": [],
@@ -1714,7 +1714,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.22.m.0.m.0.cv1.conv.weight.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.22.m.0.m.0.cv1.conv.weight.weights"
       },
       "id": 155,
       "inputs": [],
@@ -1725,7 +1725,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.22.m.0.m.0.cv1.conv.bias.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.22.m.0.m.0.cv1.conv.bias.weights"
       },
       "id": 156,
       "inputs": [],
@@ -1736,7 +1736,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.23.cv3.1.2.weight.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.23.cv3.1.2.weight.weights"
       },
       "id": 157,
       "inputs": [],
@@ -1747,7 +1747,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.23.cv3.1.2.bias.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.23.cv3.1.2.bias.weights"
       },
       "id": 158,
       "inputs": [],
@@ -1758,7 +1758,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.22.m.0.m.0.cv2.conv.weight.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.22.m.0.m.0.cv2.conv.weight.weights"
       },
       "id": 159,
       "inputs": [],
@@ -1769,7 +1769,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.22.m.0.m.0.cv2.conv.bias.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.22.m.0.m.0.cv2.conv.bias.weights"
       },
       "id": 160,
       "inputs": [],
@@ -1780,7 +1780,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.22.m.0.m.1.cv1.conv.weight.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.22.m.0.m.1.cv1.conv.weight.weights"
       },
       "id": 161,
       "inputs": [],
@@ -1791,7 +1791,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.22.m.0.m.1.cv1.conv.bias.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.22.m.0.m.1.cv1.conv.bias.weights"
       },
       "id": 162,
       "inputs": [],
@@ -1802,7 +1802,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.22.m.0.m.1.cv2.conv.weight.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.22.m.0.m.1.cv2.conv.weight.weights"
       },
       "id": 163,
       "inputs": [],
@@ -1813,7 +1813,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.22.m.0.m.1.cv2.conv.bias.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.22.m.0.m.1.cv2.conv.bias.weights"
       },
       "id": 164,
       "inputs": [],
@@ -1824,7 +1824,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.22.m.0.cv3.conv.weight.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.22.m.0.cv3.conv.weight.weights"
       },
       "id": 165,
       "inputs": [],
@@ -1835,7 +1835,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.22.m.0.cv3.conv.bias.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.22.m.0.cv3.conv.bias.weights"
       },
       "id": 166,
       "inputs": [],
@@ -1846,7 +1846,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.22.cv2.conv.weight.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.22.cv2.conv.weight.weights"
       },
       "id": 167,
       "inputs": [],
@@ -1857,7 +1857,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.22.cv2.conv.bias.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.22.cv2.conv.bias.weights"
       },
       "id": 168,
       "inputs": [],
@@ -1868,7 +1868,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.23.cv2.2.0.conv.weight.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.23.cv2.2.0.conv.weight.weights"
       },
       "id": 169,
       "inputs": [],
@@ -1879,7 +1879,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.23.cv2.2.0.conv.bias.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.23.cv2.2.0.conv.bias.weights"
       },
       "id": 170,
       "inputs": [],
@@ -1890,7 +1890,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.23.cv3.2.0.0.conv.weight.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.23.cv3.2.0.0.conv.weight.weights"
       },
       "id": 171,
       "inputs": [],
@@ -1901,7 +1901,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.23.cv3.2.0.0.conv.bias.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.23.cv3.2.0.0.conv.bias.weights"
       },
       "id": 172,
       "inputs": [],
@@ -1912,7 +1912,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.23.cv2.2.1.conv.weight.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.23.cv2.2.1.conv.weight.weights"
       },
       "id": 173,
       "inputs": [],
@@ -1923,7 +1923,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.23.cv2.2.1.conv.bias.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.23.cv2.2.1.conv.bias.weights"
       },
       "id": 174,
       "inputs": [],
@@ -1934,7 +1934,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.23.cv3.2.0.1.conv.weight.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.23.cv3.2.0.1.conv.weight.weights"
       },
       "id": 175,
       "inputs": [],
@@ -1945,7 +1945,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.23.cv3.2.0.1.conv.bias.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.23.cv3.2.0.1.conv.bias.weights"
       },
       "id": 176,
       "inputs": [],
@@ -1956,7 +1956,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.23.cv2.2.2.weight.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.23.cv2.2.2.weight.weights"
       },
       "id": 177,
       "inputs": [],
@@ -1967,7 +1967,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.23.cv2.2.2.bias.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.23.cv2.2.2.bias.weights"
       },
       "id": 178,
       "inputs": [],
@@ -1978,7 +1978,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.23.cv3.2.1.0.conv.weight.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.23.cv3.2.1.0.conv.weight.weights"
       },
       "id": 179,
       "inputs": [],
@@ -1989,7 +1989,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.23.cv3.2.1.0.conv.bias.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.23.cv3.2.1.0.conv.bias.weights"
       },
       "id": 180,
       "inputs": [],
@@ -2000,7 +2000,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.23.cv3.2.1.1.conv.weight.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.23.cv3.2.1.1.conv.weight.weights"
       },
       "id": 181,
       "inputs": [],
@@ -2011,7 +2011,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.23.cv3.2.1.1.conv.bias.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.23.cv3.2.1.1.conv.bias.weights"
       },
       "id": 182,
       "inputs": [],
@@ -2022,7 +2022,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.23.cv3.2.2.weight.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.23.cv3.2.2.weight.weights"
       },
       "id": 183,
       "inputs": [],
@@ -2033,7 +2033,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.23.cv3.2.2.bias.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.23.cv3.2.2.bias.weights"
       },
       "id": 184,
       "inputs": [],
@@ -2044,7 +2044,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/onnx__Split_562.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/onnx__Split_562.weights"
       },
       "id": 185,
       "inputs": [],
@@ -2055,7 +2055,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/_model.23_dfl_Constant_output_0.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/_model.23_dfl_Constant_output_0.weights"
       },
       "id": 186,
       "inputs": [],
@@ -2066,7 +2066,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/model.23.dfl.conv.weight.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/model.23.dfl.conv.weight.weights"
       },
       "id": 187,
       "inputs": [],
@@ -2077,7 +2077,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/_model.23_dfl_Constant_1_output_0.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/_model.23_dfl_Constant_1_output_0.weights"
       },
       "id": 188,
       "inputs": [],
@@ -2088,7 +2088,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/_model.23_Constant_4_output_0.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/_model.23_Constant_4_output_0.weights"
       },
       "id": 189,
       "inputs": [],
@@ -2099,7 +2099,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/_model.23_Mul_output_0.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/_model.23_Mul_output_0.weights"
       },
       "id": 190,
       "inputs": [],
@@ -2110,7 +2110,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/_model.23_Constant_3_output_0.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/_model.23_Constant_3_output_0.weights"
       },
       "id": 191,
       "inputs": [],
@@ -2121,7 +2121,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/_model.23_Mul_1_output_0.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/_model.23_Mul_1_output_0.weights"
       },
       "id": 192,
       "inputs": [],
@@ -2132,7 +2132,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/_model.23_Constant_9_output_0.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/_model.23_Constant_9_output_0.weights"
       },
       "id": 193,
       "inputs": [],
@@ -2143,7 +2143,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/_model.23_Constant_10_output_0.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/_model.23_Constant_10_output_0.weights"
       },
       "id": 194,
       "inputs": [],
@@ -2154,7 +2154,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/_model.23_Constant_11_output_0.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/_model.23_Constant_11_output_0.weights"
       },
       "id": 195,
       "inputs": [],
@@ -2165,7 +2165,7 @@
     },
     {
       "attributes": {
-        "path_to_weights": "/home/karen/Documents/cactus/weights/_model.23_Constant_12_output_0.weights"
+        "path_to_weights": "/home/karen/Documents/cactus/weights/yolo11n-i8/_model.23_Constant_12_output_0.weights"
       },
       "id": 196,
       "inputs": [],

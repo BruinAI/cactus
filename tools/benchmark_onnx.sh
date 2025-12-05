@@ -35,7 +35,7 @@ make -j$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4)
 cd "$SCRIPT_DIR"
 
 
-export CACTUS_CAPTURE_ENABLE=1
+export CACTUS_CAPTURE_ENABLE=0
 export CACTUS_CAPTURE_STDOUT=0        # disable stdout capture (use file only)
 export CACTUS_CAPTURE_FILE=./cactus_capture.log
 export CACTUS_CAPTURE_PREVIEW_COUNT=8
@@ -43,4 +43,4 @@ export CACTUS_CAPTURE_MAX_ELEMENTS=65536
 
 ./build/benchmark_onnx ../graph_f32.bin ../tests/assets/test_monkey.png fp32 1 5 profile_32.txt
 ./build/benchmark_onnx ../graph_f16.bin ../tests/assets/test_monkey.png fp16 1 5 profile_16.txt
-# ./build/benchmark_onnx ../graph_i8.bin ../tests/assets/test_monkey.png int8 1 5 profile_8.txt
+./build/benchmark_onnx ../graph_i8.bin ../tests/assets/test_monkey.png int8 1 5 profile_8.txt
