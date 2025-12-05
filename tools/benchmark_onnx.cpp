@@ -19,6 +19,7 @@ struct BenchmarkConfig {
     std::string ir_path;
     std::string input_path;
     std::string profile_path;
+    std::string precision = "fp16";  // "fp16", "fp32", or "int8"
 };
 
 struct BenchmarkResults {
@@ -92,11 +93,12 @@ void print_results(const BenchmarkResults& results, int num_runs) {
 }
 
 void print_usage(const char* prog) {
-    std::cerr << "Usage: " << prog << " <ir_path> <input_path> [warmup_runs] [benchmark_runs] [profile_path]\n";
+    std::cerr << "Usage: " << prog << " <ir_path> <input_path> [precision] [warmup_runs] [benchmark_runs] [profile_path]\n";
     std::cerr << "\n";
     std::cerr << "Arguments:\n";
     std::cerr << "  ir_path         Path to binary IR file (graph.bin)\n";
     std::cerr << "  input_path      Path to input image\n";
+    std::cerr << "  precision       Input precision: 'fp16', 'fp32', or 'int8' (default: fp16)\n";
     std::cerr << "  warmup_runs     Number of warmup runs (default: 10)\n";
     std::cerr << "  benchmark_runs  Number of benchmark runs (default: 50)\n";
     std::cerr << "  profile_path    Path to write per-op profile (optional, enables profiling on last run)\n";
@@ -114,13 +116,21 @@ int main(int argc, char** argv) {
     config.input_path = argv[2];
     
     if (argc > 3) {
-        config.warmup_runs = std::atoi(argv[3]);
+        config.precision = argv[3];
+        // Validate precision
+        if (config.precision != "fp16" && config.precision != "fp32" && config.precision != "int8") {
+            std::cerr << "Error: precision must be 'fp16', 'fp32', or 'int8', got: " << config.precision << "\n";
+            return 1;
+        }
     }
     if (argc > 4) {
-        config.benchmark_runs = std::atoi(argv[4]);
+        config.warmup_runs = std::atoi(argv[4]);
     }
     if (argc > 5) {
-        config.profile_path = argv[5];
+        config.benchmark_runs = std::atoi(argv[5]);
+    }
+    if (argc > 6) {
+        config.profile_path = argv[6];
     }
     
     // Validate paths
@@ -133,11 +143,21 @@ int main(int argc, char** argv) {
         return 1;
     }
     
+    // Convert precision string to Precision enum
+    // Note: INT8 weights use FP16 inputs (same preprocessing as FP16)
+    Precision input_precision;
+    if (config.precision == "fp32") {
+        input_precision = Precision::FP32;
+    } else {
+        input_precision = Precision::FP16;
+    }
+    
     std::cout << "========================================\n";
     std::cout << "       ONNX Model Benchmark\n";
     std::cout << "========================================\n";
     std::cout << "IR Path:         " << config.ir_path << "\n";
     std::cout << "Input Path:      " << config.input_path << "\n";
+    std::cout << "Input Precision: " << config.precision << "\n";
     std::cout << "Warmup Runs:     " << config.warmup_runs << "\n";
     std::cout << "Benchmark Runs:  " << config.benchmark_runs << "\n";
     if (!config.profile_path.empty()) {
@@ -149,7 +169,7 @@ int main(int argc, char** argv) {
         // Load model once
         std::cout << "Loading model..." << std::flush;
         auto load_start = std::chrono::high_resolution_clock::now();
-        OnnxModel model(config.ir_path, config.input_path);
+        OnnxModel model(config.ir_path, config.input_path, input_precision);
         auto load_end = std::chrono::high_resolution_clock::now();
         double load_time_ms = std::chrono::duration<double, std::milli>(load_end - load_start).count();
         std::cout << " done (" << std::fixed << std::setprecision(1) << load_time_ms << " ms)\n\n";
