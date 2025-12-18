@@ -218,7 +218,6 @@ int cactus_tokenize(
         std::vector<uint32_t> toks = tokenizer->encode(std::string(text));
         *out_token_len = toks.size();
 
-        // Two-pass: if buffer is null or too small, just report needed length
         if (!token_buffer || token_buffer_len == 0) return 0;
         if (token_buffer_len < toks.size()) return -2;
 

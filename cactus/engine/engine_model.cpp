@@ -529,7 +529,6 @@ double Model::score_tokens_window_logprob(
 ) {
     if (tokens.empty()) return 0.0;
 
-    // Paper-style eval usually ignores token 0 (no previous context).
     if (start == 0) start = 1;
     if (end > tokens.size()) end = tokens.size();
     if (start >= end) {
@@ -537,7 +536,6 @@ double Model::score_tokens_window_logprob(
         return 0.0;
     }
 
-    // Context window [ctx_begin, start)
     size_t ctx_begin = (start > context) ? (start - context) : 0;
 
     std::vector<uint32_t> prefix(tokens.begin() + ctx_begin, tokens.begin() + start);
@@ -545,36 +543,31 @@ double Model::score_tokens_window_logprob(
 
     if (tokens_scored) *tokens_scored = target.size();
 
-    // Reset KV for this window (paper-style sliding window does this per window)
+
     reset_cache();
 
     auto* gb = static_cast<CactusGraph*>(graph_handle_);
     auto backend =
         (config_.default_backend == Config::Backend::CPU) ? ComputeBackend::CPU : ComputeBackend::NPU;
 
-    // Prefill prefix (if empty, we still need logits for first target token; easiest is to treat
-    // the last token before start as a 1-token prefix)
     size_t final_hidden = 0;
     size_t exec_tokens = 0;
 
     if (!prefix.empty()) {
-        final_hidden = forward(prefix, /*use_cache=*/true);
+        final_hidden = forward(prefix, true);
         exec_tokens = prefix.size();
     } else {
-        // start >= 1, so tokens[start-1] exists
         uint32_t prev = tokens[start - 1];
-        final_hidden = forward({prev}, /*use_cache=*/true);
+        final_hidden = forward({prev}, true);
         exec_tokens = 1;
     }
 
     auto score_one = [&](uint32_t y) -> double {
-        // last hidden in this call
         auto last_hidden = gb->index(final_hidden, exec_tokens - 1, 0);
         const auto& last_hidden_buf = gb->get_output_buffer(last_hidden);
         last_hidden = gb->reshape(last_hidden, {1, last_hidden_buf.shape[0]});
-
         auto logits_node_id = gb->matmul(last_hidden, output_weight_node_id_, true, backend);
-
+        
         gb->execute();
         post_execute_updates(gb, exec_tokens);
         update_kv_cache(gb, exec_tokens);
@@ -603,11 +596,9 @@ double Model::score_tokens_window_logprob(
     };
 
     double total = 0.0;
-
-    // Score each target token, then teacher-force it (one-token forward each step, like generate())
     for (uint32_t y : target) {
         total += score_one(y);
-        final_hidden = forward({y}, /*use_cache=*/true);
+        final_hidden = forward({y}, true);
         exec_tokens = 1;
     }
 

@@ -404,8 +404,6 @@ public:
 
     virtual void reset_cache() { kv_cache_.reset(); }
 
-    // Scores tokens[start:end) with teacher forcing, using up to `context` tokens of left context.
-    // Returns sum logprob over scored tokens. Writes tokens_scored = (end - start).
     double score_tokens_window_logprob(const std::vector<uint32_t>& tokens, size_t start, size_t end, size_t context, size_t* tokens_scored);
 
 
