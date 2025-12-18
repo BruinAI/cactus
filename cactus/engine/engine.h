@@ -403,7 +403,13 @@ public:
     virtual std::vector<float> get_audio_embeddings(const std::vector<float>& mel_bins);
 
     virtual void reset_cache() { kv_cache_.reset(); }
-    
+
+    // Scores tokens[start:end) with teacher forcing, using up to `context` tokens of left context.
+    // Returns sum logprob over scored tokens. Writes tokens_scored = (end - start).
+    double score_tokens_window_logprob(const std::vector<uint32_t>& tokens, size_t start, size_t end, size_t context, size_t* tokens_scored);
+
+
+
     void set_cache_window(size_t window_size, size_t sink_size = 4) { kv_cache_.set_window_size(window_size, sink_size); }
 
     void* graph_handle_;

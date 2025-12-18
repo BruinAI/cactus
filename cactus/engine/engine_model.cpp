@@ -520,5 +520,104 @@ const std::vector<Model::DebugNode>& Model::get_debug_nodes() const {
     return debug_nodes_;
 }
 
+double Model::score_tokens_window_logprob(
+    const std::vector<uint32_t>& tokens,
+    size_t start,
+    size_t end,
+    size_t context,
+    size_t* tokens_scored
+) {
+    if (tokens.empty()) return 0.0;
+
+    // Paper-style eval usually ignores token 0 (no previous context).
+    if (start == 0) start = 1;
+    if (end > tokens.size()) end = tokens.size();
+    if (start >= end) {
+        if (tokens_scored) *tokens_scored = 0;
+        return 0.0;
+    }
+
+    // Context window [ctx_begin, start)
+    size_t ctx_begin = (start > context) ? (start - context) : 0;
+
+    std::vector<uint32_t> prefix(tokens.begin() + ctx_begin, tokens.begin() + start);
+    std::vector<uint32_t> target(tokens.begin() + start, tokens.begin() + end);
+
+    if (tokens_scored) *tokens_scored = target.size();
+
+    // Reset KV for this window (paper-style sliding window does this per window)
+    reset_cache();
+
+    auto* gb = static_cast<CactusGraph*>(graph_handle_);
+    auto backend =
+        (config_.default_backend == Config::Backend::CPU) ? ComputeBackend::CPU : ComputeBackend::NPU;
+
+    // Prefill prefix (if empty, we still need logits for first target token; easiest is to treat
+    // the last token before start as a 1-token prefix)
+    size_t final_hidden = 0;
+    size_t exec_tokens = 0;
+
+    if (!prefix.empty()) {
+        final_hidden = forward(prefix, /*use_cache=*/true);
+        exec_tokens = prefix.size();
+    } else {
+        // start >= 1, so tokens[start-1] exists
+        uint32_t prev = tokens[start - 1];
+        final_hidden = forward({prev}, /*use_cache=*/true);
+        exec_tokens = 1;
+    }
+
+    auto score_one = [&](uint32_t y) -> double {
+        // last hidden in this call
+        auto last_hidden = gb->index(final_hidden, exec_tokens - 1, 0);
+        const auto& last_hidden_buf = gb->get_output_buffer(last_hidden);
+        last_hidden = gb->reshape(last_hidden, {1, last_hidden_buf.shape[0]});
+
+        auto logits_node_id = gb->matmul(last_hidden, output_weight_node_id_, true, backend);
+
+        gb->execute();
+        post_execute_updates(gb, exec_tokens);
+        update_kv_cache(gb, exec_tokens);
+
+        auto* logits_ptr = gb->get_output(logits_node_id);
+        const auto& logits_buf = gb->get_output_buffer(logits_node_id);
+        size_t vocab_size = logits_buf.total_size;
+
+        if (y >= vocab_size) throw std::runtime_error("Target token id out of range");
+
+        std::vector<float> logits(vocab_size);
+        if (logits_buf.precision == Precision::FP32) {
+            std::memcpy(logits.data(), logits_ptr, vocab_size * sizeof(float));
+        } else if (logits_buf.precision == Precision::FP16) {
+            Quantization::fp16_to_fp32(static_cast<__fp16*>(logits_ptr), logits.data(), vocab_size);
+        } else {
+            Quantization::int8_to_fp32(static_cast<int8_t*>(logits_ptr), logits.data(), vocab_size, logits_buf.quantization_scale);
+        }
+
+        float max_logit = *std::max_element(logits.begin(), logits.end());
+        double sum = 0.0;
+        for (float v : logits) sum += std::exp((double)v - (double)max_logit);
+        double lse = (double)max_logit + std::log(sum);
+
+        return (double)logits[y] - lse;
+    };
+
+    double total = 0.0;
+
+    // Score each target token, then teacher-force it (one-token forward each step, like generate())
+    for (uint32_t y : target) {
+        total += score_one(y);
+        final_hidden = forward({y}, /*use_cache=*/true);
+        exec_tokens = 1;
+    }
+
+    return total;
+}
+
+
+
+
+
+
 }
 }
