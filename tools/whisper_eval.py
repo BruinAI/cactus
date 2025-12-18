@@ -1,13 +1,20 @@
 import sys
 import json
+import argparse
 from pathlib import Path
 from tqdm import tqdm
 import tempfile
 import soundfile as sf
 import re
+import atexit
+import unicodedata
 from multiprocessing import Pool, cpu_count
 sys.path.insert(0, "src")
 from evaluate import load
+
+from text_to_num import alpha2digit
+from breame.spelling import get_american_spelling
+import contractions
 
 from cactus_ffi import (
     cactus_init,
@@ -23,13 +30,72 @@ from cactus_ffi import (
 # Load WER metric
 wer_metric = load("wer")
 
-def normalize_text(text):
-    """Normalize text for WER calculation by removing punctuation and extra whitespace."""
-    # Lowercase
+def normalize_text_en(text):
+    """
+    Normalize English text following Whisper's normalization rules.
+    Implements all 12 steps from the Whisper paper.
+    """
+    # Lowercase first for consistent matching
     text = text.lower()
-    # Remove punctuation
+
+    # Step 1: Remove phrases between brackets
+    text = re.sub(r'\[.*?\]', '', text)
+
+    # Step 2: Remove phrases between parentheses
+    text = re.sub(r'\(.*?\)', '', text)
+
+    # Step 3: Remove filler words
+    text = re.sub(r'\b(hmm|mm|mhm|mmm|uh|um)\b', '', text)
+
+    # Step 4: Remove whitespace before apostrophe
+    text = re.sub(r"\s+'", "'", text)
+
+    # Step 5: Expand contractions
+    text = contractions.fix(text)
+
+    # Step 6: Remove commas between digits
+    text = re.sub(r'(\d),(\d)', r'\1\2', text)
+
+    # Step 7: Remove periods not followed by numbers
+    text = re.sub(r'\.(?!\d)', ' ', text)
+
+    # Step 8: Remove diacritics and certain symbols
+    # Keep period, percent, currency symbols for now (handled in step 9)
+    text = ''.join(
+        c for c in unicodedata.normalize('NFD', text)
+        if unicodedata.category(c) != 'Mn'
+    )
+    # Remove symbols except those used in numbers/currency
+    text = re.sub(r'[^\w\s\.\%\$\£\€\¥]+', ' ', text)
+
+    # Step 9: Normalize numeric expressions and currency
+    text = alpha2digit(text, "en")
+
+    # Convert currency words to symbols
+    text = re.sub(r'(\d+)\s+dollars?', r'$\1', text)
+    text = re.sub(r'(\d+)\s+pounds?', r'£\1', text)
+    text = re.sub(r'(\d+)\s+euros?', r'€\1', text)
+    text = re.sub(r'(\d+)\s+yen', r'¥\1', text)
+
+    # Step 10: Convert British to American spellings
+    words = text.split()
+    words = [get_american_spelling(word) for word in words]
+    text = ' '.join(words)
+
+    # Step 11: Remove remaining symbols (except those in numeric expressions)
+    # Keep currency symbols attached to numbers like $100, £50, etc.
+    text = re.sub(r'(?<!\d)[\$£€¥](?!\d)', ' ', text)  # Remove standalone currency symbols
+    text = re.sub(r'[^\w\s\$£€¥]', ' ', text)  # Remove other symbols but keep currency
+
+    # Step 12: Normalize whitespace (already done in Step 10's join, but ensure no extra spaces)
+    text = ' '.join(text.split())
+
+    return text.strip()
+
+def normalize_text(text):
+    """Simple normalization (kept for backwards compatibility)."""
+    text = text.lower()
     text = re.sub(r'[^\w\s]', '', text)
-    # Normalize whitespace
     text = ' '.join(text.split())
     return text
 
@@ -41,6 +107,7 @@ def worker_init():
     """Initialize whisper model in each worker process."""
     global worker_whisper
     worker_whisper = cactus_init("../weights/whisper-small", context_size=448)
+    atexit.register(worker_cleanup)
 
 def worker_cleanup():
     """Cleanup whisper model in each worker process."""
@@ -76,8 +143,21 @@ def process_file(args):
         return None, None, str(e)
 
 if __name__ == '__main__':
-    # Path to LibriSpeech test-clean dataset
-    librispeech_path = Path("/Users/satyajit/Downloads/LibriSpeech/test-clean")
+    parser = argparse.ArgumentParser(description="Evaluate Whisper on LibriSpeech")
+    parser.add_argument("--split", type=str, default="test-clean",
+                       choices=["test-clean", "test-other"],
+                       help="LibriSpeech split to evaluate (default: test-clean)")
+    parser.add_argument("--dataset-path", type=str,
+                       default="/Users/satyajit/Downloads/LibriSpeech",
+                       help="Path to LibriSpeech dataset")
+
+    args = parser.parse_args()
+
+    # Path to LibriSpeech dataset
+    librispeech_path = Path(args.dataset_path) / args.split
+
+    print(f"Evaluating on LibriSpeech {args.split}")
+    print(f"Dataset path: {librispeech_path}\n")
 
     references = []
     hypotheses = []
@@ -132,8 +212,8 @@ if __name__ == '__main__':
         hypotheses.append(transcription)
         references.append(reference)
 
-    hypotheses = [normalize_text(h) for h in hypotheses]
-    references = [normalize_text(r) for r in references]
+    hypotheses = [normalize_text_en(h) for h in hypotheses]
+    references = [normalize_text_en(r) for r in references]
 
     print(f"\nTotal files processed: {len(references)}")
     if errors > 0:
