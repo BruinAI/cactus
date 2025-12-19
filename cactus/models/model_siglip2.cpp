@@ -1,5 +1,6 @@
 #include "model.h"
 #include "../graph/graph.h"
+#include "../kernel/kernel.h"
 #include <cmath>
 #include <stdexcept>
 #include <utility>
@@ -10,7 +11,6 @@ namespace engine {
 
 Siglip2VisionModel::Siglip2VisionModel() : Model() {
     config_.model_type = Config::ModelType::SIGLIP2;
-    
 }
 
 Siglip2VisionModel::Siglip2VisionModel(const Config& cfg) : Model(cfg) {
@@ -37,45 +37,64 @@ Siglip2VisionModel::Siglip2VisionModel(const Config& cfg) : Model(cfg) {
     preprocessor_config.image_std[0] = config_.image_std;
     preprocessor_config.image_std[1] = config_.image_std;
     preprocessor_config.image_std[2] = config_.image_std;
-    
+
     preprocessor_ = Siglip2Preprocessor(preprocessor_config);
-    
 }
 
 void Siglip2VisionModel::load_weights_to_graph(CactusGraph* gb) {
-    vision_weight_nodes_.vision_layers.resize(config_.vision_num_layers);
     std::string base = model_folder_path_ + "/";
 
+    if (npu::is_npu_available()) {
+        std::string npu_encoder_path = model_folder_path_ + "/model.mlpackage";
+        npu_encoder_ = npu::create_encoder();
+        if (npu_encoder_ && npu_encoder_->load(npu_encoder_path)) {
+            use_npu_encoder_ = true;
+
+            std::vector<int> typical_input_shape = {
+                static_cast<int>(config_.max_num_patches),
+                static_cast<int>(config_.vision_embed_dim)
+            };
+            npu_encoder_->preallocate(typical_input_shape, "x", "");
+        } else {
+            use_npu_encoder_ = false;
+            npu_encoder_.reset();
+        }
+    }
+
+    // Always load patch embedding and position embedding weights (needed for both CPU and NPU paths)
     vision_weight_nodes_.patch_embedding_weight = gb->mmap_weights(base + "vision_patch_embedding.weights");
     vision_weight_nodes_.patch_embedding_bias = gb->mmap_weights(base + "vision_patch_embedding.bias.weights");
-
     vision_weight_nodes_.position_embedding = gb->mmap_weights(base + "vision_position_embedding.weights");
-    
-    vision_weight_nodes_.post_layernorm_weight = gb->mmap_weights(base + "vision_post_layernorm.weights");
-    vision_weight_nodes_.post_layernorm_bias = gb->mmap_weights(base + "vision_post_layernorm.bias.weights");
-    
-    for (uint32_t i = 0; i < vision_weight_nodes_.vision_layers.size(); ++i) {
-        auto& layer = vision_weight_nodes_.vision_layers[i];
-        std::string prefix = base + "vision_layer_" + std::to_string(i) + "_";
-    
-        layer.attn_q_weight = gb->mmap_weights(prefix + "self_attn_q.weights");
-        layer.attn_q_bias = gb->mmap_weights(prefix + "self_attn_q.bias.weights");
-        layer.attn_k_weight = gb->mmap_weights(prefix + "self_attn_k.weights");
-        layer.attn_k_bias = gb->mmap_weights(prefix + "self_attn_k.bias.weights");
-        layer.attn_v_weight = gb->mmap_weights(prefix + "self_attn_v.weights");
-        layer.attn_v_bias = gb->mmap_weights(prefix + "self_attn_v.bias.weights");
-        layer.attn_output_weight = gb->mmap_weights(prefix + "self_attn_out.weights");
-        layer.attn_output_bias = gb->mmap_weights(prefix + "self_attn_out.bias.weights");
-    
-        layer.layer_norm1_weight = gb->mmap_weights(prefix + "layer_norm1.weights");
-        layer.layer_norm1_bias = gb->mmap_weights(prefix + "layer_norm1.bias.weights");
-        layer.layer_norm2_weight = gb->mmap_weights(prefix + "layer_norm2.weights");
-        layer.layer_norm2_bias = gb->mmap_weights(prefix + "layer_norm2.bias.weights");
-    
-        layer.mlp_fc1_weight = gb->mmap_weights(prefix + "ffn_fc1.weights");
-        layer.mlp_fc1_bias = gb->mmap_weights(prefix + "ffn_fc1.bias.weights");
-        layer.mlp_fc2_weight = gb->mmap_weights(prefix + "ffn_fc2.weights");
-        layer.mlp_fc2_bias = gb->mmap_weights(prefix + "ffn_fc2.bias.weights");
+
+    if (!use_npu_encoder_) {
+        vision_weight_nodes_.vision_layers.resize(config_.vision_num_layers);
+
+        vision_weight_nodes_.post_layernorm_weight = gb->mmap_weights(base + "vision_post_layernorm.weights");
+        vision_weight_nodes_.post_layernorm_bias = gb->mmap_weights(base + "vision_post_layernorm.bias.weights");
+
+        for (uint32_t i = 0; i < vision_weight_nodes_.vision_layers.size(); ++i) {
+            auto& layer = vision_weight_nodes_.vision_layers[i];
+            std::string prefix = base + "vision_layer_" + std::to_string(i) + "_";
+
+            layer.attn_q_weight = gb->mmap_weights(prefix + "self_attn_q.weights");
+            layer.attn_q_bias = gb->mmap_weights(prefix + "self_attn_q.bias.weights");
+            layer.attn_k_weight = gb->mmap_weights(prefix + "self_attn_k.weights");
+            layer.attn_k_bias = gb->mmap_weights(prefix + "self_attn_k.bias.weights");
+            layer.attn_v_weight = gb->mmap_weights(prefix + "self_attn_v.weights");
+            layer.attn_v_bias = gb->mmap_weights(prefix + "self_attn_v.bias.weights");
+            layer.attn_output_weight = gb->mmap_weights(prefix + "self_attn_out.weights");
+            layer.attn_output_bias = gb->mmap_weights(prefix + "self_attn_out.bias.weights");
+
+            layer.layer_norm1_weight = gb->mmap_weights(prefix + "layer_norm1.weights");
+            layer.layer_norm1_bias = gb->mmap_weights(prefix + "layer_norm1.bias.weights");
+            layer.layer_norm2_weight = gb->mmap_weights(prefix + "layer_norm2.weights");
+            layer.layer_norm2_bias = gb->mmap_weights(prefix + "layer_norm2.bias.weights");
+
+            layer.mlp_fc1_weight = gb->mmap_weights(prefix + "ffn_fc1.weights");
+            layer.mlp_fc1_bias = gb->mmap_weights(prefix + "ffn_fc1.bias.weights");
+            layer.mlp_fc2_weight = gb->mmap_weights(prefix + "ffn_fc2.weights");
+            layer.mlp_fc2_bias = gb->mmap_weights(prefix + "ffn_fc2.bias.weights");
+        }
     }
 }
 
@@ -122,7 +141,6 @@ Siglip2VisionModel::VisionEmbeddingResult Siglip2VisionModel::build_vision_embed
         const int tile_w = shape.second;
         const int actual_patches = tile_h * tile_w;
         if (actual_patches <= 0) {
-            
             continue;
         }
 
@@ -163,10 +181,10 @@ Siglip2VisionModel::VisionEmbeddingResult Siglip2VisionModel::build_vision_embed
     return VisionEmbeddingResult{embeddings, std::move(tile_embeddings)};
 }
 
-size_t Siglip2VisionModel::build_vision_attention(CactusGraph* gb, size_t hidden_states, 
+size_t Siglip2VisionModel::build_vision_attention(CactusGraph* gb, size_t hidden_states,
                                                   uint32_t layer_idx, ComputeBackend backend) {
     const auto& layer = vision_weight_nodes_.vision_layers[layer_idx];
-    
+
     size_t q = gb->matmul(hidden_states, layer.attn_q_weight, true, backend);
     q = gb->add(q, layer.attn_q_bias);
     size_t k = gb->matmul(hidden_states, layer.attn_k_weight, true, backend);
@@ -177,11 +195,11 @@ size_t Siglip2VisionModel::build_vision_attention(CactusGraph* gb, size_t hidden
     const size_t head_dim = static_cast<size_t>(config_.vision_embed_dim / config_.vision_attention_heads);
     const auto& q_buf = gb->get_output_buffer(q);
     size_t seq_len = q_buf.shape[0];
-    
+
     size_t q_4d = gb->reshape(q, {1, seq_len, num_heads, head_dim});
     size_t k_4d = gb->reshape(k, {1, seq_len, num_heads, head_dim});
     size_t v_4d = gb->reshape(v, {1, seq_len, num_heads, head_dim});
-    
+
     float scale = 1.0f / std::sqrt(static_cast<float>(head_dim));
     size_t attn_output = gb->attention(q_4d, k_4d, v_4d, scale, false, backend);
     size_t attn_2d = gb->reshape(attn_output, {seq_len, num_heads * head_dim});
@@ -190,10 +208,10 @@ size_t Siglip2VisionModel::build_vision_attention(CactusGraph* gb, size_t hidden
     return output;
 }
 
-size_t Siglip2VisionModel::build_vision_mlp(CactusGraph* gb, size_t hidden_states, 
+size_t Siglip2VisionModel::build_vision_mlp(CactusGraph* gb, size_t hidden_states,
                                            uint32_t layer_idx, ComputeBackend backend) {
     const auto& layer = vision_weight_nodes_.vision_layers[layer_idx];
-    
+
     size_t fc1_output = gb->matmul(hidden_states, layer.mlp_fc1_weight, true, backend);
     fc1_output = gb->add(fc1_output, layer.mlp_fc1_bias);
     size_t activated = gb->gelu(fc1_output);
@@ -202,17 +220,17 @@ size_t Siglip2VisionModel::build_vision_mlp(CactusGraph* gb, size_t hidden_state
     return fc2_output;
 }
 
-size_t Siglip2VisionModel::build_vision_transformer_layer(CactusGraph* gb, size_t hidden_states, 
+size_t Siglip2VisionModel::build_vision_transformer_layer(CactusGraph* gb, size_t hidden_states,
                                                           uint32_t layer_idx, ComputeBackend backend) {
     const auto& layer = vision_weight_nodes_.vision_layers[layer_idx];
-    
+
     size_t residual = hidden_states;
-    size_t normalized = gb->layernorm(hidden_states, layer.layer_norm1_weight, 
+    size_t normalized = gb->layernorm(hidden_states, layer.layer_norm1_weight,
                                       layer.layer_norm1_bias, config_.layer_norm_eps);
     size_t attn_output = build_vision_attention(gb, normalized, layer_idx, backend);
     hidden_states = gb->add(residual, attn_output);
     residual = hidden_states;
-    normalized = gb->layernorm(hidden_states, layer.layer_norm2_weight, 
+    normalized = gb->layernorm(hidden_states, layer.layer_norm2_weight,
                                layer.layer_norm2_bias, config_.layer_norm_eps);
     size_t mlp_output = build_vision_mlp(gb, normalized, layer_idx, backend);
     hidden_states = gb->add(residual, mlp_output);
@@ -223,7 +241,69 @@ size_t Siglip2VisionModel::forward_vision(
     CactusGraph* gb,
     const Siglip2Preprocessor::PreprocessedImage& preprocessed_image,
     ComputeBackend backend) {
+
+    if (use_npu_encoder_ && npu_encoder_ && npu_encoder_->is_available()) {
+        // NPU path: build patch embeddings + position embeddings on CPU, then run transformer on NPU
+        auto embedding_result = build_vision_embeddings(gb, preprocessed_image, backend);
+
+        size_t total_patches = 0;
+        for (const auto& shape : preprocessed_image.spatial_shapes) {
+            total_patches += shape.first * shape.second;
+        }
+
+        gb->execute();
+
+        const auto& embed_buffer = gb->get_output_buffer(embedding_result.combined_embeddings);
+        void* embed_ptr = gb->get_output(embedding_result.combined_embeddings);
+
+        std::vector<__fp16> embed_f16;
+        const __fp16* input_ptr;
+        if (embed_buffer.precision == Precision::FP16) {
+            input_ptr = static_cast<const __fp16*>(embed_ptr);
+        } else {
+            embed_f16.resize(total_patches * config_.vision_embed_dim);
+            cactus_fp32_to_fp16(static_cast<const float*>(embed_ptr),
+                               embed_f16.data(), embed_f16.size());
+            input_ptr = embed_f16.data();
+        }
+
+        std::vector<int> input_shape = {
+            static_cast<int>(total_patches),
+            static_cast<int>(config_.vision_embed_dim)
+        };
+
+        __fp16* output_buffer = npu_encoder_->get_output_buffer();
+        if (output_buffer) {
+            size_t elements = npu_encoder_->encode(
+                input_ptr, output_buffer, input_shape, "x", "");
+
+            if (elements > 0) {
+                gb->soft_reset();
+                size_t vision_output = gb->input({total_patches, config_.vision_embed_dim},
+                                                  Precision::FP16);
+                gb->set_input(vision_output, output_buffer, Precision::FP16);
+                return vision_output;
+            }
+        } else {
+            std::vector<__fp16> npu_output(total_patches * config_.vision_embed_dim);
+            size_t elements = npu_encoder_->encode(
+                input_ptr, npu_output.data(), input_shape, "x", "");
+
+            if (elements > 0) {
+                gb->soft_reset();
+                size_t vision_output = gb->input({total_patches, config_.vision_embed_dim},
+                                                  Precision::FP16);
+                gb->set_input(vision_output, npu_output.data(), Precision::FP16);
+                return vision_output;
+            }
+        }
+
+        throw std::runtime_error("NPU encoder failed");
+    }
+
+    // CPU path: full forward pass through transformer layers
     auto embedding_result = build_vision_embeddings(gb, preprocessed_image, backend);
+
     auto concat_nodes = [&](const std::vector<size_t>& nodes) {
         if (nodes.empty()) {
             throw std::runtime_error("Attempted to concatenate an empty node list in forward_vision");
@@ -240,10 +320,9 @@ size_t Siglip2VisionModel::forward_vision(
 
     for (size_t tile_idx = 0; tile_idx < embedding_result.tile_embeddings.size(); ++tile_idx) {
         size_t hidden_states = embedding_result.tile_embeddings[tile_idx];
-        
+
         for (uint32_t layer_idx = 0; layer_idx < config_.vision_num_layers; ++layer_idx) {
             hidden_states = build_vision_transformer_layer(gb, hidden_states, layer_idx, backend);
-            
         }
 
         hidden_states = gb->layernorm(hidden_states,
@@ -251,7 +330,6 @@ size_t Siglip2VisionModel::forward_vision(
                                        vision_weight_nodes_.post_layernorm_bias,
                                        config_.layer_norm_eps);
         tile_outputs.push_back(hidden_states);
-        
     }
 
     if (tile_outputs.empty()) {
@@ -259,6 +337,7 @@ size_t Siglip2VisionModel::forward_vision(
     }
 
     size_t combined_output = concat_nodes(tile_outputs);
+
     return combined_output;
 }
 
@@ -274,7 +353,6 @@ size_t Siglip2VisionModel::forward_vision(const Siglip2Preprocessor::Preprocesse
 
 std::vector<float> Siglip2VisionModel::get_image_features(const std::string& image_path) {
     auto preprocessed = preprocessor_.preprocess_from_file(image_path);
-    
     return get_image_features(preprocessed);
 }
 

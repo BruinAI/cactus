@@ -6,7 +6,6 @@
 #include <cstring>
 #include <cmath>
 #include <algorithm>
-#include <iostream>
 
 using namespace cactus::engine;
 using namespace cactus::ffi;
@@ -112,26 +111,31 @@ int cactus_transcribe(
 ) {
     if (!model) {
         std::string error_msg = last_error_message.empty() ? "Model not initialized." : last_error_message;
+        CACTUS_LOG_ERROR("transcribe", error_msg);
         handle_error_response(error_msg, response_buffer, buffer_size);
         return -1;
     }
 
     if (!prompt || !response_buffer || buffer_size == 0) {
+        CACTUS_LOG_ERROR("transcribe", "Invalid parameters: prompt, response_buffer, or buffer_size");
         handle_error_response("Invalid parameters", response_buffer, buffer_size);
         return -1;
     }
 
     if (!audio_file_path && (!pcm_buffer || pcm_buffer_size == 0)) {
+        CACTUS_LOG_ERROR("transcribe", "No audio input provided");
         handle_error_response("Either audio_file_path or pcm_buffer must be provided", response_buffer, buffer_size);
         return -1;
     }
 
     if (audio_file_path && pcm_buffer && pcm_buffer_size > 0) {
+        CACTUS_LOG_ERROR("transcribe", "Both audio_file_path and pcm_buffer provided");
         handle_error_response("Cannot provide both audio_file_path and pcm_buffer", response_buffer, buffer_size);
         return -1;
     }
 
     if (pcm_buffer && pcm_buffer_size > 0 && (pcm_buffer_size < 2 || pcm_buffer_size % 2 != 0)) {
+        CACTUS_LOG_ERROR("transcribe", "Invalid pcm_buffer_size: " << pcm_buffer_size);
         handle_error_response("pcm_buffer_size must be even and at least 2 bytes", response_buffer, buffer_size);
         return -1;
     }
@@ -145,7 +149,8 @@ int cactus_transcribe(
         float temperature, top_p;
         size_t top_k, max_tokens;
         std::vector<std::string> stop_sequences;
-        parse_options_json(options_json ? options_json : "", temperature, top_p, top_k, max_tokens, stop_sequences);
+        bool force_tools = false;  
+        parse_options_json(options_json ? options_json : "", temperature, top_p, top_k, max_tokens, stop_sequences, force_tools);
 
         std::vector<float> mel_bins;
         if (audio_file_path == nullptr) {
@@ -157,18 +162,23 @@ int cactus_transcribe(
         }
 
         if (mel_bins.empty()) {
+            CACTUS_LOG_ERROR("transcribe", "Computed mel spectrogram is empty");
             handle_error_response("Computed mel spectrogram is empty", response_buffer, buffer_size);
             return -1;
         }
 
+        CACTUS_LOG_DEBUG("transcribe", "Mel spectrogram computed, size: " << mel_bins.size());
+
         auto* tokenizer = handle->model->get_tokenizer();
         if (!tokenizer) {
+            CACTUS_LOG_ERROR("transcribe", "Tokenizer unavailable");
             handle_error_response("Tokenizer unavailable", response_buffer, buffer_size);
             return -1;
         }
 
         std::vector<uint32_t> tokens = tokenizer->encode(std::string(prompt));
         if (tokens.empty()) {
+            CACTUS_LOG_ERROR("transcribe", "Decoder input tokens empty after encoding prompt");
             handle_error_response("Decoder input tokens empty", response_buffer, buffer_size);
             return -1;
         }
@@ -181,7 +191,7 @@ int cactus_transcribe(
         std::vector<uint32_t> generated_tokens;
         std::string final_text;
 
-        uint32_t next_token = handle->model->generate_with_audio(tokens, mel_bins, temperature, top_p, top_k, "profile.txt");
+        uint32_t next_token = handle->model->decode_with_audio(tokens, mel_bins, temperature, top_p, top_k, "profile.txt");
         {
             auto t_first = std::chrono::high_resolution_clock::now();
             time_to_first_token = std::chrono::duration_cast<std::chrono::microseconds>(t_first - start_time).count() / 1000.0;
@@ -199,7 +209,7 @@ int cactus_transcribe(
             for (size_t i = 1; i < max_tokens; ++i) {
                 if (handle->should_stop) break;
 
-                next_token = handle->model->generate_with_audio(tokens, mel_bins, temperature, top_p, top_k, "profile.txt");
+                next_token = handle->model->decode_with_audio(tokens, mel_bins, temperature, top_p, top_k, "profile.txt");
                 generated_tokens.push_back(next_token);
                 tokens.push_back(next_token);
                 completion_tokens++;
@@ -243,6 +253,8 @@ int cactus_transcribe(
         return static_cast<int>(json.size());
     }
     catch (const std::exception& e) {
+        CACTUS_LOG_ERROR("transcribe", "Exception: " << e.what());
+
         auto* handle = static_cast<CactusModelHandle*>(model);
         CactusTelemetry::getInstance().recordTranscription(
             handle->model_name,
@@ -258,6 +270,8 @@ int cactus_transcribe(
         return -1;
     }
     catch (...) {
+        CACTUS_LOG_ERROR("transcribe", "Unknown exception during transcription");
+
         auto* handle = static_cast<CactusModelHandle*>(model);
         CactusTelemetry::getInstance().recordTranscription(
             handle->model_name,

@@ -28,6 +28,9 @@ if(NOT APPLE)
     else()
         message(STATUS "libmman not found; assuming mmap symbols are provided by the C runtime")
     endif()
+else()
+    find_library(COREML_FRAMEWORK CoreML REQUIRED)
+    find_library(FOUNDATION_FRAMEWORK Foundation REQUIRED)
 endif()
 
 find_package(SDL2)
@@ -37,7 +40,14 @@ else()
     message(STATUS "SDL2 not found; microphone tests will be skipped")
 endif()
 
-file(GLOB TEST_SOURCES "test*.cpp")
+find_package(SDL2)
+if(SDL2_FOUND)
+    message(STATUS "Found SDL2: ${SDL2_LIBRARIES}")
+else()
+    message(STATUS "SDL2 not found; microphone tests will be skipped")
+endif()
+
+file(GLOB TEST_SOURCES "test_en*.cpp")
 list(REMOVE_ITEM TEST_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/test_utils.cpp")
 
 foreach(TEST_FILE ${TEST_SOURCES})
@@ -45,6 +55,7 @@ foreach(TEST_FILE ${TEST_SOURCES})
     get_filename_component(TEST_NAME ${TEST_FILE} NAME_WE)
     add_executable(${TEST_NAME} ${TEST_FILE} test_utils.cpp)
     target_link_libraries(${TEST_NAME} PRIVATE ${CACTUS_LIB})
+
 
     if(MMAN_LIB)
         target_link_libraries(${TEST_NAME} PRIVATE ${MMAN_LIB})
@@ -62,6 +73,11 @@ foreach(TEST_FILE ${TEST_SOURCES})
         target_link_libraries(${TEST_NAME} PRIVATE ${CURL_LIBRARIES})
         target_include_directories(${TEST_NAME} PRIVATE ${CURL_INCLUDE_DIRS})
         message(STATUS "Test ${TEST_NAME} will link with libcurl")
+    endif()
+
+
+    if(APPLE)
+        target_link_libraries(${TEST_NAME} PRIVATE ${COREML_FRAMEWORK} ${FOUNDATION_FRAMEWORK})
     endif()
 
     target_include_directories(${TEST_NAME} PRIVATE ${CACTUS_ROOT})

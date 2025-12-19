@@ -22,11 +22,13 @@ int cactus_complete(
     if (!model) {
         std::string error_msg = last_error_message.empty() ?
             "Model not initialized. Check model path and files." : last_error_message;
+        CACTUS_LOG_ERROR("complete", error_msg);
         handle_error_response(error_msg, response_buffer, buffer_size);
         return -1;
     }
 
     if (!messages_json || !response_buffer || buffer_size == 0) {
+        CACTUS_LOG_ERROR("complete", "Invalid parameters: messages_json, response_buffer, or buffer_size");
         handle_error_response("Invalid parameters", response_buffer, buffer_size);
         return -1;
     }
@@ -42,6 +44,7 @@ int cactus_complete(
         auto messages = parse_messages_json(messages_json, image_paths);
 
         if (messages.empty()) {
+            CACTUS_LOG_ERROR("complete", "No messages provided in request");
             handle_error_response("No messages provided", response_buffer, buffer_size);
             return -1;
         }
@@ -49,22 +52,39 @@ int cactus_complete(
         float temperature, top_p;
         size_t top_k, max_tokens;
         std::vector<std::string> stop_sequences;
+        bool force_tools = false;
         parse_options_json(options_json ? options_json : "",
-                          temperature, top_p, top_k, max_tokens, stop_sequences);
+                          temperature, top_p, top_k, max_tokens, stop_sequences, force_tools);
 
         std::vector<ToolFunction> tools;
         if (tools_json && strlen(tools_json) > 0)
             tools = parse_tools_json(tools_json);
 
+        if (force_tools && !tools.empty()) {
+            std::vector<std::string> function_names;
+            function_names.reserve(tools.size());
+            for (const auto& tool : tools) {
+                function_names.push_back(tool.name);
+            }
+            handle->model->set_tool_constraints(function_names);
+
+            if (temperature == 0.0f) {
+                temperature = 0.01f;
+            }
+        }
+
         std::string formatted_tools = format_tools_for_prompt(tools);
         std::string full_prompt = tokenizer->format_chat_prompt(messages, true, formatted_tools);
 
         if (full_prompt.find("ERROR:") == 0) {
+            CACTUS_LOG_ERROR("complete", "Prompt formatting failed: " << full_prompt.substr(6));
             handle_error_response(full_prompt.substr(6), response_buffer, buffer_size);
             return -1;
         }
 
         std::vector<uint32_t> current_prompt_tokens = tokenizer->encode(full_prompt);
+
+        CACTUS_LOG_DEBUG("complete", "Prompt tokens: " << current_prompt_tokens.size() << ", max_tokens: " << max_tokens);
 
         std::vector<uint32_t> tokens_to_process;
         bool is_prefix = (current_prompt_tokens.size() >= handle->processed_tokens.size()) &&
@@ -94,30 +114,22 @@ int cactus_complete(
                 return -1;
             }
             std::vector<uint32_t> last_token_vec = { handle->processed_tokens.back() };
-            next_token = handle->model->generate(last_token_vec, temperature, top_p, top_k);
+            next_token = handle->model->decode(last_token_vec, temperature, top_p, top_k);
         } else {
             if (!image_paths.empty()) {
-                next_token = handle->model->generate_with_images(tokens_to_process, image_paths, temperature, top_p, top_k, "profile.txt");
+                next_token = handle->model->decode_with_images(tokens_to_process, image_paths, temperature, top_p, top_k);
             } else {
-                constexpr size_t PREFILL_CHUNK_SIZE = 256;
+                size_t prefill_chunk_size = handle->model->get_prefill_chunk_size();
 
-                if (tokens_to_process.size() > PREFILL_CHUNK_SIZE) {
-                    size_t num_full_chunks = (tokens_to_process.size() - 1) / PREFILL_CHUNK_SIZE;
+                if (tokens_to_process.size() > 1) {
+                    std::vector<uint32_t> prefill_tokens(tokens_to_process.begin(),
+                                                         tokens_to_process.end() - 1);
+                    handle->model->prefill(prefill_tokens, prefill_chunk_size);
 
-                    for (size_t chunk_idx = 0; chunk_idx < num_full_chunks; ++chunk_idx) {
-                        size_t start = chunk_idx * PREFILL_CHUNK_SIZE;
-                        size_t end = start + PREFILL_CHUNK_SIZE;
-                        std::vector<uint32_t> chunk(tokens_to_process.begin() + start,
-                                                    tokens_to_process.begin() + end);
-                        handle->model->generate(chunk, temperature, top_p, top_k, "", true);
-                    }
-
-                    size_t final_start = num_full_chunks * PREFILL_CHUNK_SIZE;
-                    std::vector<uint32_t> final_chunk(tokens_to_process.begin() + final_start,
-                                                      tokens_to_process.end());
-                    next_token = handle->model->generate(final_chunk, temperature, top_p, top_k);
+                    std::vector<uint32_t> last_token = {tokens_to_process.back()};
+                    next_token = handle->model->decode(last_token, temperature, top_p, top_k);
                 } else {
-                    next_token = handle->model->generate(tokens_to_process, temperature, top_p, top_k, "profile.txt");
+                    next_token = handle->model->decode(tokens_to_process, temperature, top_p, top_k, "profile.txt");
                 }
             }
         }
@@ -130,6 +142,10 @@ int cactus_complete(
         generated_tokens.push_back(next_token);
         handle->processed_tokens.push_back(next_token);
 
+        if (force_tools && !tools.empty()) {
+            handle->model->update_tool_constraints(next_token);
+        }
+
         if (!matches_stop_sequence(generated_tokens, stop_token_sequences)) {
             if (callback) {
                 std::string new_text = tokenizer->decode({next_token});
@@ -139,9 +155,13 @@ int cactus_complete(
             for (size_t i = 1; i < max_tokens; i++) {
                 if (handle->should_stop) break;
 
-                next_token = handle->model->generate({next_token}, temperature, top_p, top_k);
+                next_token = handle->model->decode({next_token}, temperature, top_p, top_k);
                 generated_tokens.push_back(next_token);
                 handle->processed_tokens.push_back(next_token);
+
+                if (force_tools && !tools.empty()) {
+                    handle->model->update_tool_constraints(next_token);
+                }
 
                 if (matches_stop_sequence(generated_tokens, stop_token_sequences)) break;
 
@@ -150,6 +170,10 @@ int cactus_complete(
                     callback(new_text.c_str(), next_token, user_data);
                 }
             }
+        }
+
+        if (force_tools && !tools.empty()) {
+            handle->model->clear_tool_constraints();
         }
 
         auto end_time = std::chrono::high_resolution_clock::now();
@@ -189,6 +213,8 @@ int cactus_complete(
         return static_cast<int>(result.length());
 
     } catch (const std::exception& e) {
+        CACTUS_LOG_ERROR("complete", "Exception: " << e.what());
+
         auto* handle = static_cast<CactusModelHandle*>(model);
         CactusTelemetry::getInstance().recordCompletion(
             handle ? handle->model_name : "unknown",
@@ -198,6 +224,19 @@ int cactus_complete(
         );
 
         handle_error_response(e.what(), response_buffer, buffer_size);
+        return -1;
+    } catch (...) {
+        CACTUS_LOG_ERROR("complete", "Unknown exception during completion");
+
+        auto* handle = static_cast<CactusModelHandle*>(model);
+        CactusTelemetry::getInstance().recordCompletion(
+            handle ? handle->model_name : "unknown",
+            false,
+            0.0, 0.0, 0.0, 0,
+            "Unknown exception"
+        );
+
+        handle_error_response("Unknown error during completion", response_buffer, buffer_size);
         return -1;
     }
 }

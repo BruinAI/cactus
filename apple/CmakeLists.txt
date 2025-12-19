@@ -4,6 +4,9 @@ project(Cactus LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 
+set(CMAKE_OSX_DEPLOYMENT_TARGET "13.0" CACHE STRING "Minimum macOS version")
+set(CMAKE_XCODE_ATTRIBUTE_IPHONEOS_DEPLOYMENT_TARGET "16.0" CACHE STRING "Minimum iOS version")
+
 set(SOURCE_DIR ${CMAKE_SOURCE_DIR}/../cactus)
 
 if(NOT CMAKE_BUILD_TYPE)
@@ -17,6 +20,32 @@ file(GLOB KERNEL_SOURCES "${SOURCE_DIR}/kernel/*.cpp")
 file(GLOB FFI_SOURCES "${SOURCE_DIR}/ffi/*.cpp")
 file(GLOB MODEL_SOURCES "${SOURCE_DIR}/models/*.cpp")
 
+enable_language(OBJCXX)
+
+if(CMAKE_SYSTEM_NAME STREQUAL "iOS")
+    string(TOLOWER "${CMAKE_OSX_SYSROOT}" SYSROOT_LOWER)
+    if(SYSROOT_LOWER MATCHES "simulator")
+        set(CACTUS_PRO_LIB "${SOURCE_DIR}/../libs/libcactus_pro-ios-simulator.a")
+        message(STATUS "Building for iOS Simulator - using libcactus_pro-ios-simulator.a")
+    else()
+        set(CACTUS_PRO_LIB "${SOURCE_DIR}/../libs/libcactus_pro-ios.a")
+        message(STATUS "Building for iOS Device - using libcactus_pro-ios.a")
+    endif()
+else()
+    set(CACTUS_PRO_LIB "${SOURCE_DIR}/../libs/libcactus_pro.a")
+    message(STATUS "Building for macOS - using libcactus_pro.a")
+endif()
+
+if(EXISTS ${CACTUS_PRO_LIB})
+    message(STATUS "Found ${CACTUS_PRO_LIB} - NPU acceleration enabled")
+    set(CACTUS_HAS_PRO TRUE)
+    set(NPU_SOURCES "")
+else()
+    message(STATUS "${CACTUS_PRO_LIB} not found - NPU acceleration disabled (using stubs)")
+    set(CACTUS_HAS_PRO FALSE)
+    file(GLOB NPU_SOURCES "${SOURCE_DIR}/npu/*.cpp")
+endif()
+
 set(HEADER_FILES
     ${SOURCE_DIR}/cactus.h
     ${SOURCE_DIR}/engine/engine.h
@@ -26,6 +55,7 @@ set(HEADER_FILES
     ${SOURCE_DIR}/ffi/cactus_ffi.h
     ${SOURCE_DIR}/ffi/cactus_utils.h
     ${SOURCE_DIR}/models/model.h
+    ${SOURCE_DIR}/npu/npu.h
 )
 
 set(COMMON_SOURCES
@@ -34,6 +64,7 @@ set(COMMON_SOURCES
     ${ENGINE_SOURCES}
     ${FFI_SOURCES}
     ${MODEL_SOURCES}
+    ${NPU_SOURCES}
 )
 
 if(NOT COMMON_SOURCES)
@@ -58,13 +89,23 @@ else()
     add_library(cactus STATIC ${COMMON_SOURCES})
 endif()
 
-target_include_directories(cactus PUBLIC 
+target_include_directories(cactus PUBLIC
     ${SOURCE_DIR}
     ${SOURCE_DIR}/engine
     ${SOURCE_DIR}/graph
     ${SOURCE_DIR}/kernel
     ${SOURCE_DIR}/ffi
+    ${SOURCE_DIR}/npu
 )
+
+find_library(COREML_FRAMEWORK CoreML REQUIRED)
+find_library(FOUNDATION_FRAMEWORK Foundation REQUIRED)
+
+if(CACTUS_HAS_PRO)
+    target_link_libraries(cactus PUBLIC "-force_load ${CACTUS_PRO_LIB}")
+endif()
+
+target_link_libraries(cactus PUBLIC ${COREML_FRAMEWORK} ${FOUNDATION_FRAMEWORK})
 
 target_compile_definitions(cactus PRIVATE
     PLATFORM_CPU_ONLY=1

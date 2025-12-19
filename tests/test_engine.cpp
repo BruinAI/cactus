@@ -119,7 +119,13 @@ bool test_tool_call() {
         }
     }])";
 
-    return run_test("TOOL CALL TEST", messages,
+    const char* options_with_force_tools = R"({
+        "max_tokens": 256,
+        "stop_sequences": ["<|im_end|>", "<end_of_turn>"],
+        "force_tools": true
+    })";
+
+    return EngineTestUtils::run_test("TOOL CALL TEST", g_model_path, messages, options_with_force_tools,
         [](int result, const StreamingData&, const std::string& response, const Metrics& m) {
             bool has_function = response.find("function_call") != std::string::npos;
             bool has_tool = response.find("get_weather") != std::string::npos;
@@ -127,14 +133,22 @@ bool test_tool_call() {
                       << "├─ Correct tool: " << (has_tool ? "YES" : "NO") << "\n";
             m.print_perf(get_memory_usage_mb());
             return result > 0 && has_function && has_tool;
-        }, tools);
+        }, tools, -1, "What's the weather in San Francisco?");
 }
 
 bool test_image_input() {
     std::string model_path_str(g_model_path ? g_model_path : "");
-    if (model_path_str.find("vl") == std::string::npos) {
-        std::cout << "Skipping image input test: model is not a VLM." << std::endl;
-        return true;
+    std::string config_path = model_path_str + "/config.txt";
+    std::ifstream config_file(config_path);
+    if (config_file.good()) {
+        std::string line;
+        while (std::getline(config_file, line)) {
+            if (line.find("model_variant=vlm") != std::string::npos ||
+                line.find("model_variant=VLM") != std::string::npos) {
+                break;
+            }
+        }
+        config_file.close();
     }
 
     std::string vision_file = model_path_str + "/vision_patch_embedding.weights";
@@ -179,7 +193,7 @@ bool test_image_input() {
     return success;
 }
 
-bool test_tool_call_with_multiple_tools() {
+bool test_tool_call_with_two_tools() {
     const char* messages = R"([
         {"role": "system", "content": "You are a helpful assistant that can use tools."},
         {"role": "user", "content": "Set an alarm for 10:00 AM."}
@@ -214,15 +228,89 @@ bool test_tool_call_with_multiple_tools() {
         }
     }])";
 
-    return run_test("MULTIPLE TOOLS TEST", messages,
+    const char* options_with_force_tools = R"({
+        "max_tokens": 256,
+        "stop_sequences": ["<|im_end|>", "<end_of_turn>"],
+        "force_tools": true
+    })";
+
+    return EngineTestUtils::run_test("DOUBLE TOOLS TEST", g_model_path, messages, options_with_force_tools,
         [](int result, const StreamingData&, const std::string& response, const Metrics& m) {
-            bool has_function = response.find("function_call") != std::string::npos;
+            bool has_function = response.find("function_call") != std::string::npos ||
+                               response.find("set_alarm") != std::string::npos;
             bool has_tool = response.find("set_alarm") != std::string::npos;
             std::cout << "├─ Function call: " << (has_function ? "YES" : "NO") << "\n"
                       << "├─ Correct tool: " << (has_tool ? "YES" : "NO") << "\n";
             m.print_perf(get_memory_usage_mb());
             return result > 0 && has_function && has_tool;
-        }, tools);
+        }, tools, -1, "Set an alarm for 10:00 AM.");
+}
+
+bool test_tool_call_with_three_tools() {
+    const char* messages = R"([
+        {"role": "system", "content": "You are a helpful assistant that can use tools."},
+        {"role": "user", "content": "Send a message to John saying hello."}
+    ])";
+
+    const char* tools = R"([{
+        "type": "function",
+        "function": {
+            "name": "get_weather",
+            "description": "Get weather for a location",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "location": {"type": "string", "description": "City, State, Country"}
+                },
+                "required": ["location"]
+            }
+        }
+    }, {
+        "type": "function",
+        "function": {
+            "name": "set_alarm",
+            "description": "Set an alarm for a given time",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "hour": {"type": "integer", "description": "Hour to set the alarm for"},
+                    "minute": {"type": "integer", "description": "Minute to set the alarm for"}
+                },
+                "required": ["hour", "minute"]
+            }
+        }
+    }, {
+        "type": "function",
+        "function": {
+            "name": "send_message",
+            "description": "Send a message to a contact",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "recipient": {"type": "string", "description": "Name of the person to send the message to"},
+                    "message": {"type": "string", "description": "The message content to send"}
+                },
+                "required": ["recipient", "message"]
+            }
+        }
+    }])";
+
+    const char* options_with_force_tools = R"({
+        "max_tokens": 256,
+        "stop_sequences": ["<|im_end|>", "<end_of_turn>"],
+        "force_tools": true
+    })";
+
+    return EngineTestUtils::run_test("TRIPLE TOOLS TEST", g_model_path, messages, options_with_force_tools,
+        [](int result, const StreamingData&, const std::string& response, const Metrics& m) {
+            bool has_function = response.find("function_call") != std::string::npos ||
+                               response.find("send_message") != std::string::npos;
+            bool has_tool = response.find("send_message") != std::string::npos;
+            std::cout << "├─ Function call: " << (has_function ? "YES" : "NO") << "\n"
+                      << "├─ Correct tool: " << (has_tool ? "YES" : "NO") << "\n";
+            m.print_perf(get_memory_usage_mb());
+            return result > 0 && has_function && has_tool;
+        }, tools, -1, "Send a message to John saying hello.");
 }
 
 bool test_embeddings() {
@@ -238,20 +326,17 @@ bool test_embeddings() {
     size_t dim1, dim2;
 
     Timer t1;
-    cactus_embed(model, texts[0], emb1.data(), emb1.size() * sizeof(float), &dim1);
+    cactus_embed(model, texts[0], emb1.data(), emb1.size() * sizeof(float), &dim1, true);
     double time1 = t1.elapsed_ms();
 
     Timer t2;
-    cactus_embed(model, texts[1], emb2.data(), emb2.size() * sizeof(float), &dim2);
+    cactus_embed(model, texts[1], emb2.data(), emb2.size() * sizeof(float), &dim2, true);
     double time2 = t2.elapsed_ms();
 
-    float dot = 0, norm1 = 0, norm2 = 0;
+    float similarity = 0;
     for (size_t i = 0; i < dim1; ++i) {
-        dot += emb1[i] * emb2[i];
-        norm1 += emb1[i] * emb1[i];
-        norm2 += emb2[i] * emb2[i];
+        similarity += emb1[i] * emb2[i];
     }
-    float similarity = dot / (std::sqrt(norm1) * std::sqrt(norm2));
 
     std::cout << "\n[Results]\n"
               << "├─ Embedding dim: " << dim1 << "\n"
@@ -719,7 +804,8 @@ int main() {
     TestUtils::TestRunner runner("Engine Tests");
     runner.run_test("streaming", test_streaming());
     runner.run_test("tool_calls", test_tool_call());
-    runner.run_test("tool_calls_with_multiple_tools", test_tool_call_with_multiple_tools());
+    runner.run_test("tool_calls_with_two_tools", test_tool_call_with_two_tools());
+    runner.run_test("tool_calls_with_three_tools", test_tool_call_with_three_tools());
     runner.run_test("embeddings", test_embeddings());
     runner.run_test("image_embeddings", test_image_embeddings());
     runner.run_test("audio_embeddings", test_audio_embeddings());

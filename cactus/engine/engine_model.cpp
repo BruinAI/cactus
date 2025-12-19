@@ -1,8 +1,10 @@
 #include "engine.h"
 #include "../models/model.h"
 #include "../graph/graph.h"
+#include "../npu/npu.h"
 #include <fstream>
 #include <iomanip>
+#include <iostream>
 #include <cmath>
 #include <cstdlib>
 #include <dirent.h>
@@ -71,10 +73,12 @@ bool Model::init(CactusGraph* external_graph, const std::string& model_folder, s
 bool Model::init_internal(CactusGraph* gb, const std::string& model_folder, size_t context_size,
                           const std::string& system_prompt, bool do_warmup) {
 
+    CACTUS_LOG_DEBUG("model", "Initializing model from: " << model_folder);
     model_folder_path_ = model_folder;
     std::string config_path = model_folder + "/config.txt";
 
     if (!config_.from_json(config_path)) {
+        CACTUS_LOG_ERROR("model", "Model initialization failed - config not loaded from: " << model_folder);
         return false;
     }
 
@@ -170,8 +174,56 @@ size_t Model::forward(const std::vector<float>& /*mel_bins*/, const std::vector<
     return forward(tokens, use_cache);
 }
 
-uint32_t Model::generate(const std::vector<uint32_t>& tokens, float temperature, float top_p,
-                        size_t top_k, const std::string& profile_file, bool prefill_only) {
+void Model::prefill(const std::vector<uint32_t>& tokens, size_t chunk_size, const std::string& profile_file) {
+    if (tokens.empty()) {
+        return;
+    }
+
+    // Use NPU prefill if available and sequence is longer than chunk size
+    if (has_npu_prefill()) {
+        size_t npu_chunk_size = static_cast<size_t>(npu_prefill_->get_chunk_size());
+        if (tokens.size() > npu_chunk_size) {
+            prefill_npu(tokens);
+            return;
+        }
+    }
+
+    auto* gb = static_cast<CactusGraph*>(graph_handle_);
+
+    auto process_chunk = [&](const std::vector<uint32_t>& chunk) {
+        forward(chunk, true);
+
+        if (!profile_file.empty()) {
+            gb->execute(profile_file);
+        } else {
+            gb->execute("profile.txt");
+        }
+
+        post_execute_updates(gb, chunk.size());
+        update_kv_cache(gb, chunk.size());
+    };
+
+    if (tokens.size() <= chunk_size) {
+        process_chunk(tokens);
+        return;
+    }
+
+    size_t num_full_chunks = (tokens.size() - 1) / chunk_size;
+
+    for (size_t chunk_idx = 0; chunk_idx < num_full_chunks; ++chunk_idx) {
+        size_t start = chunk_idx * chunk_size;
+        size_t end = start + chunk_size;
+        std::vector<uint32_t> chunk(tokens.begin() + start, tokens.begin() + end);
+        process_chunk(chunk);
+    }
+
+    size_t final_start = num_full_chunks * chunk_size;
+    std::vector<uint32_t> final_chunk(tokens.begin() + final_start, tokens.end());
+    process_chunk(final_chunk);
+}
+
+uint32_t Model::decode(const std::vector<uint32_t>& tokens, float temperature, float top_p,
+                        size_t top_k, const std::string& profile_file) {
 
     if (temperature < 0) {
         temperature = config_.default_temperature;
@@ -186,46 +238,39 @@ uint32_t Model::generate(const std::vector<uint32_t>& tokens, float temperature,
     auto final_hidden = forward(tokens, true);
 
     auto* gb = static_cast<CactusGraph*>(graph_handle_);
+    auto backend = config_.default_backend == Config::Backend::CPU
+        ? ComputeBackend::CPU
+        : ComputeBackend::NPU;
 
-    size_t sampled_token_id = 0;
-    if (!prefill_only) {
-        auto backend = config_.default_backend == Config::Backend::CPU
-            ? ComputeBackend::CPU
-            : ComputeBackend::NPU;
+    auto last_hidden = gb->index(final_hidden, tokens.size() - 1, 0);
+    const auto& last_hidden_buf = gb->get_output_buffer(last_hidden);
+    size_t hidden_dim = last_hidden_buf.shape[0];
+    last_hidden = gb->reshape(last_hidden, {1, hidden_dim});
 
-        auto last_hidden = gb->index(final_hidden, tokens.size() - 1, 0);
-        const auto& last_hidden_buf = gb->get_output_buffer(last_hidden);
-        size_t hidden_dim = last_hidden_buf.shape[0];
-        last_hidden = gb->reshape(last_hidden, {1, hidden_dim});
-
-        auto logits_node_id = gb->matmul(last_hidden, output_weight_node_id_, true, backend);
-        sampled_token_id = gb->sample(logits_node_id, temperature, top_p, top_k);
-    }
+    auto logits_node_id = gb->matmul(last_hidden, output_weight_node_id_, true, backend);
+    auto sampled_token_id = gb->sample(logits_node_id, temperature, top_p, top_k, tool_constrainer_.get_bias());
 
     if (!profile_file.empty()) {
         gb->execute(profile_file);
     } else {
         gb->execute();
     }
+
     post_execute_updates(gb, tokens.size());
     update_kv_cache(gb, tokens.size());
-
-    if (prefill_only) {
-        return sampled_token_id;
-    }
 
     auto* output_ptr = gb->get_output(sampled_token_id);
     return *static_cast<uint32_t*>(output_ptr);
 }
 
-uint32_t Model::generate_with_audio(const std::vector<uint32_t>& tokens, const std::vector<float>& /*mel_bins*/, float temperature, float top_p, size_t top_k, const std::string& profile_file){
-    return generate(tokens, temperature, top_p, top_k, profile_file);
+uint32_t Model::decode_with_audio(const std::vector<uint32_t>& tokens, const std::vector<float>& /*mel_bins*/, float temperature, float top_p, size_t top_k, const std::string& profile_file){
+    return decode(tokens, temperature, top_p, top_k, profile_file);
 }
 
-uint32_t Model::generate_with_images(const std::vector<uint32_t>& tokens, const std::vector<std::string>& image_paths,
+uint32_t Model::decode_with_images(const std::vector<uint32_t>& tokens, const std::vector<std::string>& image_paths,
                                      float temperature, float top_p, size_t top_k, const std::string& profile_file) {
     (void)image_paths;
-    return generate(tokens, temperature, top_p, top_k, profile_file);
+    return decode(tokens, temperature, top_p, top_k, profile_file);
 }
 
 std::vector<float> Model::get_image_embeddings(const std::string& /*image_path*/) {
@@ -243,14 +288,13 @@ void Model::update_kv_cache(CactusGraph* gb, size_t seq_len) {
 }
 
 
-std::vector<float> Model::get_embeddings(const std::vector<uint32_t>& tokens, bool pooled, const std::string& profile_file) {
+std::vector<float> Model::get_embeddings(const std::vector<uint32_t>& tokens, bool pooled, bool normalize, const std::string& profile_file) {
+    std::vector<float> embeddings;
     auto final_hidden = forward(tokens);
 
     auto* gb = static_cast<CactusGraph*>(graph_handle_);
     auto* output_ptr = gb->get_output(final_hidden);
     const auto& output_buffer = gb->get_output_buffer(final_hidden);
-
-    std::vector<float> embeddings;
 
     if (pooled) {
         auto pooled_hidden = gb->mean(final_hidden, 0);
@@ -306,6 +350,20 @@ std::vector<float> Model::get_embeddings(const std::vector<uint32_t>& tokens, bo
         }
     }
 
+    if (normalize && !embeddings.empty()) {
+        float norm_sq = 0.0f;
+        for (float v : embeddings) {
+            norm_sq += v * v;
+        }
+        float norm = std::sqrt(norm_sq);
+        if (norm > 1e-12f) {
+            float inv_norm = 1.0f / norm;
+            for (float& v : embeddings) {
+                v *= inv_norm;
+            }
+        }
+    }
+
     kv_cache_.reset();
 
     return embeddings;
@@ -314,6 +372,7 @@ std::vector<float> Model::get_embeddings(const std::vector<uint32_t>& tokens, bo
 bool Config::from_json(const std::string& config_path) {
     std::ifstream file(config_path);
     if (!file) {
+        CACTUS_LOG_ERROR("config", "Failed to open config file: " << config_path);
         return false;
     }
     
@@ -453,10 +512,12 @@ std::string Config::to_json() const {
 }
 
 std::unique_ptr<Model> create_model(const std::string& model_folder) {
+    CACTUS_LOG_DEBUG("model", "Creating model from: " << model_folder);
     Config config;
     std::string config_path = model_folder + "/config.txt";
 
     if (!config.from_json(config_path)) {
+        CACTUS_LOG_ERROR("model", "Failed to create model - cannot load config from: " << model_folder);
         return nullptr;
     }
 
@@ -518,6 +579,133 @@ const std::vector<Model::DebugNode>& Model::get_debug_nodes() const {
         debug_nodes_.push_back({entry.layer_idx, entry.name, entry.node_id});
     }
     return debug_nodes_;
+}
+
+bool Model::load_npu_prefill(const std::string& model_path) {
+    CACTUS_LOG_DEBUG("npu", "Attempting to load NPU prefill from: " << model_path);
+
+    npu_prefill_ = npu::create_prefill();
+    if (!npu_prefill_) {
+        CACTUS_LOG_DEBUG("npu", "NPU prefill creation failed (not supported on this device)");
+        return false;
+    }
+
+    bool loaded = npu_prefill_->load(model_path);
+    if (loaded) {
+        CACTUS_LOG_INFO("npu", "NPU prefill loaded successfully from: " << model_path);
+    } else {
+        CACTUS_LOG_DEBUG("npu", "NPU prefill model not found at: " << model_path);
+    }
+    return loaded;
+}
+
+bool Model::has_npu_prefill() const {
+    return npu_prefill_ && npu_prefill_->is_available();
+}
+
+size_t Model::get_prefill_chunk_size() const {
+    if (has_npu_prefill()) {
+        return static_cast<size_t>(npu_prefill_->get_chunk_size());
+    }
+    return 256;  // default chunk size
+}
+
+std::vector<__fp16> Model::get_token_embeddings(const std::vector<uint32_t>& tokens) {
+    auto* gb = static_cast<CactusGraph*>(graph_handle_);
+    if (!gb || tokens.empty()) {
+        return {};
+    }
+
+    gb->soft_reset();
+
+    size_t tok_input = gb->input({tokens.size()}, Precision::FP32);
+    std::vector<float> tok_f(tokens.size());
+    for (size_t i = 0; i < tokens.size(); i++) {
+        tok_f[i] = static_cast<float>(tokens[i]);
+    }
+    gb->set_input(tok_input, tok_f.data(), Precision::FP32);
+
+    size_t embedding_node = gb->embedding(embedding_node_id_, tok_input);
+
+    gb->execute();
+
+    const auto& emb_buf = gb->get_output_buffer(embedding_node);
+    void* emb_ptr = gb->get_output(embedding_node);
+
+    size_t num_tokens = tokens.size();
+    size_t hidden_dim = config_.hidden_dim;
+    std::vector<__fp16> embeddings(num_tokens * hidden_dim);
+
+    if (emb_buf.precision == Precision::FP16) {
+        __fp16* src = static_cast<__fp16*>(emb_ptr);
+        std::copy(src, src + num_tokens * hidden_dim, embeddings.begin());
+    } else if (emb_buf.precision == Precision::FP32) {
+        float* src = static_cast<float*>(emb_ptr);
+        for (size_t i = 0; i < num_tokens * hidden_dim; i++) {
+            embeddings[i] = static_cast<__fp16>(src[i]);
+        }
+    } else if (emb_buf.precision == Precision::INT8) {
+        int8_t* src = static_cast<int8_t*>(emb_ptr);
+        float scale = emb_buf.quantization_scale;
+        for (size_t i = 0; i < num_tokens * hidden_dim; i++) {
+            embeddings[i] = static_cast<__fp16>(src[i] * scale);
+        }
+    }
+
+    return embeddings;
+}
+
+void Model::prefill_npu(const std::vector<uint32_t>& tokens) {
+    if (!npu_prefill_ || !npu_prefill_->is_available()) {
+        throw std::runtime_error("NPU prefill not available");
+    }
+
+    const int chunk_size = npu_prefill_->get_chunk_size();
+    const int hidden_dim = npu_prefill_->get_hidden_dim();
+    const int num_layers = npu_prefill_->get_num_layers();
+    const int num_kv_heads = npu_prefill_->get_num_kv_heads();
+    const int head_dim = npu_prefill_->get_head_dim();
+
+    std::vector<__fp16> all_embeddings = get_token_embeddings(tokens);
+    if (all_embeddings.empty()) {
+        throw std::runtime_error("Failed to get token embeddings for NPU prefill");
+    }
+
+    if (config_.model_type == Config::ModelType::GEMMA) {
+        float scale = std::sqrt(static_cast<float>(hidden_dim));
+        for (size_t i = 0; i < all_embeddings.size(); i++) {
+            all_embeddings[i] = __fp16(static_cast<float>(all_embeddings[i]) * scale);
+        }
+    }
+
+    size_t num_tokens = tokens.size();
+    size_t num_chunks = (num_tokens + chunk_size - 1) / chunk_size;
+
+    for (size_t c = 0; c < num_chunks; c++) {
+        size_t start = c * chunk_size;
+        size_t actual_tokens = std::min(static_cast<size_t>(chunk_size), num_tokens - start);
+
+        std::vector<__fp16> chunk_embeddings(chunk_size * hidden_dim, __fp16(0));
+        std::copy(all_embeddings.begin() + start * hidden_dim,
+                  all_embeddings.begin() + (start + actual_tokens) * hidden_dim,
+                  chunk_embeddings.begin());
+
+        int position_offset = static_cast<int>(start);
+
+        npu::NPUPrefillDirectResult direct_result = npu_prefill_->prefill_chunk_direct(chunk_embeddings, position_offset);
+
+        if (direct_result.valid) {
+            for (int layer_idx = 0; layer_idx < num_layers; layer_idx++) {
+                const auto& k_ref = direct_result.k_caches[layer_idx];
+                const auto& v_ref = direct_result.v_caches[layer_idx];
+
+                if (k_ref.data && v_ref.data) {
+                    kv_cache_.update_from_npu(layer_idx, k_ref.data, v_ref.data,
+                                               actual_tokens, num_kv_heads, head_dim);
+                }
+            }
+        }
+    }
 }
 
 double Model::score_tokens_window_logprob(
