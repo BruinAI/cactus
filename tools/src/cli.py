@@ -352,10 +352,10 @@ def cmd_eval(args):
         if build_result != 0:
             return build_result
 
-    class DLArgs:
+    class DownloadArgs:
         pass
 
-    dlargs = DLArgs()
+    dlargs = DownloadArgs()
     dlargs.model_id = model_id
     dlargs.precision = getattr(args, 'precision', 'INT8')
     dlargs.cache_dir = getattr(args, 'cache_dir', None)
@@ -394,8 +394,6 @@ def cmd_eval(args):
 
     if extra:
         cmd.extend(extra)
-
-    supplied = any([getattr(args, 'tools', False), getattr(args, 'vlm', False), getattr(args, 'stt', False), getattr(args, 'llm', False), getattr(args, 'embed', False)])
 
     cwd = PROJECT_ROOT.parent
     cwd_file = parent_eval_dir / '_cwd_path'
@@ -734,9 +732,6 @@ def preprocess_eval_args(parser, argv):
         args, unknown = parser.parse_known_args(argv)
         if unknown:
             parser.error(f"unrecognized arguments: {' '.join(unknown)}")
-
-    if args is None:
-        args, _ = parser.parse_known_args(argv)
 
     if getattr(args, 'command', None) == 'eval':
         setattr(args, 'extra_args', extra_to_forward)
