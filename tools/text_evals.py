@@ -12,16 +12,14 @@ from src.cactus_ffi import (
 
 MODEL_PATH = "../weights/lfm2-1.2b"
 CTX_SIZE = 2048
-MAX_DOCS = 50   # try 25 or 50
+MAX_DOCS = 25
 
 
-# Bigger stride = fewer windows = much faster
-STRIDE = 2048   # try 2048 first; 512 is expensive
+STRIDE = 2048 
 
 DATASET_PATH = "text-evals/ppl_wikitext_v1.txt"
 
-# Optional: cap tokens for a smoke test
-MAX_TOKENS = 50_000   # set None for full eval
+MAX_TOKENS = None
 
 def main():
     print("Loading model...")
