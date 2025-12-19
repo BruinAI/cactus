@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
-import math, time
+import os
+import math
+import time
 from pathlib import Path
 from tqdm import tqdm
 
@@ -10,16 +12,30 @@ from src.cactus_ffi import (
     cactus_score_window,
 )
 
+# =========================
+# Configuration
+# =========================
+
 MODEL_PATH = "../weights/lfm2-1.2b"
-CTX_SIZE = 2048
-MAX_DOCS = 25
-
-
-STRIDE = 2048 
-
 DATASET_PATH = "text-evals/ppl_wikitext_v1.txt"
 
-MAX_TOKENS = None
+MAX_DOCS   = 10          # reduce for speed
+MAX_TOKENS = None        # e.g. 8192 for quick tests
+
+CTX_SIZE = 2048
+STRIDE   = 512           # HF-style stride (CRITICAL)
+
+# =========================
+# KV cache settings
+# MUST be set BEFORE cactus_init
+# =========================
+
+os.environ["CACTUS_KV_WINDOW_SIZE"] = str(CTX_SIZE)
+os.environ["CACTUS_KV_SINK_SIZE"] = "0"
+
+# =========================
+# Main
+# =========================
 
 def main():
     print("Loading model...")
@@ -30,48 +46,75 @@ def main():
         t0 = time.time()
         raw = Path(DATASET_PATH).read_text(encoding="utf-8", errors="ignore")
         docs = [d for d in raw.split("\n\n") if d.strip()]
-
         docs = docs[:MAX_DOCS]
+
         text = "\n\n".join(docs)
 
         print(f"Using {len(docs)} documents")
         print(f"Dataset chars: {len(text):,}")
 
-
-        print("Tokenizing (this is before tqdm)...")
+        print("Tokenizing...")
         tokens = cactus_tokenize(model, text)
         print(f"Tokenized: {len(tokens):,} tokens in {time.time() - t0:.2f}s")
 
         if MAX_TOKENS is not None and len(tokens) > MAX_TOKENS:
             tokens = tokens[:MAX_TOKENS]
-            print(f"Capped to {len(tokens):,} tokens for quick run")
+            print(f"Capped to {len(tokens):,} tokens")
 
         total_logprob = 0.0
-        total_tokens = 0
+        total_tokens  = 0
 
-        starts = range(1, len(tokens), STRIDE)
-        for start in tqdm(starts, desc="Scoring PPL windows"):
-            end = min(start + STRIDE, len(tokens))
-            r = cactus_score_window(model, tokens, start, end, CTX_SIZE)
-            if not r.get("success", False):
+        # ==========================================================
+        # HF-style sliding window perplexity
+        # ==========================================================
+        # At each step:
+        #   - Feed up to CTX_SIZE tokens ending at `end`
+        #   - Score ONLY the last STRIDE tokens
+        # ==========================================================
+
+        for i in tqdm(range(0, len(tokens), STRIDE), desc="Scoring PPL windows"):
+            end = min(i + STRIDE, len(tokens))
+            begin = max(end - CTX_SIZE, 0)
+
+            window = tokens[begin:end]
+
+            # Number of tokens to score this step
+            trg_len = end - i
+            if trg_len <= 0:
                 continue
+
+            # Score only the last trg_len tokens
+            start_rel = len(window) - trg_len
+            end_rel   = len(window)
+
+            r = cactus_score_window(
+                model,
+                window,
+                start_rel,
+                end_rel,
+                CTX_SIZE,
+            )
+
+            if not r.get("success", False):
+                raise RuntimeError(r)
+
             total_logprob += r["logprob"]
             total_tokens  += r["tokens"]
 
         if total_tokens == 0:
-            print("No tokens scored.")
-            return
+            raise RuntimeError("No tokens were scored — this should never happen")
 
-        avg = total_logprob / total_tokens
-        ppl = math.exp(-avg)
+        avg_logprob = total_logprob / total_tokens
+        ppl = math.exp(-avg_logprob)
 
         print("\nResults:")
-        print(f"  Tokens scored:  {total_tokens}")
-        print(f"  Avg logprob:    {avg:.6f}")
-        print(f"  Perplexity:     {ppl:.3f}")
+        print(f"  Tokens scored: {total_tokens:,}")
+        print(f"  Avg logprob:   {avg_logprob:.6f}")
+        print(f"  Perplexity:   {ppl:.3f}")
 
     finally:
         cactus_destroy(model)
+
 
 if __name__ == "__main__":
     main()
