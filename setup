@@ -9,7 +9,8 @@ set -e
 
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 VENV_DIR="$PROJECT_ROOT/venv"
-REQUIREMENTS_FILE="$PROJECT_ROOT/tools/requirements.txt"
+REQUIREMENTS_FILE="${CACTUS_REQUIREMENTS:-$PROJECT_ROOT/tools/requirements.txt}"
+PARENT_REQUIREMENTS="$PROJECT_ROOT/../requirements.txt"
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -81,6 +82,17 @@ if [ -f "$REQUIREMENTS_FILE" ]; then
     fi
 else
     echo -e "${YELLOW}Warning: requirements.txt not found${NC}"
+fi
+
+if [ -f "$PARENT_REQUIREMENTS" ] && [ "$PARENT_REQUIREMENTS" != "$REQUIREMENTS_FILE" ]; then
+    echo ""
+    echo -e "${BLUE}Detected parent repo requirements at: $PARENT_REQUIREMENTS${NC}"
+    echo -e "${BLUE}Installing parent repo requirements...${NC}"
+    if pip install -r "$PARENT_REQUIREMENTS" --quiet; then
+        echo -e "${GREEN}✓ Parent repo dependencies installed${NC}"
+    else
+        echo -e "${YELLOW}Warning: failed to install parent repo requirements${NC}"
+    fi
 fi
 
 echo ""
