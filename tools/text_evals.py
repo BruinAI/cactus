@@ -12,30 +12,18 @@ from src.cactus_ffi import (
     cactus_score_window,
 )
 
-# =========================
-# Configuration
-# =========================
 
 MODEL_PATH = "../weights/lfm2-1.2b"
 DATASET_PATH = "text-evals/ppl_wikitext_v1.txt"
 
-MAX_DOCS   = 10          # reduce for speed
-MAX_TOKENS = None        # e.g. 8192 for quick tests
+MAX_DOCS   = 10
+MAX_TOKENS = None
 
 CTX_SIZE = 2048
-STRIDE   = 512           # HF-style stride (CRITICAL)
-
-# =========================
-# KV cache settings
-# MUST be set BEFORE cactus_init
-# =========================
+STRIDE   = 512 
 
 os.environ["CACTUS_KV_WINDOW_SIZE"] = str(CTX_SIZE)
 os.environ["CACTUS_KV_SINK_SIZE"] = "0"
-
-# =========================
-# Main
-# =========================
 
 def main():
     print("Loading model...")
@@ -64,13 +52,6 @@ def main():
         total_logprob = 0.0
         total_tokens  = 0
 
-        # ==========================================================
-        # HF-style sliding window perplexity
-        # ==========================================================
-        # At each step:
-        #   - Feed up to CTX_SIZE tokens ending at `end`
-        #   - Score ONLY the last STRIDE tokens
-        # ==========================================================
 
         for i in tqdm(range(0, len(tokens), STRIDE), desc="Scoring PPL windows"):
             end = min(i + STRIDE, len(tokens))
@@ -78,12 +59,10 @@ def main():
 
             window = tokens[begin:end]
 
-            # Number of tokens to score this step
             trg_len = end - i
             if trg_len <= 0:
                 continue
 
-            # Score only the last trg_len tokens
             start_rel = len(window) - trg_len
             end_rel   = len(window)
 
