@@ -715,100 +715,120 @@ double Model::score_tokens_window_logprob(
     size_t context,
     size_t* tokens_scored
 ) {
+    if (tokens_scored) *tokens_scored = 0;
     if (tokens.empty()) return 0.0;
 
-    if (start == 0) start = 1;
+    // Treat [start, end) as the target range
     if (end > tokens.size()) end = tokens.size();
-    if (start >= end) {
-        if (tokens_scored) *tokens_scored = 0;
-        return 0.0;
-    }
+    if (start >= end) return 0.0;
 
-    size_t ctx_begin = (start > context) ? (start - context) : 0;
+    // You cannot score token at index 0 because there is no previous token inside this window.
+    // Only enforce this if caller asked to start at 0.
+    if (start == 0) start = 1;
+    if (start >= end) return 0.0;
+
+    const size_t target_len = end - start;
+
+    // Context begins at most `context` tokens before `start`
+    const size_t ctx_begin = (start > context) ? (start - context) : 0;
+
+    // We need logits that predict tokens[start..end-1].
+    // Those logits come from hidden states at positions (start-1 .. end-2),
+    // so the input sequence must include tokens up to (end-2).
+    if (end < 2) return 0.0;
+    const size_t input_end = end - 1;  // exclusive: tokens[ctx_begin .. end-2]
+
+    if (input_end <= ctx_begin) return 0.0;
 
     std::vector<uint32_t> input_tokens(tokens.begin() + ctx_begin,
-                                       tokens.begin() + end - 1);
-    std::vector<uint32_t> target_tokens(tokens.begin() + start,
-                                        tokens.begin() + end);
+                                       tokens.begin() + input_end);
 
-    if (tokens_scored) *tokens_scored = target_tokens.size();
+    if (tokens_scored) *tokens_scored = target_len;
 
     reset_cache();
 
     auto* gb = static_cast<CactusGraph*>(graph_handle_);
-    auto backend =
+    const auto backend =
         (config_.default_backend == Config::Backend::CPU)
             ? ComputeBackend::CPU
             : ComputeBackend::NPU;
 
-    size_t hidden_node = forward(input_tokens, false);
-
+    // Build graph for hidden states: [L, hidden]
+    const size_t hidden_node = forward(input_tokens, /*use_cache=*/false);
     const auto& hidden_buf = gb->get_output_buffer(hidden_node);
-    size_t hidden_dim = hidden_buf.shape[1];
 
-    size_t first_target_pos = start - ctx_begin - 1;
+    if (hidden_buf.shape.size() != 2) {
+        throw std::runtime_error("Expected hidden to be rank-2 [L, hidden_dim]");
+    }
+    const size_t hidden_dim = hidden_buf.shape[1];
 
-    const auto& wbuf = gb->get_output_buffer(output_weight_node_id_);
+    // First hidden position that predicts tokens[start] is (start - ctx_begin - 1)
+    const size_t first_pos = start - ctx_begin - 1;
+
+    // Slice hidden rows [first_pos .. first_pos+target_len-1] => [target_len, hidden_dim]
+    // (axis 0 is sequence)
+    const size_t hidden_slice = gb->slice(hidden_node, /*axis=*/0, first_pos, target_len);
+
+    // Match decode() behavior as closely as possible.
+    // In decode(): gb->matmul(last_hidden, output_weight_node_id_, true, backend)
+    // So default to transpose_w=true here too.
     bool transpose_w = true;
-    if (wbuf.shape.size() == 2) {
-        if (wbuf.shape[0] == hidden_dim) transpose_w = false;
-    }
 
-    std::vector<size_t> logits_nodes;
-    logits_nodes.reserve(target_tokens.size());
+    // OPTIONAL: if you *know* your output weight is [hidden_dim, vocab], set transpose_w=false.
+    // If you're unsure, keep it consistent with decode (true).
+    // You can add a debug assert below after execute to validate vocab dimension.
 
-    for (size_t i = 0; i < target_tokens.size(); ++i) {
-        size_t pos = first_target_pos + i;
-        auto h = gb->index(hidden_node, pos, 0);
-        h = gb->reshape(h, {1, hidden_dim});
-        auto logits_node = gb->matmul(h, output_weight_node_id_, transpose_w, backend);
-        logits_nodes.push_back(logits_node);
-    }
+    const size_t logits_node = gb->matmul(hidden_slice, output_weight_node_id_, transpose_w, backend);
 
     gb->execute();
+
+    const auto& logits_buf = gb->get_output_buffer(logits_node);
+    if (logits_buf.shape.size() != 2) {
+        throw std::runtime_error("Expected logits to be rank-2 [T, vocab]");
+    }
+    const size_t T = logits_buf.shape[0];
+    const size_t vocab_size = logits_buf.shape[1];
+
+    if (T != target_len) {
+        throw std::runtime_error("Logits T dimension does not match target_len");
+    }
+
+    void* logits_ptr = gb->get_output(logits_node);
+
+    // Temporary row buffer in FP32
+    std::vector<float> row(vocab_size);
+
     double total_logprob = 0.0;
-    std::vector<float> logits;
 
-    for (size_t i = 0; i < target_tokens.size(); ++i) {
-        uint32_t y = target_tokens[i];
-
-        auto logits_node = logits_nodes[i];
-        auto* logits_ptr = gb->get_output(logits_node);
-        const auto& logits_buf = gb->get_output_buffer(logits_node);
-
-        size_t vocab_size = logits_buf.total_size;
-        if (y >= vocab_size) throw std::runtime_error("Target token out of vocab range");
-
-        if (logits.size() != vocab_size) logits.resize(vocab_size);
-
-        if (logits_buf.precision == Precision::FP32) {
-            std::memcpy(logits.data(), logits_ptr, vocab_size * sizeof(float));
-        } else if (logits_buf.precision == Precision::FP16) {
-            Quantization::fp16_to_fp32(static_cast<__fp16*>(logits_ptr),
-                                       logits.data(), vocab_size);
-        } else {
-            Quantization::int8_to_fp32(static_cast<int8_t*>(logits_ptr),
-                                       logits.data(), vocab_size,
-                                       logits_buf.quantization_scale);
+    for (size_t i = 0; i < target_len; ++i) {
+        const uint32_t y = tokens[start + i];
+        if (y >= vocab_size) {
+            throw std::runtime_error("Target token out of vocab range");
         }
 
-        float max_logit = *std::max_element(logits.begin(), logits.end());
-        double sum = 0.0;
-        for (float v : logits) sum += std::exp(double(v - max_logit));
-        double lse = double(max_logit) + std::log(sum);
+        // Read i-th row of logits into `row`
+        if (logits_buf.precision == Precision::FP32) {
+            const float* src = static_cast<const float*>(logits_ptr) + i * vocab_size;
+            std::memcpy(row.data(), src, vocab_size * sizeof(float));
+        } else if (logits_buf.precision == Precision::FP16) {
+            const __fp16* src = static_cast<const __fp16*>(logits_ptr) + i * vocab_size;
+            Quantization::fp16_to_fp32(const_cast<__fp16*>(src), row.data(), vocab_size);
+        } else { // INT8
+            const int8_t* src = static_cast<const int8_t*>(logits_ptr) + i * vocab_size;
+            Quantization::int8_to_fp32(const_cast<int8_t*>(src), row.data(), vocab_size, logits_buf.quantization_scale);
+        }
 
-        total_logprob += double(logits[y]) - lse;
+        // log-softmax at y using logsumexp
+        float max_logit = *std::max_element(row.begin(), row.end());
+        double sum = 0.0;
+        for (size_t j = 0; j < vocab_size; ++j) {
+            sum += std::exp(double(row[j] - max_logit));
+        }
+        const double lse = double(max_logit) + std::log(sum);
+        total_logprob += double(row[y]) - lse;
     }
 
     return total_logprob;
 }
-
-
-
-
-
-
-
-
 }
 }
