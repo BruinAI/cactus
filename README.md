@@ -35,6 +35,8 @@ Cactus Engine is an AI inference engine with OpenAI-compatible APIs built on top
 ```cpp
 #include cactus.h
 
+cactus_set_pro_key(""); // email founders@cactuscompute.com for optional key
+
 cactus_model_t model = cactus_init("path/to/weight/folder", 2048);
 
 const char* messages = R"([
@@ -69,7 +71,6 @@ Example response from Gemma3-270m-INT8
 - <sub>**Models:** LFM2-VL-450m & Whisper-Small</sub>
 - <sub>**Decode** = toks/sec, **P/D** = prefill/decode, **VLM** = 256×256 image, **STT** = 30s audio</sub>
 - <sub>**Cactus Pro**: Uses NPU for realtime and large context (Apple for now), scores are marked with *</sub>
-- <sub>Cactus Pro simply needs special weights, email founders@cactuscompute.com</sub>
 - <sub>**INT4 coming**: 1.8x speed, 1.9x smaller files</sub>
 
 | Device | Short Decode | 1k-P/D | 4k-P/D | 4k-P Pro | 4k-RAM | VLM-TTFT | VLM-Dec | VLM-RAM | STT-TTFT | STT-Dec | STT-RAM |
@@ -109,7 +110,7 @@ Example response from Gemma3-270m-INT8
 | Qwen/Qwen3-1.7B | 1161MB  | ✓ | ✓ | ✗ | ✓ | ✗ | Apple |
 | HuggingFaceTB/SmolLM2-1.7B-Instruct | 1161MB  | ✓ | ✗ | ✗ | ✓ | ✗ | ✗ |
 
-## Using up this repo on Mac
+## Using this repo on Mac
 
 - Clone repo and run `source ./setup`.
 - Setup is automatic and usage instructions printed after.

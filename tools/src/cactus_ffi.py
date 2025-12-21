@@ -74,6 +74,18 @@ if _LIB_PATH.exists():
     _lib.cactus_destroy.argtypes = [ctypes.c_void_p]
     _lib.cactus_destroy.restype = None
 
+    # cactus_get_last_error
+    _lib.cactus_get_last_error.argtypes = []
+    _lib.cactus_get_last_error.restype = ctypes.c_char_p
+
+    # cactus_set_telemetry_token
+    _lib.cactus_set_telemetry_token.argtypes = [ctypes.c_char_p]
+    _lib.cactus_set_telemetry_token.restype = None
+
+    # cactus_set_pro_key
+    _lib.cactus_set_pro_key.argtypes = [ctypes.c_char_p]
+    _lib.cactus_set_pro_key.restype = None
+
     _lib.cactus_tokenize.argtypes = [
     ctypes.c_void_p,
     ctypes.c_char_p,
@@ -245,6 +257,26 @@ def cactus_stop(model):
 def cactus_destroy(model):
     """Destroy model and free memory."""
     _lib.cactus_destroy(model)
+
+
+def cactus_get_last_error():
+    """Get the last error message."""
+    result = _lib.cactus_get_last_error()
+    return result.decode() if result else None
+
+
+def cactus_set_telemetry_token(token):
+    """Set telemetry token. Pass None or empty string to disable."""
+    _lib.cactus_set_telemetry_token(
+        token.encode() if isinstance(token, str) else token
+    )
+
+
+def cactus_set_pro_key(pro_key):
+    """Set pro key for NPU acceleration."""
+    _lib.cactus_set_pro_key(
+        pro_key.encode() if isinstance(pro_key, str) else pro_key
+    )
 
 
 def cactus_tokenize(model, text: str):

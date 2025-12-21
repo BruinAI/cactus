@@ -87,11 +87,16 @@ int cactus_complete(
         CACTUS_LOG_DEBUG("complete", "Prompt tokens: " << current_prompt_tokens.size() << ", max_tokens: " << max_tokens);
 
         std::vector<uint32_t> tokens_to_process;
-        bool is_prefix = (current_prompt_tokens.size() >= handle->processed_tokens.size()) &&
+
+        bool has_images = !image_paths.empty();
+        bool is_prefix = !has_images &&
+                         (current_prompt_tokens.size() >= handle->processed_tokens.size()) &&
                          std::equal(handle->processed_tokens.begin(), handle->processed_tokens.end(), current_prompt_tokens.begin());
 
         if (handle->processed_tokens.empty() || !is_prefix) {
-            handle->model->reset_cache();
+            if (!has_images) {
+                handle->model->reset_cache();
+            }
             tokens_to_process = current_prompt_tokens;
         } else {
             tokens_to_process.assign(current_prompt_tokens.begin() + handle->processed_tokens.size(), current_prompt_tokens.end());

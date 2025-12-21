@@ -16,6 +16,7 @@ apple/build-static/
 apple/*.xcframework
 apple/libcactus.a
 *.a
+!libs/libcactus_pro.a
 venv
 
 __pycache__

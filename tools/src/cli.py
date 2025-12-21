@@ -28,7 +28,6 @@ def get_model_dir_name(model_id):
     """Convert HuggingFace model ID to local directory name."""
     model_name = model_id.split('/')[-1]
     model_name = model_name.lower()
-    model_name = re.sub(r'-it$', '', model_name)
     return model_name
 
 
@@ -314,9 +313,10 @@ def cmd_run(args):
     """Build, download model if needed, and start interactive chat."""
     model_id = args.model_id
 
-    build_result = cmd_build(args)
-    if build_result != 0:
-        return build_result
+    if not getattr(args, 'no_build', False):
+        build_result = cmd_build(args)
+        if build_result != 0:
+            return build_result
 
     download_result = cmd_download(args)
     if download_result != 0:
@@ -334,6 +334,87 @@ def cmd_run(args):
     print()
 
     os.execv(str(chat_binary), [str(chat_binary), str(weights_dir)])
+
+
+def cmd_eval(args):
+    """Run external eval scripts."""
+
+    model_id = getattr(args, 'model_id', DEFAULT_MODEL_ID)
+
+    parent_name = PROJECT_ROOT.parent.name
+    if parent_name != 'evals':
+        print_color(RED, f"Skipping internal eval checks: companion repo not found.")
+        return 1
+
+    if not getattr(args, 'no_build', False):
+        build_result = cmd_build(args)
+        if build_result != 0:
+            return build_result
+
+    class DownloadArgs:
+        pass
+
+    dlargs = DownloadArgs()
+    dlargs.model_id = model_id
+    dlargs.precision = getattr(args, 'precision', 'INT8')
+    dlargs.cache_dir = getattr(args, 'cache_dir', None)
+    dlargs.token = getattr(args, 'token', None)
+
+    download_result = cmd_download(dlargs)
+    if download_result != 0:
+        return download_result
+
+    weights_dir = get_weights_dir(model_id)
+
+    eval_runner = PROJECT_ROOT.parent / 'tools' / 'eval' / 'run_eval.py'
+    if not eval_runner.exists():
+        print_color(RED, f"Eval runner not found at {eval_runner}")
+        print("Expected eval runner to live outside the cactus submodule (parent repo).")
+        return 1
+
+    cmd = [sys.executable, str(eval_runner), '--model-path', str(weights_dir)]
+
+    parent_eval_dir = PROJECT_ROOT.parent / 'tools' / 'eval'
+    parent_dataset = parent_eval_dir / 'datasets' / 'eval_dataset_new.py'
+    if parent_dataset.exists():
+        cmd.extend(['--dataset', str(parent_dataset)])
+
+    extra = getattr(args, 'extra_args', None) or []
+
+    def extra_has_output_dir(extra_list):
+        for a in extra_list:
+            if a == '--output-dir' or a.startswith('--output-dir='):
+                return True
+        return False
+
+    default_out = parent_eval_dir / 'results'
+    if not extra_has_output_dir(extra):
+        cmd.extend(['--output-dir', str(default_out)])
+
+    if extra:
+        cmd.extend(extra)
+
+    cwd = PROJECT_ROOT.parent
+    cwd_file = parent_eval_dir / '_cwd_path'
+    if cwd_file.exists():
+        try:
+            raw = cwd_file.read_text(encoding='utf-8').strip()
+            if raw:
+                candidate = Path(raw)
+                if not candidate.is_absolute():
+                    candidate = (PROJECT_ROOT.parent / candidate).resolve()
+                if candidate.exists() and candidate.is_dir():
+                    if candidate.name == 'tools' and candidate.parent.exists():
+                        cwd = candidate.parent
+                    else:
+                        cwd = candidate
+                else:
+                    print_color(YELLOW, f"Warning: _cwd_path points to missing location: {candidate}. Using default cwd={cwd}")
+        except Exception as e:
+            print_color(YELLOW, f"Warning: failed to read _cwd_path: {e}. Using default cwd={cwd}")
+
+    result = subprocess.run(cmd, cwd=str(cwd))
+    return result.returncode
 
 
 def cmd_test(args):
@@ -582,6 +663,21 @@ def create_parser():
                             help='Quantization precision (default: INT8)')
     run_parser.add_argument('--cache-dir', help='Cache directory for HuggingFace models')
     run_parser.add_argument('--token', help='HuggingFace API token')
+    run_parser.add_argument('--no-build', action='store_true', help='Skip building Cactus before running')
+
+    eval_parser = subparsers.add_parser('eval', help='Run evaluation scripts located outside the cactus submodule')
+    eval_parser.add_argument('model_id', nargs='?', default=DEFAULT_MODEL_ID,
+                             help=f'HuggingFace model ID (default: {DEFAULT_MODEL_ID})')
+    eval_parser.add_argument('--precision', choices=['INT8', 'FP16', 'FP32'], default='INT8',
+                             help='Quantization precision (default: INT8)')
+    eval_parser.add_argument('--cache-dir', help='Cache directory for HuggingFace models')
+    eval_parser.add_argument('--token', help='HuggingFace API token')
+    eval_parser.add_argument('--no-build', action='store_true', help='Skip building Cactus before running evals')
+    eval_parser.add_argument('--tools', action='store_true', help='Run tools evals (default)')
+    eval_parser.add_argument('--vlm', action='store_true', help='Run VLM-specific evals')
+    eval_parser.add_argument('--stt', action='store_true', help='Run speech-to-text evals')
+    eval_parser.add_argument('--llm', action='store_true', help='Run LLM evals')
+    eval_parser.add_argument('--embed', action='store_true', help='Run embedding evals')
 
     test_parser = subparsers.add_parser('test', help='Run the test suite')
     test_parser.add_argument('--model', default='LiquidAI/LFM2-VL-450M',
@@ -607,14 +703,47 @@ def create_parser():
     return parser
 
 
+def preprocess_eval_args(parser, argv):
+    args = None
+    extra_to_forward = []
+    eval_flags = ['--tools', '--vlm', '--stt', '--llm', '--embed']
+
+    if 'eval' in argv:
+        eval_idx = argv.index('eval')
+        after_eval = argv[eval_idx + 1:]
+        first_flag_index = None
+        for i, tok in enumerate(after_eval):
+            if tok in eval_flags:
+                first_flag_index = eval_idx + 1 + i
+                break
+        if first_flag_index is not None:
+            left = argv[:first_flag_index]
+            right = argv[first_flag_index:]
+            args = parser.parse_args(left)
+            extra_to_forward = [tok for tok in right if tok not in eval_flags]
+        else:
+            args, unknown = parser.parse_known_args(argv)
+            if unknown:
+                if args.command != 'eval':
+                    parser.error(f"unrecognized arguments: {' '.join(unknown)}")
+                extra_to_forward = unknown
+    else:
+        args, unknown = parser.parse_known_args(argv)
+        if unknown:
+            parser.error(f"unrecognized arguments: {' '.join(unknown)}")
+
+    if getattr(args, 'command', None) == 'eval':
+        setattr(args, 'extra_args', extra_to_forward)
+
+    return args
+
+
 def main():
     """Main entry point for the Cactus CLI."""
     parser = create_parser()
-    args = parser.parse_args()
 
-    if args.command is None:
-        parser.print_help()
-        sys.exit(1)
+    argv = sys.argv[1:]
+    args = preprocess_eval_args(parser, argv)
 
     if args.command == 'download':
         sys.exit(cmd_download(args))
@@ -624,6 +753,8 @@ def main():
         sys.exit(cmd_run(args))
     elif args.command == 'test':
         sys.exit(cmd_test(args))
+    elif args.command == 'eval':
+        sys.exit(cmd_eval(args))
     elif args.command == 'clean':
         sys.exit(cmd_clean(args))
     elif args.command == 'convert':

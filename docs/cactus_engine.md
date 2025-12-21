@@ -321,6 +321,56 @@ void cactus_destroy(cactus_model_t model);
 
 **Important:** Always call this when done with a model to prevent memory leaks.
 
+## Utility Functions
+
+### `cactus_get_last_error`
+Returns the last error message from the Cactus engine.
+
+```c
+const char* cactus_get_last_error(void);
+```
+
+**Returns:** Error message string, or NULL if no error
+
+**Example:**
+```c
+cactus_model_t model = cactus_init("invalid/path", 2048, NULL);
+if (!model) {
+    const char* error = cactus_get_last_error();
+    fprintf(stderr, "Error: %s\n", error);
+}
+```
+
+### `cactus_set_telemetry_token`
+Sets the telemetry token for usage tracking. Pass NULL or empty string to disable telemetry.
+
+```c
+void cactus_set_telemetry_token(const char* token);
+```
+
+**Example:**
+```c
+cactus_set_telemetry_token("your-telemetry-token");
+
+cactus_set_telemetry_token(NULL);
+```
+
+### `cactus_set_pro_key`
+Sets the pro key to enable NPU acceleration on supported devices (Apple Neural Engine).
+
+```c
+void cactus_set_pro_key(const char* pro_key);
+```
+
+**Example:**
+```c
+cactus_set_pro_key("your-pro-key");
+
+cactus_model_t model = cactus_init("path/to/model", 2048, NULL);
+```
+
+**Note:** The pro key should be set before initializing any models to ensure NPU acceleration is enabled.
+
 ## Complete Examples
 
 ### Basic Conversation

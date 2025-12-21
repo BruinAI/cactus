@@ -25,8 +25,11 @@ from cactus_ffi import (
     cactus_image_embed,
     cactus_audio_embed,
     cactus_reset,
-    cactus_destroy
+    cactus_destroy,
+    cactus_set_pro_key
 )
+
+cactus_set_pro_key("") # email founders@cactuscompute.com
 
 WEIGHTS_DIR = PROJECT_ROOT / "weights"
 ASSETS_DIR = PROJECT_ROOT / "tests" / "assets"

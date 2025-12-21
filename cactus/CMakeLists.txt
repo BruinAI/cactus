@@ -107,4 +107,3 @@ set_target_properties(cactus_ffi PROPERTIES
     POSITION_INDEPENDENT_CODE ON
     OUTPUT_NAME "cactus"
 )
-

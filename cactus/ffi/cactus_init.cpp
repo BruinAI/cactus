@@ -28,6 +28,8 @@ const char* cactus_get_last_error() {
 }
 
 cactus_model_t cactus_init(const char* model_path, size_t context_size, const char* corpus_dir) {
+    CactusTelemetry::getInstance().ensureInitialized();
+    
     std::string model_path_str = model_path ? std::string(model_path) : "unknown";
 
     std::string model_name = model_path_str;
@@ -122,32 +124,6 @@ void cactus_stop(cactus_model_t model) {
     if (!model) return;
     auto* handle = static_cast<CactusModelHandle*>(model);
     handle->should_stop = true;
-}
-
-void cactus_set_log_level(int level) {
-    if (level < 0) level = 0;
-    if (level > 4) level = 4;
-    cactus::Logger::instance().set_level(static_cast<cactus::LogLevel>(level));
-}
-
-static cactus_log_callback g_log_callback = nullptr;
-static void* g_log_user_data = nullptr;
-
-void cactus_set_log_callback(cactus_log_callback callback, void* user_data) {
-    g_log_callback = callback;
-    g_log_user_data = user_data;
-
-    if (callback) {
-        cactus::Logger::instance().set_callback(
-            [](cactus::LogLevel level, const std::string& component, const std::string& message) {
-                if (g_log_callback) {
-                    g_log_callback(static_cast<int>(level), component.c_str(), message.c_str(), g_log_user_data);
-                }
-            }
-        );
-    } else {
-        cactus::Logger::instance().set_callback(nullptr);
-    }
 }
 
 }

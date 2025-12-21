@@ -1,5 +1,4 @@
 #include "test_utils.h"
-#include "../cactus/ffi/cactus_telemetry.h"
 #include <fstream>
 #include <cstdlib>
 #include <cstdio>
@@ -191,6 +190,94 @@ bool test_image_input() {
     bool success = result > 0 && stream_data.token_count > 0;
     cactus_destroy(model);
     return success;
+}
+
+bool test_vlm_multiturn() {
+    std::string model_path_str(g_model_path ? g_model_path : "");
+
+    std::string vision_file = model_path_str + "/vision_patch_embedding.weights";
+    std::ifstream vf(vision_file);
+    if (!vf.good()) {
+        std::cout << "Skipping VLM multi-turn test: vision weights not found." << std::endl;
+        return true;
+    }
+    vf.close();
+
+    std::cout << "\n╔══════════════════════════════════════════╗\n"
+              << "║       VLM MULTI-TURN TEST                ║\n"
+              << "╚══════════════════════════════════════════╝\n";
+
+    cactus_model_t model = cactus_init(g_model_path, 2048, nullptr);
+    if (!model) {
+        std::cerr << "Failed to initialize model for VLM multi-turn test" << std::endl;
+        return false;
+    }
+
+    std::string img_path = std::string(g_assets_path) + "/test_monkey.png";
+
+    std::string messages1 = "[{\"role\": \"user\", "
+        "\"content\": \"Describe what is happening in this image in two sentences.\", "
+        "\"images\": [\"" + img_path + "\"]}]";
+
+    StreamingData stream_data1;
+    stream_data1.model = model;
+    char response1[4096];
+
+    std::cout << "\n[Turn 1]\n";
+    std::cout << "User: Describe what is happening in this image in two sentences.\n";
+    std::cout << "Assistant: ";
+
+    int result1 = cactus_complete(model, messages1.c_str(), response1, sizeof(response1),
+                                  g_options, nullptr, stream_callback, &stream_data1);
+
+    std::cout << "\n\n[Results - Turn 1]\n";
+    Metrics metrics1;
+    metrics1.parse(response1);
+    metrics1.print_perf(get_memory_usage_mb());
+
+    bool success1 = result1 > 0 && stream_data1.token_count > 0;
+
+    if (!success1) {
+        std::cout << "└─ Status: FAILED ✗\n";
+        cactus_destroy(model);
+        return false;
+    }
+
+    std::string assistant_response;
+    for (const auto& token : stream_data1.tokens) {
+        assistant_response += token;
+    }
+
+    std::string messages2 = "[{\"role\": \"user\", "
+        "\"content\": \"Describe what is happening in this image in two sentences.\", "
+        "\"images\": [\"" + img_path + "\"]}, "
+        "{\"role\": \"assistant\", \"content\": \"" + escape_json(assistant_response) + "\"}, "
+        "{\"role\": \"user\", \"content\": \"Describe the image once again.\"}]";
+
+    StreamingData stream_data2;
+    stream_data2.model = model;
+    char response2[4096];
+
+    std::cout << "\n[Turn 2]\n";
+    std::cout << "User: Describe the image once again.\n";
+    std::cout << "Assistant: ";
+
+    int result2 = cactus_complete(model, messages2.c_str(), response2, sizeof(response2),
+                                  g_options, nullptr, stream_callback, &stream_data2);
+
+    std::cout << "\n\n[Results - Turn 2]\n";
+    Metrics metrics2;
+    metrics2.parse(response2);
+    metrics2.print_perf(get_memory_usage_mb());
+
+    bool success2 = result2 > 0 && stream_data2.token_count > 0;
+
+    if (!success2) {
+        std::cout << "└─ Status: FAILED ✗ (Follow-up message failed)\n";
+    }
+
+    cactus_destroy(model);
+    return success1 && success2;
 }
 
 bool test_tool_call_with_two_tools() {
@@ -796,8 +883,8 @@ static bool test_pcm_transcription() {
 
 int main() {
 #ifdef __APPLE__
-    cactus_set_telemetry_enabled(1);
     cactus_set_telemetry_token("973e4aaa-5ee4-4947-a128-757bb66be75b");
+    cactus_set_pro_key(""); // email founders@cactuscompute.com
 #endif
 
     capture_memory_baseline();
@@ -810,6 +897,7 @@ int main() {
     runner.run_test("image_embeddings", test_image_embeddings());
     runner.run_test("audio_embeddings", test_audio_embeddings());
     runner.run_test("image_input", test_image_input());
+    runner.run_test("vlm_multiturn", test_vlm_multiturn());
     runner.run_test("audio_processor", test_audio_processor());
     runner.run_test("transcription", test_transcription());
     runner.run_test("pcm_transcription", test_pcm_transcription());
