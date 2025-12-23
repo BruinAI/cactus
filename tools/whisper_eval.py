@@ -27,90 +27,50 @@ from cactus_ffi import (
     cactus_destroy
 )
 
-# Load WER metric
 wer_metric = load("wer")
 
 def normalize_text_en(text):
-    """
-    Normalize English text following Whisper's normalization rules.
-    Implements all 12 steps from the Whisper paper.
-    """
-    # Lowercase first for consistent matching
     text = text.lower()
-
-    # Step 1: Remove phrases between brackets
     text = re.sub(r'\[.*?\]', '', text)
-
-    # Step 2: Remove phrases between parentheses
     text = re.sub(r'\(.*?\)', '', text)
-
-    # Step 3: Remove filler words
     text = re.sub(r'\b(hmm|mm|mhm|mmm|uh|um)\b', '', text)
-
-    # Step 4: Remove whitespace before apostrophe
     text = re.sub(r"\s+'", "'", text)
-
-    # Step 5: Expand contractions
     text = contractions.fix(text)
-
-    # Step 6: Remove commas between digits
     text = re.sub(r'(\d),(\d)', r'\1\2', text)
-
-    # Step 7: Remove periods not followed by numbers
     text = re.sub(r'\.(?!\d)', ' ', text)
-
-    # Step 8: Remove diacritics and certain symbols
-    # Keep period, percent, currency symbols for now (handled in step 9)
     text = ''.join(
         c for c in unicodedata.normalize('NFD', text)
         if unicodedata.category(c) != 'Mn'
     )
-    # Remove symbols except those used in numbers/currency
     text = re.sub(r'[^\w\s\.\%\$\£\€\¥]+', ' ', text)
-
-    # Step 9: Normalize numeric expressions and currency
     text = alpha2digit(text, "en")
-
-    # Convert currency words to symbols
     text = re.sub(r'(\d+)\s+dollars?', r'$\1', text)
     text = re.sub(r'(\d+)\s+pounds?', r'£\1', text)
     text = re.sub(r'(\d+)\s+euros?', r'€\1', text)
     text = re.sub(r'(\d+)\s+yen', r'¥\1', text)
-
-    # Step 10: Convert British to American spellings
     words = text.split()
     words = [get_american_spelling(word) for word in words]
     text = ' '.join(words)
-
-    # Step 11: Remove remaining symbols (except those in numeric expressions)
-    # Keep currency symbols attached to numbers like $100, £50, etc.
-    text = re.sub(r'(?<!\d)[\$£€¥](?!\d)', ' ', text)  # Remove standalone currency symbols
-    text = re.sub(r'[^\w\s\$£€¥]', ' ', text)  # Remove other symbols but keep currency
-
-    # Step 12: Normalize whitespace (already done in Step 10's join, but ensure no extra spaces)
+    text = re.sub(r'(?<!\d)[\$£€¥](?!\d)', ' ', text)
+    text = re.sub(r'[^\w\s\$£€¥]', ' ', text)
     text = ' '.join(text.split())
-
     return text.strip()
 
 def normalize_text(text):
-    """Simple normalization (kept for backwards compatibility)."""
     text = text.lower()
     text = re.sub(r'[^\w\s]', '', text)
     text = ' '.join(text.split())
     return text
 
-# Global worker state
 worker_whisper = None
 whisper_prompt = "<|startoftranscript|><|en|><|transcribe|><|notimestamps|>"
 
 def worker_init():
-    """Initialize whisper model in each worker process."""
     global worker_whisper
     worker_whisper = cactus_init("../weights/whisper-small", context_size=448)
     atexit.register(worker_cleanup)
 
 def worker_cleanup():
-    """Cleanup whisper model in each worker process."""
     global worker_whisper
     if worker_whisper is not None:
         cactus_destroy(worker_whisper)
@@ -153,7 +113,6 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    # Path to LibriSpeech dataset
     librispeech_path = Path(args.dataset_path) / args.split
 
     print(f"Evaluating on LibriSpeech {args.split}")
@@ -162,7 +121,6 @@ if __name__ == '__main__':
     references = []
     hypotheses = []
 
-    # Collect all FLAC files and their transcriptions
     files_to_process = []
     for speaker_dir in sorted(librispeech_path.iterdir()):
         if not speaker_dir.is_dir():
@@ -172,12 +130,10 @@ if __name__ == '__main__':
             if not chapter_dir.is_dir():
                 continue
 
-            # Find the transcription file
             trans_file = chapter_dir / f"{speaker_dir.name}-{chapter_dir.name}.trans.txt"
             if not trans_file.exists():
                 continue
 
-            # Read transcriptions
             transcriptions = {}
             with open(trans_file, 'r') as f:
                 for line in f:
@@ -186,7 +142,6 @@ if __name__ == '__main__':
                         file_id, text = parts
                         transcriptions[file_id] = text
 
-            # Collect FLAC files with their references
             for flac_file in sorted(chapter_dir.glob("*.flac")):
                 file_id = flac_file.stem
                 if file_id in transcriptions:
@@ -194,7 +149,7 @@ if __name__ == '__main__':
 
     print(f"Found {len(files_to_process)} files to process\n")
 
-    num_workers = min(8, cpu_count())
+    num_workers = min(1, cpu_count())
     print(f"Using {num_workers} worker processes\n")
 
     with Pool(processes=num_workers, initializer=worker_init) as pool:
@@ -219,11 +174,9 @@ if __name__ == '__main__':
     if errors > 0:
         print(f"Errors encountered: {errors}")
 
-    # Calculate WER
     wer_score = wer_metric.compute(predictions=hypotheses, references=references)
     print(f"Word Error Rate (WER): {wer_score:.4f} ({wer_score*100:.2f}%)")
 
-    # Show some examples
     print("\nExample transcriptions:")
     for i in range(min(5, len(references))):
         print(f"\n--- Sample {i+1} ---")
