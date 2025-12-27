@@ -28,7 +28,6 @@ def get_model_dir_name(model_id):
     """Convert HuggingFace model ID to local directory name."""
     model_name = model_id.split('/')[-1]
     model_name = model_name.lower()
-    model_name = re.sub(r'-it$', '', model_name)
     return model_name
 
 

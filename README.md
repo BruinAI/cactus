@@ -93,6 +93,7 @@ Example response from Gemma3-270m-INT8
 | Model | Compressed Size | Completion | Tool Call | Vision | Embed | Speech | Pro
 |-------|--------------------|-------------------|----------------|------|------|------|------|
 | google/gemma-3-270m-it | 172MB  | ✓ | ✗ | ✗ | ✗ | ✗ | Apple |
+| google/functiongemma-270m-it | 172MB  | ✓ | ✓ | ✗ | ✗ | ✗ | Apple |
 | openai/whisper-small | 282MB  | ✗ | ✗ | ✗ | ✓ | ✓ | Apple |
 | LiquidAI/LFM2-350M | 233MB  | ✓ | ✓ | ✗ | ✓ | ✗ | ✗ |
 | HuggingFaceTB/SmolLM2-360m-Instruct | 227MB  | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ |
