@@ -178,10 +178,43 @@ std::string Tokenizer::format_lfm2_style(const std::vector<ChatMessage>& message
         if (!sys_content.empty()) {
             sys_content += "\n";
         }
+
+        auto trim = [](const std::string &s) -> std::string {
+            size_t a = s.find_first_not_of(" \t\r\n");
+            if (a == std::string::npos) return "";
+            size_t b = s.find_last_not_of(" \t\r\n");
+            return s.substr(a, b - a + 1);
+        };
+
+        std::string inner = trim(tools_json);
+        std::string tools_elements;
+
+        if (!inner.empty() && inner.front() == '[' && inner.back() == ']') {
+            inner = trim(inner.substr(1, inner.size() - 2));
+            tools_elements = inner;
+        } else {
+            std::istringstream ss(inner);
+            std::string line;
+            std::vector<std::string> parts;
+            while (std::getline(ss, line)) {
+                std::string t = trim(line);
+                if (!t.empty()) parts.push_back(t);
+            }
+
+            if (parts.empty()) {
+                tools_elements = inner;
+            } else {
+                for (size_t i = 0; i < parts.size(); ++i) {
+                    if (i) tools_elements += ", ";
+                    tools_elements += parts[i];
+                }
+            }
+        }
+
         sys_content += "List of tools: <|tool_list_start|>[";
-        if (!tools_json.empty()) {
+        if (!tools_elements.empty()) {
             sys_content += "\n";
-            sys_content += tools_json;
+            sys_content += tools_elements;
             sys_content += "\n";
         }
         sys_content += "]<|tool_list_end|>";

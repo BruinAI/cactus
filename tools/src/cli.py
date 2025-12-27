@@ -375,7 +375,7 @@ def cmd_eval(args):
     cmd = [sys.executable, str(eval_runner), '--model-path', str(weights_dir)]
 
     parent_eval_dir = PROJECT_ROOT.parent / 'tools' / 'eval'
-    parent_dataset = parent_eval_dir / 'datasets' / 'eval_dataset_new.py'
+    parent_dataset = parent_eval_dir / 'datasets' / 'eval_dataset_base.py'
     if parent_dataset.exists():
         cmd.extend(['--dataset', str(parent_dataset)])
 
