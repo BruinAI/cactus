@@ -1,6 +1,6 @@
 # Whisper Evaluation on ASR Datasets
 
-The whosper_eval.py script evaluates Whisper-small on the librispeech and voxpopuli datasets.
+The whisper_eval.py script evaluates Whisper-small on the librispeech and voxpopuli datasets.
 
 ## Dataset Setup
 
