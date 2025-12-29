@@ -8,6 +8,7 @@ import soundfile as sf
 import re
 import atexit
 import unicodedata
+import csv
 from multiprocessing import Pool, cpu_count
 sys.path.insert(0, "src")
 from evaluate import load
@@ -18,11 +19,7 @@ import contractions
 
 from cactus_ffi import (
     cactus_init,
-    cactus_complete,
     cactus_transcribe,
-    cactus_embed,
-    cactus_image_embed,
-    cactus_audio_embed,
     cactus_reset,
     cactus_destroy
 )
@@ -76,13 +73,13 @@ def worker_cleanup():
         cactus_destroy(worker_whisper)
 
 def process_file(args):
-    flac_file, reference = args
+    audio_file, reference = args
 
     try:
         with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as tmp_wav:
             wav_path = tmp_wav.name
 
-        audio_data, sample_rate = sf.read(str(flac_file))
+        audio_data, sample_rate = sf.read(str(audio_file))
         sf.write(wav_path, audio_data, sample_rate)
 
         cactus_reset(worker_whisper)
@@ -102,26 +99,10 @@ def process_file(args):
     except Exception as e:
         return None, None, str(e)
 
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description="Evaluate Whisper on LibriSpeech")
-    parser.add_argument("--split", type=str, default="test-clean",
-                       choices=["test-clean", "test-other"],
-                       help="LibriSpeech split to evaluate (default: test-clean)")
-    parser.add_argument("--dataset-path", type=str,
-                       default="/Users/satyajit/Downloads/LibriSpeech",
-                       help="Path to LibriSpeech dataset")
-
-    args = parser.parse_args()
-
-    librispeech_path = Path(args.dataset_path) / args.split
-
-    print(f"Evaluating on LibriSpeech {args.split}")
-    print(f"Dataset path: {librispeech_path}\n")
-
-    references = []
-    hypotheses = []
-
+def load_librispeech(dataset_path, split):
+    librispeech_path = Path(dataset_path) / split
     files_to_process = []
+
     for speaker_dir in sorted(librispeech_path.iterdir()):
         if not speaker_dir.is_dir():
             continue
@@ -146,6 +127,61 @@ if __name__ == '__main__':
                 file_id = flac_file.stem
                 if file_id in transcriptions:
                     files_to_process.append((flac_file, transcriptions[file_id]))
+
+    return files_to_process
+
+def load_voxpopuli(dataset_path, split):
+    base_path = Path(dataset_path)
+    tsv_file = base_path / "transcribed_data" / "en" / "asr_en.tsv"
+
+    files_to_process = []
+
+    with open(tsv_file, 'r', encoding='utf-8') as f:
+        reader = csv.DictReader(f, delimiter='|')
+        for row in reader:
+            if row['split'] != split:
+                continue
+
+            normed_text = row['normed_text'].strip()
+            if not normed_text:
+                continue
+
+            session_id = row['session_id']
+            audio_id = row['id_']
+            year = session_id[:4]
+
+            audio_file = base_path / "transcribed_data" / "en" / year / f"{session_id}-{audio_id}.ogg"
+
+            if audio_file.exists():
+                files_to_process.append((audio_file, normed_text))
+
+    return files_to_process
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description="Evaluate Whisper on ASR datasets")
+    parser.add_argument("--dataset", type=str, default="librispeech",
+                       choices=["librispeech", "voxpopuli"],
+                       help="Dataset to evaluate on (default: librispeech)")
+    parser.add_argument("--split", type=str, default="test-clean",
+                       help="Dataset split to evaluate (default: test-clean)")
+    parser.add_argument("--dataset-path", type=str,
+                       default="/Users/satyajit/Downloads/LibriSpeech",
+                       help="Path to dataset root")
+
+    args = parser.parse_args()
+
+    if args.dataset == "librispeech":
+        files_to_process = load_librispeech(args.dataset_path, args.split)
+        dataset_name = f"LibriSpeech {args.split}"
+    elif args.dataset == "voxpopuli":
+        files_to_process = load_voxpopuli(args.dataset_path, args.split)
+        dataset_name = f"VoxPopuli {args.split}"
+
+    print(f"Evaluating on {dataset_name}")
+    print(f"Dataset path: {args.dataset_path}\n")
+
+    references = []
+    hypotheses = []
 
     print(f"Found {len(files_to_process)} files to process\n")
 
