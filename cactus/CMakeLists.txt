@@ -18,14 +18,14 @@ string(STRIP "${CACTUS_VERSION}" CACTUS_VERSION)
 
 if(APPLE)
     set(CMAKE_OSX_ARCHITECTURES "arm64")
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -arch arm64 -pthread -Wall -Wextra -pedantic -O3 -Wno-missing-designated-field-initializers")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -arch arm64 -pthread -Wall -Wextra -pedantic -O3 -Wno-missing-field-initializers")
 
     enable_language(OBJCXX)
     find_package(CURL REQUIRED)
     find_library(COREML_FRAMEWORK CoreML REQUIRED)
     find_library(FOUNDATION_FRAMEWORK Foundation REQUIRED)
 else()
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -march=armv8.2-a+fp16+simd+dotprod -pthread -Wall -Wextra -pedantic -O3 -Wno-missing-designated-field-initializers")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -march=armv8.2-a+fp16+simd+dotprod -pthread -Wall -Wextra -pedantic -O3 -Wno-missing-field-initializers")
 endif()
 
 file(GLOB ENGINE_SOURCES "engine/*.cpp")
@@ -33,6 +33,7 @@ file(GLOB GRAPH_SOURCES "graph/*.cpp")
 file(GLOB KERNEL_SOURCES "kernel/*.cpp")
 file(GLOB FFI_SOURCES "ffi/*.cpp")
 file(GLOB MODEL_SOURCES "models/*.cpp")
+file(GLOB INDEX_SOURCES "index/*.cpp")
 
 file(GLOB NPU_SOURCES "npu/*.cpp")
 
@@ -51,6 +52,7 @@ set(COMMON_SOURCES
     ${KERNEL_SOURCES}
     ${FFI_SOURCES}
     ${MODEL_SOURCES}
+    ${INDEX_SOURCES}
     ${NPU_SOURCES}
 )
 
@@ -61,6 +63,7 @@ set(COMMON_INCLUDES
     kernel
     ffi
     models
+    index
     npu
 )
 

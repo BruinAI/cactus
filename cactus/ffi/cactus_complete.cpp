@@ -73,7 +73,13 @@ int cactus_complete(
             }
         }
 
-        std::string formatted_tools = format_tools_for_prompt(tools);
+        Config::ModelType model_type = handle->model->get_config().model_type;
+        std::string formatted_tools;
+        if (model_type == Config::ModelType::GEMMA) {
+            formatted_tools = gemma::format_tools(tools);
+        } else {
+            formatted_tools = format_tools_for_prompt(tools);
+        }
         std::string full_prompt = tokenizer->format_chat_prompt(messages, true, formatted_tools);
 
         if (full_prompt.find("ERROR:") == 0) {
@@ -108,6 +114,11 @@ int cactus_complete(
         stop_token_sequences.push_back({tokenizer->get_eos_token()});
         for (const auto& stop_seq : stop_sequences)
             stop_token_sequences.push_back(tokenizer->encode(stop_seq));
+
+        if (model_type == Config::ModelType::GEMMA && !tools.empty()) {
+            stop_token_sequences.push_back(tokenizer->encode("<end_function_call>"));
+            stop_token_sequences.push_back(tokenizer->encode("<start_function_response>"));
+        }
 
         std::vector<uint32_t> generated_tokens;
         double time_to_first_token = 0.0;

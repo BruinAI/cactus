@@ -114,13 +114,16 @@ std::string Tokenizer::format_qwen_style(const std::vector<ChatMessage>& message
             }
         }
 
-        result += "You have access to the following tools:\n";
-        result += "[\n";
+        result += "# Tools\n\n";
+        result += "You may call one or more functions to assist with the user query.\n\n";
+        result += "You are provided with function signatures within <tools></tools> XML tags:\n";
+        result += "<tools>\n";
         result += tools_json;
-        result += "\n]\n\n";
-        result += "When you need to call a tool, respond with a JSON object in this exact format:\n";
-        result += "{\"function_call\": {\"name\": \"function_name\", \"arguments\": {\"arg1\": \"value1\"}}}\n";
-        result += "You can call multiple tools by using multiple function_call JSON objects.";
+        result += "\n</tools>\n\n";
+        result += "For each function call, return a json object with function name and arguments within <tool_call></tool_call> XML tags:\n";
+        result += "<tool_call>\n";
+        result += "{\"name\": <function-name>, \"arguments\": <args-json-object>}\n";
+        result += "</tool_call>";
         result += "<|im_end|>\n";
 
         for (const auto& msg : messages) {
@@ -337,49 +340,63 @@ std::string Tokenizer::format_lfm2_vl_style(
 
 
 std::string Tokenizer::format_gemma_style(const std::vector<ChatMessage>& messages, bool add_generation_prompt, const std::string& tools_json) const {
+    std::string result = "<bos>";
 
-    if (!tools_json.empty()) {
-        return "ERROR: Tool calls are not supported for Gemma models";
-    }
-
-    std::string result;
-
-    result = "<bos>";
-
-    std::string first_user_prefix = "";
+    std::string system_content;
     size_t start_idx = 0;
 
-    if (!messages.empty() && messages[0].role == "system") {
-        first_user_prefix = messages[0].content + "\n\n";
+    if (!messages.empty() && (messages[0].role == "system" || messages[0].role == "developer")) {
+        system_content = messages[0].content;
         start_idx = 1;
     }
 
-    bool first_user = true;
+    if (!tools_json.empty() || !system_content.empty()) {
+        result += "<start_of_turn>developer\n";
+        if (!system_content.empty()) {
+            result += system_content;
+            if (!tools_json.empty()) {
+                result += "\n"; 
+            }
+        }
+        if (!tools_json.empty()) {
+            result += "You are a model that can do function calling with the following functions.";
+            result += tools_json;
+            result += "\n\nWhen you decide to call a function, output it in this exact format:\n";
+            result += "<start_function_call>call:function_name{arg1:<escape>value1<escape>,arg2:<escape>value2<escape>}<end_function_call>";
+        }
+        result += "<end_of_turn>\n";
+    }
+
+    std::string prev_message_type;
+
     for (size_t i = start_idx; i < messages.size(); i++) {
         const auto& msg = messages[i];
 
-        if (msg.role == "user") {
-            result += "<start_of_turn>user";
-            result += "\n";
-            if (first_user && !first_user_prefix.empty()) {
-                result += first_user_prefix;
-                first_user = false;
+        if (msg.role == "tool") {
+            std::string func_name = msg.name.empty() ? "tool" : msg.name;
+            result += "<start_function_response>response:" + func_name + "{value:<escape>" + msg.content + "<escape>}<end_function_response>";
+            prev_message_type = "tool_response";
+        } else if (msg.role == "user") {
+            if (prev_message_type != "tool_response") {
+                result += "<start_of_turn>user\n";
             }
             result += msg.content;
-            result += "<end_of_turn>";
-            result += "\n";
-        } else if (msg.role == "assistant") {
-            result += "<start_of_turn>model";
-            result += "\n";
+            result += "<end_of_turn>\n";
+            prev_message_type = "content";
+        } else if (msg.role == "assistant" || msg.role == "model") {
+            if (prev_message_type != "tool_response") {
+                result += "<start_of_turn>model\n";
+            }
             result += msg.content;
-            result += "<end_of_turn>";
-            result += "\n";
+            result += "<end_of_turn>\n";
+            prev_message_type = "content";
         }
     }
 
     if (add_generation_prompt) {
-        result += "<start_of_turn>model";
-        result += "\n";
+        if (prev_message_type != "tool_response") {
+            result += "<start_of_turn>model\n";
+        }
     }
 
     return result;

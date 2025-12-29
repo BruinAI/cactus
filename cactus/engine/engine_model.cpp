@@ -164,6 +164,8 @@ bool Model::init_internal(CactusGraph* gb, const std::string& model_folder, size
         std::string warmup_text = system_prompt.empty() ? "Hello" : system_prompt;
         auto warmup_tokens = tokenizer_->encode(warmup_text);
         forward(warmup_tokens);
+        auto* gb = static_cast<CactusGraph*>(graph_handle_);
+        gb->execute();
     }
 
     reset_cache();
@@ -179,7 +181,6 @@ void Model::prefill(const std::vector<uint32_t>& tokens, size_t chunk_size, cons
         return;
     }
 
-    // Use NPU prefill if available and sequence is longer than chunk size
     if (has_npu_prefill()) {
         size_t npu_chunk_size = static_cast<size_t>(npu_prefill_->get_chunk_size());
         if (tokens.size() > npu_chunk_size) {
@@ -758,7 +759,6 @@ double Model::score_tokens_window_logprob(
     if (hidden_buf.shape.size() != 2) {
         throw std::runtime_error("Expected hidden to be rank-2 [L, hidden_dim]");
     }
-    const size_t hidden_dim = hidden_buf.shape[1];
 
 
     const size_t first_pos = start - ctx_begin - 1;
