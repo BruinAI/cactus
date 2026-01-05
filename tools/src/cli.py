@@ -337,13 +337,10 @@ def cmd_run(args):
 
 
 def cmd_eval(args):
-    """Run external eval scripts."""
-
     model_id = getattr(args, 'model_id', DEFAULT_MODEL_ID)
 
-    parent_name = PROJECT_ROOT.parent.name
-    if parent_name != 'evals':
-        print_color(RED, f"Skipping internal eval checks: companion repo not found.")
+    if PROJECT_ROOT.parent.name != 'evals':
+        print_color(RED, "Skipping internal eval checks: companion repo not found.")
         return 1
 
     if not getattr(args, 'no_build', False):
@@ -365,56 +362,96 @@ def cmd_eval(args):
         return download_result
 
     weights_dir = get_weights_dir(model_id)
+    extra = getattr(args, 'extra_args', None) or []
 
-    eval_runner = PROJECT_ROOT.parent / 'tools' / 'eval' / 'run_eval.py'
+    def extra_has_flag(flag: str) -> bool:
+        for a in extra:
+            if a == flag or a.startswith(flag + "="):
+                return True
+        return False
+
+    def pick_cwd() -> Path:
+        parent_eval_dir = PROJECT_ROOT.parent / 'tools' / 'eval'
+        cwd = PROJECT_ROOT.parent
+        cwd_file = parent_eval_dir / '_cwd_path'
+        if cwd_file.exists():
+            try:
+                raw = cwd_file.read_text(encoding='utf-8').strip()
+                if raw:
+                    candidate = Path(raw)
+                    if not candidate.is_absolute():
+                        candidate = (PROJECT_ROOT.parent / candidate).resolve()
+                    if candidate.exists() and candidate.is_dir():
+                        if candidate.name == 'tools' and candidate.parent.exists():
+                            cwd = candidate.parent
+                        else:
+                            cwd = candidate
+            except Exception as e:
+                print_color(YELLOW, f"Warning: failed to read _cwd_path: {e}. Using default cwd={cwd}")
+        return cwd
+
+    mode_flags = []
+    if getattr(args, 'tools', False): mode_flags.append('tools')
+    if getattr(args, 'llm', False):   mode_flags.append('llm')
+    if getattr(args, 'stt', False):   mode_flags.append('stt')
+    if getattr(args, 'vlm', False):   mode_flags.append('vlm')
+    if getattr(args, 'embed', False): mode_flags.append('embed')
+
+    if len(mode_flags) > 1:
+        print_color(RED, f"Error: choose only one eval mode flag, got: {' '.join(mode_flags)}")
+        return 1
+
+    mode = mode_flags[0] if mode_flags else "tools"
+    cwd = pick_cwd()
+
+    repo_root = PROJECT_ROOT.parent  # evals/
+
+    if mode == "stt":
+        runner = repo_root / "tools" / "eval" / "speech-evals" / "runner.py"
+        if not runner.exists():
+            print_color(RED, f"STT runner not found at {runner}")
+            return 1
+
+        cmd = [sys.executable, str(runner)]
+
+        if not extra_has_flag("--model-path"):
+            cmd += ["--model-path", str(weights_dir)]
+
+        cmd += extra
+
+        print_color(BLUE, "[cactus] launching STT eval runner")
+        print(" ".join(cmd))
+
+        r = subprocess.run(cmd, cwd=str(cwd))
+        return r.returncode
+
+    eval_runner = repo_root / "tools" / "eval" / "main.py"
     if not eval_runner.exists():
         print_color(RED, f"Eval runner not found at {eval_runner}")
         print("Expected eval runner to live outside the cactus submodule (parent repo).")
         return 1
 
-    cmd = [sys.executable, str(eval_runner), '--model-path', str(weights_dir)]
+    cmd = [sys.executable, str(eval_runner)]
 
-    parent_eval_dir = PROJECT_ROOT.parent / 'tools' / 'eval'
-    parent_dataset = parent_eval_dir / 'datasets' / 'eval_dataset_new.py'
-    if parent_dataset.exists():
-        cmd.extend(['--dataset', str(parent_dataset)])
+    if not extra_has_flag("--model-path"):
+        cmd += ["--model-path", str(weights_dir)]
 
-    extra = getattr(args, 'extra_args', None) or []
+    if mode != "tools":
+        cmd.append(f"--{mode}")
 
-    def extra_has_output_dir(extra_list):
-        for a in extra_list:
-            if a == '--output-dir' or a.startswith('--output-dir='):
-                return True
-        return False
-
+    parent_eval_dir = repo_root / 'tools' / 'eval'
     default_out = parent_eval_dir / 'results'
-    if not extra_has_output_dir(extra):
-        cmd.extend(['--output-dir', str(default_out)])
+    if not extra_has_flag("--output-dir"):
+        cmd += ["--output-dir", str(default_out)]
 
-    if extra:
-        cmd.extend(extra)
+    cmd += extra
 
-    cwd = PROJECT_ROOT.parent
-    cwd_file = parent_eval_dir / '_cwd_path'
-    if cwd_file.exists():
-        try:
-            raw = cwd_file.read_text(encoding='utf-8').strip()
-            if raw:
-                candidate = Path(raw)
-                if not candidate.is_absolute():
-                    candidate = (PROJECT_ROOT.parent / candidate).resolve()
-                if candidate.exists() and candidate.is_dir():
-                    if candidate.name == 'tools' and candidate.parent.exists():
-                        cwd = candidate.parent
-                    else:
-                        cwd = candidate
-                else:
-                    print_color(YELLOW, f"Warning: _cwd_path points to missing location: {candidate}. Using default cwd={cwd}")
-        except Exception as e:
-            print_color(YELLOW, f"Warning: failed to read _cwd_path: {e}. Using default cwd={cwd}")
+    print_color(BLUE, "[cactus] launching eval runner")
+    print(" ".join(cmd))
 
-    result = subprocess.run(cmd, cwd=str(cwd))
-    return result.returncode
+    r = subprocess.run(cmd, cwd=str(cwd))
+    return r.returncode
+
 
 
 def cmd_test(args):
@@ -704,38 +741,17 @@ def create_parser():
 
 
 def preprocess_eval_args(parser, argv):
-    args = None
-    extra_to_forward = []
-    eval_flags = ['--tools', '--vlm', '--stt', '--llm', '--embed']
-
-    if 'eval' in argv:
-        eval_idx = argv.index('eval')
-        after_eval = argv[eval_idx + 1:]
-        first_flag_index = None
-        for i, tok in enumerate(after_eval):
-            if tok in eval_flags:
-                first_flag_index = eval_idx + 1 + i
-                break
-        if first_flag_index is not None:
-            left = argv[:first_flag_index]
-            right = argv[first_flag_index:]
-            args = parser.parse_args(left)
-            extra_to_forward = [tok for tok in right if tok not in eval_flags]
-        else:
-            args, unknown = parser.parse_known_args(argv)
-            if unknown:
-                if args.command != 'eval':
-                    parser.error(f"unrecognized arguments: {' '.join(unknown)}")
-                extra_to_forward = unknown
-    else:
-        args, unknown = parser.parse_known_args(argv)
-        if unknown:
-            parser.error(f"unrecognized arguments: {' '.join(unknown)}")
+    args, unknown = parser.parse_known_args(argv)
 
     if getattr(args, 'command', None) == 'eval':
-        setattr(args, 'extra_args', extra_to_forward)
+        setattr(args, 'extra_args', unknown)
+        return args
+
+    if unknown:
+        parser.error(f"unrecognized arguments: {' '.join(unknown)}")
 
     return args
+
 
 
 def main():
