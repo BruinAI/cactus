@@ -375,26 +375,6 @@ def cmd_eval(args):
                 return True
         return False
 
-    def pick_cwd() -> Path:
-        parent_eval_dir = PROJECT_ROOT.parent / 'tools' / 'eval'
-        cwd = PROJECT_ROOT.parent
-        cwd_file = parent_eval_dir / '_cwd_path'
-        if cwd_file.exists():
-            try:
-                raw = cwd_file.read_text(encoding='utf-8').strip()
-                if raw:
-                    candidate = Path(raw)
-                    if not candidate.is_absolute():
-                        candidate = (PROJECT_ROOT.parent / candidate).resolve()
-                    if candidate.exists() and candidate.is_dir():
-                        if candidate.name == 'tools' and candidate.parent.exists():
-                            cwd = candidate.parent
-                        else:
-                            cwd = candidate
-            except Exception as e:
-                print_color(YELLOW, f"Warning: failed to read _cwd_path: {e}. Using default cwd={cwd}")
-        return cwd
-
     mode_flags = []
     if getattr(args, 'tools', False): mode_flags.append('tools')
     if getattr(args, 'llm', False):   mode_flags.append('llm')
@@ -407,57 +387,70 @@ def cmd_eval(args):
         return 1
 
     mode = mode_flags[0] if mode_flags else "tools"
-    cwd = pick_cwd()
-
     repo_root = PROJECT_ROOT.parent  # evals/
-
-    if mode == "stt":
-        runner = repo_root / "tools" / "eval" / "speech-evals" / "runner.py"
-        if not runner.exists():
-            print_color(RED, f"STT runner not found at {runner}")
-            return 1
-
-        cmd = [sys.executable, str(runner)]
-
-        if not extra_has_flag("--model-path"):
-            cmd += ["--model-path", str(weights_dir)]
-
-        cmd += extra
-
-        print_color(BLUE, "[cactus] launching STT eval runner")
-        print(" ".join(cmd))
-
-        r = subprocess.run(cmd, cwd=str(cwd))
-        return r.returncode
+    cwd = repo_root
 
     if mode == "tools":
-        eval_runner = repo_root / "tools" / "eval" / "run_eval_berk.py"
-    else: # default
-        eval_runner = repo_root / "tools" / "eval" / "run_eval_berk.py"
+        eval_runner = repo_root / "tool-evals" / "run_eval_berk.py"
+    elif mode == "stt":
+        eval_runner = repo_root / "speech-evals" / "speech_eval.py"
+    elif mode == "llm":
+        eval_runner = repo_root / "text-evals" / "perplexity_eval.py"
+    elif mode == "vlm":
+        eval_runner = repo_root / "video-evals" / "run_benchmarks.py"
+    elif mode == "embed":
+        print_color(RED, f"Error: eval mode '{mode}' is not supported in this repo layout")
+        return 1
+    else:
+        print_color(RED, f"Error: unknown eval mode '{mode}'")
+        return 1
+
     if not eval_runner.exists():
         print_color(RED, f"Eval runner not found at {eval_runner}")
-        print("Expected eval runner to live outside the cactus submodule (parent repo).")
         return 1
 
     cmd = [sys.executable, str(eval_runner)]
 
-    if not extra_has_flag("--model-path"):
-        cmd += ["--model-path", str(weights_dir)]
+    if mode == "vlm":
+        if not extra_has_flag("--model"):
+            cmd += ["--model", str(weights_dir)]
+        if not extra_has_flag("--all") and not extra_has_flag("--benchmarks"):
+            cmd += ["--all"]
+    else:
+        if not extra_has_flag("--model-path"):
+            cmd += ["--model-path", str(weights_dir)]
 
-    if mode != "tools":
-        cmd.append(f"--{mode}")
+    if mode == "llm" and not extra_has_flag("--model-id"):
+        cmd += ["--model-id", str(model_id)]
 
-    parent_eval_dir = repo_root / 'tools' / 'eval'
-    default_out = parent_eval_dir / 'results'
+    if mode == "stt" and not extra_has_flag("--dataset-path"):
+        default_dataset_path = repo_root / "speech-evals" / "dataset-retrieval"
+        cmd += ["--dataset-path", str(default_dataset_path)]
+
     if not extra_has_flag("--output-dir"):
-        cmd += ["--output-dir", str(default_out)]
+        if mode == "tools":
+            default_out = repo_root / "tool-evals" / "results"
+        elif mode == "stt":
+            default_out = repo_root / "speech-evals" / "results"
+        elif mode == "llm":
+            default_out = repo_root / "text-evals" / "results"
+        else:
+            default_out = None
+        if default_out is not None:
+            cmd += ["--output-dir", str(default_out)]
 
     cmd += extra
 
-    print_color(BLUE, "[cactus] launching eval runner")
+    print_color(BLUE, f"[cactus] launching {mode} eval runner")
     print(" ".join(cmd))
 
-    r = subprocess.run(cmd, cwd=str(cwd))
+    env = os.environ.copy()
+    if mode == "vlm":
+        ffi_dir = str(repo_root / "cactus" / "tools" / "src")
+        existing = env.get("PYTHONPATH", "")
+        env["PYTHONPATH"] = ffi_dir if not existing else (ffi_dir + os.pathsep + existing)
+
+    r = subprocess.run(cmd, cwd=str(cwd), env=env)
     return r.returncode
 
 
