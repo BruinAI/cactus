@@ -430,7 +430,10 @@ def cmd_eval(args):
         r = subprocess.run(cmd, cwd=str(cwd))
         return r.returncode
 
-    eval_runner = repo_root / "tools" / "eval" / "main.py"
+    if mode == "tools":
+        eval_runner = repo_root / "tools" / "eval" / "run_eval_berk.py"
+    else: # default
+        eval_runner = repo_root / "tools" / "eval" / "run_eval_berk.py"
     if not eval_runner.exists():
         print_color(RED, f"Eval runner not found at {eval_runner}")
         print("Expected eval runner to live outside the cactus submodule (parent repo).")
