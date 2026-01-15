@@ -75,6 +75,9 @@ void cactus_rms_norm_f16(const __fp16* input, const __fp16* weight, __fp16* outp
 void cactus_rope_f16(const __fp16* input, __fp16* output, size_t batch_size, size_t seq_len,
                       size_t num_heads, size_t head_dim, size_t start_pos, float theta);
 
+void cactus_gpt_j_rope_f16(const __fp16* input, __fp16* output, size_t batch_size, size_t seq_len,
+                           size_t num_heads, size_t head_dim, size_t rot_dim, size_t start_pos, float theta);
+
 void cactus_softmax_f16(const __fp16* input, __fp16* output, size_t batch_size,
                          size_t seq_len, size_t vocab_size);
 

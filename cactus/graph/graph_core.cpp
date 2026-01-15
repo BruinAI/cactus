@@ -279,6 +279,7 @@ void compute_node_optimized(GraphNode& node, const std::vector<std::unique_ptr<G
             break;
         case OpType::RMS_NORM:
         case OpType::ROPE:
+        case OpType::ROPE_GPTJ:
         case OpType::SOFTMAX:
         case OpType::ATTENTION:
         case OpType::ATTENTION_INT8_HYBRID:

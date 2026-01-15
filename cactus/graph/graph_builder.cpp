@@ -313,6 +313,11 @@ size_t CactusGraph::rope(size_t input, float theta, size_t position_offset, Comp
     return add_node(OpType::ROPE, {input}, {}, params);
 }
 
+size_t CactusGraph::rope_gptj(size_t input, float theta, size_t position_offset, size_t rot_dim, ComputeBackend backend) {
+    OpParams params{.theta = theta, .position_offset = position_offset, .backend = backend, .index_value = rot_dim};
+    return add_node(OpType::ROPE_GPTJ, {input}, {}, params);
+}
+
 size_t CactusGraph::softmax(size_t input, int axis) {
     OpParams params{.axis = axis};
     return add_node(OpType::SOFTMAX, {input}, {}, params);

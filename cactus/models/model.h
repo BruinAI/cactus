@@ -707,6 +707,8 @@ private:
         size_t encoder_conv1_bias;
         size_t encoder_conv2_weight;
         size_t encoder_conv2_bias;
+        size_t encoder_conv3_weight;
+        size_t encoder_conv3_bias;
         size_t encoder_norm_weight;
         size_t encoder_norm_bias;
 

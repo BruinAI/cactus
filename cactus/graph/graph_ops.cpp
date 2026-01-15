@@ -551,6 +551,34 @@ void compute_fused_node(GraphNode& node, const std::vector<std::unique_ptr<Graph
                            batch_size, seq_len, num_heads, head_dim, node.params.position_offset, node.params.theta);
             break;
         }
+        case OpType::ROPE_GPTJ: {
+            if (node.params.backend == ComputeBackend::NPU) {
+                throw std::runtime_error("NPU RoPE operation not yet implemented");
+            }
+
+            const auto& input_buffer = nodes[node_index_map.at(node.input_ids[0])]->output_buffer;
+            const auto& shape = input_buffer.shape;
+
+            if (shape.size() < 4) {
+                throw std::runtime_error("RoPE operation requires 4D tensor with shape [batch, seq_len, num_heads, head_dim], got " +
+                                        std::to_string(shape.size()) + "D tensor");
+            }
+
+            if (input_buffer.precision != Precision::FP16 || node.output_buffer.precision != Precision::FP16) {
+                throw std::runtime_error("RoPE operation only supports FP16 precision");
+            }
+
+            size_t batch_size = shape[0];
+            size_t seq_len = shape[1];
+            size_t num_heads = shape[2];
+            size_t head_dim = shape[3];
+
+            size_t rot_dim = node.params.index_value;
+
+            cactus_gpt_j_rope_f16(input_buffer.data_as<__fp16>(), node.output_buffer.data_as<__fp16>(),
+                           batch_size, seq_len, num_heads, head_dim, rot_dim, node.params.position_offset, node.params.theta);
+            break;
+        }   
         case OpType::SOFTMAX: {
             const auto& input_buffer = nodes[node_index_map.at(node.input_ids[0])]->output_buffer;
             const auto& shape = input_buffer.shape;
