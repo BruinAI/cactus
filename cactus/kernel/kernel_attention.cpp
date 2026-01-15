@@ -674,3 +674,84 @@ void cactus_rope_f16(
             }
         });
 } 
+
+void cactus_gpt_j_rope_f16(
+    const __fp16* input,
+    __fp16* output,
+    size_t batch_size,
+    size_t seq_len,
+    size_t num_heads,
+    size_t head_dim,
+    size_t rot_dim,
+    size_t start_pos,
+    float theta
+) {
+    const size_t half_dim = head_dim / 2;
+    const size_t half_rot_dim = rot_dim / 2;
+    
+    CactusRoPEF16::precompute_rope_tables_f16(seq_len + start_pos, rot_dim, theta);
+    
+    const __fp16* cos_cache = CactusRoPEF16::rope_cache_f16.cos_table.data() + start_pos * half_rot_dim;
+    const __fp16* sin_cache = CactusRoPEF16::rope_cache_f16.sin_table.data() + start_pos * half_rot_dim;
+
+    CactusThreading::parallel_for(batch_size * seq_len, CactusThreading::Thresholds::SCALAR_EXPENSIVE,
+        [&](size_t start_idx, size_t end_idx) {
+            for (size_t idx = start_idx; idx < end_idx; ++idx) {
+                const size_t batch_idx = idx / seq_len;
+                const size_t seq_idx = idx % seq_len;
+                
+                for (size_t head_idx = 0; head_idx < num_heads; ++head_idx) {
+                    const size_t offset = ((batch_idx * seq_len + seq_idx) * num_heads + head_idx) * head_dim;
+                    const __fp16* input_ptr = input + offset;
+                    __fp16* output_ptr = output + offset;
+                    
+                    const __fp16* cos_ptr = cos_cache + seq_idx * half_rot_dim;
+                    const __fp16* sin_ptr = sin_cache + seq_idx * half_rot_dim;
+                    
+                    constexpr size_t SIMD_WIDTH = 8;
+                    const size_t vectorized_half_rot_dim = (half_rot_dim / SIMD_WIDTH) * SIMD_WIDTH;
+                    
+                    for (size_t i = 0; i < vectorized_half_rot_dim; i += SIMD_WIDTH) {
+                        float16x8_t cos_vec = vld1q_f16(&cos_ptr[i]);
+                        float16x8_t sin_vec = vld1q_f16(&sin_ptr[i]);
+                        
+                        float16x8x2_t x_vec = vld2q_f16(&input_ptr[2*i]);
+                        float16x8_t x_first_half = x_vec.val[0];
+                        float16x8_t x_second_half = x_vec.val[1];
+                        
+                        float16x8_t first_result = vfmsq_f16(vmulq_f16(x_first_half, cos_vec), x_second_half, sin_vec);
+                        float16x8_t second_result = vfmaq_f16(vmulq_f16(x_second_half, cos_vec), x_first_half, sin_vec);
+                        
+                        float16x8x2_t t;
+                        t.val[0] = first_result;
+                        t.val[1] = second_result;
+                        vst2q_f16(&output_ptr[2*i], t);
+                    }
+                    
+                    for (size_t i = vectorized_half_rot_dim; i < half_rot_dim; ++i) {
+                        const __fp16 cos_val = cos_ptr[i];
+                        const __fp16 sin_val = sin_ptr[i];
+                        
+                        const __fp16 x_first_half = input_ptr[2*i];
+                        const __fp16 x_second_half = input_ptr[2*i + 1];
+                        
+                        output_ptr[2*i] = x_first_half * cos_val - x_second_half * sin_val;
+                        
+                        output_ptr[2*i + 1] = x_second_half * cos_val + x_first_half * sin_val;
+                    }
+
+                    constexpr size_t TAIL_SIMD_WIDTH = 8;
+                    size_t copy_idx = rot_dim;
+                    const size_t copy_end_vec = (head_dim / TAIL_SIMD_WIDTH) * TAIL_SIMD_WIDTH;
+
+                    for (; copy_idx + TAIL_SIMD_WIDTH <= copy_end_vec; copy_idx += TAIL_SIMD_WIDTH) {
+                        float16x8_t v = vld1q_f16(&input_ptr[copy_idx]);
+                        vst1q_f16(&output_ptr[copy_idx], v);
+                    }
+                    for (; copy_idx < head_dim; ++copy_idx) {
+                        output_ptr[copy_idx] = input_ptr[copy_idx];
+                    }
+                }
+            }
+        });
+} 

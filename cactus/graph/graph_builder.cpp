@@ -20,7 +20,7 @@ static const char* op_type_names[] = {
     "MATMUL", "TRANSPOSE", "RESHAPE", "SLICE", "GATHER", "EMBEDDING",
     "BILINEAR_INTERPOLATION",
     "SUM", "MEAN", "VARIANCE", "MIN", "MAX",
-    "RMS_NORM", "ROPE", "SOFTMAX", "ATTENTION", "ATTENTION_INT8_HYBRID", "CONV1D_CAUSAL", "CONV1D_K3",
+    "RMS_NORM", "ROPE", "SOFTMAX", "ATTENTION", "ATTENTION_INT8_HYBRID", "CONV1D_CAUSAL", "CONV1D_K3", "CONV1D",
     "SCALAR_ADD", "SCALAR_SUBTRACT", "SCALAR_MULTIPLY", "SCALAR_DIVIDE",
     "SCALAR_EXP", "SCALAR_SQRT", "SCALAR_COS", "SCALAR_SIN",
     "SILU", "GELU", "GELU_ERF", "SAMPLE", "CONCAT",
@@ -336,6 +336,11 @@ size_t CactusGraph::layernorm(size_t input, size_t weight, size_t bias, float ep
     return add_node(OpType::LAYERNORM, {input, weight, bias}, {}, params);
 }
 
+size_t CactusGraph::groupnorm(size_t input, size_t weight, size_t bias, float epsilon) {
+    OpParams params{.epsilon = epsilon};
+    return add_node(OpType::GROUPNORM, {input, weight, bias}, {}, params);
+}
+
 size_t CactusGraph::attention(size_t query, size_t key, size_t value, float scale, bool is_causal, ComputeBackend backend) {
     OpParams params{.scale = scale, .is_causal = is_causal, .backend = backend};
     return add_node(OpType::ATTENTION, {query, key, value}, {}, params);
@@ -396,6 +401,54 @@ size_t CactusGraph::conv1d_k3(size_t input, size_t weight, size_t stride){
 
     std::vector<size_t> out_shape{N, C_out, L_out};
     return add_node(OpType::CONV1D_K3, {input, weight}, out_shape, params);
+}
+
+size_t CactusGraph::conv1d(size_t input, size_t weight, size_t stride) {
+    const auto& xin = get_output_buffer(input);  
+    const auto& w   = get_output_buffer(weight); 
+
+    if (xin.shape.size() != 3) throw std::runtime_error("conv1d expects N,C,L");
+    if (w.shape.size()   != 3) throw std::runtime_error("weight must be [C_out,C_in,K]");
+    if (w.shape[1] != xin.shape[1]) throw std::runtime_error("C_in mismatch in conv1d");
+
+    const size_t N    = xin.shape[0];
+    const size_t L    = xin.shape[2];
+    const size_t C_out= w.shape[0];
+    const size_t K    = w.shape[2];
+
+    const size_t pad = 0;
+    const size_t L_out = (L + 2 * pad - K) / stride + 1;
+
+    OpParams params{};
+    params.stride = stride;
+    params.output_precision = xin.precision;
+
+    std::vector<size_t> out_shape{N, C_out, L_out};
+    return add_node(OpType::CONV1D, {input, weight}, out_shape, params);
+}
+
+size_t CactusGraph::conv1d(size_t input, size_t weight, size_t bias, size_t stride) {
+    const auto& xin = get_output_buffer(input);  
+    const auto& w   = get_output_buffer(weight); 
+    
+    if (xin.shape.size() != 3) throw std::runtime_error("conv1d expects N,C,L");
+    if (w.shape.size()   != 3) throw std::runtime_error("weight must be [C_out,C_in,K]");
+    if (w.shape[1] != xin.shape[1]) throw std::runtime_error("C_in mismatch in conv1d");
+
+    const size_t N    = xin.shape[0];
+    const size_t L    = xin.shape[2];
+    const size_t C_out= w.shape[0];
+    const size_t K    = w.shape[2];
+
+    const size_t pad = 0;
+    const size_t L_out = (L + 2 * pad - K) / stride + 1;
+
+    OpParams params{};
+    params.stride = stride;
+    params.output_precision = xin.precision;
+
+    std::vector<size_t> out_shape{N, C_out, L_out};
+    return add_node(OpType::CONV1D, {input, weight, bias}, out_shape, params);
 }
 
 

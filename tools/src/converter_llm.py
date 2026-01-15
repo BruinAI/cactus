@@ -10,7 +10,7 @@ from .tensor_io import save_tensor_with_header, create_quantization_stats, print
 from .config_utils import cfg_get, detect_model_type, extract_base_config, extract_vision_config, extract_lfm2_config, is_vlm_model
 from .weight_patterns import (
     EMBED_NAMES, OUTPUT_NAMES, OUTPUT_NORM_NAMES, LAYER_PREFIXES,
-    VISION_ITEMS, PROJECTOR_WEIGHTS, WHISPER_GLOBAL_WEIGHTS,
+    VISION_ITEMS, PROJECTOR_WEIGHTS, WHISPER_GLOBAL_WEIGHTS, MOONSHINE_GLOBAL_WEIGHTS,
     get_layer_weight_patterns, get_vision_layer_weights
 )
 from .precision_config import count_model_parameters, MixedPrecisionConfig, SMALL_MODEL_THRESHOLD, LARGE_MODEL_THRESHOLD
@@ -88,6 +88,18 @@ def convert_hf_model_weights(model, output_dir, precision='INT8', args=None):
                 save_tensor_with_header(state_dict[name], output_dir / save_name, precision, transpose=False, stats_tracker=quantization_stats, args=args, model_type=detected_model_type, num_layers=num_layers, mixed_config=mixed_config)
                 saved_tensor_full_names.add(name)
         embedding_found = True
+
+    elif model_type_str == 'moonshine':
+        for name, save_name in MOONSHINE_GLOBAL_WEIGHTS:
+            if name in state_dict:
+                save_tensor_with_header(state_dict[name], output_dir / save_name, precision, transpose=False, stats_tracker=quantization_stats, args=args, model_type=detected_model_type, num_layers=num_layers, mixed_config=mixed_config)
+                saved_tensor_full_names.add(name)
+        embedding_found = True
+        model_config['dec_hidden_act'] = cfg.decoder_hidden_act
+        model_config['enc_hidden_act'] = cfg.encoder_hidden_act
+        model_config['num_encoder_layers'] = cfg.encoder_num_hidden_layers
+        model_config['num_decoder_layers'] = cfg.decoder_num_hidden_layers
+        
 
     if embedding_found:
         embedding_norm_names = {'emb_ln.weight': 'embedding_layernorm.weight', 'emb_ln.bias': 'embedding_layernorm.bias'}
@@ -208,6 +220,11 @@ def convert_hf_model_weights(model, output_dir, precision='INT8', args=None):
                         if model_type_str == 'whisper':
                             temp = layer_prefix[:layer_prefix.find('.')] + "." + output_name
                             save_tensor_with_header(tensor, output_dir / temp, tensor_precision, transpose=should_transpose, stats_tracker=quantization_stats, args=args, model_type=detected_model_type, layer_idx=i, num_layers=num_layers, mixed_config=mixed_config)
+                        elif model_type_str == 'moonshine' and 'encoder' in layer_prefix:
+                            # Disambiguate encoder layers from decoder layers (both default to layer_{i})
+                            # layer_{i}_foo -> encoder_layer_{i}_foo
+                            enc_output_name = "encoder_" + output_name
+                            save_tensor_with_header(tensor, output_dir / enc_output_name, tensor_precision, transpose=should_transpose, stats_tracker=quantization_stats, args=args, model_type=detected_model_type, layer_idx=i, num_layers=num_layers, mixed_config=mixed_config)
                         else:
                             save_tensor_with_header(tensor, output_dir / output_name, tensor_precision, transpose=should_transpose, stats_tracker=quantization_stats, args=args, model_type=detected_model_type, layer_idx=i, num_layers=num_layers, mixed_config=mixed_config)
                         saved_tensor_full_names.add(full_name)

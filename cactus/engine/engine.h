@@ -84,10 +84,14 @@ struct Config {
     bool use_thumbnail = true;
     uint32_t min_image_tokens = 64;
     uint32_t max_image_tokens = 256;
-        uint32_t max_num_patches = 1024;
+    uint32_t max_num_patches = 1024;
     uint32_t tile_size = 512;
     float max_pixels_tolerance = 2.0f;
     bool do_image_splitting = true;
+    bool encoder_act_gelu = false;
+    bool decoder_act_gelu = false;
+    uint32_t num_encoder_layers = 0;
+    uint32_t num_decoder_layers = 0;
 
     enum class ModelType {QWEN = 0, GEMMA = 1, SMOL = 2, NOMIC = 3, LFM2 = 5, SIGLIP2 = 6, WHISPER = 7};
     ModelType model_type = ModelType::QWEN;

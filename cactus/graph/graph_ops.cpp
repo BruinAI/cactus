@@ -800,6 +800,119 @@ void compute_fused_node(GraphNode& node, const std::vector<std::unique_ptr<Graph
                 break;
         }
 
+        case OpType::CONV1D: {
+
+                if (node.params.backend == ComputeBackend::NPU) {
+                    throw std::runtime_error("NPU convolution operation not yet implemented");
+                }
+
+                const auto& X = nodes[node_index_map.at(node.input_ids[0])]->output_buffer;
+                const auto& W = nodes[node_index_map.at(node.input_ids[1])]->output_buffer;
+                auto& Y = node.output_buffer;
+
+                const __fp16* bias_ptr = nullptr;
+                std::vector<__fp16> bias_fp16;
+                if (node.input_ids.size() > 2) {
+                    const auto& B = nodes[node_index_map.at(node.input_ids[2])]->output_buffer;
+                    if (B.precision == Precision::FP16) {
+                        bias_ptr = B.data_as<__fp16>();
+                    } else if (B.precision == Precision::INT8) {
+                        bias_fp16.resize(B.total_size);
+                        const int8_t* B_int8 = B.data_as<int8_t>();
+
+                        if (B.is_grouped_int8()) {
+                            const __fp16* scales = B.scales_as_fp16();
+                            const size_t group_size = B.group_size;
+                            const size_t num_groups = B.num_groups;
+
+                            for (size_t i = 0; i < B.total_size; ++i) {
+                                size_t group_idx = i / group_size;
+                                float scale = static_cast<float>(scales[group_idx]);
+                                bias_fp16[i] = static_cast<__fp16>(B_int8[i] * scale);
+                            }
+                        } else {
+                            for (size_t i = 0; i < B.total_size; ++i) {
+                                bias_fp16[i] = static_cast<__fp16>(B_int8[i]);
+                            }
+                        }
+                        bias_ptr = bias_fp16.data();
+                    } else {
+                        throw std::runtime_error("Conv1d bias only supports FP16 and INT8 precision");
+                    }
+                }
+
+                if (X.shape.size() != 3)
+                    throw std::runtime_error("Conv1d requires 3D input [N, C_in, L]!");
+
+                if (W.shape.size() != 3)
+                    throw std::runtime_error("Weight must be [C_out, C_in, K]!");
+
+                const size_t N    = X.shape[0];
+                const size_t C_in = X.shape[1];
+                const size_t L    = X.shape[2];
+
+                const size_t C_out = W.shape[0];
+                const size_t K     = W.shape[2];
+                const size_t stride = node.params.stride;
+
+                if (L < K)
+                    throw std::runtime_error("Conv1d input length L must be >= kernel size K!");
+
+                size_t L_out = ((L - K) / stride) + 1;
+                Y.shape     = { N, C_out, L_out };
+                Y.precision = X.precision;
+
+                if (X.precision != Precision::FP16) {
+                    throw std::runtime_error("Conv1d only supports FP16 activations");
+                }
+
+                if (W.precision == Precision::INT8) {
+                    const size_t W_size = C_out * C_in * K;
+                    const int8_t* W_int8 = W.data_as<int8_t>();
+
+                    std::vector<__fp16> W_fp16(W_size);
+
+                    if (W.is_grouped_int8()) {
+                        const __fp16* scales = W.scales_as_fp16();
+                        const size_t K_total = C_in * K;
+                        const size_t group_size = W.group_size;
+                        const size_t num_groups = K_total / group_size;
+
+                        for (size_t row = 0; row < C_out; ++row) {
+                            for (size_t col = 0; col < K_total; ++col) {
+                                size_t idx = row * K_total + col;
+                                size_t group_idx = col / group_size;
+                                float scale = static_cast<float>(scales[row * num_groups + group_idx]);
+                                W_fp16[idx] = static_cast<__fp16>(W_int8[idx] * scale);
+                            }
+                        }
+                    } else {
+                        for (size_t i = 0; i < W_size; ++i) {
+                            W_fp16[i] = static_cast<__fp16>(W_int8[i]);
+                        }
+                    }
+
+                    cactus_conv1d_f16(
+                        X.data_as<__fp16>(),
+                        W_fp16.data(),
+                        bias_ptr,
+                        Y.data_as<__fp16>(),
+                        N, L, C_in, C_out, K, stride
+                    );
+                } else if (W.precision == Precision::FP16) {
+                    cactus_conv1d_f16(
+                        X.data_as<__fp16>(),
+                        W.data_as<__fp16>(),
+                        bias_ptr,
+                        Y.data_as<__fp16>(),
+                        N, L, C_in, C_out, K, stride
+                    );
+                } else {
+                    throw std::runtime_error("Conv1d only supports FP16 and INT8 weights");
+                }
+
+                break;
+        }
 
         case OpType::CONCAT: {
             const auto& input1_buffer = nodes[node_index_map.at(node.input_ids[0])]->output_buffer;
@@ -1118,6 +1231,98 @@ void compute_layernorm_node(GraphNode& node, const std::vector<std::unique_ptr<G
         }
     }
     
+    if (node.output_buffer.precision == Precision::INT8) {
+        throw std::runtime_error("LayerNorm currently does not support INT8 output");
+    } else if (node.output_buffer.precision == Precision::FP16) {
+        __fp16* output_fp16 = node.output_buffer.data_as<__fp16>();
+        for (size_t i = 0; i < input_buffer.total_size; ++i) {
+            output_fp16[i] = static_cast<__fp16>(output_float[i]);
+        }
+    } else {
+        std::memcpy(node.output_buffer.data_as<float>(), output_float.data(), input_buffer.total_size * sizeof(float));
+    }
+}
+
+void compute_groupnorm_node(GraphNode& node, const std::vector<std::unique_ptr<GraphNode>>& nodes, const std::unordered_map<size_t, size_t>& node_index_map) {
+    const auto& input_buffer = nodes[node_index_map.at(node.input_ids[0])]->output_buffer;
+    const auto& weight_buffer = nodes[node_index_map.at(node.input_ids[1])]->output_buffer;
+    const auto& bias_buffer = nodes[node_index_map.at(node.input_ids[2])]->output_buffer;
+    float epsilon = node.params.epsilon;
+    
+    if (input_buffer.shape.empty()) {
+        throw std::runtime_error("LayerNorm requires non-empty input tensor");
+    }
+    
+    size_t feature_size = input_buffer.shape.back();
+    size_t batch_size = input_buffer.total_size / feature_size;
+    
+    std::vector<float> input_float(input_buffer.total_size);
+    std::vector<float> weight_float(feature_size);
+    std::vector<float> bias_float(feature_size);
+    
+    if (input_buffer.precision == Precision::INT8) {
+        throw std::runtime_error("LayerNorm currently does not support INT8 input");
+    } else if (input_buffer.precision == Precision::FP16) {
+        const __fp16* input_fp16 = input_buffer.data_as<__fp16>();
+        for (size_t i = 0; i < input_buffer.total_size; ++i) {
+            input_float[i] = static_cast<float>(input_fp16[i]);
+        }
+    } else {
+        std::memcpy(input_float.data(), input_buffer.data_as<float>(), input_buffer.total_size * sizeof(float));
+    }
+    
+    if (weight_buffer.precision == Precision::INT8) {
+        throw std::runtime_error("LayerNorm currently does not support INT8 weight");
+    } else if (weight_buffer.precision == Precision::FP16) {
+        const __fp16* weight_fp16 = weight_buffer.data_as<__fp16>();
+        for (size_t i = 0; i < feature_size; ++i) {
+            weight_float[i] = static_cast<float>(weight_fp16[i]);
+        }
+    } else {
+        std::memcpy(weight_float.data(), weight_buffer.data_as<float>(), feature_size * sizeof(float));
+    }
+    
+    if (bias_buffer.precision == Precision::INT8) {
+        throw std::runtime_error("LayerNorm currently does not support INT8 bias");
+    } else if (bias_buffer.precision == Precision::FP16) {
+        const __fp16* bias_fp16 = bias_buffer.data_as<__fp16>();
+        for (size_t i = 0; i < feature_size; ++i) {
+            bias_float[i] = static_cast<float>(bias_fp16[i]);
+        }
+    } else {
+        std::memcpy(bias_float.data(), bias_buffer.data_as<float>(), feature_size * sizeof(float));
+    }
+    
+    std::vector<float> output_float(input_buffer.total_size);
+    float global_mean = 0.0f;
+    for (size_t b = 0; b < batch_size; ++b) {
+        const float* input_row = input_float.data() + b * feature_size;
+        for (size_t i = 0; i < feature_size; ++i) {
+            global_mean += input_row[i];
+        }
+    }
+    global_mean /= input_buffer.total_size;
+    
+    float global_variance = 0.0f;
+    for (size_t b = 0; b < batch_size; ++b) {
+        const float* input_row = input_float.data() + b * feature_size;
+        for (size_t i = 0; i < feature_size; ++i) {
+            float diff = input_row[i] - global_mean;
+            global_variance += diff * diff;
+        }
+    }
+    global_variance /= input_buffer.total_size;
+    
+    float std_inv = 1.0f / std::sqrt(global_variance + epsilon);
+    
+    for (size_t b = 0; b < batch_size; ++b) {
+        const float* input_row = input_float.data() + b * feature_size;
+        float* output_row = output_float.data() + b * feature_size;
+        for (size_t i = 0; i < feature_size; ++i) {
+            output_row[i] = (input_row[i] - global_mean) * std_inv * weight_float[i] + bias_float[i];
+        }
+    }    
+
     if (node.output_buffer.precision == Precision::INT8) {
         throw std::runtime_error("LayerNorm currently does not support INT8 output");
     } else if (node.output_buffer.precision == Precision::FP16) {

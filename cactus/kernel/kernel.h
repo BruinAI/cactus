@@ -124,6 +124,19 @@ void cactus_conv1d_f16_k3(
     size_t stride
 );
 
+void cactus_conv1d_f16(
+    const __fp16* input,
+    const __fp16* weight,
+    const __fp16* bias,
+    __fp16* output,
+    size_t N,
+    size_t L,
+    size_t C_in,
+    size_t C_out,
+    size_t K,
+    size_t stride
+);
+
 void cactus_bilinear_interpolation_f16(const __fp16* input, __fp16* output, size_t src_height, size_t src_width, size_t embed_dim,
                                        size_t dst_height, size_t dst_width);
 

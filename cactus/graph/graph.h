@@ -114,12 +114,12 @@ enum class OpType {
     MATMUL, TRANSPOSE, RESHAPE, SLICE, GATHER, EMBEDDING,
     BILINEAR_INTERPOLATION,
     SUM, MEAN, VARIANCE, MIN, MAX,
-    RMS_NORM, ROPE, SOFTMAX, ATTENTION, ATTENTION_INT8_HYBRID, CONV1D_CAUSAL, CONV1D_K3,
+    RMS_NORM, ROPE, SOFTMAX, ATTENTION, ATTENTION_INT8_HYBRID, CONV1D_CAUSAL, CONV1D_K3, CONV1D,
     SCALAR_ADD, SCALAR_SUBTRACT, SCALAR_MULTIPLY, SCALAR_DIVIDE, SCALAR_EXP, SCALAR_SQRT, SCALAR_COS, SCALAR_SIN,
     SILU, GELU, GELU_ERF,
     SAMPLE, CONCAT,
     SCATTER_TOPK,
-    TOPK, LAYERNORM,
+    TOPK, LAYERNORM, GROUPNORM,
     INDEX,
 };
 
@@ -324,6 +324,7 @@ void compute_sample_node(GraphNode& node, const std::vector<std::unique_ptr<Grap
 void compute_scatter_topk_node(GraphNode& node, const std::vector<std::unique_ptr<GraphNode>>& nodes, const std::unordered_map<size_t, size_t>& node_index_map);
 void compute_topk_node(GraphNode& node, const std::vector<std::unique_ptr<GraphNode>>& nodes, const std::unordered_map<size_t, size_t>& node_index_map);
 void compute_layernorm_node(GraphNode& node, const std::vector<std::unique_ptr<GraphNode>>& nodes, const std::unordered_map<size_t, size_t>& node_index_map);
+void compute_groupnorm_node(GraphNode& node, const std::vector<std::unique_ptr<GraphNode>>& nodes, const std::unordered_map<size_t, size_t>& node_index_map);
 void compute_index_node(GraphNode& node, const std::vector<std::unique_ptr<GraphNode>>& nodes, const std::unordered_map<size_t, size_t>& node_index_map);
 
 void shrink_thread_local_buffers();
@@ -420,6 +421,7 @@ public:
     size_t bilinear_interpolation(size_t pos_embeds, size_t dst_height, size_t dst_width);
 
     size_t layernorm(size_t input, size_t weight, size_t bias, float epsilon = 1e-5f);
+    size_t groupnorm(size_t input, size_t weight, size_t bias, float epsilon = 1e-5f);
     size_t topk(size_t input, size_t k);
     size_t rms_norm(size_t input, size_t weight, float epsilon = 1e-5f);
     size_t rope(size_t input, float theta, size_t position_offset = 0, ComputeBackend backend = ComputeBackend::CPU);
@@ -435,6 +437,8 @@ public:
 
     size_t conv1d_causal(size_t input, size_t weight, size_t kernel_size, size_t dilation = 1);
     size_t conv1d_k3(size_t input, size_t weight, size_t stride);
+    size_t conv1d(size_t input, size_t weight, size_t stride);
+    size_t conv1d(size_t input, size_t weight, size_t bias, size_t stride);
     
     size_t sample(size_t logits, float temperature = 0.6f, float top_p = 0.95f, size_t top_k = 20,
                   const std::unordered_map<uint32_t, float>& logit_bias = {});

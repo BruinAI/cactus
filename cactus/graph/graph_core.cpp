@@ -284,6 +284,7 @@ void compute_node_optimized(GraphNode& node, const std::vector<std::unique_ptr<G
         case OpType::ATTENTION_INT8_HYBRID:
         case OpType::CONV1D_CAUSAL:
         case OpType::CONV1D_K3:
+        case OpType::CONV1D:
         case OpType::GATHER:
         case OpType::SLICE:
         case OpType::EMBEDDING:
@@ -313,6 +314,9 @@ void compute_node_optimized(GraphNode& node, const std::vector<std::unique_ptr<G
             break;
         case OpType::INDEX:
             compute_index_node(node, nodes, node_index_map);
+            break;
+        case OpType::GROUPNORM:
+            compute_groupnorm_node(node, nodes, node_index_map);
             break;
     }
 }

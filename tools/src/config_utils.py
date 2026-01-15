@@ -26,6 +26,8 @@ def detect_model_type(cfg, config, output_dir=None):
         return 'lfm2'
     elif 'qwen' in model_type_str:
         return 'qwen'
+    elif 'moonshine' in model_type_str:
+        return 'moonshine'
     elif 'llama' in model_type_str:
         if output_dir and 'smol' in str(output_dir):
             return 'smol'

@@ -235,6 +235,76 @@ void cactus_conv1d_f16_k3(
     });
 }
 
+void cactus_conv1d_f16(
+    const __fp16* input,
+    const __fp16* weight,
+    const __fp16* bias,
+    __fp16* output,
+    size_t N, size_t L,
+    size_t C_in, size_t C_out,
+    size_t K,
+    size_t stride
+){
+    const size_t out_len = ((L - K) / stride) + 1;
+    const size_t in_bs   = C_in  * L;
+    const size_t out_bs  = C_out * out_len;
+
+    CactusThreading::parallel_for_2d(
+        N, C_out, CactusThreading::Thresholds::ATTENTION,
+        [&](size_t n, size_t oc) {
+
+        const __fp16* Xb  = input  + n * in_bs;
+        __fp16*       Yoc = output + n * out_bs + oc * out_len;
+        const __fp16* Woc = weight + oc * (C_in * K);
+        const float   b   = bias ? (float)bias[oc] : 0.f;
+
+        for (size_t out_t = 0; out_t < out_len; ++out_t) {
+            const size_t t = out_t * stride;   // input starting index for this output
+            // Valid range guaranteed: t + (K-1) <= L-1
+
+            float sum = b;
+
+            for (size_t ic = 0; ic < C_in; ++ic) {
+                const __fp16* Xc = Xb  + ic * L + t;   // points to x[n,ic,t]
+                const __fp16* Wc = Woc + ic * K;       // w[oc,ic,0]
+
+                // Vectorize over K
+                float32x4_t acc0 = vdupq_n_f32(0.f);
+                float32x4_t acc1 = vdupq_n_f32(0.f);
+
+                size_t k = 0;
+
+                // 8 halfs per vector load
+                for (; k + 8 <= K; k += 8) {
+                    const float16x8_t xv = vld1q_f16(Xc + k);
+                    const float16x8_t wv = vld1q_f16(Wc + k);
+
+                    acc0 = vfmaq_f32(acc0,
+                                     vcvt_f32_f16(vget_low_f16(xv)),
+                                     vcvt_f32_f16(vget_low_f16(wv)));
+                    acc1 = vfmaq_f32(acc1,
+                                     vcvt_f32_f16(vget_high_f16(xv)),
+                                     vcvt_f32_f16(vget_high_f16(wv)));
+                }
+
+                float32x2_t s1 = vadd_f32(vget_low_f32(acc0), vget_high_f32(acc0));
+                sum += vget_lane_f32(s1, 0) + vget_lane_f32(s1, 1);
+
+                float32x2_t s2 = vadd_f32(vget_low_f32(acc1), vget_high_f32(acc1));
+                sum += vget_lane_f32(s2, 0) + vget_lane_f32(s2, 1);
+
+                // Tail
+                for (; k < K; ++k) {
+                    sum += (float)Xc[k] * (float)Wc[k];
+                }
+            }
+
+            Yoc[out_t] = (__fp16)sum;
+        }
+    });
+}
+
+
 void cactus_bilinear_interpolation_f16(const __fp16* input, __fp16* output, size_t src_height, size_t src_width, size_t embed_dim,
                                        size_t dst_height, size_t dst_width)
 {
