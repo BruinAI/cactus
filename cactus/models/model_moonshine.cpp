@@ -13,17 +13,8 @@ namespace engine {
 MoonshineModel::MoonshineModel() : Model() {}
 
 MoonshineModel::MoonshineModel(const Config& config) : Model(config) {
-    size_t max_layers = std::max(config.num_encoder_layers, config.num_decoder_layers);
-    if (max_layers == 0) max_layers = config.num_layers; // Fallback if 0
-    // If specific counts are 0 but generic is set, use generic (backward compat for earlier config loading?)
-    // Actually config_utils usually sets generic. But user added specific fields.
-    // If specific are 0, we can default to generic.
-    if (config.num_encoder_layers == 0) const_cast<Config&>(config).num_encoder_layers = config.num_layers;
-    if (config.num_decoder_layers == 0) const_cast<Config&>(config).num_decoder_layers = config.num_layers;
-    
-    max_layers = std::max(config.num_encoder_layers, config.num_decoder_layers);
-
-    weight_nodes_.layers.resize(max_layers);
+    weight_nodes_.encoder_layers.resize(config.num_encoder_layers);
+    weight_nodes_.decoder_layers.resize(config.num_decoder_layers);
 
     float hd = static_cast<float>(config.attention_head_dim);
     if (hd <= 0.0f) {
@@ -97,7 +88,7 @@ void MoonshineModel::load_weights_to_graph(CactusGraph* gb) {
 
     // Decoder Layers
     for (uint32_t i = 0; i < config_.num_decoder_layers; i++) {
-        auto& layer = weight_nodes_.layers[i];
+        auto& layer = weight_nodes_.decoder_layers[i];
         std::string layer_prefix = model_folder_path_ + "/layer_" + std::to_string(i) + "_";
 
         layer.decoder_encoder_attn_k_weight = gb->mmap_weights(layer_prefix + "encoder_attn_k.weights");
@@ -125,7 +116,7 @@ void MoonshineModel::load_weights_to_graph(CactusGraph* gb) {
     // Encoder Layers
     if (!use_npu_encoder_) {
         for (uint32_t i = 0; i < config_.num_encoder_layers; i++) {
-            auto& layer = weight_nodes_.layers[i];
+            auto& layer = weight_nodes_.encoder_layers[i];
             std::string layer_prefix = model_folder_path_ + "/encoder_layer_" + std::to_string(i) + "_";
 
             layer.encoder_ffn1_weight = gb->mmap_weights(layer_prefix + "mlp_fc1.weights");
@@ -148,7 +139,7 @@ void MoonshineModel::load_weights_to_graph(CactusGraph* gb) {
 }   
 
 size_t MoonshineModel::build_encoder_mlp(CactusGraph* gb, size_t input, uint32_t layer_idx, ComputeBackend backend) {
-    const auto& layer = weight_nodes_.layers[layer_idx];
+    const auto& layer = weight_nodes_.encoder_layers[layer_idx];
 
     auto ffn1_weight = gb->matmul(input, layer.encoder_ffn1_weight, true, backend);
     auto ffn1_bias = gb->add(ffn1_weight, layer.encoder_ffn1_bias);
@@ -165,7 +156,7 @@ size_t MoonshineModel::build_encoder_mlp(CactusGraph* gb, size_t input, uint32_t
 }
 
 size_t MoonshineModel::build_decoder_mlp(CactusGraph* gb, size_t input, uint32_t layer_idx, ComputeBackend backend) const {
-    const auto& layer = weight_nodes_.layers[layer_idx];
+    const auto& layer = weight_nodes_.decoder_layers[layer_idx];
     auto ffn1_weight = gb->matmul(input, layer.decoder_ffn1_weight, true, backend);
     auto ffn1_bias = gb->add(ffn1_weight, layer.decoder_ffn1_bias);
     auto ffn1_act = gb->gelu_erf(ffn1_bias);
@@ -178,7 +169,7 @@ size_t MoonshineModel::build_decoder_mlp(CactusGraph* gb, size_t input, uint32_t
 
 size_t MoonshineModel::build_encoder_attention(CactusGraph* gb, size_t input, uint32_t layer_idx, ComputeBackend backend, bool use_cache, size_t /*position_offset*/){
 
-    const auto& layer = weight_nodes_.layers[layer_idx];
+    const auto& layer = weight_nodes_.encoder_layers[layer_idx];
 
     size_t q = gb->matmul(input, layer.decoder_encoder_attn_q_weight, true, backend);
     q = gb->add(q, layer.decoder_encoder_attn_q_bias);
@@ -259,7 +250,7 @@ void MoonshineModel::reset_cache() {
 }
 
 size_t MoonshineModel::build_decoder_self_attention(CactusGraph* gb, size_t input, uint32_t layer_idx, ComputeBackend backend, bool use_cache, size_t position_offset){
-    const auto& layer = weight_nodes_.layers[layer_idx];
+    const auto& layer = weight_nodes_.decoder_layers[layer_idx];
 
     auto q = gb->matmul(input, layer.decoder_self_attn_q_weight, true, backend);
     q = gb->add(q, layer.decoder_self_attn_q_bias);
@@ -333,7 +324,7 @@ size_t MoonshineModel::build_decoder_self_attention(CactusGraph* gb, size_t inpu
 }
 
 size_t MoonshineModel::build_encoder_self_attention(CactusGraph* gb, size_t input, uint32_t layer_idx, ComputeBackend backend, bool use_cache, size_t /*position_offset*/){
-    const auto& layer = weight_nodes_.layers[layer_idx];
+    const auto& layer = weight_nodes_.encoder_layers[layer_idx];
 
     if(use_cache)
         throw std::runtime_error("The encoder attention layers are not auto-regressive, and thus don't use KV caching!");
@@ -413,7 +404,7 @@ size_t MoonshineModel::build_encoder_transformer_block(
     bool use_cache,
     size_t position_offset)
 {
-    const auto& layer = weight_nodes_.layers[layer_idx];
+    const auto& layer = weight_nodes_.encoder_layers[layer_idx];
 
     size_t ln1 = gb->layernorm(
         hidden,
@@ -447,7 +438,7 @@ size_t MoonshineModel::build_encoder_transformer_block(
 }
 
 size_t MoonshineModel::build_decoder_transformer_block(CactusGraph* gb, size_t hidden, uint32_t layer_idx, ComputeBackend backend, bool use_cache, size_t position_offset){
-    const auto& layer = weight_nodes_.layers[layer_idx];
+    const auto& layer = weight_nodes_.decoder_layers[layer_idx];
 
     size_t ln1 = gb->layernorm(hidden, layer.decoder_post_attn_layernorm_weight, layer.decoder_post_attn_layernorm_bias);
     size_t sa = build_decoder_self_attention(gb, ln1, layer_idx, backend, use_cache, position_offset);
