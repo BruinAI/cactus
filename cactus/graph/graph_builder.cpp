@@ -586,3 +586,20 @@ size_t CactusGraph::add_node(OpType op_type, const std::vector<size_t>& inputs, 
 const BufferDesc& CactusGraph::get_output_buffer(size_t node_id) const {
     return nodes_[node_index_map_.at(node_id)]->output_buffer;
 }
+
+size_t CactusGraph::persistent(size_t source_node) {
+    const auto& source_buffer = get_output_buffer(source_node);
+    OpParams params;
+    params.output_precision = source_buffer.precision;
+    size_t node_id = add_node(OpType::PERSISTENT, {source_node}, source_buffer.shape, params);
+    persistent_node_ids_.insert(node_id);
+    return node_id;
+}
+
+bool CactusGraph::is_populated(size_t persistent_node_id) const {
+    return populated_node_ids_.count(persistent_node_id) > 0;
+}
+
+void CactusGraph::invalidate_persistent(size_t persistent_node_id) {
+    populated_node_ids_.erase(persistent_node_id);
+}

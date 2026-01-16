@@ -41,6 +41,7 @@ extern void compute_bilinear_interpolation_node(GraphNode& node, const std::vect
 extern void compute_sample_node(GraphNode& node, const std::vector<std::unique_ptr<GraphNode>>& nodes, const std::unordered_map<size_t, size_t>& node_index_map);
 extern void compute_topk_node(GraphNode& node, const std::vector<std::unique_ptr<GraphNode>>& nodes, const std::unordered_map<size_t, size_t>& node_index_map);
 extern void compute_scatter_topk_node(GraphNode& node, const std::vector<std::unique_ptr<GraphNode>>& nodes, const std::unordered_map<size_t, size_t>& node_index_map);
+extern void compute_persistent_node(GraphNode& node, const std::vector<std::unique_ptr<GraphNode>>& nodes, const std::unordered_map<size_t, size_t>& node_index_map);
 
 static const char* op_type_names[] = {
     "INPUT", "PRECISION_CAST",
@@ -139,6 +140,10 @@ void compute_node_optimized(GraphNode& node, const std::vector<std::unique_ptr<G
 
         case OpType::LAYERNORM:
             compute_layernorm_node(node, nodes, node_index_map);
+            break;
+
+        case OpType::PERSISTENT:
+            compute_persistent_node(node, nodes, node_index_map);
             break;
 
         case OpType::CONV1D_CAUSAL:
@@ -644,6 +649,11 @@ void CactusGraph::soft_reset() {
     for (const auto& cache_entry : weight_cache_) {
         cached_node_ids.insert(cache_entry.second);
     }
+    
+    // Include persistent nodes in preserved set
+    for (size_t pid : persistent_node_ids_) {
+        cached_node_ids.insert(pid);
+    }
 
     size_t max_preserved_id = 0;
     for (const auto& node : nodes_) {
@@ -680,6 +690,11 @@ void CactusGraph::soft_reset_keep_pool() {
     std::set<size_t> cached_node_ids;
     for (const auto& cache_entry : weight_cache_) {
         cached_node_ids.insert(cache_entry.second);
+    }
+
+    // Include persistent nodes in preserved set
+    for (size_t pid : persistent_node_ids_) {
+        cached_node_ids.insert(pid);
     }
 
     size_t max_preserved_id = 0;

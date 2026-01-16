@@ -418,3 +418,23 @@ void compute_bilinear_interpolation_node(GraphNode& node, const std::vector<std:
         throw std::runtime_error("BILINEAR_INTERPOLATION only supports INT8 and FP16 input precision");
     }
 }
+
+void compute_persistent_node(GraphNode& node, const std::vector<std::unique_ptr<GraphNode>>& nodes, const std::unordered_map<size_t, size_t>& node_index_map) {
+    // PERSISTENT node copies data from its source input
+    if (node.input_ids.empty()) {
+        // No source - this is a pre-allocated persistent node, nothing to copy
+        return;
+    }
+    
+    const auto& input_buffer = nodes[node_index_map.at(node.input_ids[0])]->output_buffer;
+    
+    // Allocate output buffer if not already allocated (persistent nodes use dedicated allocation, not pool)
+    if (!node.output_buffer.get_data()) {
+        node.output_buffer.allocate();
+    }
+    
+    // Copy data from source to persistent storage
+    std::memcpy(node.output_buffer.get_data(), 
+                input_buffer.get_data(), 
+                input_buffer.byte_size);
+}

@@ -12,7 +12,9 @@
 #include <mutex>
 #include <sstream>
 #include <iostream>
+#if defined(__ARM_NEON) || defined(__aarch64__) || defined(__ARM_FEATURE_FP16_VECTOR_ARITHMETIC)
 #include <arm_neon.h>
+#endif
 
 namespace cactus {
 
