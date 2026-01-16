@@ -12,6 +12,7 @@ using namespace cactus::ffi;
 
 static constexpr size_t WHISPER_TARGET_FRAMES = 3000;
 static constexpr int WHISPER_SAMPLE_RATE = 16000;
+static constexpr size_t WHISPER_MAX_DECODER_POSITIONS = 448;
 
 static AudioProcessor::SpectrogramConfig get_whisper_spectrogram_config() {
     AudioProcessor::SpectrogramConfig cfg{};
@@ -228,6 +229,12 @@ int cactus_transcribe(
             CACTUS_LOG_ERROR("transcribe", "Decoder input tokens empty after encoding prompt");
             handle_error_response("Decoder input tokens empty", response_buffer, buffer_size);
             return -1;
+        }
+
+        size_t max_allowed_tokens = WHISPER_MAX_DECODER_POSITIONS - tokens.size();
+        if (max_tokens > max_allowed_tokens) {
+            CACTUS_LOG_WARN("transcribe", "max_tokens exceeds limit, reducing to " << max_allowed_tokens);
+            max_tokens = max_allowed_tokens;
         }
 
         std::vector<std::vector<uint32_t>> stop_token_sequences;

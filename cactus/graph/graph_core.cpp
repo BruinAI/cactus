@@ -1,36 +1,7 @@
 #include "graph.h"
-#include "../kernel/kernel.h"
 #include <algorithm>
 #include <stdexcept>
 #include <cstring>
-#include <cmath>
-#include <iostream>
-
-namespace Quantization {
-    void int8_to_fp32(const int8_t* src, float* dst, size_t count, float scale) {
-        cactus_int8_to_fp32(src, dst, count, scale);
-    }
-    
-    void fp32_to_int8(const float* src, int8_t* dst, size_t count, float scale) {
-        cactus_fp32_to_int8(src, dst, count, scale);
-    }
-
-    void fp16_to_fp32(const __fp16* src, float* dst, size_t count) {
-        cactus_fp16_to_fp32(src, dst, count);
-    }
-    
-    void fp32_to_fp16(const float* src, __fp16* dst, size_t count) {
-        cactus_fp32_to_fp16(src, dst, count);
-    }
-    
-    void int8_to_fp16(const int8_t* src, __fp16* dst, size_t count, float scale) {
-        cactus_int8_to_fp16(src, dst, count, scale);
-    }
-    
-    void fp16_to_int8(const __fp16* src, int8_t* dst, size_t count, float scale) {
-        cactus_fp16_to_int8(src, dst, count, scale);
-    }
-}
 
 size_t BufferPool::round_up_size(size_t size) const {
     constexpr size_t ALIGNMENT = 64;
@@ -84,411 +55,6 @@ void BufferPool::release(char* ptr, size_t byte_size) {
 void BufferPool::clear() {
     free_buffers_.clear();
     pool_bytes_ = 0;
-}
-
-static std::vector<size_t> compute_strides(const std::vector<size_t>& shape, const std::vector<size_t>& target_shape) {
-    std::vector<size_t> strides(target_shape.size());
-    
-    size_t shape_offset = target_shape.size() - shape.size();
-    
-    for (size_t i = 0; i < target_shape.size(); ++i) {
-        if (i < shape_offset) {
-            strides[i] = 0;
-        } else {
-            size_t dim_idx = i - shape_offset;
-            if (shape[dim_idx] == 1) {
-                strides[i] = 0;
-            } else {
-                strides[i] = 1;
-                for (size_t j = dim_idx + 1; j < shape.size(); ++j) {
-                    strides[i] *= shape[j];
-                }
-            }
-        }
-    }
-    
-    return strides;
-}
-
-
-void dispatch_binary_op_f16(OpType op, const __fp16* lhs, const __fp16* rhs, __fp16* output, size_t count) {
-    switch (op) {
-        case OpType::ADD:
-            cactus_add_f16(lhs, rhs, output, count);
-            break;
-        case OpType::ADD_CLIPPED:
-            cactus_add_f16_clipped(lhs, rhs, output, count);
-            break;
-        case OpType::SUBTRACT:
-            cactus_subtract_f16(lhs, rhs, output, count);
-            break;
-        case OpType::MULTIPLY:
-            cactus_multiply_f16(lhs, rhs, output, count);
-            break;
-        case OpType::DIVIDE:
-            cactus_divide_f16(lhs, rhs, output, count);
-            break;
-        default:
-            break;
-    }
-}
-
-void dispatch_unary_op_f16(OpType op, const __fp16* input, __fp16* output, size_t count, float param) {
-    ScalarOpType scalar_op;
-    switch (op) {
-        case OpType::SCALAR_ADD: scalar_op = ScalarOpType::ADD; break;
-        case OpType::SCALAR_SUBTRACT: scalar_op = ScalarOpType::SUBTRACT; break;
-        case OpType::SCALAR_MULTIPLY: scalar_op = ScalarOpType::MULTIPLY; break;
-        case OpType::SCALAR_DIVIDE: scalar_op = ScalarOpType::DIVIDE; break;
-        case OpType::SCALAR_EXP: scalar_op = ScalarOpType::EXP; break;
-        case OpType::SCALAR_SQRT: scalar_op = ScalarOpType::SQRT; break;
-        case OpType::SCALAR_COS: scalar_op = ScalarOpType::COS; break;
-        case OpType::SCALAR_SIN: scalar_op = ScalarOpType::SIN; break;
-        default: return;
-    }
-
-    cactus_scalar_op_f16(input, output, count, param, scalar_op);
-}
-
-void compute_node_optimized(GraphNode& node, const std::vector<std::unique_ptr<GraphNode>>& nodes, const std::unordered_map<size_t, size_t>& node_index_map) {
-    switch (node.op_type) {
-        case OpType::INPUT:
-            break;
-        case OpType::ADD:
-        case OpType::ADD_CLIPPED:
-        case OpType::SUBTRACT:
-        case OpType::MULTIPLY:
-        case OpType::DIVIDE: {
-            const auto& lhs = nodes[node_index_map.at(node.input_ids[0])]->output_buffer;
-            const auto& rhs = nodes[node_index_map.at(node.input_ids[1])]->output_buffer;
-            
-            if (lhs.precision != Precision::FP16) {
-                throw std::runtime_error("Binary operations only support FP16 precision");
-            }
-
-            if (node.params.broadcast_info.needs_broadcasting) {
-                std::vector<size_t> lhs_strides = compute_strides(lhs.shape, node.params.broadcast_info.output_shape);
-                std::vector<size_t> rhs_strides = compute_strides(rhs.shape, node.params.broadcast_info.output_shape);
-
-                switch (node.op_type) {
-                    case OpType::ADD:
-                    case OpType::ADD_CLIPPED:
-                        cactus_add_broadcast_f16(lhs.data_as<__fp16>(), rhs.data_as<__fp16>(),
-                                                 node.output_buffer.data_as<__fp16>(),
-                                                 lhs_strides.data(), rhs_strides.data(),
-                                                 node.params.broadcast_info.output_shape.data(),
-                                                 node.params.broadcast_info.output_shape.size());
-                        break;
-                    case OpType::SUBTRACT:
-                        cactus_subtract_broadcast_f16(lhs.data_as<__fp16>(), rhs.data_as<__fp16>(),
-                                                      node.output_buffer.data_as<__fp16>(),
-                                                      lhs_strides.data(), rhs_strides.data(),
-                                                      node.params.broadcast_info.output_shape.data(),
-                                                      node.params.broadcast_info.output_shape.size());
-                        break;
-                    case OpType::MULTIPLY:
-                        cactus_multiply_broadcast_f16(lhs.data_as<__fp16>(), rhs.data_as<__fp16>(),
-                                                      node.output_buffer.data_as<__fp16>(),
-                                                      lhs_strides.data(), rhs_strides.data(),
-                                                      node.params.broadcast_info.output_shape.data(),
-                                                      node.params.broadcast_info.output_shape.size());
-                        break;
-                    case OpType::DIVIDE:
-                        cactus_divide_broadcast_f16(lhs.data_as<__fp16>(), rhs.data_as<__fp16>(),
-                                                    node.output_buffer.data_as<__fp16>(),
-                                                    lhs_strides.data(), rhs_strides.data(),
-                                                    node.params.broadcast_info.output_shape.data(),
-                                                    node.params.broadcast_info.output_shape.size());
-                        break;
-                    default: break;
-                }
-            } else {
-                dispatch_binary_op_f16(node.op_type, lhs.data_as<__fp16>(),
-                                       rhs.data_as<__fp16>(), node.output_buffer.data_as<__fp16>(),
-                                       node.output_buffer.total_size);
-            }
-            break;
-        }
-        case OpType::SCALAR_ADD:
-        case OpType::SCALAR_SUBTRACT:
-        case OpType::SCALAR_MULTIPLY:
-        case OpType::SCALAR_DIVIDE:
-        case OpType::SCALAR_EXP:
-        case OpType::SCALAR_SQRT:
-        case OpType::SCALAR_COS:
-        case OpType::SCALAR_SIN: {
-            const auto& input = nodes[node_index_map.at(node.input_ids[0])]->output_buffer;
-
-            if (input.precision != Precision::FP16) {
-                throw std::runtime_error("Scalar operations only support FP16 precision");
-            }
-
-            dispatch_unary_op_f16(node.op_type, input.data_as<__fp16>(),
-                                  node.output_buffer.data_as<__fp16>(),
-                                  node.output_buffer.total_size, node.params.scalar);
-            break;
-        }
-        case OpType::SILU: {
-            const auto& input = nodes[node_index_map.at(node.input_ids[0])]->output_buffer;
-
-            if (input.precision != Precision::FP16) {
-                throw std::runtime_error("SILU operation only supports FP16 precision");
-            }
-
-            cactus_silu_f16(input.data_as<__fp16>(),
-                           node.output_buffer.data_as<__fp16>(),
-                           node.output_buffer.total_size);
-            break;
-        }
-        case OpType::GELU: {
-            const auto& input = nodes[node_index_map.at(node.input_ids[0])]->output_buffer;
-
-            if (input.precision != Precision::FP16) {
-                throw std::runtime_error("GELU operation only supports FP16 precision");
-            }
-
-            cactus_gelu_f16(input.data_as<__fp16>(),
-                           node.output_buffer.data_as<__fp16>(),
-                           node.output_buffer.total_size);
-            break;
-        }
-        case OpType::GELU_ERF: {
-            const auto& input = nodes[node_index_map.at(node.input_ids[0])]->output_buffer;
-
-            if (input.precision != Precision::FP16) {
-                throw std::runtime_error("GELU_ERF operation only supports FP16 precision");
-            }
-
-            cactus_gelu_f16_erf(input.data_as<__fp16>(),
-                                node.output_buffer.data_as<__fp16>(),
-                                node.output_buffer.total_size);
-            break;
-        }
-        case OpType::TANH: {
-            const auto& input = nodes[node_index_map.at(node.input_ids[0])]->output_buffer;
-
-            if (input.precision != Precision::FP16) {
-                throw std::runtime_error("Tanh operation only supports FP16 precision");
-            }
-
-            cactus_tanh_f16(input.data_as<__fp16>(),
-                            node.output_buffer.data_as<__fp16>(),
-                            node.output_buffer.total_size);
-            break;
-        }
-        case OpType::MATMUL:
-            compute_matmul_node(node, nodes, node_index_map);
-            break;
-        case OpType::TRANSPOSE:
-            compute_transpose_node(node, nodes, node_index_map);
-            break;
-        case OpType::SUM:
-        case OpType::MEAN:
-        case OpType::VARIANCE:
-        case OpType::MIN:
-        case OpType::MAX:
-            compute_reduce_node(node, nodes, node_index_map);
-            break;
-        case OpType::RMS_NORM:
-        case OpType::ROPE:
-        case OpType::ROPE_GPTJ:
-        case OpType::SOFTMAX:
-        case OpType::ATTENTION:
-        case OpType::ATTENTION_INT8_HYBRID:
-        case OpType::CONV1D_CAUSAL:
-        case OpType::CONV1D_K3:
-        case OpType::CONV1D:
-        case OpType::GATHER:
-        case OpType::SLICE:
-        case OpType::EMBEDDING:
-        case OpType::BILINEAR_INTERPOLATION:
-            compute_fused_node(node, nodes, node_index_map);
-            break;
-        case OpType::SAMPLE:
-            compute_sample_node(node, nodes, node_index_map);
-            break;
-        case OpType::CONCAT:
-            compute_fused_node(node, nodes, node_index_map);
-            break;
-        case OpType::SCATTER_TOPK:
-            compute_scatter_topk_node(node, nodes, node_index_map);
-            break;
-        case OpType::TOPK:
-            compute_topk_node(node, nodes, node_index_map);
-            break;
-        case OpType::LAYERNORM:
-            compute_layernorm_node(node, nodes, node_index_map);
-            break;
-        case OpType::PRECISION_CAST:
-            compute_precision_cast_node(node, nodes, node_index_map);
-            break;
-        case OpType::RESHAPE:
-            compute_reshape_node(node, nodes, node_index_map);
-            break;
-        case OpType::INDEX:
-            compute_index_node(node, nodes, node_index_map);
-            break;
-        case OpType::GROUPNORM:
-            compute_groupnorm_node(node, nodes, node_index_map);
-            break;
-        case OpType::PERSISTENT:
-            compute_persistent_node(node, nodes, node_index_map);
-            break;
-    }
-}
-
-
-void CactusGraph::allocate_buffers() {
-    for (auto& node : nodes_) {
-        if (node->op_type != OpType::INPUT) {
-            node->output_buffer.allocate();
-        }
-    }
-}
-
-
-
-namespace ValidationUtils {
-    void validate_tensor_dims(const std::vector<size_t>& shape, size_t required_dims, const std::string& op_name) {
-        if (shape.size() != required_dims) {
-            throw std::runtime_error(op_name + " requires " + std::to_string(required_dims) + 
-                                    "D tensor, got " + std::to_string(shape.size()) + "D tensor");
-        }
-    }
-    
-    void validate_precision(Precision actual, Precision required, const std::string& op_name) {
-        if (actual != required) {
-            std::string actual_str = (actual == Precision::INT8) ? "INT8" : "FP32";
-            std::string required_str = (required == Precision::INT8) ? "INT8" : "FP32";
-            throw std::runtime_error(op_name + " requires " + required_str + " precision, got " + actual_str);
-        }
-    }
-    
-    void validate_input_count(size_t actual, size_t required, const std::string& op_name) {
-        if (actual < required) {
-            throw std::runtime_error(op_name + " requires " + std::to_string(required) + 
-                                    " inputs, got " + std::to_string(actual) + " inputs");
-        }
-    }
-}
-
-void compute_reshape_node(GraphNode& node, const std::vector<std::unique_ptr<GraphNode>>& nodes, const std::unordered_map<size_t, size_t>& node_index_map) {
-    const auto& input_buffer = nodes[node_index_map.at(node.input_ids[0])]->output_buffer;
-
-    if (input_buffer.is_packed_int4()) {
-        throw std::runtime_error("Reshape operation not supported on packed INT4 data");
-    }
-
-    size_t input_total_elements = input_buffer.total_size;
-    size_t output_total_elements = node.output_buffer.total_size;
-
-    if (input_total_elements != output_total_elements) {
-        throw std::runtime_error("Reshape operation: input elements (" + std::to_string(input_total_elements) +
-                                ") must match output elements (" + std::to_string(output_total_elements) + ")");
-    }
-
-    std::memcpy(node.output_buffer.get_data(), input_buffer.get_data(), input_buffer.byte_size);
-}
-
-void compute_precision_cast_node(GraphNode& node, const std::vector<std::unique_ptr<GraphNode>>& nodes, const std::unordered_map<size_t, size_t>& node_index_map) {
-    const auto& input_node = *nodes[node_index_map.at(node.input_ids[0])];
-
-    if (input_node.output_buffer.is_packed_int4()) {
-        throw std::runtime_error("Precision cast not supported on packed INT4 data");
-    }
-
-    if (input_node.output_buffer.precision == node.output_buffer.precision) {
-        std::memcpy(node.output_buffer.get_data(), input_node.output_buffer.get_data(), input_node.output_buffer.byte_size);
-        return;
-    }
-    
-    size_t count = input_node.output_buffer.total_size;
-
-    if (input_node.output_buffer.precision == Precision::INT8 && node.output_buffer.precision == Precision::FP32) {
-        if (input_node.output_buffer.is_grouped_int8()) {
-            const int8_t* src = input_node.output_buffer.data_as<int8_t>();
-            float* dst = node.output_buffer.data_as<float>();
-            const __fp16* scales = input_node.output_buffer.scales_as_fp16();
-            size_t group_size = input_node.output_buffer.group_size;
-
-            const auto& shape = input_node.output_buffer.shape;
-            if (shape.size() == 2) {
-                size_t N = shape[0];
-                size_t K = shape[1];
-                size_t num_groups = K / group_size;
-                for (size_t row = 0; row < N; ++row) {
-                    for (size_t col = 0; col < K; ++col) {
-                        size_t idx = row * K + col;
-                        size_t group_idx = col / group_size;
-                        float scale = static_cast<float>(scales[row * num_groups + group_idx]);
-                        dst[idx] = static_cast<float>(src[idx]) * scale;
-                    }
-                }
-            } else if (shape.size() == 1) {
-                size_t K = shape[0];
-                for (size_t col = 0; col < K; ++col) {
-                    size_t group_idx = col / group_size;
-                    float scale = static_cast<float>(scales[group_idx]);
-                    dst[col] = static_cast<float>(src[col]) * scale;
-                }
-            } else {
-                Quantization::int8_to_fp32(src, dst, count, 1.0f);
-            }
-        } else {
-            Quantization::int8_to_fp32(input_node.output_buffer.data_as<int8_t>(), node.output_buffer.data_as<float>(), count, 1.0f);
-        }
-    } else if (input_node.output_buffer.precision == Precision::FP32 && node.output_buffer.precision == Precision::INT8) {
-        Quantization::fp32_to_int8(input_node.output_buffer.data_as<float>(), node.output_buffer.data_as<int8_t>(), count, 1.0f);
-    } else if (input_node.output_buffer.precision == Precision::FP16 && node.output_buffer.precision == Precision::FP32) {
-        Quantization::fp16_to_fp32(input_node.output_buffer.data_as<__fp16>(), node.output_buffer.data_as<float>(), count);
-    } else if (input_node.output_buffer.precision == Precision::FP32 && node.output_buffer.precision == Precision::FP16) {
-        Quantization::fp32_to_fp16(input_node.output_buffer.data_as<float>(), node.output_buffer.data_as<__fp16>(), count);
-    } else if (input_node.output_buffer.precision == Precision::INT8 && node.output_buffer.precision == Precision::FP16) {
-        if (input_node.output_buffer.is_grouped_int8()) {
-            const int8_t* src = input_node.output_buffer.data_as<int8_t>();
-            __fp16* dst = node.output_buffer.data_as<__fp16>();
-            const __fp16* scales = input_node.output_buffer.scales_as_fp16();
-            size_t group_size = input_node.output_buffer.group_size;
-
-            const auto& shape = input_node.output_buffer.shape;
-            if (shape.size() == 2) {
-                size_t N = shape[0];
-                size_t K = shape[1];
-                size_t num_groups = K / group_size;
-                for (size_t row = 0; row < N; ++row) {
-                    for (size_t col = 0; col < K; ++col) {
-                        size_t idx = row * K + col;
-                        size_t group_idx = col / group_size;
-                        float scale = static_cast<float>(scales[row * num_groups + group_idx]);
-                        dst[idx] = static_cast<__fp16>(src[idx] * scale);
-                    }
-                }
-            } else if (shape.size() == 1) {
-                size_t K = shape[0];
-                for (size_t col = 0; col < K; ++col) {
-                    size_t group_idx = col / group_size;
-                    float scale = static_cast<float>(scales[group_idx]);
-                    dst[col] = static_cast<__fp16>(src[col] * scale);
-                }
-            } else {
-                Quantization::int8_to_fp16(src, dst, count, 1.0f);
-            }
-        } else {
-            Quantization::int8_to_fp16(input_node.output_buffer.data_as<int8_t>(), node.output_buffer.data_as<__fp16>(), count, 1.0f);
-        }
-    } else if (input_node.output_buffer.precision == Precision::FP16 && node.output_buffer.precision == Precision::INT8) {
-        Quantization::fp16_to_int8(input_node.output_buffer.data_as<__fp16>(), node.output_buffer.data_as<int8_t>(), count, 1.0f);
-    } else {
-        throw std::runtime_error("Unsupported precision conversion from " + 
-                                std::to_string(static_cast<int>(input_node.output_buffer.precision)) + 
-                                " to " + std::to_string(static_cast<int>(node.output_buffer.precision)));
-    }
-}
-
-
-TensorConfig& TensorConfig::global() {
-    static TensorConfig instance;
-    return instance;
 }
 
 BufferDesc::BufferDesc()
@@ -596,12 +162,65 @@ void BufferDesc::set_external(void* ptr) {
     pooled_data = nullptr;
 }
 
+// GraphNode implementation
 GraphNode::GraphNode(size_t node_id, OpType type) : id(node_id), op_type(type) {}
+
+// TensorConfig implementation
+TensorConfig& TensorConfig::global() {
+    static TensorConfig instance;
+    return instance;
+}
+
+// BroadcastInfo implementation
+BroadcastInfo BroadcastInfo::compute(const std::vector<size_t>& lhs, const std::vector<size_t>& rhs) {
+    BroadcastInfo info;
+    size_t max_dims = std::max(lhs.size(), rhs.size());
+    info.output_shape.resize(max_dims);
+
+    for (size_t i = 0; i < max_dims; ++i) {
+        size_t lhs_dim = i < lhs.size() ? lhs[lhs.size() - 1 - i] : 1;
+        size_t rhs_dim = i < rhs.size() ? rhs[rhs.size() - 1 - i] : 1;
+
+        if (lhs_dim != rhs_dim && lhs_dim != 1 && rhs_dim != 1) {
+            throw std::invalid_argument("Shapes are not compatible for broadcasting");
+        }
+
+        info.output_shape[max_dims - 1 - i] = std::max(lhs_dim, rhs_dim);
+    }
+
+    info.needs_broadcasting = (lhs != info.output_shape || rhs != info.output_shape);
+    return info;
+}
+
+// ValidationUtils implementation
+namespace ValidationUtils {
+    void validate_tensor_dims(const std::vector<size_t>& shape, size_t required_dims, const std::string& op_name) {
+        if (shape.size() != required_dims) {
+            throw std::runtime_error(op_name + " requires " + std::to_string(required_dims) +
+                                    "D tensor, got " + std::to_string(shape.size()) + "D tensor");
+        }
+    }
+
+    void validate_precision(Precision actual, Precision required, const std::string& op_name) {
+        if (actual != required) {
+            std::string actual_str = (actual == Precision::INT8) ? "INT8" : "FP32";
+            std::string required_str = (required == Precision::INT8) ? "INT8" : "FP32";
+            throw std::runtime_error(op_name + " requires " + required_str + " precision, got " + actual_str);
+        }
+    }
+
+    void validate_input_count(size_t actual, size_t required, const std::string& op_name) {
+        if (actual < required) {
+            throw std::runtime_error(op_name + " requires " + std::to_string(required) +
+                                    " inputs, got " + std::to_string(actual) + " inputs");
+        }
+    }
+}
 
 CactusGraph::CactusGraph() : next_node_id_(0) {}
 
-size_t CactusGraph::get_node_count() const { 
-    return nodes_.size(); 
+size_t CactusGraph::get_node_count() const {
+    return nodes_.size();
 }
 
 void CactusGraph::register_debug_node(uint32_t layer_idx, const std::string& name, size_t node_id) {
@@ -618,4 +237,12 @@ const std::vector<CactusGraph::DebugNodeEntry>& CactusGraph::get_debug_nodes() c
 
 void CactusGraph::clear_debug_nodes() {
     debug_nodes_.clear();
+}
+
+void CactusGraph::allocate_buffers() {
+    for (auto& node : nodes_) {
+        if (node->op_type != OpType::INPUT) {
+            node->output_buffer.allocate();
+        }
+    }
 }

@@ -2,7 +2,29 @@
 
 Cross-platform & energy-efficient kernels, runtime and AI inference engine for mobile devices. 
 
-# Cactus Graph 
+```
+┌─────────────────┐
+│   Cactus FFI    │ ←── OpenAI compatible C API for integration (tools, RAG, cloud handoff)
+└─────────────────┘
+         │
+┌─────────────────┐
+│  Cactus Engine  │ ←── High-level transformer engine (NPU support, INT4/INT8/FP16/MIXED)
+└─────────────────┘
+         │
+┌─────────────────┐
+│ Cactus Models   │ ←── Implements SOTA models using Cactus Graphs 
+└─────────────────┘
+         │
+┌─────────────────┐  
+│  Cactus Graph   │ ←── Unified zero-copy computation graph (think NumPy for mobile)
+└─────────────────┘
+         │
+┌─────────────────┐
+│ Cactus Kernels  │ ←── Low-level ARM-specific SIMD operations (think CUDA for mobile)
+└─────────────────┘
+```
+
+# Cactus Graph & Kernel
 Cactus Graph is a general numerical computing framework for implementing 
 any model, like PyTorch for mobile devices.
 
@@ -29,7 +51,7 @@ graph.hard_reset();
 
 ```
 
-# Cactus Engine
+# Cactus Engine & FFI
 Cactus Engine is an AI inference engine with OpenAI-compatible APIs built on top of Cactus Graphs.
 
 ```cpp

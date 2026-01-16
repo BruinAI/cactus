@@ -113,13 +113,12 @@ target_compile_options(cactus PRIVATE -fvisibility=hidden -fvisibility-inlines-h
 
 if (${ANDROID_ABI} STREQUAL "arm64-v8a")
     set(ARM_OPTIONS
-        -march=armv8.2-a+fp16+simd+dotprod+i8mm
+        -march=armv8.2-a+fp16+simd+dotprod
     )
     set(ARM_DEFINITIONS
         __ARM_NEON=1
         __ARM_FEATURE_FP16_VECTOR_ARITHMETIC=1
         __ARM_FEATURE_DOTPROD=1
-        __ARM_FEATURE_MATMUL_INT8=1
     )
     
     target_compile_options(cactus PRIVATE ${ARM_OPTIONS})

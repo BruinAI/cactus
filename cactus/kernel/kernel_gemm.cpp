@@ -169,149 +169,149 @@ void cactus_matmul_int8(
                 __builtin_prefetch(&B_scales[(n_start + ni) * num_groups], 0, 3);
             }
 
-#if defined(CACTUS_HAS_I8MM)
-            for (size_t g = 0; g < num_groups; g++) {
-                const size_t k_base = g * group_size;
+            if (cactus_has_i8mm()) {
+                for (size_t g = 0; g < num_groups; g++) {
+                    const size_t k_base = g * group_size;
 
-                size_t mi = 0;
-                for (; mi + 1 < actual_m; mi += 2) {
-                    size_t ni = 0;
-                    for (; ni + 3 < actual_n; ni += 4) {
-                        int32x4_t acc01 = vdupq_n_s32(0);  
-                        int32x4_t acc23 = vdupq_n_s32(0); 
+                    size_t mi = 0;
+                    for (; mi + 1 < actual_m; mi += 2) {
+                        size_t ni = 0;
+                        for (; ni + 3 < actual_n; ni += 4) {
+                            int32x4_t acc01 = vdupq_n_s32(0);  
+                            int32x4_t acc23 = vdupq_n_s32(0); 
 
-                        const int8_t* a_base0 = A + (m_start + mi) * K + k_base;
-                        const int8_t* a_base1 = A + (m_start + mi + 1) * K + k_base;
-                        const int8_t* b_base0 = B + (n_start + ni) * K + k_base;
-                        const int8_t* b_base1 = B + (n_start + ni + 1) * K + k_base;
-                        const int8_t* b_base2 = B + (n_start + ni + 2) * K + k_base;
-                        const int8_t* b_base3 = B + (n_start + ni + 3) * K + k_base;
+                            const int8_t* a_base0 = A + (m_start + mi) * K + k_base;
+                            const int8_t* a_base1 = A + (m_start + mi + 1) * K + k_base;
+                            const int8_t* b_base0 = B + (n_start + ni) * K + k_base;
+                            const int8_t* b_base1 = B + (n_start + ni + 1) * K + k_base;
+                            const int8_t* b_base2 = B + (n_start + ni + 2) * K + k_base;
+                            const int8_t* b_base3 = B + (n_start + ni + 3) * K + k_base;
 
-                        for (size_t k_offset = 0; k_offset < group_size; k_offset += 64) {
-                            #pragma unroll
-                            for (int kk = 0; kk < 64; kk += 16) {
-                                int8x16_t a_lo = vcombine_s8(vld1_s8(a_base0 + k_offset + kk),
-                                                              vld1_s8(a_base1 + k_offset + kk));
-                                int8x16_t a_hi = vcombine_s8(vld1_s8(a_base0 + k_offset + kk + 8),
-                                                              vld1_s8(a_base1 + k_offset + kk + 8));
-
-                                int8x16_t b01_lo = vcombine_s8(vld1_s8(b_base0 + k_offset + kk),
-                                                                vld1_s8(b_base1 + k_offset + kk));
-                                int8x16_t b01_hi = vcombine_s8(vld1_s8(b_base0 + k_offset + kk + 8),
-                                                                vld1_s8(b_base1 + k_offset + kk + 8));
-                                acc01 = accum_matmul(acc01, a_lo, b01_lo);
-                                acc01 = accum_matmul(acc01, a_hi, b01_hi);
-
-                                int8x16_t b23_lo = vcombine_s8(vld1_s8(b_base2 + k_offset + kk),
-                                                                vld1_s8(b_base3 + k_offset + kk));
-                                int8x16_t b23_hi = vcombine_s8(vld1_s8(b_base2 + k_offset + kk + 8),
-                                                                vld1_s8(b_base3 + k_offset + kk + 8));
-                                acc23 = accum_matmul(acc23, a_lo, b23_lo);
-                                acc23 = accum_matmul(acc23, a_hi, b23_hi);
-                            }
-                        }
-
-                        all_group_acc[g][mi][ni] += vgetq_lane_s32(acc01, 0);
-                        all_group_acc[g][mi][ni + 1] += vgetq_lane_s32(acc01, 1);
-                        all_group_acc[g][mi + 1][ni] += vgetq_lane_s32(acc01, 2);
-                        all_group_acc[g][mi + 1][ni + 1] += vgetq_lane_s32(acc01, 3);
-                        all_group_acc[g][mi][ni + 2] += vgetq_lane_s32(acc23, 0);
-                        all_group_acc[g][mi][ni + 3] += vgetq_lane_s32(acc23, 1);
-                        all_group_acc[g][mi + 1][ni + 2] += vgetq_lane_s32(acc23, 2);
-                        all_group_acc[g][mi + 1][ni + 3] += vgetq_lane_s32(acc23, 3);
-                    }
-
-                    for (; ni + 1 < actual_n; ni += 2) {
-                        int32x4_t acc0 = vdupq_n_s32(0);
-
-                        for (size_t k_offset = 0; k_offset < group_size; k_offset += 64) {
-                            const int8_t* a_ptr0 = A + (m_start + mi) * K + k_base + k_offset;
-                            const int8_t* a_ptr1 = A + (m_start + mi + 1) * K + k_base + k_offset;
-                            const int8_t* b_ptr0 = B + (n_start + ni) * K + k_base + k_offset;
-                            const int8_t* b_ptr1 = B + (n_start + ni + 1) * K + k_base + k_offset;
-
-                            for (int kk = 0; kk < 64; kk += 8) {
-                                int8x16_t a_vec = vcombine_s8(vld1_s8(a_ptr0 + kk), vld1_s8(a_ptr1 + kk));
-                                int8x16_t b_vec = vcombine_s8(vld1_s8(b_ptr0 + kk), vld1_s8(b_ptr1 + kk));
-                                acc0 = accum_matmul(acc0, a_vec, b_vec);
-                            }
-                        }
-
-                        all_group_acc[g][mi][ni] += vgetq_lane_s32(acc0, 0);
-                        all_group_acc[g][mi][ni + 1] += vgetq_lane_s32(acc0, 1);
-                        all_group_acc[g][mi + 1][ni] += vgetq_lane_s32(acc0, 2);
-                        all_group_acc[g][mi + 1][ni + 1] += vgetq_lane_s32(acc0, 3);
-                    }
-
-                    for (; ni < actual_n; ni++) {
-                        for (size_t mii = mi; mii < mi + 2; mii++) {
                             for (size_t k_offset = 0; k_offset < group_size; k_offset += 64) {
-                                const int8_t* a_ptr = A + (m_start + mii) * K + k_base + k_offset;
+                                #pragma unroll
+                                for (int kk = 0; kk < 64; kk += 16) {
+                                    int8x16_t a_lo = vcombine_s8(vld1_s8(a_base0 + k_offset + kk),
+                                                                vld1_s8(a_base1 + k_offset + kk));
+                                    int8x16_t a_hi = vcombine_s8(vld1_s8(a_base0 + k_offset + kk + 8),
+                                                                vld1_s8(a_base1 + k_offset + kk + 8));
+
+                                    int8x16_t b01_lo = vcombine_s8(vld1_s8(b_base0 + k_offset + kk),
+                                                                    vld1_s8(b_base1 + k_offset + kk));
+                                    int8x16_t b01_hi = vcombine_s8(vld1_s8(b_base0 + k_offset + kk + 8),
+                                                                    vld1_s8(b_base1 + k_offset + kk + 8));
+                                    acc01 = accum_matmul(acc01, a_lo, b01_lo);
+                                    acc01 = accum_matmul(acc01, a_hi, b01_hi);
+
+                                    int8x16_t b23_lo = vcombine_s8(vld1_s8(b_base2 + k_offset + kk),
+                                                                    vld1_s8(b_base3 + k_offset + kk));
+                                    int8x16_t b23_hi = vcombine_s8(vld1_s8(b_base2 + k_offset + kk + 8),
+                                                                    vld1_s8(b_base3 + k_offset + kk + 8));
+                                    acc23 = accum_matmul(acc23, a_lo, b23_lo);
+                                    acc23 = accum_matmul(acc23, a_hi, b23_hi);
+                                }
+                            }
+
+                            all_group_acc[g][mi][ni] += vgetq_lane_s32(acc01, 0);
+                            all_group_acc[g][mi][ni + 1] += vgetq_lane_s32(acc01, 1);
+                            all_group_acc[g][mi + 1][ni] += vgetq_lane_s32(acc01, 2);
+                            all_group_acc[g][mi + 1][ni + 1] += vgetq_lane_s32(acc01, 3);
+                            all_group_acc[g][mi][ni + 2] += vgetq_lane_s32(acc23, 0);
+                            all_group_acc[g][mi][ni + 3] += vgetq_lane_s32(acc23, 1);
+                            all_group_acc[g][mi + 1][ni + 2] += vgetq_lane_s32(acc23, 2);
+                            all_group_acc[g][mi + 1][ni + 3] += vgetq_lane_s32(acc23, 3);
+                        }
+
+                        for (; ni + 1 < actual_n; ni += 2) {
+                            int32x4_t acc0 = vdupq_n_s32(0);
+
+                            for (size_t k_offset = 0; k_offset < group_size; k_offset += 64) {
+                                const int8_t* a_ptr0 = A + (m_start + mi) * K + k_base + k_offset;
+                                const int8_t* a_ptr1 = A + (m_start + mi + 1) * K + k_base + k_offset;
+                                const int8_t* b_ptr0 = B + (n_start + ni) * K + k_base + k_offset;
+                                const int8_t* b_ptr1 = B + (n_start + ni + 1) * K + k_base + k_offset;
+
+                                for (int kk = 0; kk < 64; kk += 8) {
+                                    int8x16_t a_vec = vcombine_s8(vld1_s8(a_ptr0 + kk), vld1_s8(a_ptr1 + kk));
+                                    int8x16_t b_vec = vcombine_s8(vld1_s8(b_ptr0 + kk), vld1_s8(b_ptr1 + kk));
+                                    acc0 = accum_matmul(acc0, a_vec, b_vec);
+                                }
+                            }
+
+                            all_group_acc[g][mi][ni] += vgetq_lane_s32(acc0, 0);
+                            all_group_acc[g][mi][ni + 1] += vgetq_lane_s32(acc0, 1);
+                            all_group_acc[g][mi + 1][ni] += vgetq_lane_s32(acc0, 2);
+                            all_group_acc[g][mi + 1][ni + 1] += vgetq_lane_s32(acc0, 3);
+                        }
+
+                        for (; ni < actual_n; ni++) {
+                            for (size_t mii = mi; mii < mi + 2; mii++) {
+                                for (size_t k_offset = 0; k_offset < group_size; k_offset += 64) {
+                                    const int8_t* a_ptr = A + (m_start + mii) * K + k_base + k_offset;
+                                    const int8_t* b_ptr = B + (n_start + ni) * K + k_base + k_offset;
+                                    int32x4_t sum = vdupq_n_s32(0);
+                                    sum = accum_dot(sum, vld1q_s8(a_ptr), vld1q_s8(b_ptr));
+                                    sum = accum_dot(sum, vld1q_s8(a_ptr + 16), vld1q_s8(b_ptr + 16));
+                                    sum = accum_dot(sum, vld1q_s8(a_ptr + 32), vld1q_s8(b_ptr + 32));
+                                    sum = accum_dot(sum, vld1q_s8(a_ptr + 48), vld1q_s8(b_ptr + 48));
+                                    all_group_acc[g][mii][ni] += vaddvq_s32(sum);
+                                }
+                            }
+                        }
+                    }
+
+                    for (; mi < actual_m; mi++) {
+                        for (size_t k_offset = 0; k_offset < group_size; k_offset += 64) {
+                            const int8_t* a_ptr = A + (m_start + mi) * K + k_base + k_offset;
+                            int8x16_t a_vec0 = vld1q_s8(a_ptr);
+                            int8x16_t a_vec1 = vld1q_s8(a_ptr + 16);
+                            int8x16_t a_vec2 = vld1q_s8(a_ptr + 32);
+                            int8x16_t a_vec3 = vld1q_s8(a_ptr + 48);
+
+                            for (size_t ni = 0; ni < actual_n; ni++) {
                                 const int8_t* b_ptr = B + (n_start + ni) * K + k_base + k_offset;
                                 int32x4_t sum = vdupq_n_s32(0);
-                                sum = accum_dot(sum, vld1q_s8(a_ptr), vld1q_s8(b_ptr));
-                                sum = accum_dot(sum, vld1q_s8(a_ptr + 16), vld1q_s8(b_ptr + 16));
-                                sum = accum_dot(sum, vld1q_s8(a_ptr + 32), vld1q_s8(b_ptr + 32));
-                                sum = accum_dot(sum, vld1q_s8(a_ptr + 48), vld1q_s8(b_ptr + 48));
-                                all_group_acc[g][mii][ni] += vaddvq_s32(sum);
+                                sum = accum_dot(sum, a_vec0, vld1q_s8(b_ptr));
+                                sum = accum_dot(sum, a_vec1, vld1q_s8(b_ptr + 16));
+                                sum = accum_dot(sum, a_vec2, vld1q_s8(b_ptr + 32));
+                                sum = accum_dot(sum, a_vec3, vld1q_s8(b_ptr + 48));
+                                all_group_acc[g][mi][ni] += vaddvq_s32(sum);
                             }
                         }
                     }
                 }
+            } else {
+                for (size_t g = 0; g < num_groups; g++) {
+                    const size_t k_base = g * group_size;
 
-                for (; mi < actual_m; mi++) {
                     for (size_t k_offset = 0; k_offset < group_size; k_offset += 64) {
-                        const int8_t* a_ptr = A + (m_start + mi) * K + k_base + k_offset;
-                        int8x16_t a_vec0 = vld1q_s8(a_ptr);
-                        int8x16_t a_vec1 = vld1q_s8(a_ptr + 16);
-                        int8x16_t a_vec2 = vld1q_s8(a_ptr + 32);
-                        int8x16_t a_vec3 = vld1q_s8(a_ptr + 48);
-
+                        int8x16_t b_vec0[TILE_N], b_vec1[TILE_N], b_vec2[TILE_N], b_vec3[TILE_N];
                         for (size_t ni = 0; ni < actual_n; ni++) {
                             const int8_t* b_ptr = B + (n_start + ni) * K + k_base + k_offset;
-                            int32x4_t sum = vdupq_n_s32(0);
-                            sum = accum_dot(sum, a_vec0, vld1q_s8(b_ptr));
-                            sum = accum_dot(sum, a_vec1, vld1q_s8(b_ptr + 16));
-                            sum = accum_dot(sum, a_vec2, vld1q_s8(b_ptr + 32));
-                            sum = accum_dot(sum, a_vec3, vld1q_s8(b_ptr + 48));
-                            all_group_acc[g][mi][ni] += vaddvq_s32(sum);
+                            b_vec0[ni] = vld1q_s8(b_ptr);
+                            b_vec1[ni] = vld1q_s8(b_ptr + 16);
+                            b_vec2[ni] = vld1q_s8(b_ptr + 32);
+                            b_vec3[ni] = vld1q_s8(b_ptr + 48);
+                        }
+
+                        for (size_t mi = 0; mi < actual_m; mi++) {
+                            const int8_t* a_ptr = A + (m_start + mi) * K + k_base + k_offset;
+                            int8x16_t a_vec0 = vld1q_s8(a_ptr);
+                            int8x16_t a_vec1 = vld1q_s8(a_ptr + 16);
+                            int8x16_t a_vec2 = vld1q_s8(a_ptr + 32);
+                            int8x16_t a_vec3 = vld1q_s8(a_ptr + 48);
+
+                            for (size_t ni = 0; ni < actual_n; ni++) {
+                                int32x4_t sum = vdupq_n_s32(0);
+                                sum = accum_dot(sum, a_vec0, b_vec0[ni]);
+                                sum = accum_dot(sum, a_vec1, b_vec1[ni]);
+                                sum = accum_dot(sum, a_vec2, b_vec2[ni]);
+                                sum = accum_dot(sum, a_vec3, b_vec3[ni]);
+                                all_group_acc[g][mi][ni] += vaddvq_s32(sum);
+                            }
                         }
                     }
                 }
             }
-#else
-            for (size_t g = 0; g < num_groups; g++) {
-                const size_t k_base = g * group_size;
-
-                for (size_t k_offset = 0; k_offset < group_size; k_offset += 64) {
-                    int8x16_t b_vec0[TILE_N], b_vec1[TILE_N], b_vec2[TILE_N], b_vec3[TILE_N];
-                    for (size_t ni = 0; ni < actual_n; ni++) {
-                        const int8_t* b_ptr = B + (n_start + ni) * K + k_base + k_offset;
-                        b_vec0[ni] = vld1q_s8(b_ptr);
-                        b_vec1[ni] = vld1q_s8(b_ptr + 16);
-                        b_vec2[ni] = vld1q_s8(b_ptr + 32);
-                        b_vec3[ni] = vld1q_s8(b_ptr + 48);
-                    }
-
-                    for (size_t mi = 0; mi < actual_m; mi++) {
-                        const int8_t* a_ptr = A + (m_start + mi) * K + k_base + k_offset;
-                        int8x16_t a_vec0 = vld1q_s8(a_ptr);
-                        int8x16_t a_vec1 = vld1q_s8(a_ptr + 16);
-                        int8x16_t a_vec2 = vld1q_s8(a_ptr + 32);
-                        int8x16_t a_vec3 = vld1q_s8(a_ptr + 48);
-
-                        for (size_t ni = 0; ni < actual_n; ni++) {
-                            int32x4_t sum = vdupq_n_s32(0);
-                            sum = accum_dot(sum, a_vec0, b_vec0[ni]);
-                            sum = accum_dot(sum, a_vec1, b_vec1[ni]);
-                            sum = accum_dot(sum, a_vec2, b_vec2[ni]);
-                            sum = accum_dot(sum, a_vec3, b_vec3[ni]);
-                            all_group_acc[g][mi][ni] += vaddvq_s32(sum);
-                        }
-                    }
-                }
-            }
-#endif
 
             for (size_t mi = 0; mi < actual_m; mi++) {
                 const float a_scale = A_scales[m_start + mi];
@@ -417,99 +417,99 @@ void cactus_matmul_int4(
                     }
                 }
 
-#if defined(CACTUS_HAS_I8MM)
-                size_t mi = 0;
-                for (; mi + 1 < actual_m; mi += 2) {
-                    const int8_t* a_base0 = A + (m_start + mi) * K + k_base;
-                    const int8_t* a_base1 = A + (m_start + mi + 1) * K + k_base;
+                if (cactus_has_i8mm()) {
+                    size_t mi = 0;
+                    for (; mi + 1 < actual_m; mi += 2) {
+                        const int8_t* a_base0 = A + (m_start + mi) * K + k_base;
+                        const int8_t* a_base1 = A + (m_start + mi + 1) * K + k_base;
 
-                    size_t ni = 0;
-                    for (; ni + 3 < actual_n; ni += 4) {
-                        int32x4_t acc01 = vdupq_n_s32(0);
-                        int32x4_t acc23 = vdupq_n_s32(0);
+                        size_t ni = 0;
+                        for (; ni + 3 < actual_n; ni += 4) {
+                            int32x4_t acc01 = vdupq_n_s32(0);
+                            int32x4_t acc23 = vdupq_n_s32(0);
 
-                        const int8_t* b0 = B_unpacked[ni];
-                        const int8_t* b1 = B_unpacked[ni + 1];
-                        const int8_t* b2 = B_unpacked[ni + 2];
-                        const int8_t* b3 = B_unpacked[ni + 3];
+                            const int8_t* b0 = B_unpacked[ni];
+                            const int8_t* b1 = B_unpacked[ni + 1];
+                            const int8_t* b2 = B_unpacked[ni + 2];
+                            const int8_t* b3 = B_unpacked[ni + 3];
 
-                        for (size_t k_offset = 0; k_offset < group_size; k_offset += 8) {
-                            int8x8_t a0_8 = vld1_s8(a_base0 + k_offset);
-                            int8x8_t a1_8 = vld1_s8(a_base1 + k_offset);
-                            int8x16_t a_combined = vcombine_s8(a0_8, a1_8);
+                            for (size_t k_offset = 0; k_offset < group_size; k_offset += 8) {
+                                int8x8_t a0_8 = vld1_s8(a_base0 + k_offset);
+                                int8x8_t a1_8 = vld1_s8(a_base1 + k_offset);
+                                int8x16_t a_combined = vcombine_s8(a0_8, a1_8);
 
-                            int8x8_t b0_8 = vld1_s8(b0 + k_offset);
-                            int8x8_t b1_8 = vld1_s8(b1 + k_offset);
-                            int8x8_t b2_8 = vld1_s8(b2 + k_offset);
-                            int8x8_t b3_8 = vld1_s8(b3 + k_offset);
+                                int8x8_t b0_8 = vld1_s8(b0 + k_offset);
+                                int8x8_t b1_8 = vld1_s8(b1 + k_offset);
+                                int8x8_t b2_8 = vld1_s8(b2 + k_offset);
+                                int8x8_t b3_8 = vld1_s8(b3 + k_offset);
 
-                            acc01 = accum_matmul(acc01, a_combined, vcombine_s8(b0_8, b1_8));
-                            acc23 = accum_matmul(acc23, a_combined, vcombine_s8(b2_8, b3_8));
+                                acc01 = accum_matmul(acc01, a_combined, vcombine_s8(b0_8, b1_8));
+                                acc23 = accum_matmul(acc23, a_combined, vcombine_s8(b2_8, b3_8));
+                            }
+
+                            all_group_acc[g][mi][ni] += vgetq_lane_s32(acc01, 0);
+                            all_group_acc[g][mi][ni + 1] += vgetq_lane_s32(acc01, 1);
+                            all_group_acc[g][mi + 1][ni] += vgetq_lane_s32(acc01, 2);
+                            all_group_acc[g][mi + 1][ni + 1] += vgetq_lane_s32(acc01, 3);
+                            all_group_acc[g][mi][ni + 2] += vgetq_lane_s32(acc23, 0);
+                            all_group_acc[g][mi][ni + 3] += vgetq_lane_s32(acc23, 1);
+                            all_group_acc[g][mi + 1][ni + 2] += vgetq_lane_s32(acc23, 2);
+                            all_group_acc[g][mi + 1][ni + 3] += vgetq_lane_s32(acc23, 3);
                         }
 
-                        all_group_acc[g][mi][ni] += vgetq_lane_s32(acc01, 0);
-                        all_group_acc[g][mi][ni + 1] += vgetq_lane_s32(acc01, 1);
-                        all_group_acc[g][mi + 1][ni] += vgetq_lane_s32(acc01, 2);
-                        all_group_acc[g][mi + 1][ni + 1] += vgetq_lane_s32(acc01, 3);
-                        all_group_acc[g][mi][ni + 2] += vgetq_lane_s32(acc23, 0);
-                        all_group_acc[g][mi][ni + 3] += vgetq_lane_s32(acc23, 1);
-                        all_group_acc[g][mi + 1][ni + 2] += vgetq_lane_s32(acc23, 2);
-                        all_group_acc[g][mi + 1][ni + 3] += vgetq_lane_s32(acc23, 3);
+                        // Handle remaining columns
+                        for (; ni < actual_n; ni++) {
+                            const int8_t* b_col = B_unpacked[ni];
+                            for (size_t mii = mi; mii < mi + 2 && mii < actual_m; mii++) {
+                                const int8_t* a_ptr = A + (m_start + mii) * K + k_base;
+                                int32x4_t sum = vdupq_n_s32(0);
+                                for (size_t k_offset = 0; k_offset < group_size; k_offset += 16) {
+                                    sum = accum_dot(sum, vld1q_s8(a_ptr + k_offset), vld1q_s8(b_col + k_offset));
+                                }
+                                all_group_acc[g][mii][ni] += vaddvq_s32(sum);
+                            }
+                        }
                     }
 
-                    // Handle remaining columns
-                    for (; ni < actual_n; ni++) {
-                        const int8_t* b_col = B_unpacked[ni];
-                        for (size_t mii = mi; mii < mi + 2 && mii < actual_m; mii++) {
-                            const int8_t* a_ptr = A + (m_start + mii) * K + k_base;
+                    for (; mi < actual_m; mi++) {
+                        const int8_t* a_base = A + (m_start + mi) * K + k_base;
+                        for (size_t ni = 0; ni < actual_n; ni++) {
+                            const int8_t* b_col = B_unpacked[ni];
                             int32x4_t sum = vdupq_n_s32(0);
                             for (size_t k_offset = 0; k_offset < group_size; k_offset += 16) {
-                                sum = accum_dot(sum, vld1q_s8(a_ptr + k_offset), vld1q_s8(b_col + k_offset));
+                                sum = accum_dot(sum, vld1q_s8(a_base + k_offset), vld1q_s8(b_col + k_offset));
                             }
-                            all_group_acc[g][mii][ni] += vaddvq_s32(sum);
+                            all_group_acc[g][mi][ni] += vaddvq_s32(sum);
+                        }
+                    }
+                } else {
+                    for (size_t mi = 0; mi < actual_m; mi++) {
+                        const int8_t* a_ptr = A + (m_start + mi) * K + k_base;
+
+                        for (size_t ni = 0; ni < actual_n; ni++) {
+                            const int8_t* b_col = B_unpacked[ni];
+                            int32x4_t sum = vdupq_n_s32(0);
+
+                            for (size_t k_offset = 0; k_offset < group_size; k_offset += 64) {
+                                int8x16_t a0 = vld1q_s8(a_ptr + k_offset);
+                                int8x16_t a1 = vld1q_s8(a_ptr + k_offset + 16);
+                                int8x16_t a2 = vld1q_s8(a_ptr + k_offset + 32);
+                                int8x16_t a3 = vld1q_s8(a_ptr + k_offset + 48);
+
+                                int8x16_t b0 = vld1q_s8(b_col + k_offset);
+                                int8x16_t b1 = vld1q_s8(b_col + k_offset + 16);
+                                int8x16_t b2 = vld1q_s8(b_col + k_offset + 32);
+                                int8x16_t b3 = vld1q_s8(b_col + k_offset + 48);
+
+                                sum = accum_dot(sum, a0, b0);
+                                sum = accum_dot(sum, a1, b1);
+                                sum = accum_dot(sum, a2, b2);
+                                sum = accum_dot(sum, a3, b3);
+                            }
+                            all_group_acc[g][mi][ni] += vaddvq_s32(sum);
                         }
                     }
                 }
-
-                for (; mi < actual_m; mi++) {
-                    const int8_t* a_base = A + (m_start + mi) * K + k_base;
-                    for (size_t ni = 0; ni < actual_n; ni++) {
-                        const int8_t* b_col = B_unpacked[ni];
-                        int32x4_t sum = vdupq_n_s32(0);
-                        for (size_t k_offset = 0; k_offset < group_size; k_offset += 16) {
-                            sum = accum_dot(sum, vld1q_s8(a_base + k_offset), vld1q_s8(b_col + k_offset));
-                        }
-                        all_group_acc[g][mi][ni] += vaddvq_s32(sum);
-                    }
-                }
-#else
-                for (size_t mi = 0; mi < actual_m; mi++) {
-                    const int8_t* a_ptr = A + (m_start + mi) * K + k_base;
-
-                    for (size_t ni = 0; ni < actual_n; ni++) {
-                        const int8_t* b_col = B_unpacked[ni];
-                        int32x4_t sum = vdupq_n_s32(0);
-
-                        for (size_t k_offset = 0; k_offset < group_size; k_offset += 64) {
-                            int8x16_t a0 = vld1q_s8(a_ptr + k_offset);
-                            int8x16_t a1 = vld1q_s8(a_ptr + k_offset + 16);
-                            int8x16_t a2 = vld1q_s8(a_ptr + k_offset + 32);
-                            int8x16_t a3 = vld1q_s8(a_ptr + k_offset + 48);
-
-                            int8x16_t b0 = vld1q_s8(b_col + k_offset);
-                            int8x16_t b1 = vld1q_s8(b_col + k_offset + 16);
-                            int8x16_t b2 = vld1q_s8(b_col + k_offset + 32);
-                            int8x16_t b3 = vld1q_s8(b_col + k_offset + 48);
-
-                            sum = accum_dot(sum, a0, b0);
-                            sum = accum_dot(sum, a1, b1);
-                            sum = accum_dot(sum, a2, b2);
-                            sum = accum_dot(sum, a3, b3);
-                        }
-                        all_group_acc[g][mi][ni] += vaddvq_s32(sum);
-                    }
-                }
-#endif
             }
 
             for (size_t mi = 0; mi < actual_m; mi++) {
