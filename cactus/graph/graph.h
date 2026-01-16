@@ -4,6 +4,7 @@
 #include <vector>
 #include <memory>
 #include <unordered_map>
+#include <unordered_set>
 #include <functional>
 #include <cstring>
 #include <stdexcept>
@@ -114,13 +115,14 @@ enum class OpType {
     MATMUL, TRANSPOSE, RESHAPE, SLICE, GATHER, EMBEDDING,
     BILINEAR_INTERPOLATION,
     SUM, MEAN, VARIANCE, MIN, MAX,
-    RMS_NORM, ROPE, SOFTMAX, ATTENTION, ATTENTION_INT8_HYBRID, CONV1D_CAUSAL, CONV1D_K3, CONV1D,
+    RMS_NORM, ROPE, ROPE_GPTJ, SOFTMAX, ATTENTION, ATTENTION_INT8_HYBRID, CONV1D_CAUSAL, CONV1D_K3, CONV1D,
     SCALAR_ADD, SCALAR_SUBTRACT, SCALAR_MULTIPLY, SCALAR_DIVIDE, SCALAR_EXP, SCALAR_SQRT, SCALAR_COS, SCALAR_SIN,
-    SILU, GELU, GELU_ERF,
+    SILU, GELU, GELU_ERF, TANH,
     SAMPLE, CONCAT,
     SCATTER_TOPK,
     TOPK, LAYERNORM, GROUPNORM,
     INDEX,
+    PERSISTENT,  // Copies data from source and survives soft_reset()
 };
 
 struct PrecisionTraits {
@@ -325,6 +327,7 @@ void compute_scatter_topk_node(GraphNode& node, const std::vector<std::unique_pt
 void compute_topk_node(GraphNode& node, const std::vector<std::unique_ptr<GraphNode>>& nodes, const std::unordered_map<size_t, size_t>& node_index_map);
 void compute_layernorm_node(GraphNode& node, const std::vector<std::unique_ptr<GraphNode>>& nodes, const std::unordered_map<size_t, size_t>& node_index_map);
 void compute_groupnorm_node(GraphNode& node, const std::vector<std::unique_ptr<GraphNode>>& nodes, const std::unordered_map<size_t, size_t>& node_index_map);
+void compute_persistent_node(GraphNode& node, const std::vector<std::unique_ptr<GraphNode>>& nodes, const std::unordered_map<size_t, size_t>& node_index_map);
 void compute_index_node(GraphNode& node, const std::vector<std::unique_ptr<GraphNode>>& nodes, const std::unordered_map<size_t, size_t>& node_index_map);
 
 void shrink_thread_local_buffers();
@@ -393,6 +396,7 @@ public:
     size_t silu(size_t input);
     size_t gelu(size_t input);
     size_t gelu_erf(size_t input);
+    size_t tanh(size_t input);
     
     size_t matmul(size_t input1, size_t input2, bool pretransposed_rhs = false, ComputeBackend backend = ComputeBackend::CPU);
     size_t transpose(size_t input, ComputeBackend backend = ComputeBackend::CPU);
@@ -467,6 +471,11 @@ public:
     void allocate_buffers();
     size_t get_node_count() const;
 
+    // Persistent node API - nodes that survive soft_reset()
+    size_t persistent(size_t source_node);
+    bool is_populated(size_t persistent_node_id) const;
+    void invalidate_persistent(size_t persistent_node_id);
+
     std::vector<std::unique_ptr<GraphNode>> nodes_;
     std::unordered_map<size_t, size_t> node_index_map_;
 
@@ -478,6 +487,10 @@ private:
     std::vector<DebugNodeEntry> debug_nodes_;
     BufferPool buffer_pool_;
     bool prefill_mode_ = false;
+    
+    // Persistent node tracking
+    std::unordered_set<size_t> persistent_node_ids_;   // Node IDs marked persistent
+    std::unordered_set<size_t> populated_node_ids_;    // Persistent nodes with valid data
 };
 
 

@@ -264,6 +264,18 @@ void compute_node_optimized(GraphNode& node, const std::vector<std::unique_ptr<G
                                 node.output_buffer.total_size);
             break;
         }
+        case OpType::TANH: {
+            const auto& input = nodes[node_index_map.at(node.input_ids[0])]->output_buffer;
+
+            if (input.precision != Precision::FP16) {
+                throw std::runtime_error("Tanh operation only supports FP16 precision");
+            }
+
+            cactus_tanh_f16(input.data_as<__fp16>(),
+                            node.output_buffer.data_as<__fp16>(),
+                            node.output_buffer.total_size);
+            break;
+        }
         case OpType::MATMUL:
             compute_matmul_node(node, nodes, node_index_map);
             break;
@@ -318,6 +330,9 @@ void compute_node_optimized(GraphNode& node, const std::vector<std::unique_ptr<G
             break;
         case OpType::GROUPNORM:
             compute_groupnorm_node(node, nodes, node_index_map);
+            break;
+        case OpType::PERSISTENT:
+            compute_persistent_node(node, nodes, node_index_map);
             break;
     }
 }

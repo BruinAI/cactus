@@ -20,13 +20,14 @@ static const char* op_type_names[] = {
     "MATMUL", "TRANSPOSE", "RESHAPE", "SLICE", "GATHER", "EMBEDDING",
     "BILINEAR_INTERPOLATION",
     "SUM", "MEAN", "VARIANCE", "MIN", "MAX",
-    "RMS_NORM", "ROPE", "SOFTMAX", "ATTENTION", "ATTENTION_INT8_HYBRID", "CONV1D_CAUSAL", "CONV1D_K3", "CONV1D",
+    "RMS_NORM", "ROPE", "ROPE_GPTJ", "SOFTMAX", "ATTENTION", "ATTENTION_INT8_HYBRID", "CONV1D_CAUSAL", "CONV1D_K3", "CONV1D",
     "SCALAR_ADD", "SCALAR_SUBTRACT", "SCALAR_MULTIPLY", "SCALAR_DIVIDE",
     "SCALAR_EXP", "SCALAR_SQRT", "SCALAR_COS", "SCALAR_SIN",
-    "SILU", "GELU", "GELU_ERF", "SAMPLE", "CONCAT",
+    "SILU", "GELU", "GELU_ERF", "TANH", "SAMPLE", "CONCAT",
     "SCATTER_TOPK",
-    "TOPK", "LAYERNORM",
-    "INDEX"
+    "TOPK", "LAYERNORM", "GROUPNORM",
+    "INDEX",
+    "PERSISTENT"
 };
 
 static const char* get_op_name(OpType op) {
@@ -591,6 +592,10 @@ size_t CactusGraph::gelu_erf(size_t input){
     return add_node(OpType::GELU_ERF, {input}, {});
 }
 
+size_t CactusGraph::tanh(size_t input){
+    return add_node(OpType::TANH, {input}, {});
+}
+
 size_t CactusGraph::gather(size_t tensor, size_t indices) {
     const auto& tensor_buffer = get_output_buffer(tensor);
     const auto& idx_shape = get_output_buffer(indices).shape;
@@ -854,6 +859,29 @@ const BufferDesc& CactusGraph::get_output_buffer(size_t node_id) const {
     return nodes_[node_index_map_.at(node_id)]->output_buffer;
 }
 
+size_t CactusGraph::persistent(size_t source_node) {
+    const auto& source_buffer = get_output_buffer(source_node);
+    
+    OpParams params;
+    params.output_precision = source_buffer.precision;
+    
+    // Create PERSISTENT op that depends on source
+    size_t node_id = add_node(OpType::PERSISTENT, {source_node}, source_buffer.shape, params);
+    
+    // Mark this node as persistent (survives soft_reset)
+    persistent_node_ids_.insert(node_id);
+    
+    return node_id;
+}
+
+bool CactusGraph::is_populated(size_t persistent_node_id) const {
+    return populated_node_ids_.count(persistent_node_id) > 0;
+}
+
+void CactusGraph::invalidate_persistent(size_t persistent_node_id) {
+    populated_node_ids_.erase(persistent_node_id);
+}
+
 void CactusGraph::execute(const std::string& profile_file) {
     std::vector<size_t> last_use(nodes_.size(), 0);
     for (size_t i = 0; i < nodes_.size(); ++i) {
@@ -1018,6 +1046,11 @@ void CactusGraph::execute(const std::string& profile_file) {
                  << values_str << weights_str << std::endl;
         } else {
             compute_node_optimized(*node, nodes_, node_index_map_);
+        }
+        
+        // Mark persistent nodes as populated after execution
+        if (node->op_type == OpType::PERSISTENT) {
+            populated_node_ids_.insert(node->id);
         }
     }
 
@@ -1262,6 +1295,8 @@ void CactusGraph::hard_reset() {
     next_node_id_ = 0;
     debug_nodes_.clear();
     buffer_pool_.clear();
+    persistent_node_ids_.clear();
+    populated_node_ids_.clear();
 }
 
 void CactusGraph::soft_reset() {
@@ -1269,6 +1304,11 @@ void CactusGraph::soft_reset() {
     std::set<size_t> cached_node_ids;
     for (const auto& cache_entry : weight_cache_) {
         cached_node_ids.insert(cache_entry.second);
+    }
+    
+    // Include persistent nodes in preserved set
+    for (size_t pid : persistent_node_ids_) {
+        cached_node_ids.insert(pid);
     }
 
     size_t max_preserved_id = 0;
@@ -1306,6 +1346,11 @@ void CactusGraph::soft_reset_keep_pool() {
     std::set<size_t> cached_node_ids;
     for (const auto& cache_entry : weight_cache_) {
         cached_node_ids.insert(cache_entry.second);
+    }
+    
+    // Include persistent nodes in preserved set
+    for (size_t pid : persistent_node_ids_) {
+        cached_node_ids.insert(pid);
     }
 
     size_t max_preserved_id = 0;

@@ -27,6 +27,9 @@ MoonshineModel::MoonshineModel(const Config& config) : Model(config) {
     // encoder_k/v_nodes store Cross Attention Cache -> Decoder Layers
     encoder_k_nodes_.assign(config.num_decoder_layers, 0);
     encoder_v_nodes_.assign(config.num_decoder_layers, 0);
+    // Persistent nodes for encoder K/V (survive soft_reset)
+    encoder_k_persistent_.assign(config.num_decoder_layers, 0);
+    encoder_v_persistent_.assign(config.num_decoder_layers, 0);
 
 }
 
@@ -214,20 +217,15 @@ size_t MoonshineModel::build_encoder_attention(CactusGraph* gb, size_t input, ui
     size_t k_4d = 0;
     size_t v_4d = 0;
 
-    if (use_cache && encoder_kv_ready_) {
-        const auto& k_shape = encoder_k_shape_[layer_idx];
-        const auto& v_shape = encoder_v_shape_[layer_idx];
-
-        size_t cache_k_node = gb->input(k_shape, encoder_kv_precision_);
-        size_t cache_v_node = gb->input(v_shape, encoder_kv_precision_);
-
-        gb->set_input(cache_k_node, encoder_k_host_[layer_idx].data(), encoder_kv_precision_);
-        gb->set_input(cache_v_node, encoder_v_host_[layer_idx].data(), encoder_kv_precision_);
-
-        k_4d = cache_k_node;
-        v_4d = cache_v_node;
+    // Check if persistent K/V nodes are populated (from previous execute)
+    if (use_cache && encoder_k_persistent_[layer_idx] != 0 && 
+        gb->is_populated(encoder_k_persistent_[layer_idx])) {
+        // Warm path: use persistent K/V directly
+        k_4d = encoder_k_persistent_[layer_idx];
+        v_4d = encoder_v_persistent_[layer_idx];
     } else {
-        size_t enc_norm = weight_nodes_.encoder_output;
+        // Cold path: compute K/V from encoder output
+        size_t enc_norm = last_encoder_post_norm_node_;
 
         size_t k = gb->matmul(enc_norm, layer.decoder_encoder_attn_k_weight, true, backend);
         size_t v = gb->matmul(enc_norm, layer.decoder_encoder_attn_v_weight, true, backend);
@@ -242,10 +240,15 @@ size_t MoonshineModel::build_encoder_attention(CactusGraph* gb, size_t input, ui
         k_4d = gb->reshape(k, {1, T_enc, kv_heads, head_dim});
         v_4d = gb->reshape(v, {1, T_enc, kv_heads, head_dim});
 
-        if (!encoder_kv_ready_) {
-            encoder_k_nodes_[layer_idx] = k_4d;
-            encoder_v_nodes_[layer_idx] = v_4d;
+        // Create persistent nodes on first pass (they'll be populated during execute)
+        if (encoder_k_persistent_[layer_idx] == 0) {
+            encoder_k_persistent_[layer_idx] = gb->persistent(k_4d);
+            encoder_v_persistent_[layer_idx] = gb->persistent(v_4d);
         }
+        
+        // Use the persistent nodes for attention (so they get populated)
+        k_4d = encoder_k_persistent_[layer_idx];
+        v_4d = encoder_v_persistent_[layer_idx];
     }
 
     size_t attn = gb->attention(q, k_4d, v_4d, attention_scale_, false);
@@ -272,6 +275,19 @@ void MoonshineModel::reset_cache() {
     encoder_v_host_.clear();
     encoder_k_shape_.clear();
     encoder_v_shape_.clear();
+    
+    // Invalidate persistent K/V nodes so next audio gets fresh encoder K/V
+    auto* gb = static_cast<CactusGraph*>(graph_handle_);
+    if (gb) {
+        for (size_t i = 0; i < encoder_k_persistent_.size(); ++i) {
+            if (encoder_k_persistent_[i] != 0) {
+                gb->invalidate_persistent(encoder_k_persistent_[i]);
+            }
+            if (encoder_v_persistent_[i] != 0) {
+                gb->invalidate_persistent(encoder_v_persistent_[i]);
+            }
+        }
+    }
 }
 
 size_t MoonshineModel::build_decoder_self_attention(CactusGraph* gb, size_t input, uint32_t layer_idx, ComputeBackend backend, bool use_cache, size_t position_offset){
@@ -407,7 +423,7 @@ size_t MoonshineModel::build_audio_preprocessor(CactusGraph* gb, size_t input)
     last_conv1_node_ = conv1;
 
     // TODO: Implement Tanh activation (missing kernel)
-    // conv1 = gb->tanh(conv1); 
+    conv1 = gb->tanh(conv1); 
 
     size_t gn = gb->groupnorm(conv1, weight_nodes_.encoder_norm_weight, weight_nodes_.encoder_norm_bias);
 
@@ -522,7 +538,7 @@ size_t MoonshineModel::build_decoder_transformer_block(CactusGraph* gb, size_t h
 
 }
 
-size_t MoonshineModel::build_encoder(CactusGraph* gb, const std::vector<float>& audio)
+size_t MoonshineModel::build_encoder(CactusGraph* gb, const std::vector<float>& audio_features)
 {
     if (use_npu_encoder_ && npu_encoder_ && npu_encoder_->is_available()) {
         std::vector<int> out_shape = npu_encoder_->get_output_shape();
@@ -537,8 +553,8 @@ size_t MoonshineModel::build_encoder(CactusGraph* gb, const std::vector<float>& 
             throw std::runtime_error("NPU encoder output has unexpected shape");
         }
 
-        std::vector<__fp16> audio_f16(audio.size());
-        cactus_fp32_to_fp16(audio.data(), audio_f16.data(), audio.size());
+        std::vector<__fp16> audio_f16(audio_features.size());
+        cactus_fp32_to_fp16(audio_features.data(), audio_f16.data(), audio_features.size());
 
         std::vector<int> input_shape = {1, 80, static_cast<int>(T_enc)};
 
@@ -556,6 +572,7 @@ size_t MoonshineModel::build_encoder(CactusGraph* gb, const std::vector<float>& 
                 size_t enc_output_node = gb->input({T_enc, D_enc}, Precision::FP16);
                 gb->set_input(enc_output_node, output_buffer, Precision::FP16);
 
+                last_encoder_post_norm_node_ = enc_output_node;
                 return enc_output_node;
             }
         } else {
@@ -572,8 +589,8 @@ size_t MoonshineModel::build_encoder(CactusGraph* gb, const std::vector<float>& 
                 size_t enc_output_node = gb->input({T_enc, D_enc}, Precision::FP16);
                 gb->set_input(enc_output_node, npu_output.data(), Precision::FP16);
 
-                weight_nodes_.encoder_output = enc_output_node;
-                return;
+                last_encoder_post_norm_node_ = enc_output_node;
+                return enc_output_node;
             }
         }
     }
@@ -584,8 +601,8 @@ size_t MoonshineModel::build_encoder(CactusGraph* gb, const std::vector<float>& 
         : ComputeBackend::NPU;
 
     size_t mel_input = 0;
-    std::vector<__fp16> audio_f16(audio.size());
-    cactus_fp32_to_fp16(audio.data(), audio_f16.data(), audio.size());
+    std::vector<__fp16> audio_f16(audio_features.size());
+    cactus_fp32_to_fp16(audio_features.data(), audio_f16.data(), audio_features.size());
 
     mel_input = gb->input({1, 80, T_mel}, Precision::FP16);
     gb->set_input(mel_input, audio_f16.data(), Precision::FP16);
@@ -599,21 +616,22 @@ size_t MoonshineModel::build_encoder(CactusGraph* gb, const std::vector<float>& 
     size_t T_enc = conv_shape[1];
     size_t D_enc = conv_shape[2];
 
-    size_t pos_slice = gb->slice(weight_nodes_.encoder_position_embeddings, 0, 0, T_enc);
+    // Moonshine Encoder does not use absolute positional embeddings (uses RoPE in self-attention)
+    // size_t pos_slice = gb->slice(weight_nodes_.encoder_position_embeddings, 0, 0, T_enc);
+    //
+    // size_t h2d = gb->reshape(conv2_transposed, {T_enc, D_enc});
+    //
+    // auto& h2d_buf = gb->get_output_buffer(h2d);
+    // auto& pos_buf = gb->get_output_buffer(pos_slice);
+    //
+    // if (pos_buf.precision != h2d_buf.precision) {
+    //    pos_slice = gb->precision_cast(pos_slice, h2d_buf.precision);
+    // }
+    //
+    // size_t h_pos = gb->add(h2d, pos_slice);
+    // last_enc_plus_pos_node_ = h_pos;
 
-    size_t h2d = gb->reshape(conv2_transposed, {T_enc, D_enc});
-
-    auto& h2d_buf = gb->get_output_buffer(h2d);
-    auto& pos_buf = gb->get_output_buffer(pos_slice);
-
-    if (pos_buf.precision != h2d_buf.precision) {
-        pos_slice = gb->precision_cast(pos_slice, h2d_buf.precision);
-    }
-
-    size_t h_pos = gb->add(h2d, pos_slice);
-    last_enc_plus_pos_node_ = h_pos;
-
-    size_t h = h_pos;
+    size_t h = gb->reshape(conv2_transposed, {T_enc, D_enc}); // h is just reshaped conv output, no pos add
     for (uint32_t i = 0; i < config_.num_encoder_layers; ++i){
         h = build_encoder_transformer_block(gb, h, i, backend, false, 0);
         if (i == 0) {
@@ -628,10 +646,10 @@ size_t MoonshineModel::build_encoder(CactusGraph* gb, const std::vector<float>& 
     );
     last_encoder_post_norm_node_ = h_norm;
 
-
-    weight_nodes_.encoder_output = h_norm;
+    // encoder_output is only needed during first decode step to compute K/V
+    // After that, persistent K/V nodes are used directly
+    return h_norm;
 }
-
 
 
 size_t MoonshineModel::build_decoder(const std::vector<uint32_t>& tokens, bool use_cache, bool last_token_only) {
@@ -657,21 +675,6 @@ size_t MoonshineModel::build_decoder(const std::vector<uint32_t>& tokens, bool u
     gb->set_input(tok_input, tok_f.data(), Precision::FP32);
 
     size_t dec_hidden = gb->embedding(embedding_node_id_, tok_input);
-
-    size_t position_offset = kv_cache_.current_seq_len;
-    size_t dec_pos = gb->slice(weight_nodes_.decoder_position_embeddings_weight,0,position_offset,new_tokens);
-
-    {
-        const auto& h_buf   = gb->get_output_buffer(dec_hidden);
-        const auto& pos_buf = gb->get_output_buffer(dec_pos);
-
-        size_t pos_node_for_add = dec_pos;
-        if (pos_buf.precision != h_buf.precision) {
-            pos_node_for_add = gb->precision_cast(dec_pos, h_buf.precision);
-        }
-
-        dec_hidden = gb->add(dec_hidden, pos_node_for_add);
-    }
 
     for (uint32_t layer_idx = 0; layer_idx < config_.num_decoder_layers; ++layer_idx) {
         dec_hidden = build_decoder_transformer_block(
@@ -705,29 +708,15 @@ size_t MoonshineModel::build_decoder(const std::vector<uint32_t>& tokens, bool u
 }
 
 
-size_t MoonshineModel::forward(const std::vector<float>& mel_bins, const std::vector<uint32_t>& tokens, bool use_cache)
+size_t MoonshineModel::forward(const std::vector<float>& audio_features, const std::vector<uint32_t>& tokens, bool use_cache)
 {
-
-    if (!initialized_ || !graph_handle_) {
-        throw std::runtime_error("Model not initialized");
-    }
-
-    if (!use_cache) {
-        kv_cache_.reset();
-        kv_cache_.current_seq_len = 0;
-        reset_graph_side_cache_nodes();
-        build_encoder(mel_bins);
-    }
-
-    return build_decoder(tokens, use_cache, false);
+    throw std::runtime_error("Not implemented");
 }
 
-std::vector<float> MoonshineModel::get_audio_embeddings(const std::vector<float>& mel_bins) {
-    build_encoder(mel_bins);
-
+std::vector<float> MoonshineModel::get_audio_embeddings(const std::vector<float>& audio_features) {
     auto* gb = static_cast<CactusGraph*>(graph_handle_);
-
-    size_t pooled = gb->mean(weight_nodes_.encoder_output, 0);
+    build_encoder(gb, audio_features); // Call the public build_encoder
+    size_t pooled = gb->mean(last_encoder_post_norm_node_, 0);
     gb->execute();
 
     const auto& output_buf = gb->get_output_buffer(pooled);
@@ -744,7 +733,7 @@ std::vector<float> MoonshineModel::get_audio_embeddings(const std::vector<float>
 
 uint32_t MoonshineModel::decode_with_audio(
     const std::vector<uint32_t>& tokens,
-    const std::vector<float>& mel_bins,
+    const std::vector<float>& audio_features,
     float temperature,
     float top_p,
     size_t top_k,
@@ -755,7 +744,7 @@ uint32_t MoonshineModel::decode_with_audio(
         throw std::runtime_error("Model not initialized - call init() first");
     if (tokens.empty())
         throw std::runtime_error("Token sequence cannot be empty");
-    if (mel_bins.empty())
+    if (audio_features.empty())
         throw std::runtime_error("Mel bins cannot be empty in Moonshine decode_with_audio");
 
     auto* gb = static_cast<CactusGraph*>(graph_handle_);
@@ -786,7 +775,7 @@ uint32_t MoonshineModel::decode_with_audio(
         encoder_v_shape_.clear();
 
         first_decode_step_ = true;
-        build_encoder(mel_bins);
+        build_encoder(gb, audio_features);
         logits_node = build_decoder(full_tokens, false, false);
     }
 
@@ -795,13 +784,6 @@ uint32_t MoonshineModel::decode_with_audio(
         gb->soft_reset();
         reset_graph_side_cache_nodes();
 
-        if (encoder_output_host_.empty())
-            throw std::runtime_error("Missing encoder_output_host_ in warm step!");
-
-        size_t enc_node = gb->input(encoder_output_shape_, encoder_output_precision_);
-        gb->set_input(enc_node, encoder_output_host_.data(), encoder_output_precision_);
-        weight_nodes_.encoder_output = enc_node;
-
         std::vector<uint32_t> last_token_vec = { tokens.back() };
         logits_node = build_decoder(last_token_vec, true, true);
     }
@@ -809,91 +791,6 @@ uint32_t MoonshineModel::decode_with_audio(
     size_t sampled_token_id = gb->sample(logits_node, temperature, top_p, top_k);
     if (!profile_file.empty()) gb->execute(profile_file);
     else gb->execute();
-
-    if (cold_start)
-    {
-        auto& out_buf = gb->get_output_buffer(weight_nodes_.encoder_output);
-
-        encoder_output_shape_      = out_buf.shape;
-        encoder_output_precision_  = out_buf.precision;
-
-        size_t total_elems = 1;
-        for (auto s : out_buf.shape)
-            total_elems *= s;
-
-        size_t elem_size = 0;
-        switch (out_buf.precision) {
-            case Precision::FP32: elem_size = sizeof(float);    break;
-            case Precision::FP16: elem_size = sizeof(uint16_t); break;
-            case Precision::INT8: elem_size = sizeof(int8_t);   break;
-            default:
-                throw std::runtime_error("Unsupported encoder_output precision in MoonshineModel");
-        }
-
-        const size_t total_bytes = total_elems * elem_size;
-
-        encoder_output_host_.resize(total_bytes);
-        std::memcpy(
-            encoder_output_host_.data(),
-            gb->get_output(weight_nodes_.encoder_output),
-            total_bytes
-        );
-
-        {
-            if (config_.num_decoder_layers == 0) {
-                throw std::runtime_error("MoonshineModel: num_decoder_layers is zero?");
-            }
-
-            auto& k0_buf = gb->get_output_buffer(encoder_k_nodes_[0]);
-            encoder_kv_precision_ = k0_buf.precision;
-
-            encoder_k_host_.resize(config_.num_decoder_layers);
-            encoder_v_host_.resize(config_.num_decoder_layers);
-            encoder_k_shape_.resize(config_.num_decoder_layers);
-            encoder_v_shape_.resize(config_.num_decoder_layers);
-
-            size_t kv_elem_size = 0;
-            switch (encoder_kv_precision_) {
-                case Precision::FP32: kv_elem_size = sizeof(float);    break;
-                case Precision::FP16: kv_elem_size = sizeof(uint16_t); break;
-                case Precision::INT8: kv_elem_size = sizeof(int8_t);   break;
-                default:
-                    throw std::runtime_error("Unsupported encoder K/V precision in MoonshineModel");
-            }
-
-            for (uint32_t i = 0; i < config_.num_decoder_layers; ++i) {
-                size_t k_node = encoder_k_nodes_[i];
-                size_t v_node = encoder_v_nodes_[i];
-
-                auto& k_buf = gb->get_output_buffer(k_node);
-                auto& v_buf = gb->get_output_buffer(v_node);
-
-                encoder_k_shape_[i] = k_buf.shape;
-                encoder_v_shape_[i] = v_buf.shape;
-
-                size_t k_elems = 1;
-                for (auto s : k_buf.shape) k_elems *= s;
-                size_t v_elems = 1;
-                for (auto s : v_buf.shape) v_elems *= s;
-
-                encoder_k_host_[i].resize(k_elems * kv_elem_size);
-                encoder_v_host_[i].resize(v_elems * kv_elem_size);
-
-                std::memcpy(
-                    encoder_k_host_[i].data(),
-                    gb->get_output(k_node),
-                    k_elems * kv_elem_size
-                );
-                std::memcpy(
-                    encoder_v_host_[i].data(),
-                    gb->get_output(v_node),
-                    v_elems * kv_elem_size
-                );
-            }
-        }
-
-        encoder_kv_ready_ = true;
-    }
 
 
     if (out_entropy) {

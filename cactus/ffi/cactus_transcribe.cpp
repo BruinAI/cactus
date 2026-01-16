@@ -57,6 +57,7 @@ static std::vector<float> normalize_mel(std::vector<float>& mel, size_t n_mels) 
     return mel;
 }
 
+// can remove after testing
 static std::vector<float> compute_whisper_mel_from_pcm(const int16_t* pcm_samples, size_t num_samples, int sample_rate_in) {
     if (!pcm_samples || num_samples == 0) return {};
 
@@ -152,22 +153,68 @@ int cactus_transcribe(
         bool force_tools;
         parse_options_json(options_json ? options_json : "", temperature, top_p, top_k, max_tokens, stop_sequences, force_tools, tool_rag_top_k, confidence_threshold);
 
-        std::vector<float> mel_bins;
+        std::vector<float> audio_features;
+        
+        bool is_moonshine = handle->model->get_config().model_type == engine::Config::ModelType::MOONSHINE; // Assuming generic Moonshine type or based on name/config
+
+        // Check if Moonshine via config model type name if enum not available directly or use string check if needed.
+        // But since we are inside engine namespace usage, we can check Config enum.
+        // Wait, Config::ModelType might not be exposed or I might need to include engine.h which is likely included via kernel/model headers.
+        // cactus_utils.h likely includes model.h or similar.
+        
+        // Let's assume handle->model->get_config().model_type is available.
+        // Re-checking engine.h (step 1150) showed ModelType::WHISPER = 7. Moonshine wasn't explicitly shown in the delta but implied or I should check.
+        // Actually step 1150 showed: 96: enum class ModelType {QWEN = 0, GEMMA = 1, SMOL = 2, NOMIC = 3, LFM2 = 5, SIGLIP2 = 6, WHISPER = 7};
+        // Moonshine is likely missing from that enum list in the view! 
+        // I need to check if Moonshine is in the ModelType enum in engine.h first.
+        
         if (audio_file_path == nullptr) {
             const int16_t* pcm_samples = reinterpret_cast<const int16_t*>(pcm_buffer);
             size_t num_samples = pcm_buffer_size / 2;
-            mel_bins = compute_whisper_mel_from_pcm(pcm_samples, num_samples, WHISPER_SAMPLE_RATE);
+            
+            std::vector<float> waveform_fp32(num_samples);
+            for (size_t i = 0; i < num_samples; i++)
+                waveform_fp32[i] = static_cast<float>(pcm_samples[i]) / 32768.0f;
+
+            std::vector<float> waveform_16k = resample_to_16k_fp32(waveform_fp32, WHISPER_SAMPLE_RATE); // Assuming input is WHISPER_SAMPLE_RATE? No, input rate is unknown here! 
+            // Wait, compute_whisper_mel_from_pcm took sample_rate_in. But it was passed WHISPER_SAMPLE_RATE (16000) hardcoded in the original call!
+            // Line 159: mel_bins = compute_whisper_mel_from_pcm(pcm_samples, num_samples, WHISPER_SAMPLE_RATE);
+            // This implies the input buffer is EXPECTED to be 16kHz already for the FFI?
+            
+            if (is_moonshine) {
+                 audio_features = waveform_16k;
+            } else {
+                 if (!waveform_16k.empty()) {
+                     auto cfg = get_whisper_spectrogram_config();
+                     AudioProcessor ap;
+                     ap.init_mel_filters(cfg.n_fft / 2 + 1, 80, 0.0f, 8000.0f, WHISPER_SAMPLE_RATE);
+                     std::vector<float> mel = ap.compute_spectrogram(waveform_16k, cfg);
+                     audio_features = normalize_mel(mel, 80);
+                 }
+            }
         } else {
-            mel_bins = compute_whisper_mel_from_wav(audio_file_path);
+             // Load from WAV
+             AudioFP32 audio = load_wav(audio_file_path);
+             std::vector<float> waveform_16k = resample_to_16k_fp32(audio.samples, audio.sample_rate);
+             
+             if (is_moonshine) {
+                 audio_features = waveform_16k;
+             } else {
+                  auto cfg = get_whisper_spectrogram_config();
+                  AudioProcessor ap;
+                  ap.init_mel_filters(cfg.n_fft / 2 + 1, 80, 0.0f, 8000.0f, WHISPER_SAMPLE_RATE);
+                  std::vector<float> mel = ap.compute_spectrogram(waveform_16k, cfg);
+                  audio_features = normalize_mel(mel, 80);
+             }
         }
 
-        if (mel_bins.empty()) {
-            CACTUS_LOG_ERROR("transcribe", "Computed mel spectrogram is empty");
-            handle_error_response("Computed mel spectrogram is empty", response_buffer, buffer_size);
+        if (audio_features.empty()) {
+            CACTUS_LOG_ERROR("transcribe", "Computed audio features are empty");
+            handle_error_response("Computed audio features are empty", response_buffer, buffer_size);
             return -1;
         }
 
-        CACTUS_LOG_DEBUG("transcribe", "Mel spectrogram computed, size: " << mel_bins.size());
+        CACTUS_LOG_DEBUG("transcribe", "Audio features prepared, size: " << audio_features.size());
 
         auto* tokenizer = handle->model->get_tokenizer();
         if (!tokenizer) {
@@ -191,7 +238,7 @@ int cactus_transcribe(
         std::vector<uint32_t> generated_tokens;
         std::string final_text;
 
-        uint32_t next_token = handle->model->decode_with_audio(tokens, mel_bins, temperature, top_p, top_k);
+        uint32_t next_token = handle->model->decode_with_audio(tokens, audio_features, temperature, top_p, top_k);
         {
             auto t_first = std::chrono::high_resolution_clock::now();
             time_to_first_token = std::chrono::duration_cast<std::chrono::microseconds>(t_first - start_time).count() / 1000.0;
@@ -209,7 +256,7 @@ int cactus_transcribe(
             for (size_t i = 1; i < max_tokens; ++i) {
                 if (handle->should_stop) break;
 
-                next_token = handle->model->decode_with_audio(tokens, mel_bins, temperature, top_p, top_k);
+                next_token = handle->model->decode_with_audio(tokens, audio_features, temperature, top_p, top_k);
                 generated_tokens.push_back(next_token);
                 tokens.push_back(next_token);
                 completion_tokens++;

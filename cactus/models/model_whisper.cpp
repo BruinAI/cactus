@@ -456,12 +456,12 @@ size_t WhisperModel::build_decoder_transformer_block(CactusGraph* gb, size_t hid
 
 }
 
-void WhisperModel::run_encoder(const std::vector<float>& mel_bins)
+void WhisperModel::run_encoder(const std::vector<float>& audio_features)
 {
-    if (mel_bins.size() % 80 != 0)
+    if (audio_features.size() % 80 != 0)
         throw std::runtime_error("Mel bins length must be divisible by 80.");
 
-    size_t T_mel = mel_bins.size() / 80;
+    size_t T_mel = audio_features.size() / 80;
     if (T_mel == 0)
         throw std::runtime_error("Mel bins has zero frames.");
 
@@ -482,15 +482,15 @@ void WhisperModel::run_encoder(const std::vector<float>& mel_bins)
             throw std::runtime_error("NPU encoder output has unexpected shape");
         }
 
-        std::vector<__fp16> mel_bins_f16(mel_bins.size());
-        cactus_fp32_to_fp16(mel_bins.data(), mel_bins_f16.data(), mel_bins.size());
+        std::vector<__fp16> audio_features_f16(audio_features.size());
+        cactus_fp32_to_fp16(audio_features.data(), audio_features_f16.data(), audio_features.size());
 
         std::vector<int> input_shape = {1, 80, static_cast<int>(T_mel)};
 
         __fp16* output_buffer = npu_encoder_->get_output_buffer();
         if (output_buffer) {
             size_t elements_written = npu_encoder_->encode(
-                mel_bins_f16.data(),
+                audio_features_f16.data(),
                 output_buffer,  
                 input_shape,
                 "x",
@@ -507,7 +507,7 @@ void WhisperModel::run_encoder(const std::vector<float>& mel_bins)
         } else {
             std::vector<__fp16> npu_output(T_enc * D_enc);
             size_t elements_written = npu_encoder_->encode(
-                mel_bins_f16.data(),
+                audio_features_f16.data(),
                 npu_output.data(),
                 input_shape,
                 "x",
@@ -530,11 +530,11 @@ void WhisperModel::run_encoder(const std::vector<float>& mel_bins)
         : ComputeBackend::NPU;
 
     size_t mel_input = 0;
-    std::vector<__fp16> mel_bins_f16(mel_bins.size());
-    cactus_fp32_to_fp16(mel_bins.data(), mel_bins_f16.data(), mel_bins.size());
+    std::vector<__fp16> audio_features_f16(audio_features.size());
+    cactus_fp32_to_fp16(audio_features.data(), audio_features_f16.data(), audio_features.size());
 
     mel_input = gb->input({1, 80, T_mel}, Precision::FP16);
-    gb->set_input(mel_input, mel_bins_f16.data(), Precision::FP16);
+    gb->set_input(mel_input, audio_features_f16.data(), Precision::FP16);
 
     size_t conv2_transposed = build_conv1d(gb, mel_input);
 
@@ -651,7 +651,7 @@ size_t WhisperModel::run_decoder_step(const std::vector<uint32_t>& tokens, bool 
 }
 
 
-size_t WhisperModel::forward(const std::vector<float>& mel_bins, const std::vector<uint32_t>& tokens, bool use_cache)
+size_t WhisperModel::forward(const std::vector<float>& audio_features, const std::vector<uint32_t>& tokens, bool use_cache)
 {
 
     if (!initialized_ || !graph_handle_) {
@@ -662,14 +662,14 @@ size_t WhisperModel::forward(const std::vector<float>& mel_bins, const std::vect
         kv_cache_.reset();
         kv_cache_.current_seq_len = 0;
         reset_graph_side_cache_nodes();
-        run_encoder(mel_bins);
+        run_encoder(audio_features);
     }
 
     return run_decoder_step(tokens, use_cache, false);
 }
 
-std::vector<float> WhisperModel::get_audio_embeddings(const std::vector<float>& mel_bins) {
-    run_encoder(mel_bins);
+std::vector<float> WhisperModel::get_audio_embeddings(const std::vector<float>& audio_features) {
+    run_encoder(audio_features);
 
     auto* gb = static_cast<CactusGraph*>(graph_handle_);
 
@@ -690,7 +690,7 @@ std::vector<float> WhisperModel::get_audio_embeddings(const std::vector<float>& 
 
 uint32_t WhisperModel::decode_with_audio(
     const std::vector<uint32_t>& tokens,
-    const std::vector<float>& mel_bins,
+    const std::vector<float>& audio_features,
     float temperature,
     float top_p,
     size_t top_k,
@@ -701,7 +701,7 @@ uint32_t WhisperModel::decode_with_audio(
         throw std::runtime_error("Model not initialized - call init() first");
     if (tokens.empty())
         throw std::runtime_error("Token sequence cannot be empty");
-    if (mel_bins.empty())
+    if (audio_features.empty())
         throw std::runtime_error("Mel bins cannot be empty in Whisper decode_with_audio");
 
     auto* gb = static_cast<CactusGraph*>(graph_handle_);
@@ -732,7 +732,7 @@ uint32_t WhisperModel::decode_with_audio(
         encoder_v_shape_.clear();
 
         first_decode_step_ = true;
-        run_encoder(mel_bins);
+        run_encoder(audio_features);
         logits_node = run_decoder_step(full_tokens, false, false);
     }
 

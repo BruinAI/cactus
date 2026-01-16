@@ -93,7 +93,7 @@ struct Config {
     uint32_t num_encoder_layers = 0;
     uint32_t num_decoder_layers = 0;
 
-    enum class ModelType {QWEN = 0, GEMMA = 1, SMOL = 2, NOMIC = 3, LFM2 = 5, SIGLIP2 = 6, WHISPER = 7};
+    enum class ModelType {QWEN = 0, GEMMA = 1, SMOL = 2, NOMIC = 3, LFM2 = 5, SIGLIP2 = 6, WHISPER = 7, MOONSHINE = 8};
     ModelType model_type = ModelType::QWEN;
 
     enum class ModelVariant {DEFAULT = 0, VLM = 1, EXTRACT = 2, RAG = 3};
@@ -503,14 +503,14 @@ public:
                                           float temperature = -1.0f, float top_p = -1.0f,
                                           size_t top_k = 0, const std::string& profile_file = "", float* out_entropy = nullptr);
 
-    virtual uint32_t decode_with_audio(const std::vector<uint32_t>& tokens, const std::vector<float>& mel_bins, float temperature = 0.0f, float top_p = 0.0f,
+    virtual uint32_t decode_with_audio(const std::vector<uint32_t>& tokens, const std::vector<float>& audio_features, float temperature = 0.0f, float top_p = 0.0f,
                       size_t top_k = 0, const std::string& profile_file = "", float* out_entropy = nullptr);
 
     std::vector<float> get_embeddings(const std::vector<uint32_t>& tokens, bool pooled = true, bool normalize = false, const std::string& profile_file = "");
     
     virtual std::vector<float> get_image_embeddings(const std::string& image_path);
     
-    virtual std::vector<float> get_audio_embeddings(const std::vector<float>& mel_bins);
+    virtual std::vector<float> get_audio_embeddings(const std::vector<float>& audio_features);
 
     virtual void reset_cache() { kv_cache_.reset(); }
 
@@ -533,7 +533,7 @@ public:
 protected:
     virtual size_t forward(const std::vector<uint32_t>& tokens, bool use_cache = false) = 0;
     
-    virtual size_t forward(const std::vector<float>& mel_bins, const std::vector<uint32_t>& tokens, bool use_cache = false);
+    virtual size_t forward(const std::vector<float>& audio_features, const std::vector<uint32_t>& tokens, bool use_cache = false);
     
     virtual void load_weights_to_graph(CactusGraph* gb) = 0;
     

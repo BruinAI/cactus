@@ -380,9 +380,9 @@ protected:
         throw std::runtime_error("Whisper requires mel+token forward().");
     }
 
-    size_t forward(const std::vector<float>& mel_bins, const std::vector<uint32_t>& tokens, bool use_cache = false) override;
+    size_t forward(const std::vector<float>& audio_features, const std::vector<uint32_t>& tokens, bool use_cache = false) override;
 
-    void run_encoder(const std::vector<float>& mel_bins);
+    void run_encoder(const std::vector<float>& audio_features);
     void reset_graph_side_cache_nodes();
 
     size_t run_decoder_step(const std::vector<uint32_t>& tokens, bool use_cache, bool last_token_only);
@@ -412,10 +412,10 @@ protected:
     
     size_t build_conv1d(CactusGraph* gb, size_t input);
 
-    uint32_t decode_with_audio(const std::vector<uint32_t>& tokens, const std::vector<float>& mel_bins,
+    uint32_t decode_with_audio(const std::vector<uint32_t>& tokens, const std::vector<float>& audio_features,
                                     float temperature = 0.0f, float top_p = 0.0f, size_t top_k = 0, const std::string& profile_file = "", float* out_entropy = nullptr) override;
 
-    std::vector<float> get_audio_embeddings(const std::vector<float>& mel_bins) override;
+    std::vector<float> get_audio_embeddings(const std::vector<float>& audio_features) override;
     
     void reset_cache() override;
 
@@ -654,9 +654,10 @@ protected:
         throw std::runtime_error("Moonshine requires mel+token forward().");
     }
 
-    size_t forward(const std::vector<float>& mel_bins, const std::vector<uint32_t>& tokens, bool use_cache = false) override;
+    size_t forward(const std::vector<float>& audio_features, const std::vector<uint32_t>& tokens, bool use_cache = false) override;
 
-    void run_encoder(const std::vector<float>& mel_bins);
+    size_t build_encoder(CactusGraph* gb, const std::vector<float>& audio_features);
+    
     void reset_graph_side_cache_nodes();
 
     size_t run_decoder_step(const std::vector<uint32_t>& tokens, bool use_cache, bool last_token_only);
@@ -686,10 +687,10 @@ protected:
     
     size_t build_conv1d(CactusGraph* gb, size_t input);
 
-    uint32_t decode_with_audio(const std::vector<uint32_t>& tokens, const std::vector<float>& mel_bins,
+    uint32_t decode_with_audio(const std::vector<uint32_t>& tokens, const std::vector<float>& audio_features,
                                     float temperature = 0.0f, float top_p = 0.0f, size_t top_k = 0, const std::string& profile_file = "", float* out_entropy = nullptr) override;
 
-    std::vector<float> get_audio_embeddings(const std::vector<float>& mel_bins) override;
+    std::vector<float> get_audio_embeddings(const std::vector<float>& audio_features) override;
     
     void reset_cache() override;
 
@@ -712,7 +713,6 @@ private:
         size_t encoder_norm_weight;
         size_t encoder_norm_bias;
 
-        size_t encoder_output;
 
         struct LayerWeights {
             //Decoder layers
@@ -892,6 +892,10 @@ private:
 
     std::vector<size_t> encoder_k_nodes_;
     std::vector<size_t> encoder_v_nodes_;
+
+    // Persistent nodes for encoder K/V (survive soft_reset)
+    std::vector<size_t> encoder_k_persistent_;
+    std::vector<size_t> encoder_v_persistent_;
 
     std::vector<std::vector<uint8_t>> encoder_k_host_;
     std::vector<std::vector<uint8_t>> encoder_v_host_;
