@@ -284,6 +284,7 @@ struct OpParams {
     
     size_t index_value = 0;  
     size_t num_classes = 0; 
+    size_t num_groups = 0;
     size_t dst_height = 0;
     size_t dst_width = 0;
 
@@ -426,7 +427,7 @@ public:
 
     size_t layernorm(size_t input, size_t weight, size_t bias, float epsilon = 1e-5f);
     size_t layernorm(size_t input, size_t weight, float epsilon = 1e-5f);  // No bias version
-    size_t groupnorm(size_t input, size_t weight, size_t bias, float epsilon = 1e-5f);
+    size_t groupnorm(size_t input, size_t weight, size_t bias, size_t num_groups = 32, float epsilon = 1e-5f);
     size_t topk(size_t input, size_t k);
     size_t rms_norm(size_t input, size_t weight, float epsilon = 1e-5f);
     size_t rope(size_t input, float theta, size_t position_offset = 0, ComputeBackend backend = ComputeBackend::CPU);

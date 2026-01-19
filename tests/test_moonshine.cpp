@@ -7,7 +7,7 @@ using namespace EngineTestUtils;
 
 const char* g_moonshine_model_path = std::getenv("CACTUS_TEST_MOONSHINE_MODEL");
 const char* g_assets_path = std::getenv("CACTUS_TEST_ASSETS");
-const char* g_whisper_prompt = "<|startoftranscript|><|en|><|transcribe|><|notimestamps|>";
+const char* g_whisper_prompt = "";
 
 template<typename Predicate>
 bool run_moonshine_test(const char* title, const char* options_json, Predicate check) {

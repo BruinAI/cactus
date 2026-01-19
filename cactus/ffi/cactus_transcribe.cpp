@@ -225,7 +225,7 @@ int cactus_transcribe(
         }
 
         std::vector<uint32_t> tokens = tokenizer->encode(std::string(prompt));
-        if (tokens.empty()) {
+        if (tokens.empty() && !is_moonshine) {
             CACTUS_LOG_ERROR("transcribe", "Decoder input tokens empty after encoding prompt");
             handle_error_response("Decoder input tokens empty", response_buffer, buffer_size);
             return -1;

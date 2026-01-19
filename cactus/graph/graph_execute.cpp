@@ -277,10 +277,11 @@ void CactusGraph::execute(const std::string& profile_file) {
     bool capture_to_stdout = get_env_int("CACTUS_CAPTURE_STDOUT", 0) != 0;
     std::string capture_file_path = get_env_str("CACTUS_CAPTURE_FILE");
     bool capture_requested = get_env_int("CACTUS_CAPTURE_ENABLE", 0) != 0;
+    std::string capture_dir = get_env_str("CACTUS_CAPTURE_DIR");
 
     if (!capture_requested) {
-        capture_requested = capture_to_stdout || !capture_file_path.empty();
-    } else if (capture_file_path.empty() && !capture_to_stdout) {
+        capture_requested = capture_to_stdout || !capture_file_path.empty() || !capture_dir.empty();
+    } else if (capture_file_path.empty() && !capture_to_stdout && capture_dir.empty()) {
         capture_to_stdout = true;
     }
 
@@ -320,6 +321,11 @@ void CactusGraph::execute(const std::string& profile_file) {
             auto start = std::chrono::high_resolution_clock::now();
 
             compute_node_optimized(*node, nodes_, node_index_map_);
+            
+            // Mark PERSISTENT nodes as populated after execution
+            if (node->op_type == OpType::PERSISTENT) {
+                populated_node_ids_.insert(node->id);
+            }
 
             auto end = std::chrono::high_resolution_clock::now();
             auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
@@ -414,6 +420,11 @@ void CactusGraph::execute(const std::string& profile_file) {
                  << values_str << weights_str << std::endl;
         } else {
             compute_node_optimized(*node, nodes_, node_index_map_);
+            
+            // Mark PERSISTENT nodes as populated after execution
+            if (node->op_type == OpType::PERSISTENT) {
+                populated_node_ids_.insert(node->id);
+            }
         }
     }
 
@@ -441,7 +452,13 @@ void CactusGraph::execute(const std::string& profile_file) {
             }
         }
 
-        if (capture_outputs.empty()) {
+        if (!capture_dir.empty()) {
+            std::filesystem::path dir_path(capture_dir);
+            std::error_code ec;
+            std::filesystem::create_directories(dir_path, ec);
+        }
+
+        if (capture_outputs.empty() && capture_dir.empty()) {
             capture_requested = false;
         }
     }
@@ -576,6 +593,26 @@ void CactusGraph::execute(const std::string& profile_file) {
                     }
                 } else {
                     has_data = false;
+                }
+
+                if (!capture_dir.empty() && has_data) {
+                    std::string safe_name = entry.name;
+                    // std::replace(safe_name.begin(), safe_name.end(), '.', '_'); // Keep dots, usually fine
+                    std::string filename = capture_dir + "/" + safe_name + ".bin";
+                    std::ofstream bin_file(filename, std::ios::binary);
+                    if (bin_file.is_open()) {
+                        size_t bytes_to_write = buffer.byte_size;
+                        if (truncated) {
+                             // Only writing truncated amount if truncated? 
+                             // Wait, truncated logic above was setting elements_to_process = capture_max_elements
+                             // If we want FULL dump, we should use total_size.
+                             // Usually binary dump implies full dump. 
+                             // So I will write buffer.byte_size assuming data_ptr points to the whole thing.
+                             // `data_ptr` is `buffer.get_data()`.
+                             bytes_to_write = buffer.total_size * PrecisionTraits::size_of(buffer.precision);
+                        }
+                        bin_file.write(reinterpret_cast<const char*>(data_ptr), bytes_to_write);
+                    }
                 }
 
                 size_t processed_count = has_data ? elements_to_process : 0;

@@ -421,21 +421,39 @@ void compute_bilinear_interpolation_node(GraphNode& node, const std::vector<std:
 }
 
 void compute_persistent_node(GraphNode& node, const std::vector<std::unique_ptr<GraphNode>>& nodes, const std::unordered_map<size_t, size_t>& node_index_map) {
-    // PERSISTENT node copies data from its source input
+    // PERSISTENT node copies data from its source input on first execution.
+    // After soft_reset, the node retains its data but input may be gone.
+    
+    // If already populated (has data), skip - the persistent data is still valid
+
+    
+    // Check if input node exists in current execution context
     if (node.input_ids.empty()) {
-        // No source - this is a pre-allocated persistent node, nothing to copy
         return;
     }
+
+    auto it = node_index_map.find(node.input_ids[0]);
     
-    const auto& input_buffer = nodes[node_index_map.at(node.input_ids[0])]->output_buffer;
-    
-    // Allocate output buffer if not already allocated (persistent nodes use dedicated allocation, not pool)
-    if (!node.output_buffer.get_data()) {
-        node.output_buffer.allocate();
+    if (it != node_index_map.end()) {
+        // Input exists: We must copy/update the persistent storage.
+        const auto& input_buffer = nodes[it->second]->output_buffer;
+        
+        // Allocate output buffer if not already allocated
+        if (!node.output_buffer.get_data()) {
+            node.output_buffer.allocate();
+        }
+        
+        // Copy data from source to persistent storage
+        std::memcpy(node.output_buffer.get_data(), 
+                    input_buffer.get_data(), 
+                    input_buffer.byte_size);
+    } else {
+        // Input NOT found. This is normal for subsequent runs where source is not rebuilt.
+        // If we have data, we are good.
+        if (node.output_buffer.get_data()) {
+            return;
+        }
+        // No input and no data -> Error
+        throw std::runtime_error("PERSISTENT node input not found and not populated - this should not happen");
     }
-    
-    // Copy data from source to persistent storage
-    std::memcpy(node.output_buffer.get_data(), 
-                input_buffer.get_data(), 
-                input_buffer.byte_size);
 }

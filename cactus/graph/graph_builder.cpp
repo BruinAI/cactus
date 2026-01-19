@@ -12,11 +12,11 @@ size_t CactusGraph::add(size_t input1, size_t input2) {
     const auto& lhs_buffer = get_output_buffer(input1);
     const auto& rhs_buffer = get_output_buffer(input2);
 
-    std::cout << "[SHAPE DEBUG] add: lhs=" << input1 << " [";
-    for(size_t i=0; i<lhs_buffer.shape.size(); ++i) std::cout << lhs_buffer.shape[i] << (i==lhs_buffer.shape.size()-1?"":",");
-    std::cout << "] rhs=" << input2 << " [";
-    for(size_t i=0; i<rhs_buffer.shape.size(); ++i) std::cout << rhs_buffer.shape[i] << (i==rhs_buffer.shape.size()-1?"":",");
-    std::cout << "]" << std::endl;
+    // std::cout << "[SHAPE DEBUG] add: lhs=" << input1 << " [";
+    // for(size_t i=0; i<lhs_buffer.shape.size(); ++i) // std::cout << lhs_buffer.shape[i] << (i==lhs_buffer.shape.size()-1?"":",");
+    // std::cout << "] rhs=" << input2 << " [";
+    // for(size_t i=0; i<rhs_buffer.shape.size(); ++i) // std::cout << rhs_buffer.shape[i] << (i==rhs_buffer.shape.size()-1?"":",");
+    // std::cout << "]" << std::endl;
 
     BroadcastInfo broadcast_info = BroadcastInfo::compute(lhs_buffer.shape, rhs_buffer.shape);
     OpParams params{.broadcast_info = broadcast_info};
@@ -68,11 +68,11 @@ size_t CactusGraph::matmul(size_t input1, size_t input2, bool pretransposed_rhs,
     const auto& lhs_buffer = get_output_buffer(input1);
     const auto& rhs_buffer = get_output_buffer(input2);
     
-    std::cout << "[SHAPE DEBUG] matmul: lhs=" << input1 << " [";
-    for(size_t i=0; i<lhs_buffer.shape.size(); ++i) std::cout << lhs_buffer.shape[i] << (i==lhs_buffer.shape.size()-1?"":",");
-    std::cout << "] rhs=" << input2 << " [";
-    for(size_t i=0; i<rhs_buffer.shape.size(); ++i) std::cout << rhs_buffer.shape[i] << (i==rhs_buffer.shape.size()-1?"":",");
-    std::cout << "] pretransposed=" << pretransposed_rhs << std::endl;
+    // std::cout << "[SHAPE DEBUG] matmul: lhs=" << input1 << " [";
+    for(size_t i=0; i<lhs_buffer.shape.size(); ++i) // std::cout << lhs_buffer.shape[i] << (i==lhs_buffer.shape.size()-1?"":",");
+    // std::cout << "] rhs=" << input2 << " [";
+    for(size_t i=0; i<rhs_buffer.shape.size(); ++i) // std::cout << rhs_buffer.shape[i] << (i==rhs_buffer.shape.size()-1?"":",");
+    // std::cout << "] pretransposed=" << pretransposed_rhs << std::endl;
 
     if (lhs_buffer.shape.size() != 2 || rhs_buffer.shape.size() != 2) {
         throw std::invalid_argument("Matrix multiplication requires 2D tensors");
@@ -93,7 +93,7 @@ size_t CactusGraph::matmul(size_t input1, size_t input2, bool pretransposed_rhs,
 }
 
 size_t CactusGraph::transpose(size_t input, ComputeBackend backend) {
-    std::cout << "[SHAPE DEBUG] transpose: input=" << input << std::endl;
+    // std::cout << "[SHAPE DEBUG] transpose: input=" << input << std::endl;
     const auto& input_buffer = get_output_buffer(input);
     std::vector<size_t> output_shape = input_buffer.shape;
 
@@ -131,9 +131,9 @@ size_t CactusGraph::transposeN(size_t input, const std::vector<size_t>& permutat
 }
 
 size_t CactusGraph::reshape(size_t input, const std::vector<size_t>& new_shape) {
-    std::cout << "[SHAPE DEBUG] reshape: input=" << input << " new_shape=[";
-    for(size_t i=0; i<new_shape.size(); ++i) std::cout << new_shape[i] << (i==new_shape.size()-1?"":",");
-    std::cout << "]" << std::endl;
+    // std::cout << "[SHAPE DEBUG] reshape: input=" << input << " new_shape=[";
+    // for(size_t i=0; i<new_shape.size(); ++i) // std::cout << new_shape[i] << (i==new_shape.size()-1?"":",");
+    // std::cout << "]" << std::endl;
     OpParams params{.new_shape = new_shape};
     return add_node(OpType::RESHAPE, {input}, new_shape, params);
 }
@@ -295,25 +295,25 @@ size_t CactusGraph::topk(size_t input, size_t k) {
 }
 
 size_t CactusGraph::layernorm(size_t input, size_t weight, size_t bias, float epsilon) {
-    std::cout << "[SHAPE DEBUG] layernorm: input=" << input << " weight=" << weight << " bias=" << bias << std::endl;
+    // std::cout << "[SHAPE DEBUG] layernorm: input=" << input << " weight=" << weight << " bias=" << bias << std::endl;
     OpParams params{.epsilon = epsilon};
     return add_node(OpType::LAYERNORM, {input, weight, bias}, {}, params);
 }
 
 size_t CactusGraph::layernorm(size_t input, size_t weight, float epsilon) {
-    std::cout << "[SHAPE DEBUG] layernorm (no bias): input=" << input << " weight=" << weight << std::endl;
+    // std::cout << "[SHAPE DEBUG] layernorm (no bias): input=" << input << " weight=" << weight << std::endl;
     OpParams params{.epsilon = epsilon};
     return add_node(OpType::LAYERNORM, {input, weight}, {}, params);
 }
 
-size_t CactusGraph::groupnorm(size_t input, size_t weight, size_t bias, float epsilon) {
-    std::cout << "[SHAPE DEBUG] groupnorm: input=" << input << " weight=" << weight << " bias=" << bias << std::endl;
-    OpParams params{.epsilon = epsilon};
+size_t CactusGraph::groupnorm(size_t input, size_t weight, size_t bias, size_t num_groups, float epsilon) {
+    // std::cout << "[SHAPE DEBUG] groupnorm: input=" << input << " weight=" << weight << " bias=" << bias << std::endl;
+    OpParams params{.epsilon = epsilon, .num_groups = num_groups};
     return add_node(OpType::GROUPNORM, {input, weight, bias}, {}, params);
 }
 
 size_t CactusGraph::attention(size_t query, size_t key, size_t value, float scale, bool is_causal, ComputeBackend backend) {
-    std::cout << "[SHAPE DEBUG] attention: q=" << query << " k=" << key << " v=" << value << std::endl;
+    // std::cout << "[SHAPE DEBUG] attention: q=" << query << " k=" << key << " v=" << value << std::endl;
     OpParams params{.scale = scale, .is_causal = is_causal, .backend = backend};
     return add_node(OpType::ATTENTION, {query, key, value}, {}, params);
 }
@@ -351,7 +351,7 @@ size_t CactusGraph::conv1d_causal(size_t input, size_t weight, size_t, size_t di
 }
 
 size_t CactusGraph::conv1d_k3(size_t input, size_t weight, size_t stride) {
-    std::cout << "[SHAPE DEBUG] conv1d_k3: input=" << input << " weight=" << weight << " stride=" << stride << std::endl;
+    // std::cout << "[SHAPE DEBUG] conv1d_k3: input=" << input << " weight=" << weight << " stride=" << stride << std::endl;
     const auto& xin = get_output_buffer(input);
     const auto& w   = get_output_buffer(weight);
 
@@ -377,7 +377,7 @@ size_t CactusGraph::conv1d_k3(size_t input, size_t weight, size_t stride) {
 }
 
 size_t CactusGraph::conv1d(size_t input, size_t weight, size_t stride) {
-    std::cout << "[SHAPE DEBUG] conv1d (no bias): input=" << input << " weight=" << weight << " stride=" << stride << std::endl;
+    // std::cout << "[SHAPE DEBUG] conv1d (no bias): input=" << input << " weight=" << weight << " stride=" << stride << std::endl;
     const auto& xin = get_output_buffer(input);
     const auto& w   = get_output_buffer(weight);
     
@@ -395,7 +395,7 @@ size_t CactusGraph::conv1d(size_t input, size_t weight, size_t stride) {
 }
 
 size_t CactusGraph::conv1d(size_t input, size_t weight, size_t bias, size_t stride) {
-    std::cout << "[SHAPE DEBUG] conv1d: input=" << input << " weight=" << weight << " bias=" << bias << " stride=" << stride << std::endl;
+    // std::cout << "[SHAPE DEBUG] conv1d: input=" << input << " weight=" << weight << " bias=" << bias << " stride=" << stride << std::endl;
     const auto& xin = get_output_buffer(input);
     const auto& w   = get_output_buffer(weight);
     
@@ -602,11 +602,15 @@ size_t CactusGraph::slice(size_t input, int axis, size_t start, size_t length) {
 }
 
 size_t CactusGraph::embedding(size_t embedding_tensor, size_t indices) {
-    std::cout << "[SHAPE DEBUG] embedding: weight=" << embedding_tensor << " indices=" << indices << std::endl;
+    // std::cout << "[SHAPE DEBUG] embedding: weight=" << embedding_tensor << " indices=" << indices << std::endl;
     const auto& emb_buffer = get_output_buffer(embedding_tensor);
     const auto& idx_shape = get_output_buffer(indices).shape;
 
     if (emb_buffer.shape.size() != 2) {
+        std::cerr << "Error: Embedding tensor " << embedding_tensor << " has invalid shape: [";
+        for(auto d : emb_buffer.shape) std::cerr << d << ",";
+        std::cerr << "]. OpType=" << (int)nodes_[node_index_map_[embedding_tensor]]->op_type
+                  << " ExtData=" << emb_buffer.external_data << std::endl;
         throw std::runtime_error("Embedding tensor must be 2D [vocab_size, hidden_dim]");
     }
 

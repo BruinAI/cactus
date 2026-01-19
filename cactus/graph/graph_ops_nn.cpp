@@ -585,7 +585,13 @@ void compute_groupnorm_node(GraphNode& node, const std::vector<std::unique_ptr<G
     size_t spatial_size = 1;
     for (size_t i = 2; i < input.shape.size(); ++i) spatial_size *= input.shape[i];
 
-    size_t num_groups = 32;  // Moonshine uses 32 groups
+    size_t num_groups = node.params.num_groups;
+    if (num_groups == 0) num_groups = 32; // Default to 32 if not specified
+    
+    if (channels % num_groups != 0) {
+        throw std::runtime_error("GroupNorm: channels must be divisible by num_groups");
+    }
+
     size_t channels_per_group = channels / num_groups;
 
     const __fp16* src = input.data_as<__fp16>();
