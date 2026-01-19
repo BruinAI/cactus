@@ -28,6 +28,9 @@ extern void compute_attention_int8_hybrid_node(GraphNode& node, const std::vecto
 extern void compute_layernorm_node(GraphNode& node, const std::vector<std::unique_ptr<GraphNode>>& nodes, const std::unordered_map<size_t, size_t>& node_index_map);
 extern void compute_conv1d_causal_node(GraphNode& node, const std::vector<std::unique_ptr<GraphNode>>& nodes, const std::unordered_map<size_t, size_t>& node_index_map);
 extern void compute_conv1d_k3_node(GraphNode& node, const std::vector<std::unique_ptr<GraphNode>>& nodes, const std::unordered_map<size_t, size_t>& node_index_map);
+extern void compute_conv1d_node(GraphNode& node, const std::vector<std::unique_ptr<GraphNode>>& nodes, const std::unordered_map<size_t, size_t>& node_index_map);
+extern void compute_groupnorm_node(GraphNode& node, const std::vector<std::unique_ptr<GraphNode>>& nodes, const std::unordered_map<size_t, size_t>& node_index_map);
+extern void compute_rope_gptj_node(GraphNode& node, const std::vector<std::unique_ptr<GraphNode>>& nodes, const std::unordered_map<size_t, size_t>& node_index_map);
 extern void shrink_thread_local_buffers();
 
 extern void compute_transpose_node(GraphNode& node, const std::vector<std::unique_ptr<GraphNode>>& nodes, const std::unordered_map<size_t, size_t>& node_index_map);
@@ -92,6 +95,7 @@ void compute_node_optimized(GraphNode& node, const std::vector<std::unique_ptr<G
         case OpType::SILU:
         case OpType::GELU:
         case OpType::GELU_ERF:
+        case OpType::TANH:
             compute_activation_node(node, nodes, node_index_map);
             break;
 
@@ -126,6 +130,10 @@ void compute_node_optimized(GraphNode& node, const std::vector<std::unique_ptr<G
             compute_rope_node(node, nodes, node_index_map);
             break;
 
+        case OpType::ROPE_GPTJ:
+            compute_rope_gptj_node(node, nodes, node_index_map);
+            break;
+
         case OpType::SOFTMAX:
             compute_softmax_node(node, nodes, node_index_map);
             break;
@@ -142,6 +150,10 @@ void compute_node_optimized(GraphNode& node, const std::vector<std::unique_ptr<G
             compute_layernorm_node(node, nodes, node_index_map);
             break;
 
+        case OpType::GROUPNORM:
+            compute_groupnorm_node(node, nodes, node_index_map);
+            break;
+
         case OpType::PERSISTENT:
             compute_persistent_node(node, nodes, node_index_map);
             break;
@@ -152,6 +164,10 @@ void compute_node_optimized(GraphNode& node, const std::vector<std::unique_ptr<G
 
         case OpType::CONV1D_K3:
             compute_conv1d_k3_node(node, nodes, node_index_map);
+            break;
+
+        case OpType::CONV1D:
+            compute_conv1d_node(node, nodes, node_index_map);
             break;
 
         // Tensor operations

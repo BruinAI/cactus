@@ -2,6 +2,7 @@
 #include "../graph/graph.h"
 #include "../npu/npu.h"
 #include "../kernel/kernel.h"
+#include <algorithm>
 #include <cmath>
 #include <stdexcept>
 #include <set>

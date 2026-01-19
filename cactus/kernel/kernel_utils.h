@@ -97,6 +97,10 @@ inline bool cactus_has_i8mm() {
     return false;
 }
 
+inline int32x4_t accum_matmul(int32x4_t acc, int8x16_t a, int8x16_t b) {
+    return acc;
+}
+
 #endif
 
 inline float16x8_t accum_f16_dot(float16x8_t acc, float16x8_t a_low, float16x8_t a_high,

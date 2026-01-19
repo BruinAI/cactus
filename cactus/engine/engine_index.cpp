@@ -8,6 +8,7 @@
 #include <queue>
 #include <limits>
 #include <cerrno>
+#include <algorithm>
 
 namespace cactus {
 namespace engine {

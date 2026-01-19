@@ -425,6 +425,7 @@ public:
     size_t bilinear_interpolation(size_t pos_embeds, size_t dst_height, size_t dst_width);
 
     size_t layernorm(size_t input, size_t weight, size_t bias, float epsilon = 1e-5f);
+    size_t layernorm(size_t input, size_t weight, float epsilon = 1e-5f);  // No bias version
     size_t groupnorm(size_t input, size_t weight, size_t bias, float epsilon = 1e-5f);
     size_t topk(size_t input, size_t k);
     size_t rms_norm(size_t input, size_t weight, float epsilon = 1e-5f);

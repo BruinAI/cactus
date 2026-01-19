@@ -1,6 +1,7 @@
 #include "graph.h"
 #include "../kernel/kernel.h"
 #include <cstring>
+#include <cmath>
 #include <stdexcept>
 
 void compute_transpose_node(GraphNode& node, const std::vector<std::unique_ptr<GraphNode>>& nodes, const std::unordered_map<size_t, size_t>& node_index_map) {

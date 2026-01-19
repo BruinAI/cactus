@@ -156,7 +156,7 @@ int cactus_transcribe(
 
         std::vector<float> audio_features;
         
-        bool is_moonshine = handle->model->get_config().model_type == engine::Config::ModelType::MOONSHINE; // Assuming generic Moonshine type or based on name/config
+        bool is_moonshine = handle->model->get_config().model_type == cactus::engine::Config::ModelType::MOONSHINE; // Assuming generic Moonshine type or based on name/config
 
         // Check if Moonshine via config model type name if enum not available directly or use string check if needed.
         // But since we are inside engine namespace usage, we can check Config enum.

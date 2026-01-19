@@ -660,7 +660,7 @@ protected:
     
     void reset_graph_side_cache_nodes();
 
-    size_t run_decoder_step(const std::vector<uint32_t>& tokens, bool use_cache, bool last_token_only);
+    size_t build_decoder(const std::vector<uint32_t>& tokens, bool use_cache, bool last_token_only);
 
     void load_weights_to_graph(CactusGraph* gb) override;
 
@@ -686,6 +686,7 @@ protected:
                                   ComputeBackend backend, bool use_cache = false, size_t position_offset = 0);
     
     size_t build_conv1d(CactusGraph* gb, size_t input);
+    size_t build_audio_preprocessor(CactusGraph* gb, size_t input);
 
     uint32_t decode_with_audio(const std::vector<uint32_t>& tokens, const std::vector<float>& audio_features,
                                     float temperature = 0.0f, float top_p = 0.0f, size_t top_k = 0, const std::string& profile_file = "", float* out_entropy = nullptr) override;
@@ -712,6 +713,7 @@ private:
         size_t encoder_conv3_bias;
         size_t encoder_norm_weight;
         size_t encoder_norm_bias;
+        size_t encoder_layer_norm_weight;
 
 
         struct LayerWeights {
@@ -744,6 +746,7 @@ private:
             size_t decoder_self_attn_k_weight;
             size_t decoder_self_attn_v_weight;
             size_t decoder_self_attn_q_bias;
+            size_t decoder_self_attn_k_bias;
             size_t decoder_self_attn_v_bias;
             size_t decoder_self_attn_output_weight;
             size_t decoder_self_attn_output_bias;
