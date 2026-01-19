@@ -508,8 +508,8 @@ bool Config::from_json(const std::string& config_path) {
                 }
             }
         }
-        else if (key == "encoder_act_gelu") encoder_act_gelu = (value == "gelu");
-        else if (key == "decoder_act_gelu") decoder_act_gelu = (value == "gelu");
+        else if (key == "enc_hidden_act") encoder_act_gelu = (value == "gelu");
+        else if (key == "dec_hidden_act") decoder_act_gelu = (value == "gelu");
         else if (key == "num_encoder_layers") num_encoder_layers = static_cast<uint32_t>(std::stoul(value));
         else if (key == "num_decoder_layers") num_decoder_layers = static_cast<uint32_t>(std::stoul(value));
     }

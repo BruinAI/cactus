@@ -192,6 +192,54 @@ def convert_hf_model_weights(model, output_dir, precision='INT8', args=None):
                     full_name = layer_prefix + pattern
                     if full_name in state_dict:
                         tensor = state_dict[full_name]
+
+                        # Check for SwiGLU (mlp.fc1.weight + silu) BEFORE generic save
+                        if 'mlp.fc1.weight' in pattern and model_type_str == 'moonshine':
+                             activation = model_config.get('enc_hidden_act', 'gelu') if 'encoder' in layer_prefix else model_config.get('dec_hidden_act', 'gelu')
+                             if activation == 'silu':
+                                # Split mlp.fc1 into gate and up
+                                # full_name is already correct key
+                                w = tensor
+                                b_name = full_name.replace('weight', 'bias')
+                                b = state_dict.get(b_name)
+
+                                # Moonshine SwiGLU: fc1 output is 4*dim. 
+                                # usually: gate (dim*2) | up (dim*2).
+                                inter_size = model_config.get('intermediate_size', 0)
+                                if inter_size == 0:
+                                    inter_size = model_config.get('ffn_intermediate_dim', 0)
+                                    
+                                if inter_size > 0:
+                                    half_dim = inter_size
+                                else:
+                                    half_dim = w.shape[0] // 2
+                                
+                                # Ensure split is valid
+                                if w.shape[0] != 2 * half_dim:
+                                     half_dim = w.shape[0] // 2
+
+                                w_gate = w[:half_dim, :]
+                                w_up = w[half_dim:, :]
+                                
+                                save_name_prefix = output_name.replace('mlp_fc1.weights', '')
+                                if 'encoder' in layer_prefix:
+                                    save_name_prefix = "encoder_" + save_name_prefix
+
+                                save_tensor_with_header(w_gate, output_dir / (save_name_prefix + "ffn_gate.weights"), precision, transpose=should_transpose, stats_tracker=quantization_stats, args=args, model_type=detected_model_type, layer_idx=i, num_layers=num_layers, mixed_config=mixed_config)
+                                save_tensor_with_header(w_up, output_dir / (save_name_prefix + "ffn_up.weights"), precision, transpose=should_transpose, stats_tracker=quantization_stats, args=args, model_type=detected_model_type, layer_idx=i, num_layers=num_layers, mixed_config=mixed_config)
+
+                                if b is not None:
+                                    b_gate = b[:half_dim]
+                                    b_up = b[half_dim:]
+                                    save_tensor_with_header(b_gate, output_dir / (save_name_prefix + "ffn_gate.bias"), precision, transpose=should_transpose, stats_tracker=quantization_stats, args=args, model_type=detected_model_type, layer_idx=i, num_layers=num_layers, mixed_config=mixed_config)
+                                    save_tensor_with_header(b_up, output_dir / (save_name_prefix + "ffn_up.bias"), precision, transpose=should_transpose, stats_tracker=quantization_stats, args=args, model_type=detected_model_type, layer_idx=i, num_layers=num_layers, mixed_config=mixed_config)
+                                
+                                saved_tensor_full_names.add(full_name)
+                                if b is not None:
+                                    saved_tensor_full_names.add(b_name)
+                                found = True
+                                break
+
                         if pattern.startswith('attn.Wqkv.') and model_type_str == 'nomic_bert':
                             if tensor.ndim == 1:
                                 tensor = tensor.reshape(3, -1)
@@ -231,6 +279,80 @@ def convert_hf_model_weights(model, output_dir, precision='INT8', args=None):
                         found = True
                         break
 
+                if not found and 'mlp.fc1.weight' in output_name and model_type_str == 'moonshine':
+                    # Check connection/config for swiglu
+                    # We can assume Moonshine uses SwiGLU if we see it in config or based on model logic
+                    # But converter doesn't strictly know SwiGLU without config. 
+                    # Use existing check logic or default to previous implementation:
+                    
+                    activation = model_config.get('enc_hidden_act', 'gelu') if 'encoder' in layer_prefix else model_config.get('dec_hidden_act', 'gelu')
+                    
+                    if activation == 'silu':
+                        # Split mlp.fc1 into gate and up
+                        full_name = layer_prefix + name_patterns[0][0] # e.g. mlp.fc1.weight
+                        # Try both weight and bias
+                        w_name = layer_prefix + 'mlp.fc1.weight'
+                        b_name = layer_prefix + 'mlp.fc1.bias'
+                        
+                        if w_name in state_dict:
+                            w = state_dict[w_name] # [4*dim, dim]
+                            if b_name in state_dict:
+                                b = state_dict[b_name]
+                            else:
+                                b = None
+                                
+                            # Moonshine SwiGLU: fc1 output is 4*dim. 
+                            # usually: gate (dim*2) | up (dim*2).
+                            # User verified config has intermediate_size (e.g. 1152).
+                            # Weight width should be 2 * intermediate_size.
+                            
+                            inter_size = model_config.get('intermediate_size', 0)
+                            if inter_size == 0:
+                                inter_size = model_config.get('ffn_intermediate_dim', 0) # User mentioned this key
+                                
+                            if inter_size > 0:
+                                half_dim = inter_size
+                                if w.shape[0] != 2 * half_dim:
+                                    # Fallback or error? 
+                                    # User said "weight is supposed to be 2x that size".
+                                    # If shape doesn't match, maybe inter_size is wrong or weight is different.
+                                    # Let's trust strict split if shape allows, but prefer calculation.
+                                    pass
+                            else:
+                                half_dim = w.shape[0] // 2
+                            
+                            # Ensure split is valid
+                            if w.shape[0] == 2 * half_dim:
+                                w_gate = w[:half_dim, :]
+                                w_up = w[half_dim:, :]
+                            else:
+                                # Fallback to even split if config doesn't match
+                                half_dim = w.shape[0] // 2
+                                w_gate = w[:half_dim, :]
+                                w_up = w[half_dim:, :]
+                            
+                            w_gate = w[:half_dim, :]
+                            w_up = w[half_dim:, :]
+                            
+                            save_name_prefix = output_name.replace('mlp_fc1.weights', '') # e.g. layer_{i}_
+                            if 'encoder' in layer_prefix:
+                                save_name_prefix = "encoder_" + save_name_prefix
+
+                            save_tensor_with_header(w_gate, output_dir / (save_name_prefix + "ffn_gate.weights"), precision, transpose=should_transpose, stats_tracker=quantization_stats, args=args, model_type=detected_model_type, layer_idx=i, num_layers=num_layers, mixed_config=mixed_config)
+                            save_tensor_with_header(w_up, output_dir / (save_name_prefix + "ffn_up.weights"), precision, transpose=should_transpose, stats_tracker=quantization_stats, args=args, model_type=detected_model_type, layer_idx=i, num_layers=num_layers, mixed_config=mixed_config)
+
+                            if b is not None:
+                                b_gate = b[:half_dim]
+                                b_up = b[half_dim:]
+                                save_tensor_with_header(b_gate, output_dir / (save_name_prefix + "ffn_gate.bias"), precision, transpose=should_transpose, stats_tracker=quantization_stats, args=args, model_type=detected_model_type, layer_idx=i, num_layers=num_layers, mixed_config=mixed_config)
+                                save_tensor_with_header(b_up, output_dir / (save_name_prefix + "ffn_up.bias"), precision, transpose=should_transpose, stats_tracker=quantization_stats, args=args, model_type=detected_model_type, layer_idx=i, num_layers=num_layers, mixed_config=mixed_config)
+                            
+                            saved_tensor_full_names.add(w_name)
+                            if b_name in state_dict:
+                                saved_tensor_full_names.add(b_name)
+                            found = True
+                            break # Converted specifically
+                        
                 if not found and 'c_attn.weight' in name_patterns[0]:
                     attn_name = layer_prefix + 'attn.c_attn.weight'
                     if attn_name in state_dict:

@@ -664,7 +664,7 @@ protected:
 
     void load_weights_to_graph(CactusGraph* gb) override;
 
-    size_t build_encoder_attention(CactusGraph* gb, size_t normalized_input, uint32_t layer_idx,
+    size_t build_decoder_cross_attention(CactusGraph* gb, size_t normalized_input, uint32_t layer_idx,
                           ComputeBackend backend, bool use_cache = false, size_t position_offset = 0);
     
     size_t build_decoder_self_attention(CactusGraph* gb, size_t normalized_input, uint32_t layer_idx,
@@ -736,6 +736,10 @@ private:
 
             size_t decoder_ffn1_weight;
             size_t decoder_ffn1_bias;
+            size_t decoder_ffn_gate_weight;
+            size_t decoder_ffn_gate_bias;
+            size_t decoder_ffn_up_weight;
+            size_t decoder_ffn_up_bias;
             size_t decoder_ffn2_weight;
             size_t decoder_ffn2_bias;
 
@@ -757,6 +761,10 @@ private:
             //Encoder layers
             size_t encoder_ffn1_weight;
             size_t encoder_ffn1_bias;
+            size_t encoder_ffn_gate_weight;
+            size_t encoder_ffn_gate_bias;
+            size_t encoder_ffn_up_weight;
+            size_t encoder_ffn_up_bias;
             size_t encoder_ffn2_weight;
             size_t encoder_ffn2_bias;
 

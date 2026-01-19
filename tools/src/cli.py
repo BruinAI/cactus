@@ -154,6 +154,17 @@ def cmd_download(args):
             except Exception as e:
                 print(f"  Warning: convert_processors failed: {e}")
 
+        elif 'moonshine' in model_id.lower():
+            try:
+                from transformers import MoonshineForConditionalGeneration
+                print(f"  Note: Loading Moonshine model using MoonshineForConditionalGeneration...")
+                model = MoonshineForConditionalGeneration.from_pretrained(model_id, cache_dir=cache_dir, trust_remote_code=True, token=token)
+            except ImportError:
+                print_color(RED, "  Warning: Could not import MoonshineForConditionalGeneration. Falling back to AutoModel (head might be missing).")
+                model = AutoModel.from_pretrained(model_id, cache_dir=cache_dir, trust_remote_code=True, token=token)
+            
+            tokenizer = AutoTokenizer.from_pretrained(model_id, cache_dir=cache_dir, trust_remote_code=True, token=token)
+
         elif is_whisper:
             tokenizer = AutoTokenizer.from_pretrained(model_id, cache_dir=cache_dir, trust_remote_code=True, token=token)
             model = AutoModel.from_pretrained(model_id, cache_dir=cache_dir, trust_remote_code=True, token=token)

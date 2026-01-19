@@ -44,8 +44,15 @@ void MoonshineModel::load_weights_to_graph(CactusGraph* gb) {
 
     // weight_nodes_.decoder_position_embeddings_weight = gb->mmap_weights(model_folder_path_ + "/decoder_position_embeddings.weights"); // Not present
 
-    weight_nodes_.output_weight = embedding_node_id_;
-    output_weight_node_id_ = embedding_node_id_;
+    // weight_nodes_.output_weight = embedding_node_id_;
+    // output_weight_node_id_ = embedding_node_id_; 
+    
+    // Moonshine output layer (proj_out) is separate from embeddings
+    output_weight_node_id_ = gb->mmap_weights(model_folder_path_ + "/output_weight.weights");
+    if (output_weight_node_id_ == 0) {
+        output_weight_node_id_ = gb->mmap_weights(model_folder_path_ + "/output_layer.weights");
+    }
+    weight_nodes_.output_weight = output_weight_node_id_;
 
     if (npu::is_npu_available()) {
         std::string npu_encoder_path = model_folder_path_ + "/model.mlpackage";
@@ -92,8 +99,7 @@ void MoonshineModel::load_weights_to_graph(CactusGraph* gb) {
         weight_nodes_.encoder_layer_norm_weight = gb->mmap_weights(model_folder_path_ + "/encoder_layer_norm_weight.weights"); // Final Encoder LayerNorm
     }
 
-    // Decoder Layers
-    for (uint32_t i = 0; i < config_.num_decoder_layers; i++) {
+        for (uint32_t i = 0; i < config_.num_decoder_layers; i++) {
         auto& layer = weight_nodes_.decoder_layers[i];
         std::string layer_prefix = model_folder_path_ + "/layer_" + std::to_string(i) + "_";
 
@@ -104,8 +110,19 @@ void MoonshineModel::load_weights_to_graph(CactusGraph* gb) {
 
         layer.decoder_post_encoder_layernorm_weight = gb->mmap_weights(layer_prefix + "post_attn_norm.weights");
 
-        layer.decoder_ffn1_weight = gb->mmap_weights(layer_prefix + "mlp_fc1.weights");
-        layer.decoder_ffn1_bias = gb->mmap_weights(layer_prefix + "mlp_fc1.bias");
+        std::cout << "Loading decoder layer " << i << " weights. Decoder act gelu=" << config_.decoder_act_gelu << std::endl;
+
+        if (config_.decoder_act_gelu) {
+            layer.decoder_ffn1_weight = gb->mmap_weights(layer_prefix + "mlp_fc1.weights");
+            layer.decoder_ffn1_bias = gb->mmap_weights(layer_prefix + "mlp_fc1.bias");
+        } else {
+             // SiLU/SwiGLU: load split weights
+            layer.decoder_ffn_gate_weight = gb->mmap_weights(layer_prefix + "ffn_gate.weights");
+            layer.decoder_ffn_gate_bias = gb->mmap_weights(layer_prefix + "ffn_gate.bias");
+            layer.decoder_ffn_up_weight = gb->mmap_weights(layer_prefix + "ffn_up.weights");
+            layer.decoder_ffn_up_bias = gb->mmap_weights(layer_prefix + "ffn_up.bias");
+        }
+        
         layer.decoder_ffn2_weight = gb->mmap_weights(layer_prefix + "mlp_fc2.weights");
         layer.decoder_ffn2_bias = gb->mmap_weights(layer_prefix + "mlp_fc2.bias");
 
@@ -124,9 +141,19 @@ void MoonshineModel::load_weights_to_graph(CactusGraph* gb) {
         for (uint32_t i = 0; i < config_.num_encoder_layers; i++) {
             auto& layer = weight_nodes_.encoder_layers[i];
             std::string layer_prefix = model_folder_path_ + "/encoder_layer_" + std::to_string(i) + "_";
+            std::cout << "Loading encoder layer " << i << " weights. Encoder act gelu=" << config_.encoder_act_gelu << std::endl;
 
-            layer.encoder_ffn1_weight = gb->mmap_weights(layer_prefix + "mlp_fc1.weights");
-            layer.encoder_ffn1_bias = gb->mmap_weights(layer_prefix + "mlp_fc1.bias");
+            if (config_.encoder_act_gelu) {
+                layer.encoder_ffn1_weight = gb->mmap_weights(layer_prefix + "mlp_fc1.weights");
+                layer.encoder_ffn1_bias = gb->mmap_weights(layer_prefix + "mlp_fc1.bias");
+            } else {
+                // SiLU/SwiGLU: load split weights
+                layer.encoder_ffn_gate_weight = gb->mmap_weights(layer_prefix + "ffn_gate.weights");
+                layer.encoder_ffn_gate_bias = gb->mmap_weights(layer_prefix + "ffn_gate.bias");
+                layer.encoder_ffn_up_weight = gb->mmap_weights(layer_prefix + "ffn_up.weights");
+                layer.encoder_ffn_up_bias = gb->mmap_weights(layer_prefix + "ffn_up.bias");
+            }
+
             layer.encoder_ffn2_weight = gb->mmap_weights(layer_prefix + "mlp_fc2.weights");
             layer.encoder_ffn2_bias = gb->mmap_weights(layer_prefix + "mlp_fc2.bias");
 
@@ -164,58 +191,46 @@ static size_t build_encoder_mlp_gelu(CactusGraph* gb, size_t input, size_t w1, s
     return ffn2_bias;
 }
 
-static size_t build_encoder_mlp_silu(CactusGraph* gb, size_t input, size_t w1, size_t b1, size_t w2, size_t b2, ComputeBackend backend, uint32_t layer_idx) {
-    auto ffn1_weight = gb->matmul(input, w1, true, backend);
-    std::cout << "[BUILD DEBUG] enc_mlp_ffn1_weight_silu layer=" << layer_idx << std::endl;
-    auto ffn1_bias = gb->add(ffn1_weight, b1);
-    std::cout << "[BUILD DEBUG] enc_mlp_ffn1_bias_silu layer=" << layer_idx << std::endl;
-    auto ffn1_act = gb->silu(ffn1_bias);
-    std::cout << "[BUILD DEBUG] enc_mlp_ffn1_act_silu layer=" << layer_idx << std::endl;
-    auto ffn2_weight = gb->matmul(ffn1_act, w2, true, backend);
-    std::cout << "[BUILD DEBUG] enc_mlp_ffn2_weight_silu layer=" << layer_idx << std::endl;
-    auto ffn2_bias = gb->add(ffn2_weight, b2);
-    std::cout << "[BUILD DEBUG] enc_mlp_ffn2_bias_silu layer=" << layer_idx << std::endl;
+static size_t build_encoder_mlp_silu(CactusGraph* gb, size_t input, size_t w_gate, size_t b_gate, size_t w_up, size_t b_up, size_t w2, size_t b2, ComputeBackend backend, uint32_t layer_idx) {
+    auto gate_weight = gb->matmul(input, w_gate, true, backend);
+    auto gate_bias = gb->add(gate_weight, b_gate);
+    auto gate_act = gb->silu(gate_bias);
+    
+    auto up_weight = gb->matmul(input, w_up, true, backend);
+    auto up_bias = gb->add(up_weight, b_up);
+    
+    auto intermediate = gb->multiply(gate_act, up_bias);
+    
+    auto output_weight = gb->matmul(intermediate, w2, true, backend);
+    auto output_bias = gb->add(output_weight, b2);
 
-    gb->capture_debug_node(layer_idx, "enc_mlp_ffn1_weight", ffn1_weight);
-    gb->capture_debug_node(layer_idx, "enc_mlp_ffn1_bias", ffn1_bias);
-    gb->capture_debug_node(layer_idx, "enc_mlp_ffn1_act", ffn1_act);
-    gb->capture_debug_node(layer_idx, "enc_mlp_ffn2_weight", ffn2_weight);
-    gb->capture_debug_node(layer_idx, "enc_mlp_ffn2_bias", ffn2_bias);
+    gb->capture_debug_node(layer_idx, "enc_mlp_gate_act", gate_act);
+    gb->capture_debug_node(layer_idx, "enc_mlp_up_bias", up_bias);
+    gb->capture_debug_node(layer_idx, "enc_mlp_intermediate", intermediate);
+    gb->capture_debug_node(layer_idx, "enc_mlp_output_bias", output_bias);
 
-    return ffn2_bias;
+    return output_bias;
 }
 
-static size_t build_decoder_mlp_silu(CactusGraph* gb, size_t input, size_t w1, size_t b1, size_t w2, size_t b2, ComputeBackend backend, size_t intermediate_size, uint32_t layer_idx) {
-    auto ffn1_weight = gb->matmul(input, w1, true, backend);
-    std::cout << "[BUILD DEBUG] dec_mlp_ffn1_weight layer=" << layer_idx << std::endl;
-    auto ffn1_bias = gb->add(ffn1_weight, b1);
-    std::cout << "[BUILD DEBUG] dec_mlp_ffn1_bias layer=" << layer_idx << std::endl;
+static size_t build_decoder_mlp_silu(CactusGraph* gb, size_t input, size_t w_gate, size_t b_gate, size_t w_up, size_t b_up, size_t w2, size_t b2, ComputeBackend backend, uint32_t layer_idx) {
+    auto gate_weight = gb->matmul(input, w_gate, true, backend);
+    auto gate_bias = gb->add(gate_weight, b_gate);
+    auto gate_act = gb->silu(gate_bias);
     
-    auto val = gb->slice(ffn1_bias, -1, 0, intermediate_size);
-    std::cout << "[BUILD DEBUG] dec_mlp_val layer=" << layer_idx << std::endl;
-    auto gate = gb->slice(ffn1_bias, -1, intermediate_size, intermediate_size);
-    std::cout << "[BUILD DEBUG] dec_mlp_gate layer=" << layer_idx << std::endl;
+    auto up_weight = gb->matmul(input, w_up, true, backend);
+    auto up_bias = gb->add(up_weight, b_up);
     
-    auto gate_act = gb->silu(gate);
-    std::cout << "[BUILD DEBUG] dec_mlp_gate_act layer=" << layer_idx << std::endl;
-    auto post_act = gb->multiply(val, gate_act);
-    std::cout << "[BUILD DEBUG] dec_mlp_post_act layer=" << layer_idx << std::endl;
+    auto intermediate = gb->multiply(gate_act, up_bias);
     
-    auto ffn2_weight = gb->matmul(post_act, w2, true, backend);
-    std::cout << "[BUILD DEBUG] dec_mlp_ffn2_weight layer=" << layer_idx << std::endl;
-    auto ffn2_bias = gb->add(ffn2_weight, b2);
-    std::cout << "[BUILD DEBUG] dec_mlp_ffn2_bias layer=" << layer_idx << std::endl;
+    auto output_weight = gb->matmul(intermediate, w2, true, backend);
+    auto output_bias = gb->add(output_weight, b2);
 
-    gb->capture_debug_node(layer_idx, "dec_mlp_ffn1_weight", ffn1_weight);
-    gb->capture_debug_node(layer_idx, "dec_mlp_ffn1_bias", ffn1_bias);
-    gb->capture_debug_node(layer_idx, "dec_mlp_val", val);
-    gb->capture_debug_node(layer_idx, "dec_mlp_gate", gate);
     gb->capture_debug_node(layer_idx, "dec_mlp_gate_act", gate_act);
-    gb->capture_debug_node(layer_idx, "dec_mlp_post_act", post_act);
-    gb->capture_debug_node(layer_idx, "dec_mlp_ffn2_weight", ffn2_weight);
-    gb->capture_debug_node(layer_idx, "dec_mlp_ffn2_bias", ffn2_bias);
-
-    return ffn2_bias;
+    gb->capture_debug_node(layer_idx, "dec_mlp_up_bias", up_bias);
+    gb->capture_debug_node(layer_idx, "dec_mlp_intermediate", intermediate);
+    gb->capture_debug_node(layer_idx, "dec_mlp_output_bias", output_bias);
+    
+    return output_bias;
 }
 
 static size_t build_decoder_mlp_gelu(CactusGraph* gb, size_t input, size_t w1, size_t b1, size_t w2, size_t b2, ComputeBackend backend, size_t intermediate_size, uint32_t layer_idx) {
@@ -254,14 +269,12 @@ static size_t build_decoder_mlp_gelu(CactusGraph* gb, size_t input, size_t w1, s
 
 
 
-size_t MoonshineModel::build_encoder_attention(CactusGraph* gb, size_t input, uint32_t layer_idx, ComputeBackend backend, bool use_cache, size_t /*position_offset*/){
+size_t MoonshineModel::build_decoder_cross_attention(CactusGraph* gb, size_t input, uint32_t layer_idx, ComputeBackend backend, bool use_cache, size_t /*position_offset*/){
 
-    const auto& layer = weight_nodes_.encoder_layers[layer_idx];
+    const auto& layer = weight_nodes_.decoder_layers[layer_idx];
 
     size_t q = gb->matmul(input, layer.decoder_encoder_attn_q_weight, true, backend);
     std::cout << "[BUILD DEBUG] enc_attn_q_matmul layer=" << layer_idx << std::endl;
-    q = gb->add(q, layer.decoder_encoder_attn_q_bias);
-    std::cout << "[BUILD DEBUG] enc_attn_q_add_bias layer=" << layer_idx << std::endl;
 
     const auto& q_buf   = gb->get_output_buffer(q);
     if (q_buf.shape.size() != 2) {
@@ -292,8 +305,6 @@ size_t MoonshineModel::build_encoder_attention(CactusGraph* gb, size_t input, ui
         std::cout << "[BUILD DEBUG] enc_attn_k_matmul layer=" << layer_idx << std::endl;
         size_t v = gb->matmul(enc_norm, layer.decoder_encoder_attn_v_weight, true, backend);
         std::cout << "[BUILD DEBUG] enc_attn_v_matmul layer=" << layer_idx << std::endl;
-        v = gb->add(v, layer.decoder_encoder_attn_v_bias);
-        std::cout << "[BUILD DEBUG] enc_attn_v_add_bias layer=" << layer_idx << std::endl;
 
         const auto& k_buf = gb->get_output_buffer(k);
         if (k_buf.shape.size() != 2) {
@@ -335,8 +346,6 @@ size_t MoonshineModel::build_encoder_attention(CactusGraph* gb, size_t input, ui
     std::cout << "[BUILD DEBUG] enc_attn_reshape_out layer=" << layer_idx << std::endl;
     size_t out = gb->matmul(attn, layer.decoder_encoder_attn_output_weight, true, backend);
     std::cout << "[BUILD DEBUG] enc_attn_out_matmul layer=" << layer_idx << std::endl;
-    out = gb->add(out, layer.decoder_encoder_attn_output_bias);
-    std::cout << "[BUILD DEBUG] enc_attn_out_add_bias layer=" << layer_idx << std::endl;
 
     gb->capture_debug_node(layer_idx, "cross_attn_out_matmul", out);
 
@@ -376,26 +385,17 @@ void MoonshineModel::reset_cache() {
 size_t MoonshineModel::build_decoder_self_attention(CactusGraph* gb, size_t input, uint32_t layer_idx, ComputeBackend backend, bool use_cache, size_t position_offset){
     const auto& layer = weight_nodes_.decoder_layers[layer_idx];
 
-    size_t q_pre = gb->matmul(input, layer.decoder_self_attn_q_weight, true, backend);
+    size_t q = gb->matmul(input, layer.decoder_self_attn_q_weight, true, backend);
     std::cout << "[BUILD DEBUG] dec_sa_q_matmul layer=" << layer_idx << std::endl;
-    size_t q = gb->add(q_pre, layer.decoder_self_attn_q_bias);
-    std::cout << "[BUILD DEBUG] dec_sa_q_add_bias layer=" << layer_idx << std::endl;
 
-    size_t k_pre = gb->matmul(input, layer.decoder_self_attn_k_weight, true, backend);
+    size_t k = gb->matmul(input, layer.decoder_self_attn_k_weight, true, backend);
     std::cout << "[BUILD DEBUG] dec_sa_k_matmul layer=" << layer_idx << std::endl;
-    size_t k = gb->add(k_pre, layer.decoder_self_attn_k_bias);
-    std::cout << "[BUILD DEBUG] dec_sa_k_add_bias layer=" << layer_idx << std::endl;
 
-    size_t v_pre = gb->matmul(input, layer.decoder_self_attn_v_weight, true, backend);
+    size_t v = gb->matmul(input, layer.decoder_self_attn_v_weight, true, backend);
     std::cout << "[BUILD DEBUG] dec_sa_v_matmul layer=" << layer_idx << std::endl;
-    size_t v = gb->add(v_pre, layer.decoder_self_attn_v_bias);
-    std::cout << "[BUILD DEBUG] dec_sa_v_add_bias layer=" << layer_idx << std::endl;
 
-    gb->capture_debug_node(layer_idx, "dec_sa_q_pre", q_pre);
     gb->capture_debug_node(layer_idx, "dec_sa_q", q);
-    gb->capture_debug_node(layer_idx, "dec_sa_k_pre", k_pre);
     gb->capture_debug_node(layer_idx, "dec_sa_k", k);
-    gb->capture_debug_node(layer_idx, "dec_sa_v_pre", v_pre);
     gb->capture_debug_node(layer_idx, "dec_sa_v", v);
 
     const auto& q_shape = gb->get_output_buffer(q).shape;
@@ -485,8 +485,6 @@ size_t MoonshineModel::build_decoder_self_attention(CactusGraph* gb, size_t inpu
 
     auto output = gb->matmul(attn_out, layer.decoder_self_attn_output_weight, true, backend);
     std::cout << "[BUILD DEBUG] dec_sa_out_matmul layer=" << layer_idx << std::endl;
-    output = gb->add(output, layer.decoder_self_attn_output_bias);
-    std::cout << "[BUILD DEBUG] dec_sa_out_add_bias layer=" << layer_idx << std::endl;
 
     gb->capture_debug_node(layer_idx, "dec_sa_out_matmul", output);
 
@@ -656,7 +654,8 @@ size_t MoonshineModel::build_encoder_transformer_block(
         );
     } else {
         ffn_out = build_encoder_mlp_silu(
-            gb, ln2, layer.encoder_ffn1_weight, layer.encoder_ffn1_bias,
+            gb, ln2, layer.encoder_ffn_gate_weight, layer.encoder_ffn_gate_bias,
+            layer.encoder_ffn_up_weight, layer.encoder_ffn_up_bias,
             layer.encoder_ffn2_weight, layer.encoder_ffn2_bias, backend, layer_idx
         );
     }
@@ -687,7 +686,7 @@ size_t MoonshineModel::build_decoder_transformer_block(CactusGraph* gb, size_t h
 
     size_t ln2 = gb->layernorm(x_post_sa, layer.decoder_post_encoder_layernorm_weight, layer.decoder_post_encoder_layernorm_bias);
     std::cout << "[BUILD DEBUG] decoder_ln2 layer=" << layer_idx << std::endl;
-    size_t ca = build_encoder_attention(gb, ln2, layer_idx, backend, use_cache, position_offset);
+    size_t ca = build_decoder_cross_attention(gb, ln2, layer_idx, backend, use_cache, position_offset);
     std::cout << "[BUILD DEBUG] decoder_ca_block layer=" << layer_idx << std::endl;
     size_t x_post_ca = gb->add(x_post_sa, ca);
     std::cout << "[BUILD DEBUG] decoder_x_post_ca layer=" << layer_idx << std::endl;
@@ -703,9 +702,9 @@ size_t MoonshineModel::build_decoder_transformer_block(CactusGraph* gb, size_t h
         );
     } else {
         ffn_out = build_decoder_mlp_silu(
-            gb, ln3, layer.decoder_ffn1_weight, layer.decoder_ffn1_bias,
-            layer.decoder_ffn2_weight, layer.decoder_ffn2_bias, backend,
-            config_.ffn_intermediate_dim, layer_idx
+            gb, ln3, layer.decoder_ffn_gate_weight, layer.decoder_ffn_gate_bias,
+            layer.decoder_ffn_up_weight, layer.decoder_ffn_up_bias,
+            layer.decoder_ffn2_weight, layer.decoder_ffn2_bias, backend, layer_idx
         );
     }
     size_t x_post_ffn = gb->add(x_post_ca, ffn_out);

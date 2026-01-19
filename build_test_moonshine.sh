@@ -24,6 +24,9 @@ export CACTUS_CAPTURE_MAX_ELEMENTS=1000   # Max elements to capture per tensor
 # export CACTUS_CAPTURE_PREVIEW_COUNT=16
 # export CACTUS_CAPTURE_MAX_ELEMENTS=1000000
 
+rm -rf weights/moonshine-tiny
+cactus download UsefulSensors/moonshine-tiny --precision FP16
+
 echo "============================================="
 echo "Moonshine Build & Test Script"
 echo "============================================="
