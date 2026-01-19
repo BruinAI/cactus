@@ -566,7 +566,7 @@ void compute_rope_gptj_node(GraphNode& node, const std::vector<std::unique_ptr<G
     size_t seq_len = shape[1];
     size_t num_heads = shape[2];
     size_t head_dim = shape[3];
-    size_t rot_dim = node.params.head_dim;
+    size_t rot_dim = static_cast<size_t>(node.params.scalar);
 
     cactus_gpt_j_rope_f16(input_buffer.data_as<__fp16>(), node.output_buffer.data_as<__fp16>(),
                           batch_size, seq_len, num_heads, head_dim, rot_dim,

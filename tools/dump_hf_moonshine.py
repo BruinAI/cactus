@@ -17,7 +17,9 @@ from typing import Any, Dict, List, Optional, Tuple
 import numpy as np
 import torch
 import soundfile as sf
-from transformers import MoonshineForConditionalGeneration, AutoProcessor
+from transformers import AutoProcessor
+# NOTE: MoonshineForConditionalGeneration is imported lazily in dump_moonshine_outputs()
+# so we can patch apply_rotary_pos_emb before the model class is loaded
 
 
 # ----------------------------
@@ -305,13 +307,122 @@ def dump_moonshine_outputs(
     preview_elems: int = 16,
     dump_dir: Optional[str] = None,
 ):
+    """
+    Post-RoPE Q/K tensors are dumped with pattern:
+        model.encoder.layers.{layer_idx}.self_attn.q_rope.bin
+        model.encoder.layers.{layer_idx}.self_attn.k_rope.bin
+    
+    These correspond to C++ dumps with pattern:
+        model.encoder.layers.{layer_idx}.self_attn.q_rope.bin
+        model.encoder.layers.{layer_idx}.self_attn.k_rope.bin
+    """
+    
+    # --- Monkey-patch to capture post-RoPE Q and K ---
+    # MUST happen BEFORE importing MoonshineForConditionalGeneration
+    # because the model class captures the function reference at import time
+    rope_call_state = {"call_idx": 0}
+    num_encoder_layers = 6  # moonshine-tiny config
+    
+    if dump_dir:
+        Path(dump_dir).mkdir(parents=True, exist_ok=True)
+        
+        # Patch the moonshine module's apply_rotary_pos_emb (it has its own definition)
+        import transformers.models.moonshine.modeling_moonshine as moonshine_module
+        original_apply_rotary_pos_emb = moonshine_module.apply_rotary_pos_emb
+        
+        def patched_apply_rotary_pos_emb(q, k, cos, sin, *args, **kwargs):
+            # Call original
+            q_rot, k_rot = original_apply_rotary_pos_emb(q, k, cos, sin, *args, **kwargs)
+            
+            call_idx = rope_call_state["call_idx"]
+            
+            # Determine if encoder or decoder layer based on call order
+            # First 6 calls (0-5) are encoder, next 6 (6-11) are decoder
+            if call_idx < num_encoder_layers:
+                layer_idx = call_idx
+                prefix = f"model.encoder.layers.{layer_idx}.self_attn"
+            else:
+                layer_idx = call_idx - num_encoder_layers
+                prefix = f"model.decoder.layers.{layer_idx}.self_attn"
+            
+            # Dump Q after RoPE: shape is [batch, num_heads, seq_len, head_dim]
+            # Reshape to [batch, seq_len, num_heads * head_dim] to match C++
+            q_arr = _to_numpy_f32(q_rot.permute(0, 2, 1, 3).reshape(q_rot.shape[0], q_rot.shape[2], -1))
+            k_arr = _to_numpy_f32(k_rot.permute(0, 2, 1, 3).reshape(k_rot.shape[0], k_rot.shape[2], -1))
+            
+            q_fname = str(Path(dump_dir) / f"{prefix}.q_rope.bin")
+            k_fname = str(Path(dump_dir) / f"{prefix}.k_rope.bin")
+            
+            with open(q_fname, "wb") as f:
+                f.write(q_arr.tobytes())
+            with open(k_fname, "wb") as f:
+                f.write(k_arr.tobytes())
+            
+            print(f"  Dumped post-RoPE Q/K: {prefix} (call {call_idx})")
+            rope_call_state["call_idx"] += 1
+            
+            return q_rot, k_rot
+        
+        # Patch the module BEFORE importing MoonshineForConditionalGeneration
+        moonshine_module.apply_rotary_pos_emb = patched_apply_rotary_pos_emb
+        print("Installed post-RoPE capture hook in moonshine module")
+        
+        # --- Also patch eager_attention_forward to capture attn_output ---
+        attn_call_state = {"call_idx": 0}
+        original_eager_attention_forward = moonshine_module.eager_attention_forward
+        
+        def patched_eager_attention_forward(module, query, key, value, attention_mask, scaling, **kwargs):
+            # Call original
+            attn_output, attn_weights = original_eager_attention_forward(
+                module, query, key, value, attention_mask, scaling, **kwargs
+            )
+            
+            call_idx = attn_call_state["call_idx"]
+            
+            # Determine if encoder or decoder based on call order
+            # Encoder has 6 self-attn, Decoder has 6 self-attn + 6 cross-attn = 18 total
+            if call_idx < num_encoder_layers:
+                layer_idx = call_idx
+                prefix = f"model.encoder.layers.{layer_idx}.self_attn"
+            else:
+                # Decoder calls: self_attn then encoder_attn for each layer
+                dec_call = call_idx - num_encoder_layers
+                layer_idx = dec_call // 2
+                is_cross = (dec_call % 2 == 1)
+                if is_cross:
+                    prefix = f"model.decoder.layers.{layer_idx}.encoder_attn"
+                else:
+                    prefix = f"model.decoder.layers.{layer_idx}.self_attn"
+            
+            # attn_output shape: [batch, seq_len, num_heads, head_dim] after transpose in eager
+            # Reshape to [batch, seq_len, hidden_size] to match C++ after reshape
+            attn_arr = _to_numpy_f32(attn_output.reshape(attn_output.shape[0], attn_output.shape[1], -1))
+            
+            attn_fname = str(Path(dump_dir) / f"{prefix}.attn_out.bin")
+            with open(attn_fname, "wb") as f:
+                f.write(attn_arr.tobytes())
+            
+            print(f"  Dumped attn_out: {prefix} (call {call_idx})")
+            attn_call_state["call_idx"] += 1
+            
+            return attn_output, attn_weights
+        
+        moonshine_module.eager_attention_forward = patched_eager_attention_forward
+        print("Installed attention output capture hook")
+    
+    # Now import the model (after patching)
+    from transformers import MoonshineForConditionalGeneration
+    
     print(f"Loading model: {model_name}")
 
     device = "cuda:0" if torch.cuda.is_available() else "cpu"
-    # Keep model in float32 for reproducible stats/debugging
     torch_dtype = torch.float32
 
-    model = MoonshineForConditionalGeneration.from_pretrained(model_name, trust_remote_code=True)
+    model = MoonshineForConditionalGeneration.from_pretrained(
+        model_name, 
+        trust_remote_code=True,
+        attn_implementation="eager"  # Force eager attention so RoPE patch is called
+    )
     model = model.to(device=device, dtype=torch_dtype)
     model.eval()
 
@@ -337,6 +448,14 @@ def dump_moonshine_outputs(
     if dump_dir:
         Path(dump_dir).mkdir(parents=True, exist_ok=True)
         print(f"Dumping binary tensors to: {dump_dir}")
+        # Manual dump of input for C++ alignment
+        if hasattr(inputs, "input_values"):
+            fname = str(Path(dump_dir) / "audio_input_real.bin")
+            # input_values is [batch, len], C++ expects flattened
+            arr = _to_numpy_f32(inputs.input_values)
+            with open(fname, "wb") as f:
+                f.write(arr.tobytes())
+            print(f"Dumped {fname}")
 
     # 1) Capture a SINGLE forward pass with hooks ON (prevents generate() from recording 1000s of steps)
     dumper = ActivationDumper(
@@ -344,11 +463,27 @@ def dump_moonshine_outputs(
         max_stats_elems=max_stats_elems,
         preview_elems=preview_elems,
         dump_dir=dump_dir,
-        # skip extremely spammy/less useful modules if desired:
-        # skip_module_name_prefixes=["model.decoder.embed_positions"]  # example
+        # skip carefully
         skip_module_name_prefixes=[],
     )
+    
+    # Manual dump of conv3 weights/bias for debugging
+    if dump_dir:
+        try:
+            w = _to_numpy_f32(model.model.encoder.conv3.weight)
+            with open(str(Path(dump_dir) / "model.encoder.conv3.weight.bin"), "wb") as f:
+                f.write(w.tobytes())
+            if model.model.encoder.conv3.bias is not None:
+                b = _to_numpy_f32(model.model.encoder.conv3.bias)
+                with open(str(Path(dump_dir) / "model.encoder.conv3.bias.bin"), "wb") as f:
+                    f.write(b.tobytes())
+            print("Dumped conv3 weights/bias")
+        except AttributeError:
+            print("Could not access model.model.encoder.conv3")
+
     dumper.register_all_named_modules(model)
+
+    # (RoPE capture hook was installed before model loading)
 
     bos_id = pick_decoder_start_id(model, processor)
     decoder_input_ids = torch.tensor([[bos_id]], device=device, dtype=torch.long)
