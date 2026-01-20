@@ -597,18 +597,11 @@ void CactusGraph::execute(const std::string& profile_file) {
 
                 if (!capture_dir.empty() && has_data) {
                     std::string safe_name = entry.name;
-                    // std::replace(safe_name.begin(), safe_name.end(), '.', '_'); // Keep dots, usually fine
                     std::string filename = capture_dir + "/" + safe_name + ".bin";
                     std::ofstream bin_file(filename, std::ios::binary);
                     if (bin_file.is_open()) {
                         size_t bytes_to_write = buffer.byte_size;
                         if (truncated) {
-                             // Only writing truncated amount if truncated? 
-                             // Wait, truncated logic above was setting elements_to_process = capture_max_elements
-                             // If we want FULL dump, we should use total_size.
-                             // Usually binary dump implies full dump. 
-                             // So I will write buffer.byte_size assuming data_ptr points to the whole thing.
-                             // `data_ptr` is `buffer.get_data()`.
                              bytes_to_write = buffer.total_size * PrecisionTraits::size_of(buffer.precision);
                         }
                         bin_file.write(reinterpret_cast<const char*>(data_ptr), bytes_to_write);
