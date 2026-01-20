@@ -156,19 +156,8 @@ int cactus_transcribe(
 
         std::vector<float> audio_features;
         
-        bool is_moonshine = handle->model->get_config().model_type == cactus::engine::Config::ModelType::MOONSHINE; // Assuming generic Moonshine type or based on name/config
+        bool is_moonshine = handle->model->get_config().model_type == cactus::engine::Config::ModelType::MOONSHINE;
 
-        // Check if Moonshine via config model type name if enum not available directly or use string check if needed.
-        // But since we are inside engine namespace usage, we can check Config enum.
-        // Wait, Config::ModelType might not be exposed or I might need to include engine.h which is likely included via kernel/model headers.
-        // cactus_utils.h likely includes model.h or similar.
-        
-        // Let's assume handle->model->get_config().model_type is available.
-        // Re-checking engine.h (step 1150) showed ModelType::WHISPER = 7. Moonshine wasn't explicitly shown in the delta but implied or I should check.
-        // Actually step 1150 showed: 96: enum class ModelType {QWEN = 0, GEMMA = 1, SMOL = 2, NOMIC = 3, LFM2 = 5, SIGLIP2 = 6, WHISPER = 7};
-        // Moonshine is likely missing from that enum list in the view! 
-        // I need to check if Moonshine is in the ModelType enum in engine.h first.
-        
         if (audio_file_path == nullptr) {
             const int16_t* pcm_samples = reinterpret_cast<const int16_t*>(pcm_buffer);
             size_t num_samples = pcm_buffer_size / 2;
@@ -177,10 +166,7 @@ int cactus_transcribe(
             for (size_t i = 0; i < num_samples; i++)
                 waveform_fp32[i] = static_cast<float>(pcm_samples[i]) / 32768.0f;
 
-            std::vector<float> waveform_16k = resample_to_16k_fp32(waveform_fp32, WHISPER_SAMPLE_RATE); // Assuming input is WHISPER_SAMPLE_RATE? No, input rate is unknown here! 
-            // Wait, compute_whisper_mel_from_pcm took sample_rate_in. But it was passed WHISPER_SAMPLE_RATE (16000) hardcoded in the original call!
-            // Line 159: mel_bins = compute_whisper_mel_from_pcm(pcm_samples, num_samples, WHISPER_SAMPLE_RATE);
-            // This implies the input buffer is EXPECTED to be 16kHz already for the FFI?
+            std::vector<float> waveform_16k = resample_to_16k_fp32(waveform_fp32, WHISPER_SAMPLE_RATE); 
             
             if (is_moonshine) {
                  audio_features = waveform_16k;

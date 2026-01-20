@@ -65,7 +65,24 @@ def compare_files(cpp_file, py_file, tolerance=1e-3, logger=print):
     # C++ dump is always FP16
     cpp_data = read_binary_file(cpp_file, np.float16).astype(np.float32)
 
-    compare_arrays(os.path.basename(cpp_file), py_data, cpp_data, tolerance, logger)
+    # Special handling for attn_out padding (Py=40, C++=36)
+    basename = os.path.basename(cpp_file)
+    if "attn_out" in basename:
+        n_py = len(py_data)
+        n_cpp = len(cpp_data)
+        
+        # Check if Python has 40/36 ratio
+        if n_py > n_cpp and n_py % 40 == 0 and n_cpp % 36 == 0:
+            count_py = n_py // 40
+            count_cpp = n_cpp // 36
+            
+            if count_py == count_cpp:
+                logger(f"  [Info] Detected padded attn_out (Py=40, C++=36). Unpadding Python data...")
+                py_reshaped = py_data.reshape(-1, 40)
+                py_unpadded = py_reshaped[:, :36]
+                py_data = py_unpadded.flatten()
+
+    compare_arrays(basename, py_data, cpp_data, tolerance, logger)
 
 def main():
     parser = argparse.ArgumentParser(description="Compare C++ and Python binary dumps")

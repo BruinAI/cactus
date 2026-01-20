@@ -47,6 +47,10 @@ void cactus_attention_f16(
             std::vector<float> block_scores(BLOCK_SIZE);
             std::vector<float32x4_t> output_accum_low(head_dim_aligned / VECTOR_WIDTH * 2);
             std::vector<float32x4_t> output_accum_high(head_dim_aligned / VECTOR_WIDTH * 2);
+            
+            // Scalar accumulators for tail dimensions (head_dim_aligned to head_dim)
+            const size_t tail_dims = head_dim - head_dim_aligned;
+            std::vector<float> output_accum_tail(tail_dims, 0.0f);
 
             for (size_t work_idx = start_idx; work_idx < end_idx; ++work_idx) {
                 const size_t batch_idx = work_idx / (num_q_heads * seq_len);
@@ -70,6 +74,10 @@ void cactus_attention_f16(
                     for (size_t i = 0; i < output_accum_low.size(); ++i) {
                         output_accum_low[i] = vdupq_n_f32(0.0f);
                         output_accum_high[i] = vdupq_n_f32(0.0f);
+                    }
+                    // Reset tail accumulators
+                    for (size_t i = 0; i < tail_dims; ++i) {
+                        output_accum_tail[i] = 0.0f;
                     }
                     
                     const bool is_decode = (q_pos == seq_len - 1) && seq_len > 1;
@@ -221,6 +229,12 @@ void cactus_attention_f16(
                                 output_accum_low[idx] = vfmaq_f32(output_accum_low[idx], v_low, weight_vec);
                                 output_accum_high[idx] = vfmaq_f32(output_accum_high[idx], v_high, weight_vec);
                             }
+                            
+                            // Accumulate tail dimensions (scalar)
+                            for (size_t dim = head_dim_aligned; dim < head_dim; ++dim) {
+                                float val = attn_weight * static_cast<float>(v_vec[dim]);
+                                output_accum_tail[dim - head_dim_aligned] += val;
+                            }
                         }
                         
                         running_sum += block_sum;
@@ -242,8 +256,9 @@ void cactus_attention_f16(
                             vst1q_f16(&o_vec[dim_block], combined);
                         }
                         
+                        // Output tail dimensions (scalar)
                         for (size_t dim = head_dim_aligned; dim < head_dim; ++dim) {
-                            o_vec[dim] = static_cast<__fp16>(0.0f);
+                            o_vec[dim] = static_cast<__fp16>(output_accum_tail[dim - head_dim_aligned] * inv_sum);
                         }
                     } else {
                         for (size_t dim = 0; dim < head_dim; ++dim) {
