@@ -409,6 +409,54 @@ def dump_moonshine_outputs(
         
         moonshine_module.eager_attention_forward = patched_eager_attention_forward
         print("Installed attention output capture hook")
+        
+        # --- Patch MoonshineEncoderLayer.forward to capture residual_sum ---
+        encoder_layer_call_state = {"call_idx": 0}
+        original_encoder_layer_forward = moonshine_module.MoonshineEncoderLayer.forward
+        
+        def patched_encoder_layer_forward(self, hidden_states, *args, **kwargs):
+            # Capture residual before self-attn
+            residual = hidden_states.clone()
+            
+            # Call the input_layernorm manually
+            normed = self.input_layernorm(hidden_states)
+            
+            # Call self_attn
+            attn_out, _ = self.self_attn(
+                hidden_states=normed,
+                attention_mask=kwargs.get('attention_mask'),
+                position_ids=kwargs.get('position_ids'),
+                past_key_values=kwargs.get('past_key_values'),
+                use_cache=kwargs.get('use_cache', False),
+                cache_position=kwargs.get('cache_position'),
+                position_embeddings=kwargs.get('position_embeddings'),
+            )
+            
+            # Residual connection
+            residual_sum = residual + attn_out
+            
+            # Dump residual_sum
+            layer_idx = encoder_layer_call_state["call_idx"]
+            if layer_idx < num_encoder_layers:
+                prefix = f"model.encoder.layers.{layer_idx}"
+                arr = _to_numpy_f32(residual_sum.reshape(residual_sum.shape[0], residual_sum.shape[1], -1))
+                fname = str(Path(dump_dir) / f"{prefix}.residual_sum.bin")
+                with open(fname, "wb") as f:
+                    f.write(arr.tobytes())
+                print(f"  Dumped residual_sum: {prefix} (call {layer_idx})")
+            
+            encoder_layer_call_state["call_idx"] += 1
+            
+            # Continue with rest of layer (post_attention_layernorm + MLP)
+            residual2 = residual_sum
+            hidden_states = self.post_attention_layernorm(residual_sum)
+            hidden_states = self.mlp(hidden_states)
+            hidden_states = residual2 + hidden_states
+            
+            return hidden_states
+        
+        moonshine_module.MoonshineEncoderLayer.forward = patched_encoder_layer_forward
+        print("Installed encoder layer residual_sum capture hook")
     
     # Now import the model (after patching)
     from transformers import MoonshineForConditionalGeneration

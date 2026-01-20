@@ -1,4 +1,4 @@
-Found 225 files in tests/build/dump_cpp
+Found 237 files in tests/build/dump_cpp
 Found Python conv3 dump: tests/build/dump_python/model.encoder.conv3.bin
 
 Comparing Special: Preprocessor Final (Synthesized from model.encoder.conv3.bin)
@@ -57,6 +57,25 @@ Comparing model.encoder.layers.0.post_attention_layernorm.bin...
       Use idx 232268: Py=2.379771, C++=4.015625, Diff=1.635854
       Use idx 228812: Py=2.362329, C++=3.996094, Diff=1.633765
       Use idx 222476: Py=2.358474, C++=3.992188, Diff=1.633714
+
+Comparing model.encoder.layers.0.residual_sum.bin...
+[91m[FAIL][0m MaxDiff: 5.291111, MSE: 0.15503052, CosSim: 0.988405, RelDiff: 77286.343750
+    Top 5 mismatches:
+      Use idx 154937: Py=35.634861, C++=30.343750, Diff=5.291111
+      Use idx 176249: Py=41.320076, C++=36.156250, Diff=5.163826
+      Use idx 165593: Py=16.103762, C++=10.945312, Diff=5.158449
+      Use idx 177689: Py=28.068453, C++=22.937500, Diff=5.130953
+      Use idx 4313: Py=14.034546, C++=8.960938, Diff=5.073608
+
+Comparing model.encoder.layers.0.self_attn.attn_out.bin...
+  [Warn] Size mismatch in model.encoder.layers.0.self_attn.attn_out.bin: Py=266560, C++=239904. Comparing first 239904 elements.
+[91m[FAIL][0m MaxDiff: 4.318062, MSE: 0.37606910, CosSim: 0.000733, RelDiff: 25742188.000000
+    Top 5 mismatches:
+      Use idx 176663: Py=-1.851265, C++=2.466797, Diff=4.318062
+      Use idx 161975: Py=-1.700104, C++=2.421875, Diff=4.121979
+      Use idx 179255: Py=-1.457790, C++=2.316406, Diff=3.774196
+      Use idx 147575: Py=-1.321468, C++=2.388672, Diff=3.710140
+      Use idx 120032: Py=1.612504, C++=-2.076172, Diff=3.688676
 
 Comparing model.encoder.layers.0.self_attn.bin...
   [Warn] Size mismatch in model.encoder.layers.0.self_attn.bin: Py=5551112, C++=239904. Comparing first 239904 elements.
@@ -151,6 +170,25 @@ Comparing model.encoder.layers.1.post_attention_layernorm.bin...
       Use idx 218444: Py=-1.380700, C++=-0.118164, Diff=1.262536
       Use idx 213260: Py=-1.407667, C++=-0.146118, Diff=1.261549
       Use idx 213548: Py=-1.397521, C++=-0.136963, Diff=1.260559
+
+Comparing model.encoder.layers.1.residual_sum.bin...
+[91m[FAIL][0m MaxDiff: 21.656853, MSE: 2.41459680, CosSim: 0.968071, RelDiff: 177269.046875
+    Top 5 mismatches:
+      Use idx 239609: Py=84.093147, C++=105.750000, Diff=21.656853
+      Use idx 239897: Py=92.577362, C++=113.625000, Diff=21.047638
+      Use idx 231257: Py=76.099854, C++=95.250000, Diff=19.150146
+      Use idx 230969: Py=75.779839, C++=94.875000, Diff=19.095161
+      Use idx 231545: Py=76.034744, C++=95.125000, Diff=19.090256
+
+Comparing model.encoder.layers.1.self_attn.attn_out.bin...
+  [Warn] Size mismatch in model.encoder.layers.1.self_attn.attn_out.bin: Py=266560, C++=239904. Comparing first 239904 elements.
+[91m[FAIL][0m MaxDiff: 6.105770, MSE: 1.12502766, CosSim: 0.015162, RelDiff: 38535156.000000
+    Top 5 mismatches:
+      Use idx 70576: Py=-3.205379, C++=2.900391, Diff=6.105770
+      Use idx 34155: Py=-4.020130, C++=1.836914, Diff=5.857044
+      Use idx 139744: Py=-3.206173, C++=2.332031, Diff=5.538204
+      Use idx 237390: Py=-3.448768, C++=2.072266, Diff=5.521033
+      Use idx 105136: Py=-3.230186, C++=2.255859, Diff=5.486045
 
 Comparing model.encoder.layers.1.self_attn.bin...
   [Warn] Size mismatch in model.encoder.layers.1.self_attn.bin: Py=5551112, C++=239904. Comparing first 239904 elements.
@@ -276,6 +314,25 @@ Comparing model.encoder.layers.2.post_attention_layernorm.bin...
       Use idx 219945: Py=-2.806314, C++=-1.395508, Diff=1.410807
       Use idx 221097: Py=-2.752264, C++=-1.343750, Diff=1.408514
 
+Comparing model.encoder.layers.2.residual_sum.bin...
+[91m[FAIL][0m MaxDiff: 24.321487, MSE: 4.96421385, CosSim: 0.971164, RelDiff: 26567.650391
+    Top 5 mismatches:
+      Use idx 1433: Py=159.571487, C++=135.250000, Diff=24.321487
+      Use idx 1721: Py=153.848541, C++=130.500000, Diff=23.348541
+      Use idx 83225: Py=104.682266, C++=83.000000, Diff=21.682266
+      Use idx 83801: Py=113.867233, C++=92.500000, Diff=21.367233
+      Use idx 150329: Py=121.137985, C++=99.937500, Diff=21.200485
+
+Comparing model.encoder.layers.2.self_attn.attn_out.bin...
+  [Warn] Size mismatch in model.encoder.layers.2.self_attn.attn_out.bin: Py=266560, C++=239904. Comparing first 239904 elements.
+[91m[FAIL][0m MaxDiff: 8.662964, MSE: 1.27382815, CosSim: 0.003030, RelDiff: 68398440.000000
+    Top 5 mismatches:
+      Use idx 154526: Py=-0.744995, C++=7.917969, Diff=8.662964
+      Use idx 154814: Py=-0.395714, C++=7.628906, Diff=8.024620
+      Use idx 80814: Py=4.183107, C++=-3.658203, Diff=7.841311
+      Use idx 72174: Py=4.733924, C++=-2.892578, Diff=7.626502
+      Use idx 178735: Py=-1.640131, C++=5.906250, Diff=7.546381
+
 Comparing model.encoder.layers.2.self_attn.bin...
   [Warn] Size mismatch in model.encoder.layers.2.self_attn.bin: Py=5551112, C++=239904. Comparing first 239904 elements.
 [91m[FAIL][0m MaxDiff: 53.843750, MSE: 13.45512390, CosSim: 0.002401, RelDiff: 438291744.000000
@@ -399,6 +456,25 @@ Comparing model.encoder.layers.3.post_attention_layernorm.bin...
       Use idx 230329: Py=-2.137893, C++=-3.736328, Diff=1.598435
       Use idx 234649: Py=-2.042672, C++=-3.638672, Diff=1.596000
       Use idx 230041: Py=-2.135639, C++=-3.730469, Diff=1.594830
+
+Comparing model.encoder.layers.3.residual_sum.bin...
+[91m[FAIL][0m MaxDiff: 34.811508, MSE: 11.31172085, CosSim: 0.959142, RelDiff: 574339.500000
+    Top 5 mismatches:
+      Use idx 146297: Py=133.124008, C++=98.312500, Diff=34.811508
+      Use idx 146009: Py=136.283264, C++=103.250000, Diff=33.033264
+      Use idx 83801: Py=141.388107, C++=108.562500, Diff=32.825607
+      Use idx 146585: Py=141.137115, C++=108.562500, Diff=32.574615
+      Use idx 14681: Py=151.147018, C++=119.062500, Diff=32.084518
+
+Comparing model.encoder.layers.3.self_attn.attn_out.bin...
+  [Warn] Size mismatch in model.encoder.layers.3.self_attn.attn_out.bin: Py=266560, C++=239904. Comparing first 239904 elements.
+[91m[FAIL][0m MaxDiff: 8.759302, MSE: 0.88600844, CosSim: 0.008343, RelDiff: 40664064.000000
+    Top 5 mismatches:
+      Use idx 43371: Py=-2.735865, C++=6.023438, Diff=8.759302
+      Use idx 228987: Py=3.691586, C++=-4.046875, Diff=7.738461
+      Use idx 47867: Py=7.405268, C++=0.123596, Diff=7.281672
+      Use idx 49147: Py=6.896019, C++=-0.303955, Diff=7.199974
+      Use idx 49467: Py=6.850254, C++=-0.277832, Diff=7.128086
 
 Comparing model.encoder.layers.3.self_attn.bin...
   [Warn] Size mismatch in model.encoder.layers.3.self_attn.bin: Py=5551112, C++=239904. Comparing first 239904 elements.
@@ -524,6 +600,25 @@ Comparing model.encoder.layers.4.post_attention_layernorm.bin...
       Use idx 7261: Py=-2.079498, C++=-0.775391, Diff=1.304108
       Use idx 2789: Py=1.216998, C++=-0.082336, Diff=1.299335
 
+Comparing model.encoder.layers.4.residual_sum.bin...
+[91m[FAIL][0m MaxDiff: 60.774902, MSE: 29.04210854, CosSim: 0.956585, RelDiff: 29935.441406
+    Top 5 mismatches:
+      Use idx 189497: Py=259.024902, C++=198.250000, Diff=60.774902
+      Use idx 189785: Py=258.856934, C++=199.250000, Diff=59.606934
+      Use idx 190073: Py=253.394608, C++=195.375000, Diff=58.019608
+      Use idx 98201: Py=174.243927, C++=120.000000, Diff=54.243927
+      Use idx 120665: Py=213.493286, C++=161.750000, Diff=51.743286
+
+Comparing model.encoder.layers.4.self_attn.attn_out.bin...
+  [Warn] Size mismatch in model.encoder.layers.4.self_attn.attn_out.bin: Py=266560, C++=239904. Comparing first 239904 elements.
+[91m[FAIL][0m MaxDiff: 19.961933, MSE: 4.40316343, CosSim: 0.012621, RelDiff: 142734368.000000
+    Top 5 mismatches:
+      Use idx 203063: Py=-17.385761, C++=2.576172, Diff=19.961933
+      Use idx 204023: Py=-19.241903, C++=0.571777, Diff=19.813681
+      Use idx 203383: Py=-18.949640, C++=0.413574, Diff=19.363214
+      Use idx 203703: Py=-20.149906, C++=-1.101562, Diff=19.048344
+      Use idx 11384: Py=5.967520, C++=-12.523438, Diff=18.490957
+
 Comparing model.encoder.layers.4.self_attn.bin...
   [Warn] Size mismatch in model.encoder.layers.4.self_attn.bin: Py=5551112, C++=239904. Comparing first 239904 elements.
 [91m[FAIL][0m MaxDiff: 59.436798, MSE: 43.74814987, CosSim: -0.001136, RelDiff: 516208000.000000
@@ -647,6 +742,25 @@ Comparing model.encoder.layers.5.post_attention_layernorm.bin...
       Use idx 55289: Py=6.248467, C++=3.156250, Diff=3.092217
       Use idx 3737: Py=3.205379, C++=0.358887, Diff=2.846492
       Use idx 4313: Py=4.095400, C++=1.318359, Diff=2.777040
+
+Comparing model.encoder.layers.5.residual_sum.bin...
+[91m[FAIL][0m MaxDiff: 143.867462, MSE: 82.69445038, CosSim: 0.970654, RelDiff: 580025.625000
+    Top 5 mismatches:
+      Use idx 55577: Py=263.617462, C++=119.750000, Diff=143.867462
+      Use idx 4313: Py=183.376297, C++=48.500000, Diff=134.876297
+      Use idx 55289: Py=240.253586, C++=112.437500, Diff=127.816086
+      Use idx 52985: Py=191.376373, C++=65.875000, Diff=125.501373
+      Use idx 52883: Py=-34.689186, C++=-153.125000, Diff=118.435814
+
+Comparing model.encoder.layers.5.self_attn.attn_out.bin...
+  [Warn] Size mismatch in model.encoder.layers.5.self_attn.attn_out.bin: Py=266560, C++=239904. Comparing first 239904 elements.
+[91m[FAIL][0m MaxDiff: 23.948448, MSE: 14.95668602, CosSim: 0.004420, RelDiff: 148984368.000000
+    Top 5 mismatches:
+      Use idx 196223: Py=-11.495324, C++=12.453125, Diff=23.948448
+      Use idx 48711: Py=-13.930762, C++=9.867188, Diff=23.797951
+      Use idx 178947: Py=15.241152, C++=-8.453125, Diff=23.694277
+      Use idx 169970: Py=-12.771204, C++=10.390625, Diff=23.161829
+      Use idx 195613: Py=-12.157103, C++=10.796875, Diff=22.953978
 
 Comparing model.encoder.layers.5.self_attn.bin...
   [Warn] Size mismatch in model.encoder.layers.5.self_attn.bin: Py=5551112, C++=239904. Comparing first 239904 elements.

@@ -677,6 +677,7 @@ size_t MoonshineModel::build_encoder_transformer_block(
 
     gb->capture_debug_node(layer_idx, prefix + "input_layernorm", input_layernorm);
     gb->capture_debug_node(layer_idx, prefix + "self_attn", self_attn_out);
+    gb->capture_debug_node(layer_idx, prefix + "residual_sum", post_attention_layernorm_input);  // Before LN
     gb->capture_debug_node(layer_idx, prefix + "post_attention_layernorm", post_attention_layernorm);
 
     size_t mlp_out;
