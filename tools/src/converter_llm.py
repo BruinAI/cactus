@@ -218,8 +218,9 @@ def convert_hf_model_weights(model, output_dir, precision='INT8', args=None):
                                 if w.shape[0] != 2 * half_dim:
                                      half_dim = w.shape[0] // 2
 
-                                w_gate = w[:half_dim, :]
-                                w_up = w[half_dim:, :]
+                                # HuggingFace: hidden, gate = chunk(2) -> first half is up/value, second half is gate
+                                w_up = w[:half_dim, :]
+                                w_gate = w[half_dim:, :]
                                 
                                 save_name_prefix = output_name.replace('mlp_fc1.weights', '')
                                 if 'encoder' in layer_prefix:
@@ -229,8 +230,8 @@ def convert_hf_model_weights(model, output_dir, precision='INT8', args=None):
                                 save_tensor_with_header(w_up, output_dir / (save_name_prefix + "ffn_up.weights"), precision, transpose=should_transpose, stats_tracker=quantization_stats, args=args, model_type=detected_model_type, layer_idx=i, num_layers=num_layers, mixed_config=mixed_config)
 
                                 if b is not None:
-                                    b_gate = b[:half_dim]
-                                    b_up = b[half_dim:]
+                                    b_up = b[:half_dim]
+                                    b_gate = b[half_dim:]
                                     save_tensor_with_header(b_gate, output_dir / (save_name_prefix + "ffn_gate.bias"), precision, transpose=should_transpose, stats_tracker=quantization_stats, args=args, model_type=detected_model_type, layer_idx=i, num_layers=num_layers, mixed_config=mixed_config)
                                     save_tensor_with_header(b_up, output_dir / (save_name_prefix + "ffn_up.bias"), precision, transpose=should_transpose, stats_tracker=quantization_stats, args=args, model_type=detected_model_type, layer_idx=i, num_layers=num_layers, mixed_config=mixed_config)
                                 
@@ -323,16 +324,16 @@ def convert_hf_model_weights(model, output_dir, precision='INT8', args=None):
                             
                             # Ensure split is valid
                             if w.shape[0] == 2 * half_dim:
-                                w_gate = w[:half_dim, :]
-                                w_up = w[half_dim:, :]
+                                # HuggingFace: hidden, gate = chunk(2) -> first half is up/value, second half is gate
+                                w_up = w[:half_dim, :]
+                                w_gate = w[half_dim:, :]
                             else:
-                                # Fallback to even split if config doesn't match
+                                # Fallback to even split if config doesn't match (same order as above)
                                 half_dim = w.shape[0] // 2
-                                w_gate = w[:half_dim, :]
-                                w_up = w[half_dim:, :]
+                                w_up = w[:half_dim, :]
+                                w_gate = w[half_dim:, :]
                             
-                            w_gate = w[:half_dim, :]
-                            w_up = w[half_dim:, :]
+                            # (Duplicate assignment - removed, uses above)
                             
                             save_name_prefix = output_name.replace('mlp_fc1.weights', '') # e.g. layer_{i}_
                             if 'encoder' in layer_prefix:
@@ -342,8 +343,8 @@ def convert_hf_model_weights(model, output_dir, precision='INT8', args=None):
                             save_tensor_with_header(w_up, output_dir / (save_name_prefix + "ffn_up.weights"), precision, transpose=should_transpose, stats_tracker=quantization_stats, args=args, model_type=detected_model_type, layer_idx=i, num_layers=num_layers, mixed_config=mixed_config)
 
                             if b is not None:
-                                b_gate = b[:half_dim]
-                                b_up = b[half_dim:]
+                                b_up = b[:half_dim]
+                                b_gate = b[half_dim:]
                                 save_tensor_with_header(b_gate, output_dir / (save_name_prefix + "ffn_gate.bias"), precision, transpose=should_transpose, stats_tracker=quantization_stats, args=args, model_type=detected_model_type, layer_idx=i, num_layers=num_layers, mixed_config=mixed_config)
                                 save_tensor_with_header(b_up, output_dir / (save_name_prefix + "ffn_up.bias"), precision, transpose=should_transpose, stats_tracker=quantization_stats, args=args, model_type=detected_model_type, layer_idx=i, num_layers=num_layers, mixed_config=mixed_config)
                             

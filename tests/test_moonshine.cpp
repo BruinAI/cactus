@@ -55,7 +55,7 @@ bool run_moonshine_test(const char* title, const char* options_json, Predicate c
 
 static bool test_moonshine_transcription() {
     return run_moonshine_test("MOONSHINE TRANSCRIPTION", R"({"max_tokens": 100})",
-        [](int rc, const Metrics& m) { return rc > 0 && m.completion_tokens >= 5; });
+        [](int rc, const Metrics& m) { return rc > 0 && m.completion_tokens >= 10; });
 }
 
 int main() {

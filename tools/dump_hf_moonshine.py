@@ -30,6 +30,10 @@ def _to_numpy_f32(t: torch.Tensor) -> np.ndarray:
     # stats/preview in float32 for consistent debugging
     return t.detach().to(device="cpu").float().numpy()
 
+def _to_numpy_f16(t: torch.Tensor) -> np.ndarray:
+    # Binary dumps in float16 to match C++ implementation
+    return t.detach().to(device="cpu").half().numpy()
+
 def format_stats(arr: np.ndarray, max_preview: int = 1000) -> Dict[str, Any]:
     flat = arr.reshape(-1)
     n_total = int(flat.shape[0])
@@ -153,13 +157,14 @@ class ActivationDumper:
         )
 
         if self.dump_dir:
-            # Save raw bytes (float32)
+            # Save raw bytes (float16 to match C++ implementation)
             import os
             fname = os.path.join(self.dump_dir, f"{module_name}.bin")
             # Ensure directory exists? dump_dir created in main. 
             # Subdirectories for modules? No, flatten names with dots.
+            arr_f16 = _to_numpy_f16(t)
             with open(fname, "wb") as f:
-                f.write(arr.tobytes())
+                f.write(arr_f16.tobytes())
 
     def _flatten_outputs(self, output: Any) -> List[Tuple[str, torch.Tensor]]:
         """
@@ -347,8 +352,8 @@ def dump_moonshine_outputs(
             
             # Dump Q after RoPE: shape is [batch, num_heads, seq_len, head_dim]
             # Reshape to [batch, seq_len, num_heads * head_dim] to match C++
-            q_arr = _to_numpy_f32(q_rot.permute(0, 2, 1, 3).reshape(q_rot.shape[0], q_rot.shape[2], -1))
-            k_arr = _to_numpy_f32(k_rot.permute(0, 2, 1, 3).reshape(k_rot.shape[0], k_rot.shape[2], -1))
+            q_arr = _to_numpy_f16(q_rot.permute(0, 2, 1, 3).reshape(q_rot.shape[0], q_rot.shape[2], -1))
+            k_arr = _to_numpy_f16(k_rot.permute(0, 2, 1, 3).reshape(k_rot.shape[0], k_rot.shape[2], -1))
             
             q_fname = str(Path(dump_dir) / f"{prefix}.q_rope.bin")
             k_fname = str(Path(dump_dir) / f"{prefix}.k_rope.bin")
@@ -396,7 +401,7 @@ def dump_moonshine_outputs(
             
             # attn_output shape: [batch, seq_len, num_heads, head_dim] after transpose in eager
             # Reshape to [batch, seq_len, hidden_size] to match C++ after reshape
-            attn_arr = _to_numpy_f32(attn_output.reshape(attn_output.shape[0], attn_output.shape[1], -1))
+            attn_arr = _to_numpy_f16(attn_output.reshape(attn_output.shape[0], attn_output.shape[1], -1))
             
             attn_fname = str(Path(dump_dir) / f"{prefix}.attn_out.bin")
             with open(attn_fname, "wb") as f:
@@ -439,7 +444,7 @@ def dump_moonshine_outputs(
             layer_idx = encoder_layer_call_state["call_idx"]
             if layer_idx < num_encoder_layers:
                 prefix = f"model.encoder.layers.{layer_idx}"
-                arr = _to_numpy_f32(residual_sum.reshape(residual_sum.shape[0], residual_sum.shape[1], -1))
+                arr = _to_numpy_f16(residual_sum.reshape(residual_sum.shape[0], residual_sum.shape[1], -1))
                 fname = str(Path(dump_dir) / f"{prefix}.residual_sum.bin")
                 with open(fname, "wb") as f:
                     f.write(arr.tobytes())
@@ -464,7 +469,7 @@ def dump_moonshine_outputs(
     print(f"Loading model: {model_name}")
 
     device = "cuda:0" if torch.cuda.is_available() else "cpu"
-    torch_dtype = torch.float32
+    torch_dtype = torch.float16
 
     model = MoonshineForConditionalGeneration.from_pretrained(
         model_name, 
@@ -483,7 +488,7 @@ def dump_moonshine_outputs(
     print(f"Audio shape: {audio.shape}, sample_rate: {sample_rate}, duration: {len(audio)/sample_rate:.2f}s")
 
     inputs = processor(audio, return_tensors="pt", sampling_rate=sample_rate)
-    inputs = inputs.to(device)
+    inputs = inputs.to(device=device, dtype=torch_dtype)
 
     # Some processors use input_values, others input_features
     input_shape = None
@@ -500,7 +505,7 @@ def dump_moonshine_outputs(
         if hasattr(inputs, "input_values"):
             fname = str(Path(dump_dir) / "audio_input_real.bin")
             # input_values is [batch, len], C++ expects flattened
-            arr = _to_numpy_f32(inputs.input_values)
+            arr = _to_numpy_f16(inputs.input_values)
             with open(fname, "wb") as f:
                 f.write(arr.tobytes())
             print(f"Dumped {fname}")
@@ -518,11 +523,11 @@ def dump_moonshine_outputs(
     # Manual dump of conv3 weights/bias for debugging
     if dump_dir:
         try:
-            w = _to_numpy_f32(model.model.encoder.conv3.weight)
+            w = _to_numpy_f16(model.model.encoder.conv3.weight)
             with open(str(Path(dump_dir) / "model.encoder.conv3.weight.bin"), "wb") as f:
                 f.write(w.tobytes())
             if model.model.encoder.conv3.bias is not None:
-                b = _to_numpy_f32(model.model.encoder.conv3.bias)
+                b = _to_numpy_f16(model.model.encoder.conv3.bias)
                 with open(str(Path(dump_dir) / "model.encoder.conv3.bias.bin"), "wb") as f:
                     f.write(b.tobytes())
             print("Dumped conv3 weights/bias")

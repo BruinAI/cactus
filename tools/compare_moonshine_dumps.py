@@ -59,8 +59,8 @@ def compare_arrays(name, py_data, cpp_data, tolerance=1e-3, logger=print):
             logger(f"      Use idx {idx}: Py={py_flat[idx]:.6f}, C++={cpp_flat[idx]:.6f}, Diff={diff[idx]:.6f}")
 
 def compare_files(cpp_file, py_file, tolerance=1e-3, logger=print):
-    # Python dump is float32
-    py_data = read_binary_file(py_file, np.float32)
+    # Python dump is FP16
+    py_data = read_binary_file(py_file, np.float16).astype(np.float32)
     
     # C++ dump is always FP16
     cpp_data = read_binary_file(cpp_file, np.float16).astype(np.float32)
@@ -211,8 +211,8 @@ def main():
     if py_conv3_path and os.path.exists(cpp_final_path):
         log(f"\nComparing Special: Preprocessor Final (Synthesized from {os.path.basename(py_conv3_path)})")
         
-        # Read Python data (FP32)
-        conv3_data = read_binary_file(py_conv3_path, np.float32)
+        # Read Python data (FP16)
+        conv3_data = read_binary_file(py_conv3_path, np.float16).astype(np.float32)
         
         # C++ is always FP16
         cpp_data = read_binary_file(cpp_final_path, np.float16).astype(np.float32)
