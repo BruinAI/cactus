@@ -5,13 +5,27 @@
 #include <thread>
 #include <chrono>
 #include <dirent.h>
+#include <algorithm>
+#include <cctype>
 
 using namespace EngineTestUtils;
 
 const char* g_model_path = std::getenv("CACTUS_TEST_MODEL");
 const char* g_transcribe_model_path = std::getenv("CACTUS_TEST_TRANSCRIBE_MODEL");
 const char* g_assets_path = std::getenv("CACTUS_TEST_ASSETS");
-const char* g_whisper_prompt = "<|startoftranscript|><|en|><|transcribe|><|notimestamps|>";
+
+static const char* get_transcribe_prompt() {
+    if (g_transcribe_model_path) {
+        std::string path = g_transcribe_model_path;
+        std::transform(path.begin(), path.end(), path.begin(), [](unsigned char c){ return std::tolower(c); });
+        if (path.find("whisper") != std::string::npos) {
+            return "<|startoftranscript|><|en|><|transcribe|><|notimestamps|>";
+        }
+    }
+    return "";
+}
+
+const char* g_whisper_prompt = get_transcribe_prompt();
 
 const char* g_options = R"({
         "max_tokens": 256,

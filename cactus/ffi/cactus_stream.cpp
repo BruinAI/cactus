@@ -236,9 +236,15 @@ int cactus_stream_transcribe_process(
             confirmation_threshold
         );
 
-        std::string prompt = "<|startofprev|>"
-            + handle->last_n_words
-            + "<|startoftranscript|><|en|><|transcribe|><|notimestamps|>";
+        bool is_moonshine = handle->model_handle->model->get_config().model_type == cactus::engine::Config::ModelType::MOONSHINE;
+        std::string prompt;
+        if (!is_moonshine) {
+            prompt = "<|startofprev|>"
+                + handle->last_n_words
+                + "<|startoftranscript|><|en|><|transcribe|><|notimestamps|>";
+        } else {
+            prompt = handle->last_n_words;
+        }
 
         const int result = cactus_transcribe(
             handle->model_handle,
