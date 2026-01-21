@@ -115,14 +115,14 @@ enum class OpType {
     MATMUL, TRANSPOSE, RESHAPE, SLICE, GATHER, EMBEDDING,
     BILINEAR_INTERPOLATION,
     SUM, MEAN, VARIANCE, MIN, MAX,
-    RMS_NORM, ROPE, ROPE_GPTJ, SOFTMAX, ATTENTION, ATTENTION_INT8_HYBRID, CONV1D_CAUSAL, CONV1D_K3, CONV1D,
+    RMS_NORM, ROPE, ROPE_GPTJ, SOFTMAX, ATTENTION, ATTENTION_FULL_SOFTMAX, ATTENTION_INT8_HYBRID, CONV1D_CAUSAL, CONV1D_K3, CONV1D,
     SCALAR_ADD, SCALAR_SUBTRACT, SCALAR_MULTIPLY, SCALAR_DIVIDE, SCALAR_EXP, SCALAR_SQRT, SCALAR_COS, SCALAR_SIN,
     SILU, GELU, GELU_ERF, TANH,
     SAMPLE, CONCAT,
     SCATTER_TOPK,
     TOPK, LAYERNORM, GROUPNORM,
     INDEX,
-    PERSISTENT,  // Copies data from source and survives soft_reset()
+    PERSISTENT,
 };
 
 struct PrecisionTraits {
@@ -437,6 +437,9 @@ public:
     size_t attention(size_t query, size_t key, size_t value, float scale, size_t position_offset, ComputeBackend backend = ComputeBackend::CPU);
     size_t attention(size_t query, size_t key, size_t value, float scale, size_t position_offset, size_t window_size, ComputeBackend backend = ComputeBackend::CPU);
 
+    size_t attention_full_softmax(size_t query, size_t key, size_t value, float scale, bool is_causal = true, ComputeBackend backend = ComputeBackend::CPU);
+    size_t attention_full_softmax(size_t query, size_t key, size_t value, float scale, size_t position_offset, ComputeBackend backend = ComputeBackend::CPU);
+
     size_t attention_int8_hybrid(size_t query, size_t key_new, size_t value_new, float scale, size_t position_offset,
                                  const int8_t* cached_keys, const int8_t* cached_values,
                                  const float* k_scales, const float* v_scales,
@@ -473,7 +476,6 @@ public:
     void allocate_buffers();
     size_t get_node_count() const;
 
-    // Persistent node API - nodes that survive soft_reset()
     size_t persistent(size_t source_node);
     bool is_populated(size_t persistent_node_id) const;
     void invalidate_persistent(size_t persistent_node_id);
@@ -490,9 +492,8 @@ private:
     BufferPool buffer_pool_;
     bool prefill_mode_ = false;
     
-    // Persistent node tracking
-    std::unordered_set<size_t> persistent_node_ids_;   // Node IDs marked persistent
-    std::unordered_set<size_t> populated_node_ids_;    // Persistent nodes with valid data
+    std::unordered_set<size_t> persistent_node_ids_;
+    std::unordered_set<size_t> populated_node_ids_;
 };
 
 

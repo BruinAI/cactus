@@ -73,6 +73,7 @@ size_t CactusGraph::matmul(size_t input1, size_t input2, bool pretransposed_rhs,
     size_t N = pretransposed_rhs ? rhs_buffer.shape[0] : rhs_buffer.shape[1];
 
     if (K != rhs_K) {
+        std::cout << "Matrix dimensions incompatible for multiplication: " << K << " != " << rhs_K << std::endl;
         throw std::invalid_argument("Matrix dimensions incompatible for multiplication");
     }
 
@@ -307,6 +308,16 @@ size_t CactusGraph::attention(size_t query, size_t key, size_t value, float scal
 size_t CactusGraph::attention(size_t query, size_t key, size_t value, float scale, size_t position_offset, size_t window_size, ComputeBackend backend) {
     OpParams params{.scale = scale, .position_offset = position_offset, .window_size = window_size, .backend = backend};
     return add_node(OpType::ATTENTION, {query, key, value}, {}, params);
+}
+
+size_t CactusGraph::attention_full_softmax(size_t query, size_t key, size_t value, float scale, bool is_causal, ComputeBackend backend) {
+    OpParams params{.scale = scale, .is_causal = is_causal, .backend = backend};
+    return add_node(OpType::ATTENTION_FULL_SOFTMAX, {query, key, value}, {}, params);
+}
+
+size_t CactusGraph::attention_full_softmax(size_t query, size_t key, size_t value, float scale, size_t position_offset, ComputeBackend backend) {
+    OpParams params{.scale = scale, .position_offset = position_offset, .backend = backend};
+    return add_node(OpType::ATTENTION_FULL_SOFTMAX, {query, key, value}, {}, params);
 }
 
 size_t CactusGraph::attention_int8_hybrid(size_t query, size_t key_new, size_t value_new, float scale, size_t position_offset,

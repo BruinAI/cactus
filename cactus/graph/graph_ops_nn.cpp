@@ -259,6 +259,44 @@ void compute_attention_node(GraphNode& node, const std::vector<std::unique_ptr<G
                          node.params.position_offset, node.params.window_size, node.params.is_causal);
 }
 
+void compute_attention_full_softmax_node(GraphNode& node, const std::vector<std::unique_ptr<GraphNode>>& nodes, const std::unordered_map<size_t, size_t>& node_index_map) {
+    if (node.params.backend == ComputeBackend::NPU) {
+        throw std::runtime_error("NPU attention operation not yet implemented");
+    }
+
+    if (node.input_ids.size() < 3) {
+        throw std::runtime_error("Attention operation requires 3 inputs (query, key, value), got " +
+                                std::to_string(node.input_ids.size()) + " inputs");
+    }
+
+    const auto& query_buffer = nodes[node_index_map.at(node.input_ids[0])]->output_buffer;
+    const auto& key_buffer = nodes[node_index_map.at(node.input_ids[1])]->output_buffer;
+    const auto& value_buffer = nodes[node_index_map.at(node.input_ids[2])]->output_buffer;
+    const auto& q_shape = query_buffer.shape;
+    const auto& k_shape = key_buffer.shape;
+
+    if (q_shape.size() < 4) {
+        throw std::runtime_error("Attention operation requires 4D tensors [batch, seq_len, num_heads, head_dim], got " +
+                                std::to_string(q_shape.size()) + "D tensor");
+    }
+
+    if (query_buffer.precision != Precision::FP16) {
+        throw std::runtime_error("Attention operation only supports FP16 precision");
+    }
+
+    size_t batch_size = q_shape[0];
+    size_t seq_len = q_shape[1];
+    size_t num_q_heads = q_shape[2];
+    size_t head_dim = q_shape[3];
+    size_t num_kv_heads = k_shape[2];
+    size_t kv_seq_len = key_buffer.shape[1];
+
+    cactus_attention_full_softmax_f16(query_buffer.data_as<__fp16>(), key_buffer.data_as<__fp16>(),
+                         value_buffer.data_as<__fp16>(), node.output_buffer.data_as<__fp16>(),
+                         batch_size, seq_len, kv_seq_len, num_q_heads, num_kv_heads, head_dim, node.params.scale, nullptr,
+                         node.params.position_offset, node.params.window_size, node.params.is_causal);
+}
+
 void compute_attention_int8_hybrid_node(GraphNode& node, const std::vector<std::unique_ptr<GraphNode>>& nodes, const std::unordered_map<size_t, size_t>& node_index_map) {
     const auto& query_buffer = nodes[node_index_map.at(node.input_ids[0])]->output_buffer;
     const auto& key_new_buffer = nodes[node_index_map.at(node.input_ids[1])]->output_buffer;
@@ -307,7 +345,7 @@ void compute_layernorm_node(GraphNode& node, const std::vector<std::unique_ptr<G
 
     std::vector<float> input_float(input_buffer.total_size);
     std::vector<float> weight_float(feature_size);
-    std::vector<float> bias_float(feature_size, 0.0f);  // Default to zero if no bias
+    std::vector<float> bias_float(feature_size, 0.0f);
 
     if (input_buffer.precision == Precision::INT8) {
         throw std::runtime_error("LayerNorm currently does not support INT8 input");
@@ -586,7 +624,7 @@ void compute_groupnorm_node(GraphNode& node, const std::vector<std::unique_ptr<G
     for (size_t i = 2; i < input.shape.size(); ++i) spatial_size *= input.shape[i];
 
     size_t num_groups = node.params.num_groups;
-    if (num_groups == 0) num_groups = 32; // Default to 32 if not specified
+    if (num_groups == 0) num_groups = 32;
     
     if (channels % num_groups != 0) {
         throw std::runtime_error("GroupNorm: channels must be divisible by num_groups");

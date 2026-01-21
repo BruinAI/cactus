@@ -58,45 +58,6 @@ static std::vector<float> normalize_mel(std::vector<float>& mel, size_t n_mels) 
     return mel;
 }
 
-// can remove after testing
-static std::vector<float> compute_whisper_mel_from_pcm(const int16_t* pcm_samples, size_t num_samples, int sample_rate_in) {
-    if (!pcm_samples || num_samples == 0) return {};
-
-    std::vector<float> waveform_fp32(num_samples);
-    for (size_t i = 0; i < num_samples; i++)
-        waveform_fp32[i] = static_cast<float>(pcm_samples[i]) / 32768.0f;
-
-    std::vector<float> waveform_16k = resample_to_16k_fp32(waveform_fp32, sample_rate_in);
-    if (waveform_16k.empty()) return {};
-
-    auto cfg = get_whisper_spectrogram_config();
-    const size_t num_mel_filters = 80;
-    const size_t num_frequency_bins = cfg.n_fft / 2 + 1;
-
-    AudioProcessor ap;
-    ap.init_mel_filters(num_frequency_bins, num_mel_filters, 0.0f, 8000.0f, WHISPER_SAMPLE_RATE);
-    std::vector<float> mel = ap.compute_spectrogram(waveform_16k, cfg);
-
-    if (mel.empty()) return mel;
-    return normalize_mel(mel, num_mel_filters);
-}
-
-static std::vector<float> compute_whisper_mel_from_wav(const std::string& wav_path) {
-    AudioFP32 audio = load_wav(wav_path);
-    std::vector<float> waveform_16k = resample_to_16k_fp32(audio.samples, audio.sample_rate);
-
-    auto cfg = get_whisper_spectrogram_config();
-    const size_t num_mel_filters = 80;
-    const size_t num_frequency_bins = cfg.n_fft / 2 + 1;
-
-    AudioProcessor ap;
-    ap.init_mel_filters(num_frequency_bins, num_mel_filters, 0.0f, 8000.0f, WHISPER_SAMPLE_RATE);
-    std::vector<float> mel = ap.compute_spectrogram(waveform_16k, cfg);
-
-    if (mel.empty()) return mel;
-    return normalize_mel(mel, num_mel_filters);
-}
-
 extern "C" {
 
 int cactus_transcribe(
@@ -180,7 +141,6 @@ int cactus_transcribe(
                  }
             }
         } else {
-             // Load from WAV
              AudioFP32 audio = load_wav(audio_file_path);
              std::vector<float> waveform_16k = resample_to_16k_fp32(audio.samples, audio.sample_rate);
              
@@ -274,10 +234,20 @@ int cactus_transcribe(
         double decode_tps = (completion_tokens > 1 && decode_time_ms > 0.0) ? ((completion_tokens - 1) * 1000.0) / decode_time_ms : 0.0;
 
         std::string cleaned_text = final_text;
-        const std::string token_to_remove = "<|startoftranscript|>";
-        size_t pos = 0;
-        while ((pos = cleaned_text.find(token_to_remove, pos)) != std::string::npos) {
-            cleaned_text.erase(pos, token_to_remove.length());
+        
+        const std::vector<std::string> tokens_to_remove = {
+            "<|startoftranscript|>",
+            "</s>"
+        };
+        for (const auto& token_to_remove : tokens_to_remove) {
+            size_t pos = 0;
+            while ((pos = cleaned_text.find(token_to_remove, pos)) != std::string::npos) {
+                cleaned_text.erase(pos, token_to_remove.length());
+            }
+        }
+        
+        if (!cleaned_text.empty() && cleaned_text[0] == ' ') {
+            cleaned_text.erase(0, 1);
         }
 
         std::string json = construct_response_json(cleaned_text, {}, time_to_first_token, total_time_ms, prefill_tps, decode_tps, prompt_tokens, completion_tokens);

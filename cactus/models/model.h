@@ -698,15 +698,10 @@ protected:
 private:
     struct WeightNodeIDs {
         size_t output_weight;
-        size_t output_norm_weight;
 
         size_t decoder_norm_weight;
-        size_t decoder_norm_bias;
-        size_t decoder_position_embeddings_weight;
 
-        size_t encoder_position_embeddings;
         size_t encoder_conv1_weight;
-        size_t encoder_conv1_bias;
         size_t encoder_conv2_weight;
         size_t encoder_conv2_bias;
         size_t encoder_conv3_weight;
@@ -718,21 +713,13 @@ private:
 
         struct LayerWeights {
             //Decoder layers
-            size_t decoder_output_norm_bias;
-            size_t decoder_output_norm_weight;
-            size_t decoder_position_embeddings_weight;
-            size_t decoder_token_embeddings_weight;
 
             size_t decoder_encoder_attn_q_weight;
             size_t decoder_encoder_attn_k_weight;
             size_t decoder_encoder_attn_v_weight;
-            size_t decoder_encoder_attn_q_bias;
-            size_t decoder_encoder_attn_v_bias;
             size_t decoder_encoder_attn_output_weight;
-            size_t decoder_encoder_attn_output_bias;
 
             size_t decoder_post_encoder_layernorm_weight;
-            size_t decoder_post_encoder_layernorm_bias;
 
             size_t decoder_ffn1_weight;
             size_t decoder_ffn1_bias;
@@ -744,19 +731,13 @@ private:
             size_t decoder_ffn2_bias;
 
             size_t decoder_post_ffn_layernorm_weight;
-            size_t decoder_post_ffn_layernorm_bias;
             
             size_t decoder_self_attn_q_weight;
             size_t decoder_self_attn_k_weight;
             size_t decoder_self_attn_v_weight;
-            size_t decoder_self_attn_q_bias;
-            size_t decoder_self_attn_k_bias;
-            size_t decoder_self_attn_v_bias;
             size_t decoder_self_attn_output_weight;
-            size_t decoder_self_attn_output_bias;
 
             size_t decoder_post_attn_layernorm_weight;
-            size_t decoder_post_attn_layernorm_bias;
 
             //Encoder layers
             size_t encoder_ffn1_weight;
@@ -769,18 +750,13 @@ private:
             size_t encoder_ffn2_bias;
 
             size_t encoder_post_ffn_layernorm_weight;
-            size_t encoder_post_ffn_layernorm_bias;
             
             size_t encoder_self_attn_q_weight;
             size_t encoder_self_attn_k_weight;
             size_t encoder_self_attn_v_weight;
-            size_t encoder_self_attn_q_bias;
-            size_t encoder_self_attn_v_bias;
             size_t encoder_self_attn_output_weight;
-            size_t encoder_self_attn_output_bias;
 
             size_t encoder_post_attn_layernorm_weight;
-            size_t encoder_post_attn_layernorm_bias;
         };
 
         std::vector<LayerWeights> encoder_layers;
@@ -803,115 +779,11 @@ private:
     std::vector<uint8_t> encoder_output_bytes_;
     Precision encoder_output_precision_ = Precision::FP32;
 
-    std::vector<size_t> suppress_tokens_ = {
-    1,
-    2,
-    7,
-    8,
-    9,
-    10,
-    14,
-    25,
-    26,
-    27,
-    28,
-    29,
-    31,
-    58,
-    59,
-    60,
-    61,
-    62,
-    63,
-    90,
-    91,
-    92,
-    93,
-    359,
-    503,
-    522,
-    542,
-    873,
-    893,
-    902,
-    918,
-    922,
-    931,
-    1350,
-    1853,
-    1982,
-    2460,
-    2627,
-    3246,
-    3253,
-    3268,
-    3536,
-    3846,
-    3961,
-    4183,
-    4667,
-    6585,
-    6647,
-    7273,
-    9061,
-    9383,
-    10428,
-    10929,
-    11938,
-    12033,
-    12331,
-    12562,
-    13793,
-    14157,
-    14635,
-    15265,
-    15618,
-    16553,
-    16604,
-    18362,
-    18956,
-    20075,
-    21675,
-    22520,
-    26130,
-    26161,
-    26435,
-    28279,
-    29464,
-    31650,
-    32302,
-    32470,
-    36865,
-    42863,
-    47425,
-    49870,
-    50254,
-    50258,
-    50358,
-    50359,
-    50360,
-    50361,
-    50362
-    };
-
-    std::vector<size_t> begin_suppress_tokens_ = {
-    220,
-    50257
-    };
-
     bool first_decode_step_ = true;
 
-    std::vector<size_t> encoder_k_nodes_;
-    std::vector<size_t> encoder_v_nodes_;
-
-    // Persistent nodes for encoder K/V (survive soft_reset)
     std::vector<size_t> encoder_k_persistent_;
     std::vector<size_t> encoder_v_persistent_;
 
-    std::vector<std::vector<uint8_t>> encoder_k_host_;
-    std::vector<std::vector<uint8_t>> encoder_v_host_;
-    std::vector<std::vector<size_t>>  encoder_k_shape_;
-    std::vector<std::vector<size_t>>  encoder_v_shape_;
     Precision encoder_kv_precision_ = Precision::FP32;
     bool encoder_kv_ready_ = false;
 

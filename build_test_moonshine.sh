@@ -60,17 +60,17 @@ echo "[Step 3/3] Running Moonshine tests..."
 # Ensure env var is passed to the test executable (exported at top)
 ./test_moonshine
 
-echo ""
-echo "[Step 4/4] Running Python reference dump..."
-cd "$SCRIPT_DIR"
-python3 tools/dump_hf_moonshine.py \
-    "$CACTUS_TEST_ASSETS/test.wav" \
-    -o "hf_moonshine_dump.log" \
-    --dump-dir "tests/build/dump_python"
+# echo ""
+# echo "[Step 4/4] Running Python reference dump..."
+# cd "$SCRIPT_DIR"
+# python3 tools/dump_hf_moonshine.py \
+#     "$CACTUS_TEST_ASSETS/test.wav" \
+#     -o "hf_moonshine_dump.log" \
+#     --dump-dir "tests/build/dump_python"
 
-echo ""
-echo "============================================="
-echo "Done!"
-echo "C++ binary dumps: tests/build/dump_cpp"
-echo "Python binary dumps: tests/build/dump_python"
-echo "============================================="
+# echo ""
+# echo "============================================="
+# echo "Done!"
+# echo "C++ binary dumps: tests/build/dump_cpp"
+# echo "Python binary dumps: tests/build/dump_python"
+# echo "============================================="
