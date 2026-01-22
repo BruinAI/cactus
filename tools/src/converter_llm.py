@@ -92,7 +92,12 @@ def convert_hf_model_weights(model, output_dir, precision='INT8', args=None):
     elif model_type_str == 'moonshine':
         for name, save_name in MOONSHINE_GLOBAL_WEIGHTS:
             if name in state_dict:
-                save_tensor_with_header(state_dict[name], output_dir / save_name, precision, transpose=False, stats_tracker=quantization_stats, args=args, model_type=detected_model_type, num_layers=num_layers, mixed_config=mixed_config)
+                tensor = state_dict[name]
+                if name == 'model.encoder.conv2.weight':
+                    # [C_out, C_in, K] -> [C_in, K, C_out] for NEON vectorization over C_out
+                    tensor = tensor.permute(1, 2, 0).contiguous()
+                
+                save_tensor_with_header(tensor, output_dir / save_name, precision, transpose=False, stats_tracker=quantization_stats, args=args, model_type=detected_model_type, num_layers=num_layers, mixed_config=mixed_config)
                 saved_tensor_full_names.add(name)
         embedding_found = True
         model_config['dec_hidden_act'] = cfg.decoder_hidden_act

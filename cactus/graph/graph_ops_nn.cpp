@@ -259,44 +259,6 @@ void compute_attention_node(GraphNode& node, const std::vector<std::unique_ptr<G
                          node.params.position_offset, node.params.window_size, node.params.is_causal);
 }
 
-void compute_attention_full_softmax_node(GraphNode& node, const std::vector<std::unique_ptr<GraphNode>>& nodes, const std::unordered_map<size_t, size_t>& node_index_map) {
-    if (node.params.backend == ComputeBackend::NPU) {
-        throw std::runtime_error("NPU attention operation not yet implemented");
-    }
-
-    if (node.input_ids.size() < 3) {
-        throw std::runtime_error("Attention operation requires 3 inputs (query, key, value), got " +
-                                std::to_string(node.input_ids.size()) + " inputs");
-    }
-
-    const auto& query_buffer = nodes[node_index_map.at(node.input_ids[0])]->output_buffer;
-    const auto& key_buffer = nodes[node_index_map.at(node.input_ids[1])]->output_buffer;
-    const auto& value_buffer = nodes[node_index_map.at(node.input_ids[2])]->output_buffer;
-    const auto& q_shape = query_buffer.shape;
-    const auto& k_shape = key_buffer.shape;
-
-    if (q_shape.size() < 4) {
-        throw std::runtime_error("Attention operation requires 4D tensors [batch, seq_len, num_heads, head_dim], got " +
-                                std::to_string(q_shape.size()) + "D tensor");
-    }
-
-    if (query_buffer.precision != Precision::FP16) {
-        throw std::runtime_error("Attention operation only supports FP16 precision");
-    }
-
-    size_t batch_size = q_shape[0];
-    size_t seq_len = q_shape[1];
-    size_t num_q_heads = q_shape[2];
-    size_t head_dim = q_shape[3];
-    size_t num_kv_heads = k_shape[2];
-    size_t kv_seq_len = key_buffer.shape[1];
-
-    cactus_attention_full_softmax_f16(query_buffer.data_as<__fp16>(), key_buffer.data_as<__fp16>(),
-                         value_buffer.data_as<__fp16>(), node.output_buffer.data_as<__fp16>(),
-                         batch_size, seq_len, kv_seq_len, num_q_heads, num_kv_heads, head_dim, node.params.scale, nullptr,
-                         node.params.position_offset, node.params.window_size, node.params.is_causal);
-}
-
 void compute_attention_int8_hybrid_node(GraphNode& node, const std::vector<std::unique_ptr<GraphNode>>& nodes, const std::unordered_map<size_t, size_t>& node_index_map) {
     const auto& query_buffer = nodes[node_index_map.at(node.input_ids[0])]->output_buffer;
     const auto& key_new_buffer = nodes[node_index_map.at(node.input_ids[1])]->output_buffer;
@@ -593,6 +555,47 @@ void compute_conv1d_node(GraphNode& node, const std::vector<std::unique_ptr<Grap
 
     cactus_conv1d_f16(X.data_as<__fp16>(), W.data_as<__fp16>(), bias_ptr,
                       Y.data_as<__fp16>(), N, L, C_in, C_out, K, stride);
+}
+
+void compute_conv1d_k7s3_node(GraphNode& node, const std::vector<std::unique_ptr<GraphNode>>& nodes,
+                         const std::unordered_map<size_t, size_t>& node_index_map) {
+    const auto& X = nodes[node_index_map.at(node.input_ids[0])]->output_buffer;
+    const auto& W = nodes[node_index_map.at(node.input_ids[1])]->output_buffer; // Expected packed [C_in, K, C_out]
+
+    const __fp16* bias_ptr = (node.input_ids.size() > 2) ?
+        nodes[node_index_map.at(node.input_ids[2])]->output_buffer.data_as<__fp16>() : nullptr;
+
+    auto& Y = node.output_buffer;
+
+    const size_t N = X.shape[0];
+    const size_t C_in = X.shape[1];
+    const size_t L = X.shape[2];
+    
+    // Weight shape is now [C_in, K, C_out]
+    if (W.shape.size() != 3) throw std::runtime_error("Weight must be 3D");
+    const size_t C_in_W = W.shape[0];
+    const size_t K = W.shape[1];
+    const size_t C_out = W.shape[2];
+    const size_t stride = node.params.stride;
+
+    if (C_in != C_in_W) throw std::runtime_error("Channel mismatch in conv1d_k7s3");
+    if (K != 7 || stride != 3) throw std::runtime_error("conv1d_k7s3 requires K=7, stride=3");
+
+    if (X.precision != Precision::FP16 || W.precision != Precision::FP16) {
+        throw std::runtime_error("Conv1d specialized only supports FP16");
+    }
+    
+    size_t L_out = (L < 7) ? 0 : (L - 7) / 3 + 1;
+    Y.shape = {N, C_out, L_out};
+    Y.precision = Precision::FP16;
+
+    cactus_conv1d_f16_k7s3_oc8(
+        X.data_as<__fp16>(), 
+        W.data_as<__fp16>(), 
+        bias_ptr,
+        Y.data_as<__fp16>(), 
+        N, L, C_in, C_out
+    );
 }
 
 void compute_rope_gptj_node(GraphNode& node, const std::vector<std::unique_ptr<GraphNode>>& nodes,

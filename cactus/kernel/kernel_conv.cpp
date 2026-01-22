@@ -259,14 +259,12 @@ void cactus_conv1d_f16(
         const float   b   = bias ? (float)bias[oc] : 0.f;
 
         for (size_t out_t = 0; out_t < out_len; ++out_t) {
-            const size_t t = out_t * stride;   // input starting index for this output
-            // Valid range guaranteed: t + (K-1) <= L-1
-
+            const size_t t = out_t * stride;
             float sum = b;
 
             for (size_t ic = 0; ic < C_in; ++ic) {
-                const __fp16* Xc = Xb  + ic * L + t;   // points to x[n,ic,t]
-                const __fp16* Wc = Woc + ic * K;       // w[oc,ic,0]
+                const __fp16* Xc = Xb  + ic * L + t;
+                const __fp16* Wc = Woc + ic * K;
 
                 // Vectorize over K
                 float32x4_t acc0 = vdupq_n_f32(0.f);
@@ -303,6 +301,147 @@ void cactus_conv1d_f16(
         }
     });
 }
+
+inline void conv1d_k7s3_oc8_t4(
+    const __fp16* Xb,
+    const __fp16* Wpack,
+    const __fp16* bias,
+    __fp16* Yb,
+    size_t L,
+    size_t out_len,
+    size_t C_in,
+    size_t C_out,
+    size_t out_t,
+    size_t oc0
+){
+    float32x4_t acc[4][2];
+    float32x4_t b0 = vdupq_n_f32(0.f);
+    float32x4_t b1 = vdupq_n_f32(0.f);
+    if (bias) {
+        float16x8_t bv = vld1q_f16(bias + oc0);
+        b0 = vcvt_f32_f16(vget_low_f16(bv));
+        b1 = vcvt_f32_f16(vget_high_f16(bv));
+    }
+
+    for (int j = 0; j < 4; ++j) {
+        acc[j][0] = b0;
+        acc[j][1] = b1;
+    }
+
+    const size_t t_base = out_t * 3;
+
+    for (size_t ic = 0; ic < C_in; ++ic) {
+        const __fp16* Wic = Wpack + (ic * 7) * C_out + oc0;
+        const __fp16* Xic = Xb + ic * L + t_base;
+
+        for (int k = 0; k < 7; ++k) {
+            float16x8_t w_half = vld1q_f16(Wic + k * C_out);
+            float32x4_t w0 = vcvt_f32_f16(vget_low_f16(w_half));
+            float32x4_t w1 = vcvt_f32_f16(vget_high_f16(w_half));
+            for (int j = 0; j < 4; ++j) {
+                float x_val = (float)Xic[j * 3 + k];
+                float32x4_t xv = vdupq_n_f32(x_val);
+
+                acc[j][0] = vfmaq_f32(acc[j][0], w0, xv);
+                acc[j][1] = vfmaq_f32(acc[j][1], w1, xv);
+            }
+        }
+    }
+
+    float tmp0[4], tmp1[4];
+    for(int j=0; j<4; ++j) {
+        vst1q_f32(tmp0, acc[j][0]);
+        vst1q_f32(tmp1, acc[j][1]);
+        
+        for(int i=0; i<4; ++i) {
+             Yb[(oc0 + i) * out_len + out_t + j] = (__fp16)tmp0[i];
+        }
+        for(int i=0; i<4; ++i) {
+             Yb[(oc0 + 4 + i) * out_len + out_t + j] = (__fp16)tmp1[i];
+        }
+    }
+}
+
+inline void conv1d_k7s3_oc8_scalar(
+    const __fp16* Xb,
+    const __fp16* Wpack,
+    const __fp16* bias,
+    __fp16* Yb,
+    size_t L,
+    size_t out_len,
+    size_t C_in,
+    size_t C_out,
+    size_t out_t,
+    size_t oc0
+){
+    float32x4_t acc0 = vdupq_n_f32(0.f);
+    float32x4_t acc1 = vdupq_n_f32(0.f);
+
+    if (bias) {
+        float16x8_t bv = vld1q_f16(bias + oc0);
+        acc0 = vcvt_f32_f16(vget_low_f16(bv));
+        acc1 = vcvt_f32_f16(vget_high_f16(bv));
+    }
+
+    const size_t t_base = out_t * 3;
+    
+    for (size_t ic = 0; ic < C_in; ++ic) {
+        const __fp16* Wic = Wpack + (ic * 7) * C_out + oc0;
+        const __fp16* Xic = Xb + ic * L + t_base;
+        for (int k = 0; k < 7; ++k) {
+            float x_val = (float)Xic[k];
+            float32x4_t xv = vdupq_n_f32(x_val);
+            
+            float16x8_t w_half = vld1q_f16(Wic + k * C_out);
+            acc0 = vfmaq_f32(acc0, vcvt_f32_f16(vget_low_f16(w_half)), xv);
+            acc1 = vfmaq_f32(acc1, vcvt_f32_f16(vget_high_f16(w_half)), xv);
+        }
+    }
+    
+    float tmp[8];
+    vst1q_f32(tmp, acc0);
+    vst1q_f32(tmp+4, acc1);
+    
+    for(int i=0; i<8; ++i) {
+        if (oc0 + i < C_out) {
+             Yb[(oc0 + i) * out_len + out_t] = (__fp16)tmp[i];
+        }
+    }
+}
+
+void cactus_conv1d_f16_k7s3_oc8(
+    const __fp16* input,
+    const __fp16* Wpack,
+    const __fp16* bias,
+    __fp16* output,
+    size_t N,
+    size_t L,
+    size_t C_in,
+    size_t C_out)
+{
+    if (L < 7) return;
+    size_t out_len = (L - 7) / 3 + 1;
+    size_t num_oc_blocks = (C_out + 7) / 8;
+
+    // Parallelize over N and Output Channel Blocks
+    CactusThreading::parallel_for_2d(N, num_oc_blocks, CactusThreading::Thresholds::SCALAR_EXPENSIVE, [=](size_t n, size_t ob) {
+        size_t oc0 = ob * 8;
+        const __fp16* Xb = input + n * (C_in * L);
+        __fp16* Yb = output + n * (C_out * out_len);
+
+        // Main time loop with blocking Tb=4
+        size_t out_t = 0;
+        for (; out_t + 4 <= out_len; out_t += 4) {
+            conv1d_k7s3_oc8_t4(Xb, Wpack, bias, Yb, L, out_len, C_in, C_out, out_t, oc0);
+        }
+
+        // Tail time steps
+        for (; out_t < out_len; ++out_t) {
+            conv1d_k7s3_oc8_scalar(Xb, Wpack, bias, Yb, L, out_len, C_in, C_out, out_t, oc0);
+        }
+    });
+}
+
 
 
 void cactus_bilinear_interpolation_f16(const __fp16* input, __fp16* output, size_t src_height, size_t src_width, size_t embed_dim,

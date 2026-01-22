@@ -24,11 +24,11 @@ extern void compute_rms_norm_node(GraphNode& node, const std::vector<std::unique
 extern void compute_rope_node(GraphNode& node, const std::vector<std::unique_ptr<GraphNode>>& nodes, const std::unordered_map<size_t, size_t>& node_index_map);
 extern void compute_softmax_node(GraphNode& node, const std::vector<std::unique_ptr<GraphNode>>& nodes, const std::unordered_map<size_t, size_t>& node_index_map);
 extern void compute_attention_node(GraphNode& node, const std::vector<std::unique_ptr<GraphNode>>& nodes, const std::unordered_map<size_t, size_t>& node_index_map);
-extern void compute_attention_full_softmax_node(GraphNode& node, const std::vector<std::unique_ptr<GraphNode>>& nodes, const std::unordered_map<size_t, size_t>& node_index_map);
 extern void compute_attention_int8_hybrid_node(GraphNode& node, const std::vector<std::unique_ptr<GraphNode>>& nodes, const std::unordered_map<size_t, size_t>& node_index_map);
 extern void compute_layernorm_node(GraphNode& node, const std::vector<std::unique_ptr<GraphNode>>& nodes, const std::unordered_map<size_t, size_t>& node_index_map);
 extern void compute_conv1d_causal_node(GraphNode& node, const std::vector<std::unique_ptr<GraphNode>>& nodes, const std::unordered_map<size_t, size_t>& node_index_map);
 extern void compute_conv1d_k3_node(GraphNode& node, const std::vector<std::unique_ptr<GraphNode>>& nodes, const std::unordered_map<size_t, size_t>& node_index_map);
+extern void compute_conv1d_k7s3_node(GraphNode& node, const std::vector<std::unique_ptr<GraphNode>>& nodes, const std::unordered_map<size_t, size_t>& node_index_map);
 extern void compute_conv1d_node(GraphNode& node, const std::vector<std::unique_ptr<GraphNode>>& nodes, const std::unordered_map<size_t, size_t>& node_index_map);
 extern void compute_groupnorm_node(GraphNode& node, const std::vector<std::unique_ptr<GraphNode>>& nodes, const std::unordered_map<size_t, size_t>& node_index_map);
 extern void compute_rope_gptj_node(GraphNode& node, const std::vector<std::unique_ptr<GraphNode>>& nodes, const std::unordered_map<size_t, size_t>& node_index_map);
@@ -53,13 +53,15 @@ static const char* op_type_names[] = {
     "MATMUL", "TRANSPOSE", "RESHAPE", "SLICE", "GATHER", "EMBEDDING",
     "BILINEAR_INTERPOLATION",
     "SUM", "MEAN", "VARIANCE", "MIN", "MAX",
-    "RMS_NORM", "ROPE", "SOFTMAX", "ATTENTION", "ATTENTION_INT8_HYBRID", "CONV1D_CAUSAL", "CONV1D_K3",
+    "RMS_NORM", "ROPE", "ROPE_GPTJ", "SOFTMAX", "ATTENTION", "ATTENTION_INT8_HYBRID", "CONV1D_CAUSAL", "CONV1D_K3", "CONV1D_K7S3", "CONV1D",
     "SCALAR_ADD", "SCALAR_SUBTRACT", "SCALAR_MULTIPLY", "SCALAR_DIVIDE",
     "SCALAR_EXP", "SCALAR_SQRT", "SCALAR_COS", "SCALAR_SIN",
-    "SILU", "GELU", "GELU_ERF", "SAMPLE", "CONCAT",
+    "SILU", "GELU", "GELU_ERF", "TANH",
+    "SAMPLE", "CONCAT",
     "SCATTER_TOPK",
-    "TOPK", "LAYERNORM",
-    "INDEX"
+    "TOPK", "LAYERNORM", "GROUPNORM",
+    "INDEX",
+    "PERSISTENT"
 };
 
 static const char* get_op_name(OpType op) {
@@ -142,10 +144,6 @@ void compute_node_optimized(GraphNode& node, const std::vector<std::unique_ptr<G
         case OpType::ATTENTION:
             compute_attention_node(node, nodes, node_index_map);
             break;
-        
-        case OpType::ATTENTION_FULL_SOFTMAX:
-            compute_attention_full_softmax_node(node, nodes, node_index_map);
-            break;
 
         case OpType::ATTENTION_INT8_HYBRID:
             compute_attention_int8_hybrid_node(node, nodes, node_index_map);
@@ -169,6 +167,10 @@ void compute_node_optimized(GraphNode& node, const std::vector<std::unique_ptr<G
 
         case OpType::CONV1D_K3:
             compute_conv1d_k3_node(node, nodes, node_index_map);
+            break;
+
+        case OpType::CONV1D_K7S3:
+            compute_conv1d_k7s3_node(node, nodes, node_index_map);
             break;
 
         case OpType::CONV1D:
@@ -293,12 +295,22 @@ void CactusGraph::execute(const std::string& profile_file) {
     size_t capture_preview_count = static_cast<size_t>(get_env_int("CACTUS_CAPTURE_PREVIEW_COUNT", 8));
     size_t capture_max_elements = static_cast<size_t>(get_env_int("CACTUS_CAPTURE_MAX_ELEMENTS", 65536));
 
-    bool enable_profiling = !profile_file.empty();
+    std::string env_profile = get_env_str("CACTUS_PROFILE_FILE");
+    if (env_profile.empty()) env_profile = get_env_str("CACTUS_PROFILE");
+
+    std::string target_profile = profile_file;
+    if (target_profile.empty() && !env_profile.empty()) {
+        target_profile = env_profile;
+    }
+
+    bool enable_profiling = !target_profile.empty();
+    bool to_stdout = (target_profile == "stdout" || target_profile == "-");
+
     std::ofstream profile_out;
     std::ostream* out = &std::cout;
 
-    if (enable_profiling) {
-        profile_out.open(profile_file);
+    if (enable_profiling && !to_stdout) {
+        profile_out.open(target_profile, std::ios::app);
         if (profile_out.is_open()) {
             out = &profile_out;
         }

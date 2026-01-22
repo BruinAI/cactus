@@ -310,16 +310,6 @@ size_t CactusGraph::attention(size_t query, size_t key, size_t value, float scal
     return add_node(OpType::ATTENTION, {query, key, value}, {}, params);
 }
 
-size_t CactusGraph::attention_full_softmax(size_t query, size_t key, size_t value, float scale, bool is_causal, ComputeBackend backend) {
-    OpParams params{.scale = scale, .is_causal = is_causal, .backend = backend};
-    return add_node(OpType::ATTENTION_FULL_SOFTMAX, {query, key, value}, {}, params);
-}
-
-size_t CactusGraph::attention_full_softmax(size_t query, size_t key, size_t value, float scale, size_t position_offset, ComputeBackend backend) {
-    OpParams params{.scale = scale, .position_offset = position_offset, .backend = backend};
-    return add_node(OpType::ATTENTION_FULL_SOFTMAX, {query, key, value}, {}, params);
-}
-
 size_t CactusGraph::attention_int8_hybrid(size_t query, size_t key_new, size_t value_new, float scale, size_t position_offset,
                                           const int8_t* cached_keys, const int8_t* cached_values,
                                           const float* k_scales, const float* v_scales,
@@ -365,6 +355,40 @@ size_t CactusGraph::conv1d_k3(size_t input, size_t weight, size_t stride) {
 
     std::vector<size_t> out_shape{N, C_out, L_out};
     return add_node(OpType::CONV1D_K3, {input, weight}, out_shape, params);
+}
+
+size_t CactusGraph::conv1d_k7s3(size_t input, size_t weight, size_t bias) {
+    const auto& xin = get_output_buffer(input);
+    const auto& w   = get_output_buffer(weight);
+    const auto& b   = get_output_buffer(bias);
+
+    if (xin.shape.size() != 3) throw std::runtime_error("conv1d_k7s3 expects N,C,L");
+    // Weight is packed [C_in, K, C_out]
+    if (w.shape.size() != 3) throw std::runtime_error("weight must be [C_in, 7, C_out]");
+    if (w.shape[0] != xin.shape[1]) throw std::runtime_error("C_in mismatch in conv1d_k7s3");
+    if (w.shape[1] != 7) throw std::runtime_error("K=7 expected in conv1d_k7s3");
+    
+    // Bias check
+    size_t C_out = w.shape[2];
+    if (b.total_size != C_out) throw std::runtime_error("Bias size mismatch");
+
+    const size_t N    = xin.shape[0];
+    const size_t L    = xin.shape[2];
+    const size_t K    = 7;
+    const size_t stride = 3;
+
+    // Output length: floor((L - K)/stride) + 1
+    // Matches moonshine logic if padding is 0. 
+    // Standard conv1d formula w/o padding: L_out = (L - dilation*(K-1) - 1)/stride + 1
+    // dilation=1 => (L - K)/stride + 1
+    const size_t L_out = (L < K) ? 0 : (L - K) / stride + 1;
+
+    OpParams params{};
+    params.stride = stride;
+    params.output_precision = xin.precision;
+
+    std::vector<size_t> out_shape{N, C_out, L_out};
+    return add_node(OpType::CONV1D_K7S3, {input, weight, bias}, out_shape, params);
 }
 
 size_t CactusGraph::conv1d(size_t input, size_t weight, size_t stride) {
