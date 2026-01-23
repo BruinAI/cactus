@@ -86,7 +86,12 @@ BufferDesc::BufferDesc(BufferDesc&& other) noexcept
       group_size(other.group_size),
       num_groups(other.num_groups),
       scales_data(other.scales_data),
-      owned_scales(std::move(other.owned_scales)) {
+      owned_scales(std::move(other.owned_scales)),
+      packed_int4_data(other.packed_int4_data),
+      packed_int4_size(other.packed_int4_size),
+      activation_scales_data(other.activation_scales_data),
+      owned_activation_scales(std::move(other.owned_activation_scales)),
+      num_rows_for_activation_scales(other.num_rows_for_activation_scales) {
     other.total_size = 0;
     other.byte_size = 0;
     other.external_data = nullptr;
@@ -94,6 +99,10 @@ BufferDesc::BufferDesc(BufferDesc&& other) noexcept
     other.group_size = 0;
     other.num_groups = 0;
     other.scales_data = nullptr;
+    other.packed_int4_data = nullptr;
+    other.packed_int4_size = 0;
+    other.activation_scales_data = nullptr;
+    other.num_rows_for_activation_scales = 0;
 }
 
 BufferDesc& BufferDesc::operator=(BufferDesc&& other) noexcept {
@@ -113,6 +122,11 @@ BufferDesc& BufferDesc::operator=(BufferDesc&& other) noexcept {
         num_groups = other.num_groups;
         scales_data = other.scales_data;
         owned_scales = std::move(other.owned_scales);
+        packed_int4_data = other.packed_int4_data;
+        packed_int4_size = other.packed_int4_size;
+        activation_scales_data = other.activation_scales_data;
+        owned_activation_scales = std::move(other.owned_activation_scales);
+        num_rows_for_activation_scales = other.num_rows_for_activation_scales;
 
         other.total_size = 0;
         other.byte_size = 0;
@@ -121,6 +135,10 @@ BufferDesc& BufferDesc::operator=(BufferDesc&& other) noexcept {
         other.group_size = 0;
         other.num_groups = 0;
         other.scales_data = nullptr;
+        other.packed_int4_data = nullptr;
+        other.packed_int4_size = 0;
+        other.activation_scales_data = nullptr;
+        other.num_rows_for_activation_scales = 0;
     }
     return *this;
 }
@@ -192,7 +210,6 @@ BroadcastInfo BroadcastInfo::compute(const std::vector<size_t>& lhs, const std::
     return info;
 }
 
-// ValidationUtils implementation
 namespace ValidationUtils {
     void validate_tensor_dims(const std::vector<size_t>& shape, size_t required_dims, const std::string& op_name) {
         if (shape.size() != required_dims) {

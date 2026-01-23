@@ -9,7 +9,7 @@ set -e
 
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 VENV_DIR="$PROJECT_ROOT/venv"
-REQUIREMENTS_FILE="${CACTUS_REQUIREMENTS:-$PROJECT_ROOT/tools/requirements.txt}"
+REQUIREMENTS_FILE="${CACTUS_REQUIREMENTS:-$PROJECT_ROOT/python/requirements.txt}"
 PARENT_REQUIREMENTS="$PROJECT_ROOT/../requirements.txt"
 
 RED='\033[0;31m'
@@ -98,7 +98,7 @@ fi
 echo ""
 echo -e "${BLUE}Step 4: Installing cactus CLI tools...${NC}"
 
-if pip install -e "$PROJECT_ROOT/tools" --quiet; then
+if pip install -e "$PROJECT_ROOT/python" --quiet; then
     echo -e "${GREEN}✓ Cactus CLI installed${NC}"
 else
     echo -e "${RED}Failed to install cactus CLI${NC}"

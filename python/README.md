@@ -5,9 +5,11 @@ Python bindings for Cactus Engine via FFI. Auto-installed when you run `source .
 ## Getting Started
 
 ```bash
-# Setup environment and build
+# Setup environment
 source ./setup
-cactus build
+
+# Build shared library for Python
+cactus build --python
 
 # Download models
 cactus download LiquidAI/LFM2-VL-450M
@@ -17,7 +19,7 @@ cactus download openai/whisper-small
 ## Quick Example
 
 ```python
-from cactus_ffi import cactus_init, cactus_complete, cactus_destroy
+from cactus import cactus_init, cactus_complete, cactus_destroy
 import json
 
 model = cactus_init("weights/lfm2-vl-450m")
@@ -59,6 +61,7 @@ Run chat completion. Returns JSON string with response and metrics.
 | `top_k` | `int` | Top-k sampling |
 | `max_tokens` | `int` | Maximum tokens to generate |
 | `stop_sequences` | `list` | Stop sequences |
+| `include_stop_sequences` | `bool` | Include matched stop sequences in output (default: `False`) |
 | `force_tools` | `bool` | Constrain output to tool call format |
 | `tool_rag_top_k` | `int` | Select top-k relevant tools via Tool RAG (default: 2, 0 = use all tools) |
 | `confidence_threshold` | `float` | Minimum confidence for local generation (default: 0.7, triggers cloud_handoff when below) |
@@ -275,12 +278,12 @@ print(json.loads(response)["response"])
 
 ## Full Example
 
-See `tools/example.py` for a complete example covering:
+See `python/example.py` for a complete example covering:
 - Text completion
 - Text/image/audio embeddings
 - Vision (VLM)
 - Speech transcription
 
 ```bash
-python tools/example.py
+python python/example.py
 ```

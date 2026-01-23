@@ -210,14 +210,14 @@ bool BPETokenizer::load_vocabulary_with_config(const std::string& vocab_file, co
                         uint32_t token_id = static_cast<uint32_t>(std::stoul(id_str));
                         special_tokens_[token_content] = token_id;
                     } catch (...) {
-                        
+                        std::cerr << "Warning: Failed to parse token ID '" << id_str << "' for special token '" << token_content << "'" << std::endl;
                     }
                 }
                 pos = cont_quote2 + 1;
             }
         }
     } catch (...) {
-        
+        std::cerr << "Warning: Failed to parse tokenizer.json for special tokens" << std::endl;
     }
 
     std::string template_path = dir + "/chat_template.jinja2";

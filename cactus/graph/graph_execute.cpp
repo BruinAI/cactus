@@ -46,6 +46,7 @@ extern void compute_sample_node(GraphNode& node, const std::vector<std::unique_p
 extern void compute_topk_node(GraphNode& node, const std::vector<std::unique_ptr<GraphNode>>& nodes, const std::unordered_map<size_t, size_t>& node_index_map);
 extern void compute_scatter_topk_node(GraphNode& node, const std::vector<std::unique_ptr<GraphNode>>& nodes, const std::unordered_map<size_t, size_t>& node_index_map);
 extern void compute_persistent_node(GraphNode& node, const std::vector<std::unique_ptr<GraphNode>>& nodes, const std::unordered_map<size_t, size_t>& node_index_map);
+extern void compute_quantize_activations_node(GraphNode& node, const std::vector<std::unique_ptr<GraphNode>>& nodes, const std::unordered_map<size_t, size_t>& node_index_map);
 
 static const char* op_type_names[] = {
     "INPUT", "PRECISION_CAST",
@@ -61,7 +62,8 @@ static const char* op_type_names[] = {
     "SCATTER_TOPK",
     "TOPK", "LAYERNORM", "GROUPNORM",
     "INDEX",
-    "PERSISTENT"
+    "PERSISTENT",
+    "QUANTIZE_ACTIVATIONS"
 };
 
 static const char* get_op_name(OpType op) {
@@ -73,7 +75,6 @@ void compute_node_optimized(GraphNode& node, const std::vector<std::unique_ptr<G
         case OpType::INPUT:
             break;
 
-        // Binary operations
         case OpType::ADD:
         case OpType::ADD_CLIPPED:
         case OpType::SUBTRACT:
@@ -82,7 +83,6 @@ void compute_node_optimized(GraphNode& node, const std::vector<std::unique_ptr<G
             compute_binary_op_node(node, nodes, node_index_map);
             break;
 
-        // Scalar/unary operations
         case OpType::SCALAR_ADD:
         case OpType::SCALAR_SUBTRACT:
         case OpType::SCALAR_MULTIPLY:
@@ -94,7 +94,6 @@ void compute_node_optimized(GraphNode& node, const std::vector<std::unique_ptr<G
             compute_unary_op_node(node, nodes, node_index_map);
             break;
 
-        // Activation functions
         case OpType::SILU:
         case OpType::GELU:
         case OpType::GELU_ERF:
@@ -102,7 +101,6 @@ void compute_node_optimized(GraphNode& node, const std::vector<std::unique_ptr<G
             compute_activation_node(node, nodes, node_index_map);
             break;
 
-        // Reduction operations
         case OpType::SUM:
         case OpType::MEAN:
         case OpType::VARIANCE:
@@ -111,7 +109,6 @@ void compute_node_optimized(GraphNode& node, const std::vector<std::unique_ptr<G
             compute_reduce_node(node, nodes, node_index_map);
             break;
 
-        // Data transformation
         case OpType::RESHAPE:
             compute_reshape_node(node, nodes, node_index_map);
             break;
@@ -120,7 +117,6 @@ void compute_node_optimized(GraphNode& node, const std::vector<std::unique_ptr<G
             compute_precision_cast_node(node, nodes, node_index_map);
             break;
 
-        // Neural network operations
         case OpType::MATMUL:
             compute_matmul_node(node, nodes, node_index_map);
             break;
@@ -177,7 +173,6 @@ void compute_node_optimized(GraphNode& node, const std::vector<std::unique_ptr<G
             compute_conv1d_node(node, nodes, node_index_map);
             break;
 
-        // Tensor operations
         case OpType::TRANSPOSE:
             compute_transpose_node(node, nodes, node_index_map);
             break;
@@ -206,7 +201,6 @@ void compute_node_optimized(GraphNode& node, const std::vector<std::unique_ptr<G
             compute_bilinear_interpolation_node(node, nodes, node_index_map);
             break;
 
-        // Sampling operations
         case OpType::SAMPLE:
             compute_sample_node(node, nodes, node_index_map);
             break;
@@ -217,6 +211,10 @@ void compute_node_optimized(GraphNode& node, const std::vector<std::unique_ptr<G
 
         case OpType::SCATTER_TOPK:
             compute_scatter_topk_node(node, nodes, node_index_map);
+            break;
+
+        case OpType::QUANTIZE_ACTIVATIONS:
+            compute_quantize_activations_node(node, nodes, node_index_map);
             break;
 
         default:

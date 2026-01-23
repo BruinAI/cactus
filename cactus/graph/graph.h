@@ -123,10 +123,10 @@ enum class OpType {
     TOPK, LAYERNORM, GROUPNORM,
     INDEX,
     PERSISTENT,
+    QUANTIZE_ACTIVATIONS
 };
 
 struct PrecisionTraits {
-    // Returns in-memory element size (INT4 unpacks to INT8, so returns 1)
     static constexpr size_t size_of(Precision prec) {
         switch (prec) {
             case Precision::INT8: return 1;
@@ -207,8 +207,12 @@ struct BufferDesc {
     void* scales_data = nullptr;
     std::unique_ptr<char[]> owned_scales;
 
-    const void* packed_int4_data = nullptr;  
-    size_t packed_int4_size = 0; 
+    const void* packed_int4_data = nullptr;
+    size_t packed_int4_size = 0;
+
+    void* activation_scales_data = nullptr;
+    std::unique_ptr<char[]> owned_activation_scales;
+    size_t num_rows_for_activation_scales = 0; 
 
     BufferDesc();
     BufferDesc(const std::vector<size_t>& s, Precision prec = Precision::INT8);
@@ -249,6 +253,25 @@ struct BufferDesc {
     void set_packed_int4(const void* packed_data, size_t packed_size) {
         packed_int4_data = packed_data;
         packed_int4_size = packed_size;
+    }
+
+    bool has_activation_scales() const {
+        return activation_scales_data != nullptr && num_rows_for_activation_scales > 0;
+    }
+    const float* activation_scales_as_float() const {
+        return reinterpret_cast<const float*>(activation_scales_data);
+    }
+    float* activation_scales_as_float() {
+        return reinterpret_cast<float*>(activation_scales_data);
+    }
+    void allocate_activation_scales(size_t num_rows) {
+        num_rows_for_activation_scales = num_rows;
+        owned_activation_scales = std::make_unique<char[]>(num_rows * sizeof(float));
+        activation_scales_data = owned_activation_scales.get();
+    }
+    void set_activation_scales(void* scales_ptr, size_t num_rows) {
+        activation_scales_data = scales_ptr;
+        num_rows_for_activation_scales = num_rows;
     }
 
     void allocate();
@@ -377,6 +400,7 @@ public:
     
     size_t input(const std::vector<size_t>& shape, Precision precision = Precision::INT8);
     size_t precision_cast(size_t input, Precision target_precision);
+    size_t quantize_activations(size_t input);  
     
     size_t add(size_t input1, size_t input2);
     size_t add_clipped(size_t input1, size_t input2);  

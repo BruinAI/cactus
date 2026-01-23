@@ -49,6 +49,7 @@ add_library(
     cactus
     SHARED
     ${COMMON_SOURCES}
+    ${CMAKE_SOURCE_DIR}/cactus_jni.cpp
 )
 
 add_library(

@@ -75,6 +75,57 @@ void shrink_thread_local_buffers() {
     cached_quant_K = 0;
 }
 
+void compute_quantize_activations_node(GraphNode& node, const std::vector<std::unique_ptr<GraphNode>>& nodes, const std::unordered_map<size_t, size_t>& node_index_map) {
+    const auto& input_buffer = nodes[node_index_map.at(node.input_ids[0])]->output_buffer;
+    const auto& shape = input_buffer.shape;
+
+    if (input_buffer.precision != Precision::FP16) {
+        throw std::runtime_error("QUANTIZE_ACTIVATIONS requires FP16 input");
+    }
+
+    if (shape.size() < 2) {
+        throw std::runtime_error("QUANTIZE_ACTIVATIONS requires at least 2D tensor");
+    }
+
+    size_t K = shape.back();
+    size_t M = 1;
+    for (size_t i = 0; i < shape.size() - 1; ++i) {
+        M *= shape[i];
+    }
+
+    if (!node.output_buffer.has_activation_scales() ||
+        node.output_buffer.num_rows_for_activation_scales != M) {
+        node.output_buffer.allocate_activation_scales(M);
+    }
+
+    const __fp16* src = input_buffer.data_as<__fp16>();
+    int8_t* dst = node.output_buffer.data_as<int8_t>();
+    float* scales = node.output_buffer.activation_scales_as_float();
+
+    constexpr size_t PARALLEL_THRESHOLD = 16;
+
+    if (M >= PARALLEL_THRESHOLD) {
+        CactusThreading::parallel_for(M, CactusThreading::Thresholds::ELEMENT_WISE,
+            [src, dst, scales, K](size_t m_start, size_t m_end) {
+                for (size_t m = m_start; m < m_end; m++) {
+                    float max_abs = cactus_fp16_max_abs(src + m * K, K);
+                    float scale = max_abs / 127.0f;
+                    if (scale < 1e-10f) scale = 1e-10f;
+                    scales[m] = scale;
+                    cactus_fp16_to_int8(src + m * K, dst + m * K, K, scale);
+                }
+            });
+    } else {
+        for (size_t m = 0; m < M; m++) {
+            float max_abs = cactus_fp16_max_abs(src + m * K, K);
+            float scale = max_abs / 127.0f;
+            if (scale < 1e-10f) scale = 1e-10f;
+            scales[m] = scale;
+            cactus_fp16_to_int8(src + m * K, dst + m * K, K, scale);
+        }
+    }
+}
+
 void compute_matmul_node(GraphNode& node, const std::vector<std::unique_ptr<GraphNode>>& nodes, const std::unordered_map<size_t, size_t>& node_index_map) {
     const auto& lhs_buffer = nodes[node_index_map.at(node.input_ids[0])]->output_buffer;
     const auto& rhs_buffer = nodes[node_index_map.at(node.input_ids[1])]->output_buffer;
@@ -94,8 +145,10 @@ void compute_matmul_node(GraphNode& node, const std::vector<std::unique_ptr<Grap
         throw std::runtime_error("NPU matrix multiplication not yet implemented");
     }
 
-    if (lhs_buffer.precision == Precision::FP16 && rhs_buffer.is_packed_int4()) {
-        const __fp16* lhs = lhs_buffer.data_as<__fp16>();
+    const bool lhs_is_prequantized_int8 = (lhs_buffer.precision == Precision::INT8 &&
+                                            lhs_buffer.has_activation_scales());
+
+    if (rhs_buffer.is_packed_int4()) {
         const uint8_t* rhs_packed = rhs_buffer.packed_int4_as_uint8();
         const __fp16* rhs_scales = rhs_buffer.scales_as_fp16();
         __fp16* output = node.output_buffer.data_as<__fp16>();
@@ -104,16 +157,28 @@ void compute_matmul_node(GraphNode& node, const std::vector<std::unique_ptr<Grap
             throw std::runtime_error("INT4 matmul requires pretransposed weights");
         }
 
-        ensure_quant_buffers(M, K);
-        quantize_activations_fp16_to_int8(lhs, quant_activation_buffer.data(),
-                                          quant_scales_buffer.data(), M, K);
+        const int8_t* lhs_int8;
+        const float* lhs_scales;
 
-        cactus_matmul_int4(quant_activation_buffer.data(), quant_scales_buffer.data(),
+        if (lhs_is_prequantized_int8) {
+            lhs_int8 = lhs_buffer.data_as<int8_t>();
+            lhs_scales = lhs_buffer.activation_scales_as_float();
+        } else if (lhs_buffer.precision == Precision::FP16) {
+            const __fp16* lhs = lhs_buffer.data_as<__fp16>();
+            ensure_quant_buffers(M, K);
+            quantize_activations_fp16_to_int8(lhs, quant_activation_buffer.data(),
+                                              quant_scales_buffer.data(), M, K);
+            lhs_int8 = quant_activation_buffer.data();
+            lhs_scales = quant_scales_buffer.data();
+        } else {
+            throw std::runtime_error("INT4 matmul requires INT8 (pre-quantized) or FP16 activations");
+        }
+
+        cactus_matmul_int4(lhs_int8, lhs_scales,
                            rhs_packed, rhs_scales, output,
                            M, K, N, rhs_buffer.group_size);
 
-    } else if (lhs_buffer.precision == Precision::FP16 && rhs_buffer.is_grouped_int8()) {
-        const __fp16* lhs = lhs_buffer.data_as<__fp16>();
+    } else if (rhs_buffer.is_grouped_int8()) {
         const int8_t* rhs = rhs_buffer.data_as<int8_t>();
         const __fp16* rhs_scales = rhs_buffer.scales_as_fp16();
         __fp16* output = node.output_buffer.data_as<__fp16>();
@@ -122,17 +187,30 @@ void compute_matmul_node(GraphNode& node, const std::vector<std::unique_ptr<Grap
             throw std::runtime_error("Group-wise INT8 matmul requires pretransposed weights");
         }
 
-        ensure_quant_buffers(M, K);
-        quantize_activations_fp16_to_int8(lhs, quant_activation_buffer.data(),
-                                          quant_scales_buffer.data(), M, K);
+        const int8_t* lhs_int8;
+        const float* lhs_scales;
 
-        cactus_matmul_int8(quant_activation_buffer.data(), quant_scales_buffer.data(),
+        if (lhs_is_prequantized_int8) {
+            lhs_int8 = lhs_buffer.data_as<int8_t>();
+            lhs_scales = lhs_buffer.activation_scales_as_float();
+        } else if (lhs_buffer.precision == Precision::FP16) {
+            const __fp16* lhs = lhs_buffer.data_as<__fp16>();
+            ensure_quant_buffers(M, K);
+            quantize_activations_fp16_to_int8(lhs, quant_activation_buffer.data(),
+                                              quant_scales_buffer.data(), M, K);
+            lhs_int8 = quant_activation_buffer.data();
+            lhs_scales = quant_scales_buffer.data();
+        } else {
+            throw std::runtime_error("INT8 matmul requires INT8 (pre-quantized) or FP16 activations");
+        }
+
+        cactus_matmul_int8(lhs_int8, lhs_scales,
                            rhs, rhs_scales, output,
                            M, K, N, rhs_buffer.group_size);
 
     } else {
         if (lhs_buffer.precision != Precision::FP16) {
-            throw std::runtime_error("Matmul only supports FP16 precision for activations");
+            throw std::runtime_error("FP16 matmul requires FP16 activations");
         }
 
         const __fp16* lhs = lhs_buffer.data_as<__fp16>();

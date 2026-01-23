@@ -145,8 +145,6 @@ void cactus_matmul_int8(
     #endif
 
     const size_t num_groups = K / group_size;
-
-    constexpr size_t MAX_GROUPS = 64;
     const size_t num_row_tiles = (M + TILE_M - 1) / TILE_M;
     const size_t num_col_tiles = (N + TILE_N - 1) / TILE_N;
     const size_t total_tiles = num_row_tiles * num_col_tiles;
@@ -163,22 +161,24 @@ void cactus_matmul_int8(
             const size_t actual_m = m_end - m_start;
             const size_t actual_n = n_end - n_start;
 
-            int32_t all_group_acc[MAX_GROUPS][TILE_M][TILE_N] = {{{0}}};
+            float running_sum[TILE_M][TILE_N] = {{0.0f}};
 
             for (size_t ni = 0; ni < actual_n; ni++) {
                 __builtin_prefetch(&B_scales[(n_start + ni) * num_groups], 0, 3);
             }
 
-            if (cactus_has_i8mm()) {
-                for (size_t g = 0; g < num_groups; g++) {
-                    const size_t k_base = g * group_size;
+            for (size_t g = 0; g < num_groups; g++) {
+                const size_t k_base = g * group_size;
 
+                int32_t group_acc[TILE_M][TILE_N] = {{0}};
+
+                if (cactus_has_i8mm()) {
                     size_t mi = 0;
                     for (; mi + 1 < actual_m; mi += 2) {
                         size_t ni = 0;
                         for (; ni + 3 < actual_n; ni += 4) {
-                            int32x4_t acc01 = vdupq_n_s32(0);  
-                            int32x4_t acc23 = vdupq_n_s32(0); 
+                            int32x4_t acc01 = vdupq_n_s32(0);
+                            int32x4_t acc23 = vdupq_n_s32(0);
 
                             const int8_t* a_base0 = A + (m_start + mi) * K + k_base;
                             const int8_t* a_base1 = A + (m_start + mi + 1) * K + k_base;
@@ -211,14 +211,14 @@ void cactus_matmul_int8(
                                 }
                             }
 
-                            all_group_acc[g][mi][ni] += vgetq_lane_s32(acc01, 0);
-                            all_group_acc[g][mi][ni + 1] += vgetq_lane_s32(acc01, 1);
-                            all_group_acc[g][mi + 1][ni] += vgetq_lane_s32(acc01, 2);
-                            all_group_acc[g][mi + 1][ni + 1] += vgetq_lane_s32(acc01, 3);
-                            all_group_acc[g][mi][ni + 2] += vgetq_lane_s32(acc23, 0);
-                            all_group_acc[g][mi][ni + 3] += vgetq_lane_s32(acc23, 1);
-                            all_group_acc[g][mi + 1][ni + 2] += vgetq_lane_s32(acc23, 2);
-                            all_group_acc[g][mi + 1][ni + 3] += vgetq_lane_s32(acc23, 3);
+                            group_acc[mi][ni] += vgetq_lane_s32(acc01, 0);
+                            group_acc[mi][ni + 1] += vgetq_lane_s32(acc01, 1);
+                            group_acc[mi + 1][ni] += vgetq_lane_s32(acc01, 2);
+                            group_acc[mi + 1][ni + 1] += vgetq_lane_s32(acc01, 3);
+                            group_acc[mi][ni + 2] += vgetq_lane_s32(acc23, 0);
+                            group_acc[mi][ni + 3] += vgetq_lane_s32(acc23, 1);
+                            group_acc[mi + 1][ni + 2] += vgetq_lane_s32(acc23, 2);
+                            group_acc[mi + 1][ni + 3] += vgetq_lane_s32(acc23, 3);
                         }
 
                         for (; ni + 1 < actual_n; ni += 2) {
@@ -237,10 +237,10 @@ void cactus_matmul_int8(
                                 }
                             }
 
-                            all_group_acc[g][mi][ni] += vgetq_lane_s32(acc0, 0);
-                            all_group_acc[g][mi][ni + 1] += vgetq_lane_s32(acc0, 1);
-                            all_group_acc[g][mi + 1][ni] += vgetq_lane_s32(acc0, 2);
-                            all_group_acc[g][mi + 1][ni + 1] += vgetq_lane_s32(acc0, 3);
+                            group_acc[mi][ni] += vgetq_lane_s32(acc0, 0);
+                            group_acc[mi][ni + 1] += vgetq_lane_s32(acc0, 1);
+                            group_acc[mi + 1][ni] += vgetq_lane_s32(acc0, 2);
+                            group_acc[mi + 1][ni + 1] += vgetq_lane_s32(acc0, 3);
                         }
 
                         for (; ni < actual_n; ni++) {
@@ -253,7 +253,7 @@ void cactus_matmul_int8(
                                     sum = accum_dot(sum, vld1q_s8(a_ptr + 16), vld1q_s8(b_ptr + 16));
                                     sum = accum_dot(sum, vld1q_s8(a_ptr + 32), vld1q_s8(b_ptr + 32));
                                     sum = accum_dot(sum, vld1q_s8(a_ptr + 48), vld1q_s8(b_ptr + 48));
-                                    all_group_acc[g][mii][ni] += vaddvq_s32(sum);
+                                    group_acc[mii][ni] += vaddvq_s32(sum);
                                 }
                             }
                         }
@@ -274,15 +274,11 @@ void cactus_matmul_int8(
                                 sum = accum_dot(sum, a_vec1, vld1q_s8(b_ptr + 16));
                                 sum = accum_dot(sum, a_vec2, vld1q_s8(b_ptr + 32));
                                 sum = accum_dot(sum, a_vec3, vld1q_s8(b_ptr + 48));
-                                all_group_acc[g][mi][ni] += vaddvq_s32(sum);
+                                group_acc[mi][ni] += vaddvq_s32(sum);
                             }
                         }
                     }
-                }
-            } else {
-                for (size_t g = 0; g < num_groups; g++) {
-                    const size_t k_base = g * group_size;
-
+                } else {
                     for (size_t k_offset = 0; k_offset < group_size; k_offset += 64) {
                         int8x16_t b_vec0[TILE_N], b_vec1[TILE_N], b_vec2[TILE_N], b_vec3[TILE_N];
                         for (size_t ni = 0; ni < actual_n; ni++) {
@@ -306,9 +302,16 @@ void cactus_matmul_int8(
                                 sum = accum_dot(sum, a_vec1, b_vec1[ni]);
                                 sum = accum_dot(sum, a_vec2, b_vec2[ni]);
                                 sum = accum_dot(sum, a_vec3, b_vec3[ni]);
-                                all_group_acc[g][mi][ni] += vaddvq_s32(sum);
+                                group_acc[mi][ni] += vaddvq_s32(sum);
                             }
                         }
+                    }
+                }
+
+                for (size_t ni = 0; ni < actual_n; ni++) {
+                    const float b_scale = (float)B_scales[(n_start + ni) * num_groups + g];
+                    for (size_t mi = 0; mi < actual_m; mi++) {
+                        running_sum[mi][ni] += (float)group_acc[mi][ni] * b_scale;
                     }
                 }
             }
@@ -316,12 +319,7 @@ void cactus_matmul_int8(
             for (size_t mi = 0; mi < actual_m; mi++) {
                 const float a_scale = A_scales[m_start + mi];
                 for (size_t ni = 0; ni < actual_n; ni++) {
-                    const __fp16* col_scales = &B_scales[(n_start + ni) * num_groups];
-                    float sum = 0.0f;
-                    for (size_t g = 0; g < num_groups; g++) {
-                        sum += (float)all_group_acc[g][mi][ni] * (float)col_scales[g];
-                    }
-                    C[(m_start + mi) * N + (n_start + ni)] = (__fp16)(sum * a_scale);
+                    C[(m_start + mi) * N + (n_start + ni)] = (__fp16)(running_sum[mi][ni] * a_scale);
                 }
             }
             } // tile_idx
@@ -341,7 +339,7 @@ void cactus_matmul_int4(
 
     #if defined(__APPLE__) && defined(__arm64__)
       constexpr size_t TILE_M = 4;
-      constexpr size_t TILE_N = 8;  
+      constexpr size_t TILE_N = 8;
     #else
       constexpr size_t TILE_M = 4;
       constexpr size_t TILE_N = 4;
@@ -350,7 +348,6 @@ void cactus_matmul_int4(
     const size_t num_groups = K / group_size;
     const size_t K_packed = K / 2;
 
-    constexpr size_t MAX_GROUPS = 64;
     const size_t num_row_tiles = (M + TILE_M - 1) / TILE_M;
     const size_t num_col_tiles = (N + TILE_N - 1) / TILE_N;
     const size_t total_tiles = num_row_tiles * num_col_tiles;
@@ -382,7 +379,7 @@ void cactus_matmul_int4(
 
     CactusThreading::parallel_gemm_tiles(M, total_tiles,
         [=](size_t tile_start, size_t tile_end) {
-            alignas(64) int8_t B_unpacked[TILE_N][128];  
+            alignas(64) int8_t B_unpacked[TILE_N][128];
 
             for (size_t tile_idx = tile_start; tile_idx < tile_end; ++tile_idx) {
             const size_t tile_row = tile_idx / num_col_tiles;
@@ -394,7 +391,7 @@ void cactus_matmul_int4(
             const size_t actual_m = m_end - m_start;
             const size_t actual_n = n_end - n_start;
 
-            int32_t all_group_acc[MAX_GROUPS][TILE_M][TILE_N] = {{{0}}};
+            float running_sum[TILE_M][TILE_N] = {{0.0f}};
 
             for (size_t ni = 0; ni < actual_n; ni++) {
                 __builtin_prefetch(&B_scales[(n_start + ni) * num_groups], 0, 3);
@@ -403,6 +400,8 @@ void cactus_matmul_int4(
             for (size_t g = 0; g < num_groups; g++) {
                 const size_t k_base = g * group_size;
                 const size_t k_base_packed = k_base / 2;
+
+                int32_t group_acc[TILE_M][TILE_N] = {{0}};
 
                 for (size_t ni = 0; ni < actual_n; ni++) {
                     const uint8_t* b_ptr = B_packed + (n_start + ni) * K_packed + k_base_packed;
@@ -447,14 +446,14 @@ void cactus_matmul_int4(
                                 acc23 = accum_matmul(acc23, a_combined, vcombine_s8(b2_8, b3_8));
                             }
 
-                            all_group_acc[g][mi][ni] += vgetq_lane_s32(acc01, 0);
-                            all_group_acc[g][mi][ni + 1] += vgetq_lane_s32(acc01, 1);
-                            all_group_acc[g][mi + 1][ni] += vgetq_lane_s32(acc01, 2);
-                            all_group_acc[g][mi + 1][ni + 1] += vgetq_lane_s32(acc01, 3);
-                            all_group_acc[g][mi][ni + 2] += vgetq_lane_s32(acc23, 0);
-                            all_group_acc[g][mi][ni + 3] += vgetq_lane_s32(acc23, 1);
-                            all_group_acc[g][mi + 1][ni + 2] += vgetq_lane_s32(acc23, 2);
-                            all_group_acc[g][mi + 1][ni + 3] += vgetq_lane_s32(acc23, 3);
+                            group_acc[mi][ni] += vgetq_lane_s32(acc01, 0);
+                            group_acc[mi][ni + 1] += vgetq_lane_s32(acc01, 1);
+                            group_acc[mi + 1][ni] += vgetq_lane_s32(acc01, 2);
+                            group_acc[mi + 1][ni + 1] += vgetq_lane_s32(acc01, 3);
+                            group_acc[mi][ni + 2] += vgetq_lane_s32(acc23, 0);
+                            group_acc[mi][ni + 3] += vgetq_lane_s32(acc23, 1);
+                            group_acc[mi + 1][ni + 2] += vgetq_lane_s32(acc23, 2);
+                            group_acc[mi + 1][ni + 3] += vgetq_lane_s32(acc23, 3);
                         }
 
                         // Handle remaining columns
@@ -466,7 +465,7 @@ void cactus_matmul_int4(
                                 for (size_t k_offset = 0; k_offset < group_size; k_offset += 16) {
                                     sum = accum_dot(sum, vld1q_s8(a_ptr + k_offset), vld1q_s8(b_col + k_offset));
                                 }
-                                all_group_acc[g][mii][ni] += vaddvq_s32(sum);
+                                group_acc[mii][ni] += vaddvq_s32(sum);
                             }
                         }
                     }
@@ -479,7 +478,7 @@ void cactus_matmul_int4(
                             for (size_t k_offset = 0; k_offset < group_size; k_offset += 16) {
                                 sum = accum_dot(sum, vld1q_s8(a_base + k_offset), vld1q_s8(b_col + k_offset));
                             }
-                            all_group_acc[g][mi][ni] += vaddvq_s32(sum);
+                            group_acc[mi][ni] += vaddvq_s32(sum);
                         }
                     }
                 } else {
@@ -506,8 +505,15 @@ void cactus_matmul_int4(
                                 sum = accum_dot(sum, a2, b2);
                                 sum = accum_dot(sum, a3, b3);
                             }
-                            all_group_acc[g][mi][ni] += vaddvq_s32(sum);
+                            group_acc[mi][ni] += vaddvq_s32(sum);
                         }
+                    }
+                }
+
+                for (size_t ni = 0; ni < actual_n; ni++) {
+                    const float b_scale = (float)B_scales[(n_start + ni) * num_groups + g];
+                    for (size_t mi = 0; mi < actual_m; mi++) {
+                        running_sum[mi][ni] += (float)group_acc[mi][ni] * b_scale;
                     }
                 }
             }
@@ -515,12 +521,7 @@ void cactus_matmul_int4(
             for (size_t mi = 0; mi < actual_m; mi++) {
                 const float a_scale = A_scales[m_start + mi];
                 for (size_t ni = 0; ni < actual_n; ni++) {
-                    const __fp16* col_scales = &B_scales[(n_start + ni) * num_groups];
-                    float sum = 0.0f;
-                    for (size_t g = 0; g < num_groups; g++) {
-                        sum += (float)all_group_acc[g][mi][ni] * (float)col_scales[g];
-                    }
-                    C[(m_start + mi) * N + (n_start + ni)] = (__fp16)(sum * a_scale);
+                    C[(m_start + mi) * N + (n_start + ni)] = (__fp16)(running_sum[mi][ni] * a_scale);
                 }
             }
             } // tile_idx

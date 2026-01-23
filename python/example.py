@@ -17,7 +17,7 @@ SCRIPT_DIR = Path(__file__).parent
 PROJECT_ROOT = SCRIPT_DIR.parent
 sys.path.insert(0, str(SCRIPT_DIR / "src"))
 
-from cactus_ffi import (
+from cactus import (
     cactus_init,
     cactus_complete,
     cactus_transcribe,

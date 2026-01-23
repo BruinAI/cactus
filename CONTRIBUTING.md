@@ -124,13 +124,13 @@ Cactus provides Python bindings for quick scripting and research. After setup:
 cactus build
 cactus download LiquidAI/LFM2-VL-450M
 cactus download openai/whisper-small
-cd tools && python example.py
+cd python && python example.py
 ```
 
 **Available functions:**
 
 ```python
-from cactus_ffi import (
+from cactus import (
     cactus_init,          # Load a model
     cactus_complete,      # Text/VLM completion
     cactus_transcribe,    # Audio transcription (Whisper)
@@ -146,7 +146,7 @@ from cactus_ffi import (
 
 ```python
 import json
-from cactus_ffi import cactus_init, cactus_complete, cactus_destroy
+from cactus import cactus_init, cactus_complete, cactus_destroy
 
 # Load model
 model = cactus_init("../weights/lfm2-vl-450m")
@@ -166,7 +166,7 @@ cactus_destroy(model)
 **Whisper transcription:**
 
 ```python
-from cactus_ffi import cactus_init, cactus_transcribe, cactus_destroy
+from cactus import cactus_init, cactus_transcribe, cactus_destroy
 
 whisper = cactus_init("../weights/whisper-small")
 prompt = "<|startoftranscript|><|en|><|transcribe|><|notimestamps|>"
@@ -175,7 +175,7 @@ response = cactus_transcribe(whisper, "audio.wav", prompt=prompt)
 cactus_destroy(whisper)
 ```
 
-See `tools/example.py` for a complete working example.
+See `python/example.py` for a complete working example.
 
 ### Questions?
 
