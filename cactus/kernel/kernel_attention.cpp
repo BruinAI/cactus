@@ -171,17 +171,17 @@ void cactus_attention_f16(
 
                         if (block_max > NEG_INF) {
                             if (block_max > running_max) {
-                                float scale_correction = expf(running_max - block_max);
-                                running_sum *= scale_correction;
-                                
-                                for (size_t i = 0; i < used_vec_blocks; ++i) {
-                                    output_accum_low[i] = vmulq_n_f32(output_accum_low[i], scale_correction);
-                                    output_accum_high[i] = vmulq_n_f32(output_accum_high[i], scale_correction);
-                                }
-                                for (size_t i = 0; i < tail_dims; ++i) {
-                                    output_accum_tail[i] *= scale_correction;
-                                }
-                                running_max = block_max;
+                            float scale_correction = expf(running_max - block_max);
+                            running_sum *= scale_correction;
+                            
+                            for (size_t i = 0; i < used_vec_blocks; ++i) {
+                                output_accum_low[i] = vmulq_n_f32(output_accum_low[i], scale_correction);
+                                output_accum_high[i] = vmulq_n_f32(output_accum_high[i], scale_correction);
+                            }
+                            for (size_t i = 0; i < tail_dims; ++i) {
+                                output_accum_tail[i] *= scale_correction;
+                            }
+                            running_max = block_max;
                             } else {
                                 current_block_scale = expf(block_max - running_max);
                             }

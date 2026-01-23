@@ -60,12 +60,10 @@ size_t CactusGraph::divide(size_t input1, size_t input2) {
 size_t CactusGraph::matmul(size_t input1, size_t input2, bool pretransposed_rhs, ComputeBackend backend) {
     const auto& lhs_buffer = get_output_buffer(input1);
     const auto& rhs_buffer = get_output_buffer(input2);
-    
-    for(size_t i=0; i<lhs_buffer.shape.size(); ++i)         
-        for(size_t i=0; i<rhs_buffer.shape.size(); ++i)     
-            if (lhs_buffer.shape.size() != 2 || rhs_buffer.shape.size() != 2) {
-                throw std::invalid_argument("Matrix multiplication requires 2D tensors");
-            }
+      
+    if (lhs_buffer.shape.size() != 2 || rhs_buffer.shape.size() != 2) {
+        throw std::invalid_argument("Matrix multiplication requires 2D tensors");
+    }
 
     size_t M = lhs_buffer.shape[0];
     size_t K = lhs_buffer.shape[1];

@@ -203,49 +203,6 @@ bool test_rms_norm() {
     return fixture.verify_output(norm_result, expected, 0.01f);
 }
 
-// REMOVE BEFORE FINAL COMMIT
-
-bool test_group_norm() {
-    TestUtils::FP16TestFixture fixture("Group Norm");
-
-    // Input: 2 samples (sequence len), 4 channels.
-    // Total elements: 8.
-    // Values: {1, 2, 3, 4, 5, 6, 7, 8}
-    // Global Mean: 4.5
-    // Global Variance: sum((x - 4.5)^2) / 8 = 42/8 = 5.25
-    // Std: sqrt(5.25 + 1e-5) approx 2.29128...
-    // Output = (Input - 4.5) / 2.29128...
-
-    size_t input_a = fixture.create_input({2, 4});
-    size_t weight = fixture.create_input({4});
-    size_t bias = fixture.create_input({4});
-    
-    // Using default epsilon 1e-5f
-    // Since num_groups implicitly 1, strict global norm.
-    size_t norm_result = fixture.graph().groupnorm(input_a, weight, bias);
-
-    std::vector<__fp16> input_data = {1.0f, 2.0f, 3.0f, 4.0f, 5.0f, 6.0f, 7.0f, 8.0f};
-    std::vector<__fp16> weight_data = {1.0f, 1.0f, 1.0f, 1.0f};
-    std::vector<__fp16> bias_data = {0.0f, 0.0f, 0.0f, 0.0f};
-
-    fixture.set_input_data(input_a, input_data);
-    fixture.set_input_data(weight, weight_data);
-    fixture.set_input_data(bias, bias_data);
-    fixture.execute();
-
-    float mean = 4.5f;
-    float variance = 5.25f; // (3.5^2 + 2.5^2 + 1.5^2 + 0.5^2) * 2 / 8 = (12.25 + 6.25 + 2.25 + 0.25) * 2 / 8 = 21 * 2 / 8 = 5.25
-    float inv_std = 1.0f / sqrtf(variance + 1e-5f);
-
-    std::vector<__fp16> expected;
-    for (auto val : input_data) {
-        float norm = (static_cast<float>(val) - mean) * inv_std;
-        expected.push_back(static_cast<__fp16>(norm));
-    }
-
-    return fixture.verify_output(norm_result, expected, 0.01f);
-}
-
 bool test_softmax() {
     TestUtils::FP16TestFixture fixture("Softmax");
 
@@ -923,7 +880,6 @@ int main() {
     runner.run_test("Variance Operations", test_variance_operations());
     runner.run_test("Min/Max Operations", test_min_max_operations());
     runner.run_test("RMS Norm", test_rms_norm());
-    runner.run_test("Group Norm", test_group_norm());
     runner.run_test("Softmax", test_softmax());
     runner.run_test("Attention", test_attention());
     runner.run_test("FP16 Precision", test_fp16_precision());

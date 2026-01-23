@@ -623,7 +623,7 @@ const char* get_device_id(const char* current_token);
 extern "C" {
 
 __attribute__((weak))
-const char* register_app(const char* encrypted_data) {
+inline const char* register_app(const char* encrypted_data) {
     (void)encrypted_data;
     static thread_local std::string uuid_storage;
     uuid_storage = cactus::ffi::generateUUID();
@@ -631,7 +631,7 @@ const char* register_app(const char* encrypted_data) {
 }
 
 __attribute__((weak))
-const char* get_device_id(const char* current_token) {
+inline const char* get_device_id(const char* current_token) {
     (void)current_token;
     static thread_local std::string uuid_storage;
     uuid_storage = cactus::ffi::generateUUID();
