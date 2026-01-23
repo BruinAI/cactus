@@ -339,7 +339,6 @@ void CactusGraph::execute(const std::string& profile_file) {
 
             compute_node_optimized(*node, nodes_, node_index_map_);
             
-            // Mark PERSISTENT nodes as populated after execution
             if (node->op_type == OpType::PERSISTENT) {
                 populated_node_ids_.insert(node->id);
             }
@@ -438,7 +437,6 @@ void CactusGraph::execute(const std::string& profile_file) {
         } else {
             compute_node_optimized(*node, nodes_, node_index_map_);
             
-            // Mark PERSISTENT nodes as populated after execution
             if (node->op_type == OpType::PERSISTENT) {
                 populated_node_ids_.insert(node->id);
             }
@@ -713,7 +711,6 @@ void CactusGraph::soft_reset() {
         cached_node_ids.insert(cache_entry.second);
     }
     
-    // Include persistent nodes in preserved set
     for (size_t pid : persistent_node_ids_) {
         cached_node_ids.insert(pid);
     }
@@ -755,7 +752,6 @@ void CactusGraph::soft_reset_keep_pool() {
         cached_node_ids.insert(cache_entry.second);
     }
 
-    // Include persistent nodes in preserved set
     for (size_t pid : persistent_node_ids_) {
         cached_node_ids.insert(pid);
     }

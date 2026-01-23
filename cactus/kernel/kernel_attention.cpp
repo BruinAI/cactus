@@ -49,7 +49,6 @@ void cactus_attention_f16(
             std::vector<float32x4_t> output_accum_low(head_dim_aligned / VECTOR_WIDTH * 2);
             std::vector<float32x4_t> output_accum_high(head_dim_aligned / VECTOR_WIDTH * 2);
             
-            // Scalar accumulators for tail dimensions (head_dim_aligned to head_dim)
             const size_t tail_dims = head_dim - head_dim_aligned;
             std::vector<float> output_accum_tail(tail_dims, 0.0f);
 
@@ -79,7 +78,6 @@ void cactus_attention_f16(
                         output_accum_low[i] = vdupq_n_f32(0.0f);
                         output_accum_high[i] = vdupq_n_f32(0.0f);
                     }
-                    // Reset tail accumulators
                     for (size_t i = 0; i < tail_dims; ++i) {
                         output_accum_tail[i] = 0.0f;
                     }

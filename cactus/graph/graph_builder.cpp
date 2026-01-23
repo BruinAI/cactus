@@ -363,12 +363,10 @@ size_t CactusGraph::conv1d_k7s3(size_t input, size_t weight, size_t bias) {
     const auto& b   = get_output_buffer(bias);
 
     if (xin.shape.size() != 3) throw std::runtime_error("conv1d_k7s3 expects N,C,L");
-    // Weight is packed [C_in, K, C_out]
     if (w.shape.size() != 3) throw std::runtime_error("weight must be [C_in, 7, C_out]");
     if (w.shape[0] != xin.shape[1]) throw std::runtime_error("C_in mismatch in conv1d_k7s3");
     if (w.shape[1] != 7) throw std::runtime_error("K=7 expected in conv1d_k7s3");
     
-    // Bias check
     size_t C_out = w.shape[2];
     if (b.total_size != C_out) throw std::runtime_error("Bias size mismatch");
 
@@ -377,10 +375,6 @@ size_t CactusGraph::conv1d_k7s3(size_t input, size_t weight, size_t bias) {
     const size_t K    = 7;
     const size_t stride = 3;
 
-    // Output length: floor((L - K)/stride) + 1
-    // Matches moonshine logic if padding is 0. 
-    // Standard conv1d formula w/o padding: L_out = (L - dilation*(K-1) - 1)/stride + 1
-    // dilation=1 => (L - K)/stride + 1
     const size_t L_out = (L < K) ? 0 : (L - K) / stride + 1;
 
     OpParams params{};

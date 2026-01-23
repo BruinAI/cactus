@@ -266,13 +266,11 @@ void cactus_conv1d_f16(
                 const __fp16* Xc = Xb  + ic * L + t;
                 const __fp16* Wc = Woc + ic * K;
 
-                // Vectorize over K
                 float32x4_t acc0 = vdupq_n_f32(0.f);
                 float32x4_t acc1 = vdupq_n_f32(0.f);
 
                 size_t k = 0;
 
-                // 8 halfs per vector load
                 for (; k + 8 <= K; k += 8) {
                     const float16x8_t xv = vld1q_f16(Xc + k);
                     const float16x8_t wv = vld1q_f16(Wc + k);
@@ -291,7 +289,6 @@ void cactus_conv1d_f16(
                 float32x2_t s2 = vadd_f32(vget_low_f32(acc1), vget_high_f32(acc1));
                 sum += vget_lane_f32(s2, 0) + vget_lane_f32(s2, 1);
 
-                // Tail
                 for (; k < K; ++k) {
                     sum += (float)Xc[k] * (float)Wc[k];
                 }
@@ -423,19 +420,16 @@ void cactus_conv1d_f16_k7s3_oc8(
     size_t out_len = (L - 7) / 3 + 1;
     size_t num_oc_blocks = (C_out + 7) / 8;
 
-    // Parallelize over N and Output Channel Blocks
     CactusThreading::parallel_for_2d(N, num_oc_blocks, CactusThreading::Thresholds::SCALAR_EXPENSIVE, [=](size_t n, size_t ob) {
         size_t oc0 = ob * 8;
         const __fp16* Xb = input + n * (C_in * L);
         __fp16* Yb = output + n * (C_out * out_len);
 
-        // Main time loop with blocking Tb=4
         size_t out_t = 0;
         for (; out_t + 4 <= out_len; out_t += 4) {
             conv1d_k7s3_oc8_t4(Xb, Wpack, bias, Yb, L, out_len, C_in, C_out, out_t, oc0);
         }
 
-        // Tail time steps
         for (; out_t < out_len; ++out_t) {
             conv1d_k7s3_oc8_scalar(Xb, Wpack, bias, Yb, L, out_len, C_in, C_out, out_t, oc0);
         }

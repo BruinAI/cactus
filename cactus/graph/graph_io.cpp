@@ -43,7 +43,7 @@ size_t CactusGraph::mmap_embeddings(const std::string& filename) {
     size_t file_idx = mapped_files_.size();
     mapped_files_.push_back(std::move(mapped_file));
     node_to_mapped_file_[node_id] = file_idx;
-    weight_cache_[filename] = node_id; // Added caching
+    weight_cache_[filename] = node_id;
     return node_id;
 }
 

@@ -7,12 +7,9 @@
 #include <set>
 #include <iostream>
 #include <algorithm>
-
-
 namespace cactus {
 namespace engine {
 MoonshineModel::MoonshineModel() : Model() {}
-
 MoonshineModel::MoonshineModel(const Config& config) : Model(config) {
     weight_nodes_.encoder_layers.resize(config.num_encoder_layers);
     weight_nodes_.decoder_layers.resize(config.num_decoder_layers);
@@ -20,13 +17,11 @@ MoonshineModel::MoonshineModel(const Config& config) : Model(config) {
     if (hd <= 0.0f) {
         hd = 64.0f;
     }
-
     attention_scale_ = 1.0f / std::sqrt(hd);
     encoder_block_out_nodes_.resize(config.num_encoder_layers, 0);
     encoder_k_persistent_.assign(config.num_decoder_layers, 0);
     encoder_v_persistent_.assign(config.num_decoder_layers, 0);
 }
-
 void MoonshineModel::load_weights_to_graph(CactusGraph* gb) {
     embedding_node_id_ = gb->mmap_embeddings(embedding_file_path_);
     weight_nodes_.decoder_norm_weight = gb->mmap_weights(model_folder_path_ + "/output_norm.weights");
@@ -34,24 +29,20 @@ void MoonshineModel::load_weights_to_graph(CactusGraph* gb) {
     if (output_weight_node_id_ == 0) {
         output_weight_node_id_ = gb->mmap_weights(model_folder_path_ + "/output_layer.weights");
     }
-
     weight_nodes_.output_weight = output_weight_node_id_;
     if (npu::is_npu_available()) {
         std::string npu_encoder_path = model_folder_path_ + "/model.mlpackage";
         npu_encoder_ = npu::create_encoder();
         if (npu_encoder_ && npu_encoder_->load(npu_encoder_path)) {
             use_npu_encoder_ = true;
-            std::vector<int> typical_input_shape = {1, 80, 3000}
-;
+            std::vector<int> typical_input_shape = {1, 80, 3000};
             npu_encoder_->preallocate(typical_input_shape, "x", "");
         }
         else {
             use_npu_encoder_ = false;
             npu_encoder_.reset();
         }
-
     }
-
     if (!use_npu_encoder_) {
         weight_nodes_.encoder_conv1_weight = gb->mmap_weights(model_folder_path_ + "/encoder_conv1_weight.weights");
         weight_nodes_.encoder_conv2_weight = gb->mmap_weights(model_folder_path_ + "/encoder_conv2_weight.weights");
@@ -62,7 +53,6 @@ void MoonshineModel::load_weights_to_graph(CactusGraph* gb) {
         weight_nodes_.encoder_norm_bias = gb->mmap_weights(model_folder_path_ + "/encoder_norm_bias.bias");
         weight_nodes_.encoder_layer_norm_weight = gb->mmap_weights(model_folder_path_ + "/encoder_layer_norm_weight.weights"); 
     }
-
         for (uint32_t i = 0; i < config_.num_decoder_layers; i++) {
         auto& layer = weight_nodes_.decoder_layers[i];
         std::string layer_prefix = model_folder_path_ + "/layer_" + std::to_string(i) + "_";
@@ -81,7 +71,6 @@ void MoonshineModel::load_weights_to_graph(CactusGraph* gb) {
             layer.decoder_ffn_up_weight = gb->mmap_weights(layer_prefix + "ffn_up.weights");
             layer.decoder_ffn_up_bias = gb->mmap_weights(layer_prefix + "ffn_up.bias");
         }
-
         layer.decoder_ffn2_weight = gb->mmap_weights(layer_prefix + "mlp_fc2.weights");
         layer.decoder_ffn2_bias = gb->mmap_weights(layer_prefix + "mlp_fc2.bias");
         layer.decoder_post_ffn_layernorm_weight = gb->mmap_weights(layer_prefix + "final_norm.weights");
@@ -91,7 +80,6 @@ void MoonshineModel::load_weights_to_graph(CactusGraph* gb) {
         layer.decoder_self_attn_output_weight = gb->mmap_weights(layer_prefix + "attn_output.weights");
         layer.decoder_post_attn_layernorm_weight = gb->mmap_weights(layer_prefix + "input_norm.weights");
     }
-
     if (!use_npu_encoder_) {
         for (uint32_t i = 0; i < config_.num_encoder_layers; i++) {
             auto& layer = weight_nodes_.encoder_layers[i];
@@ -106,7 +94,6 @@ void MoonshineModel::load_weights_to_graph(CactusGraph* gb) {
                 layer.encoder_ffn_up_weight = gb->mmap_weights(layer_prefix + "ffn_up.weights");
                 layer.encoder_ffn_up_bias = gb->mmap_weights(layer_prefix + "ffn_up.bias");
             }
-
             layer.encoder_ffn2_weight = gb->mmap_weights(layer_prefix + "mlp_fc2.weights");
             layer.encoder_ffn2_bias = gb->mmap_weights(layer_prefix + "mlp_fc2.bias");
             layer.encoder_post_ffn_layernorm_weight = gb->mmap_weights(layer_prefix + "post_attn_norm.weights");
@@ -116,20 +103,14 @@ void MoonshineModel::load_weights_to_graph(CactusGraph* gb) {
             layer.encoder_self_attn_output_weight = gb->mmap_weights(layer_prefix + "attn_output.weights");
             layer.encoder_post_attn_layernorm_weight = gb->mmap_weights(layer_prefix + "input_norm.weights");
         }
-
     }
-
 }
-   
 static size_t build_encoder_mlp_gelu(CactusGraph* gb, size_t input, size_t w1, size_t b1, size_t w2, size_t b2, ComputeBackend backend, uint32_t layer_idx) {
     auto ffn1_weight = gb->matmul(input, w1, true, backend);
     auto ffn1_bias = gb->add(ffn1_weight, b1);
     auto ffn1_act = gb->gelu(ffn1_bias);
     auto ffn2_weight = gb->matmul(ffn1_act, w2, true, backend);
     auto ffn2_bias = gb->add(ffn2_weight, b2);
-    //gb->capture_debug_node(layer_idx, "model.encoder.layers." + std::to_string(layer_idx) + ".mlp.fc1", ffn1_bias); 
-    //gb->capture_debug_node(layer_idx, "model.encoder.layers." + std::to_string(layer_idx) + ".mlp.fc1.act", ffn1_act); 
-    //gb->capture_debug_node(layer_idx, "model.encoder.layers." + std::to_string(layer_idx) + ".mlp.fc2", ffn2_bias);
     return ffn2_bias;
 }
 static size_t build_decoder_mlp_silu(CactusGraph* gb, size_t input, size_t w_gate, size_t b_gate, size_t w_up, size_t b_up, size_t w2, size_t b2, ComputeBackend backend, uint32_t layer_idx) {
@@ -141,13 +122,8 @@ static size_t build_decoder_mlp_silu(CactusGraph* gb, size_t input, size_t w_gat
     auto intermediate = gb->multiply(gate_act, up_bias);
     auto output_weight = gb->matmul(intermediate, w2, true, backend);
     auto output_bias = gb->add(output_weight, b2);
-    //gb->capture_debug_node(layer_idx, "model.decoder.layers." + std::to_string(layer_idx) + ".mlp.gate_act", gate_act);
-    //gb->capture_debug_node(layer_idx, "model.decoder.layers." + std::to_string(layer_idx) + ".mlp.up_bias", up_bias);
-    //gb->capture_debug_node(layer_idx, "model.decoder.layers." + std::to_string(layer_idx) + ".mlp.intermediate", intermediate);
-    //gb->capture_debug_node(layer_idx, "model.decoder.layers." + std::to_string(layer_idx) + ".mlp.output", output_bias);
     return output_bias;
 }
-
 size_t MoonshineModel::build_decoder_cross_attention(CactusGraph* gb, size_t input, uint32_t layer_idx, ComputeBackend backend, bool use_cache, size_t /*position_offset*/){
     const auto& layer = weight_nodes_.decoder_layers[layer_idx];
     size_t q = gb->matmul(input, layer.decoder_encoder_attn_q_weight, true, backend);
@@ -155,13 +131,11 @@ size_t MoonshineModel::build_decoder_cross_attention(CactusGraph* gb, size_t inp
     if (q_buf.shape.size() != 2) {
         throw std::runtime_error("encoder cross-attn: q must be [T_dec, D]");
     }
-
     size_t T_dec   = q_buf.shape[0];
     size_t q_heads = config_.attention_heads;
     size_t kv_heads = config_.attention_kv_heads;
     size_t head_dim = config_.attention_head_dim;
-    q = gb->reshape(q, {1, T_dec, q_heads, head_dim}
-);
+    q = gb->reshape(q, {1, T_dec, q_heads, head_dim});
     size_t k_4d = 0;
     size_t v_4d = 0;
     bool is_pop = (encoder_k_persistent_[layer_idx] != 0 && gb->is_populated(encoder_k_persistent_[layer_idx]));
@@ -178,39 +152,25 @@ size_t MoonshineModel::build_decoder_cross_attention(CactusGraph* gb, size_t inp
         if (k_buf.shape.size() != 2) {
             throw std::runtime_error("encoder cross-attn: k must be [T_enc, D]");
         }
-
         size_t T_enc = k_buf.shape[0];
-        k_4d = gb->reshape(k, {1, T_enc, kv_heads, head_dim}
-);
-        v_4d = gb->reshape(v, {1, T_enc, kv_heads, head_dim}
-);
+        k_4d = gb->reshape(k, {1, T_enc, kv_heads, head_dim});
+        v_4d = gb->reshape(v, {1, T_enc, kv_heads, head_dim});
         if (encoder_k_persistent_[layer_idx] == 0) {
             encoder_k_persistent_[layer_idx] = gb->persistent(k_4d);
             encoder_v_persistent_[layer_idx] = gb->persistent(v_4d);
         }
-
         k_4d = encoder_k_persistent_[layer_idx];
         v_4d = encoder_v_persistent_[layer_idx];
-        //gb->capture_debug_node(layer_idx, prefix + "persistent_k", k_4d);
-        //gb->capture_debug_node(layer_idx, prefix + "persistent_v", v_4d);
     }
-
     size_t attn = gb->attention(q, k_4d, v_4d, attention_scale_, false);
-    //gb->capture_debug_node(layer_idx, prefix + "q_proj", q);
-    //gb->capture_debug_node(layer_idx, prefix + "k_proj", k_4d);
-    //gb->capture_debug_node(layer_idx, prefix + "v_proj", v_4d);
-    attn = gb->reshape(attn, {T_dec, q_heads * head_dim}
-);
+    attn = gb->reshape(attn, {T_dec, q_heads * head_dim});
     size_t output = gb->matmul(attn, layer.decoder_encoder_attn_output_weight, true, backend);
-    //gb->capture_debug_node(layer_idx, prefix + "o_proj", output);
     return output;
 }
-
 void MoonshineModel::reset_graph_side_cache_nodes() {
     cache_k_output_nodes_.assign(config_.num_decoder_layers, 0);
     cache_v_output_nodes_.assign(config_.num_decoder_layers, 0);
 }
-
 void MoonshineModel::reset_cache() {
     Model::reset_cache();
     encoder_ready_ = false;
@@ -223,49 +183,34 @@ void MoonshineModel::reset_cache() {
             if (encoder_k_persistent_[i] != 0) {
                 gb->invalidate_persistent(encoder_k_persistent_[i]);
             }
-
             if (encoder_v_persistent_[i] != 0) {
                 gb->invalidate_persistent(encoder_v_persistent_[i]);
             }
-
         }
-
     }
-
 }
-
 size_t MoonshineModel::build_decoder_self_attention(CactusGraph* gb, size_t input, uint32_t layer_idx, ComputeBackend backend, bool use_cache, size_t position_offset){
     const auto& layer = weight_nodes_.decoder_layers[layer_idx];
     size_t q_proj = gb->matmul(input, layer.decoder_self_attn_q_weight, true, backend);
     size_t k_proj = gb->matmul(input, layer.decoder_self_attn_k_weight, true, backend);
     size_t v_proj = gb->matmul(input, layer.decoder_self_attn_v_weight, true, backend);
     std::string prefix = "model.decoder.layers." + std::to_string(layer_idx) + ".self_attn.";
-    //gb->capture_debug_node(layer_idx, prefix + "q_proj", q_proj);
-    //gb->capture_debug_node(layer_idx, prefix + "k_proj", k_proj);
-    //gb->capture_debug_node(layer_idx, prefix + "v_proj", v_proj);
     const auto& q_shape = gb->get_output_buffer(q_proj).shape;
     if (q_shape.size() != 2) {
         throw std::runtime_error("decoder self-attn: q must be [T_new, D]");
     }
-
     size_t seq_new = q_shape[0];
     size_t num_heads = config_.attention_heads;
     size_t head_dim = config_.attention_head_dim;
     size_t num_kv_heads = config_.attention_kv_heads;
-    size_t q_4d = gb->reshape(q_proj, {1, seq_new, num_heads, head_dim}
-);
-    size_t k_4d = gb->reshape(k_proj, {1, seq_new, num_kv_heads, head_dim}
-);
-    size_t v_4d = gb->reshape(v_proj, {1, seq_new, num_kv_heads, head_dim}
-);
+    size_t q_4d = gb->reshape(q_proj, {1, seq_new, num_heads, head_dim});
+    size_t k_4d = gb->reshape(k_proj, {1, seq_new, num_kv_heads, head_dim});
+    size_t v_4d = gb->reshape(v_proj, {1, seq_new, num_kv_heads, head_dim});
     size_t rot_dim = std::max(head_dim / 2, (size_t)32);
     if (config_.rope_theta > 0) {
         q_4d = gb->rope_gptj(q_4d, config_.rope_theta, position_offset, rot_dim);
         k_4d = gb->rope_gptj(k_4d, config_.rope_theta, position_offset, rot_dim);
     }
-
-    //gb->capture_debug_node(layer_idx, prefix + "q_rope", q_4d);
-    //gb->capture_debug_node(layer_idx, prefix + "k_rope", k_4d);
     size_t final_k = k_4d;
     size_t final_v = v_4d;
     if (use_cache && !kv_cache_.is_empty()) {
@@ -274,7 +219,6 @@ size_t MoonshineModel::build_decoder_self_attention(CactusGraph* gb, size_t inpu
         if (!k_view.ptr1 || !v_view.ptr1) {
             throw std::runtime_error("KV cache view is empty but kv_cache_.is_empty()==false");
         }
-
         size_t cache_len = kv_cache_.current_seq_len;
         size_t cache_k_node = gb->input(
             {1, cache_len, num_kv_heads, head_dim}
@@ -294,11 +238,9 @@ size_t MoonshineModel::build_decoder_self_attention(CactusGraph* gb, size_t inpu
             gb->set_input(cache_k_node, kv_cache_.get_key_ptr(layer_idx), kv_cache_.precision);
             gb->set_input(cache_v_node, kv_cache_.get_value_ptr(layer_idx), kv_cache_.precision);
         }
-
         final_k = gb->concat(cache_k_node, k_4d, 1);
         final_v = gb->concat(cache_v_node, v_4d, 1);
     }
-
     if (use_cache) {
         cache_k_output_nodes_[layer_idx] = final_k;
         cache_v_output_nodes_[layer_idx] = final_v;
@@ -307,15 +249,11 @@ size_t MoonshineModel::build_decoder_self_attention(CactusGraph* gb, size_t inpu
         cache_k_output_nodes_[layer_idx] = k_4d;
         cache_v_output_nodes_[layer_idx] = v_4d;
     }
-
     auto attn_out_4d = gb->attention(q_4d, final_k, final_v, attention_scale_, position_offset);
-    auto attn_out    = gb->reshape(attn_out_4d, {seq_new, num_heads * head_dim}
-);
+    auto attn_out    = gb->reshape(attn_out_4d, {seq_new, num_heads * head_dim});
     auto output = gb->matmul(attn_out, layer.decoder_self_attn_output_weight, true, backend);
-    //gb->capture_debug_node(layer_idx, prefix + "o_proj", output);
     return output;
 }
-
 size_t MoonshineModel::build_encoder_self_attention(CactusGraph* gb, size_t input, uint32_t layer_idx, ComputeBackend backend, bool use_cache, size_t /*position_offset*/){
     const auto& layer = weight_nodes_.encoder_layers[layer_idx];
     if(use_cache)
@@ -324,36 +262,23 @@ size_t MoonshineModel::build_encoder_self_attention(CactusGraph* gb, size_t inpu
     auto v_proj = gb->matmul(input, layer.encoder_self_attn_v_weight, true, backend);
     auto k_proj = gb->matmul(input, layer.encoder_self_attn_k_weight, true, backend);
     std::string prefix = "model.encoder.layers." + std::to_string(layer_idx) + ".self_attn.";
-    //gb->capture_debug_node(layer_idx, prefix + "q_proj", q_proj);
-    //gb->capture_debug_node(layer_idx, prefix + "k_proj", k_proj);
-    //gb->capture_debug_node(layer_idx, prefix + "v_proj", v_proj);
     size_t seq_len = gb->get_output_buffer(q_proj).shape[0];
     size_t num_heads = config_.attention_heads;
     size_t head_dim  = config_.attention_head_dim;
-    auto q = gb->reshape(q_proj, {1, seq_len, num_heads, head_dim}
-);
-    auto k = gb->reshape(k_proj, {1, seq_len, num_heads, head_dim}
-);
-    auto v = gb->reshape(v_proj, {1, seq_len, num_heads, head_dim}
-);
+    auto q = gb->reshape(q_proj, {1, seq_len, num_heads, head_dim});
+    auto k = gb->reshape(k_proj, {1, seq_len, num_heads, head_dim});
+    auto v = gb->reshape(v_proj, {1, seq_len, num_heads, head_dim});
     size_t rot_dim = static_cast<size_t>(head_dim * 0.9f); 
     if (rot_dim % 2 != 0) throw std::runtime_error("rot_dim must be even");
     if (config_.rope_theta > 0) {
         q = gb->rope_gptj(q, config_.rope_theta, 0, rot_dim);
         k = gb->rope_gptj(k, config_.rope_theta, 0, rot_dim);
     }
-
-    //gb->capture_debug_node(layer_idx, prefix + "q_rope", q);
-    //gb->capture_debug_node(layer_idx, prefix + "k_rope", k);
     auto attn = gb->attention(q, k, v, attention_scale_, false);
-    //gb->capture_debug_node(layer_idx, prefix + "attn_out", attn);  
-    attn = gb->reshape(attn, {seq_len, num_heads * head_dim}
-);
+    attn = gb->reshape(attn, {seq_len, num_heads * head_dim});
     auto output = gb->matmul(attn, layer.encoder_self_attn_output_weight, true, backend);
-    //gb->capture_debug_node(layer_idx, prefix + "o_proj", output);
     return output;
 }
-
 size_t MoonshineModel::build_audio_preprocessor(CactusGraph* gb, size_t input)
 {
     size_t conv_input = input;
@@ -361,29 +286,19 @@ size_t MoonshineModel::build_audio_preprocessor(CactusGraph* gb, size_t input)
     if (xbuf.precision == Precision::INT8) { 
         conv_input = gb->precision_cast(input, Precision::FP16);
     }
-
     size_t conv1 = gb->conv1d(conv_input, weight_nodes_.encoder_conv1_weight, 64);
     last_conv1_node_ = conv1;
     size_t conv1_act = gb->tanh(conv1); 
     size_t group_norm = gb->groupnorm(conv1_act, weight_nodes_.encoder_norm_weight, weight_nodes_.encoder_norm_bias, 1);
-    
-    // Optimized conv2 with K=7, Stride=3 using packed weights [C_in, 7, C_out]
+
     size_t conv2_with_bias = gb->conv1d_k7s3(group_norm, weight_nodes_.encoder_conv2_weight, weight_nodes_.encoder_conv2_bias);
-    
     size_t conv2_act = gb->gelu(conv2_with_bias);
     size_t conv3 = gb->conv1d_k3(conv2_act, weight_nodes_.encoder_conv3_weight, 2);
     auto bias3_shape = gb->get_output_buffer(weight_nodes_.encoder_conv3_bias).shape;
     size_t C3 = bias3_shape[0];
-    size_t bias3 = gb->reshape(weight_nodes_.encoder_conv3_bias, {1, C3, 1}
-);
+    size_t bias3 = gb->reshape(weight_nodes_.encoder_conv3_bias, {1, C3, 1});
     size_t conv3_with_bias = gb->add(conv3, bias3);
     size_t conv3_act = gb->gelu(conv3_with_bias);
-    //gb->capture_debug_node(0, "model.encoder.conv1", conv1);
-    //gb->capture_debug_node(0, "model.encoder.groupnorm", group_norm);
-    //gb->capture_debug_node(0, "model.encoder.conv2", conv2_with_bias);
-    //gb->capture_debug_node(0, "model.encoder.conv3", conv3_with_bias);
-    //gb->capture_debug_node(0, "model.encoder.conv3.weight", weight_nodes_.encoder_conv3_weight);
-    //gb->capture_debug_node(0, "model.encoder.conv3.bias", weight_nodes_.encoder_conv3_bias);
     const auto& buf = gb->get_output_buffer(conv3_act);
     size_t conv_out_transposed;
     if (buf.precision == Precision::FP16) {
@@ -393,11 +308,8 @@ size_t MoonshineModel::build_audio_preprocessor(CactusGraph* gb, size_t input)
         size_t conv3_f16 = gb->precision_cast(conv3_act, Precision::FP16);
         conv_out_transposed = gb->transpose(conv3_f16, ComputeBackend::CPU);
     }
-
-    //gb->capture_debug_node(0, "preprocessor_final_transposed", conv_out_transposed);
     return conv_out_transposed;
 }
-
 size_t MoonshineModel::build_encoder_transformer_block(
     CactusGraph* gb,
     size_t hidden,
@@ -420,26 +332,16 @@ size_t MoonshineModel::build_encoder_transformer_block(
         layer.encoder_post_ffn_layernorm_weight
     );
     std::string prefix = "model.encoder.layers." + std::to_string(layer_idx) + ".";
-    //gb->capture_debug_node(layer_idx, prefix + "input_layernorm", input_layernorm);
-    //gb->capture_debug_node(layer_idx, prefix + "self_attn", self_attn_out);
-    //gb->capture_debug_node(layer_idx, prefix + "residual_sum", post_attention_layernorm_input);  
-    //gb->capture_debug_node(layer_idx, prefix + "post_attention_layernorm", post_attention_layernorm);
     size_t mlp_out = build_encoder_mlp_gelu(
         gb, post_attention_layernorm, layer.encoder_ffn1_weight, layer.encoder_ffn1_bias,
         layer.encoder_ffn2_weight, layer.encoder_ffn2_bias, backend, layer_idx
     );
-
     size_t out = gb->add(post_attention_layernorm_input, mlp_out);
-    //gb->capture_debug_node(layer_idx, prefix + "mlp", mlp_out);
-    //gb->capture_debug_node(layer_idx, prefix + "output", out); 
-    //gb->capture_debug_node(layer_idx, "model.encoder.layers." + std::to_string(layer_idx), out);
     if (layer_idx < encoder_block_out_nodes_.size()) {
         encoder_block_out_nodes_[layer_idx] = out;
     }
-
     return out;
 }
-
 size_t MoonshineModel::build_decoder_transformer_block(CactusGraph* gb, size_t hidden, uint32_t layer_idx, ComputeBackend backend, bool use_cache, size_t position_offset){
     const auto& layer = weight_nodes_.decoder_layers[layer_idx];
     size_t input_layernorm = gb->layernorm(hidden, layer.decoder_post_attn_layernorm_weight);
@@ -454,17 +356,10 @@ size_t MoonshineModel::build_decoder_transformer_block(CactusGraph* gb, size_t h
             layer.decoder_ffn_up_weight, layer.decoder_ffn_up_bias,
             layer.decoder_ffn2_weight, layer.decoder_ffn2_bias, backend, layer_idx
             );
-
     size_t x_post_ffn = gb->add(x_post_ca, mlp_out);
     std::string prefix = "model.decoder.layers." + std::to_string(layer_idx) + ".";
-    //gb->capture_debug_node(layer_idx, prefix + "input_layernorm", input_layernorm);
-    //gb->capture_debug_node(layer_idx, prefix + "post_attention_layernorm", post_attention_layernorm);
-    //gb->capture_debug_node(layer_idx, prefix + "final_layernorm", final_layernorm);
-    //gb->capture_debug_node(layer_idx, "model.decoder.layers." + std::to_string(layer_idx), x_post_ffn);
-
     return x_post_ffn;
 }
-
 size_t MoonshineModel::build_encoder(CactusGraph* gb, const std::vector<float>& audio_features)
 {
     if (!audio_features.empty()) {
@@ -476,16 +371,13 @@ size_t MoonshineModel::build_encoder(CactusGraph* gb, const std::vector<float>& 
             if (val > max_val) max_val = val;
             sum_val += val;
         }
-
         double mean_val = sum_val / audio_features.size();
         double variance = 0.0;
         for (float val : audio_features) {
             variance += (val - mean_val) * (val - mean_val);
         }
-
         double std_val = std::sqrt(variance / audio_features.size());
     }
-
     if (use_npu_encoder_ && npu_encoder_ && npu_encoder_->is_available()) {
         std::vector<int> out_shape = npu_encoder_->get_output_shape();
         size_t T_enc, D_enc;
@@ -500,7 +392,6 @@ size_t MoonshineModel::build_encoder(CactusGraph* gb, const std::vector<float>& 
         else {
             throw std::runtime_error("NPU encoder output has unexpected shape");
         }
-
         std::vector<__fp16> audio_f16(audio_features.size());
         cactus_fp32_to_fp16(audio_features.data(), audio_f16.data(), audio_features.size());
         std::vector<int> input_shape = {1, 80, static_cast<int>(T_enc)};
@@ -520,7 +411,6 @@ size_t MoonshineModel::build_encoder(CactusGraph* gb, const std::vector<float>& 
                 last_encoder_post_norm_node_ = enc_output_persistent;
                 return enc_output_persistent;
             }
-
         }
         else {
             std::vector<__fp16> npu_output(T_enc * D_enc);
@@ -538,11 +428,8 @@ size_t MoonshineModel::build_encoder(CactusGraph* gb, const std::vector<float>& 
                 last_encoder_post_norm_node_ = enc_output_persistent;
                 return enc_output_persistent;
             }
-
         }
-
     }
-
     auto backend =
         (config_.default_backend == Config::Backend::CPU)
         ? ComputeBackend::CPU
@@ -553,38 +440,30 @@ size_t MoonshineModel::build_encoder(CactusGraph* gb, const std::vector<float>& 
     size_t audio_length = audio_features.size();  
     audio_input = gb->input({1, 1, audio_length}, Precision::FP16);
     gb->set_input(audio_input, audio_f16.data(), Precision::FP16);
-    //gb->capture_debug_node(0, "audio_input_real", audio_input);
     size_t conv2_transposed = build_audio_preprocessor(gb, audio_input);
     const auto& conv_shape = gb->get_output_buffer(conv2_transposed).shape;
     if (conv_shape.size() != 3 || conv_shape[0] != 1)
         throw std::runtime_error("Conv2 transpose should be [1, T_enc, D].");
     size_t T_enc = conv_shape[1];
     size_t D_enc = conv_shape[2];
-    size_t h = gb->reshape(conv2_transposed, {T_enc, D_enc}
-); 
-    //gb->capture_debug_node(0, "encoder_initial_h", h);
+    size_t h = gb->reshape(conv2_transposed, {T_enc, D_enc}); 
     for (uint32_t i = 0; i < config_.num_encoder_layers; ++i){
         h = build_encoder_transformer_block(gb, h, i, backend, false, 0);
     }
-
     size_t h_norm = gb->layernorm(
         h,
         weight_nodes_.encoder_layer_norm_weight
     );
-    //gb->capture_debug_node(0, "model.encoder.layer_norm", h_norm);
     size_t h_norm_persistent = gb->persistent(h_norm);
-    //gb->capture_debug_node(0, "encoder_final_norm_persistent", h_norm_persistent);
     last_encoder_post_norm_node_ = h_norm_persistent;
     return h_norm_persistent;
 }
-
 size_t MoonshineModel::build_decoder(const std::vector<uint32_t>& tokens, bool use_cache, bool last_token_only) {
     auto* gb = static_cast<CactusGraph*>(graph_handle_);
     const size_t full_len = tokens.size();
     if (full_len == 0) {
         throw std::runtime_error("Decoder token list cannot be empty.");
     }
-
     auto backend = config_.default_backend == Config::Backend::CPU
                                                 ? ComputeBackend::CPU
                                                 : ComputeBackend::NPU;
@@ -596,10 +475,8 @@ size_t MoonshineModel::build_decoder(const std::vector<uint32_t>& tokens, bool u
     for (size_t i = 0; i < new_tokens; i++) {
         tok_f[i] = static_cast<float>(tokens[start_idx + i]);
     }
-
     gb->set_input(tok_input, tok_f.data(), Precision::FP32);
     size_t dec_hidden = gb->embedding(embedding_node_id_, tok_input);
-    //gb->capture_debug_node(0, "decoder_initial_embedding", dec_hidden);
     for (uint32_t layer_idx = 0; layer_idx < config_.num_decoder_layers; ++layer_idx) {
         dec_hidden = build_decoder_transformer_block(
             gb,
@@ -610,37 +487,28 @@ size_t MoonshineModel::build_decoder(const std::vector<uint32_t>& tokens, bool u
             position_offset
         );
     }
-
-    //gb->capture_debug_node(0, "decoder_hidden_all_layers", dec_hidden);
     size_t dec_norm = gb->layernorm(
         dec_hidden,
         weight_nodes_.decoder_norm_weight
     );
-    //gb->capture_debug_node(0, "model.decoder.norm", dec_norm);
     size_t logits_input = dec_norm;
     if (last_token_only) {
         size_t row_index = new_tokens - 1;
         logits_input = gb->slice(logits_input, 0, row_index, 1); 
     }
-
     auto w_shape = gb->get_output_buffer(output_weight_node_id_).shape;
     size_t logits = gb->matmul(logits_input, output_weight_node_id_, true, backend);
     last_new_tokens_ = new_tokens;
-    //gb->capture_debug_node(0, "logits", logits);
     return logits;
 }
-
 size_t MoonshineModel::forward(const std::vector<float>& audio_features, const std::vector<uint32_t>& tokens, bool use_cache)
 {
     auto* gb = static_cast<CactusGraph*>(graph_handle_);
     gb->clear_debug_nodes();
     size_t enc_out = build_encoder(gb, audio_features);
     size_t logits = build_decoder(tokens, use_cache, true);
-    //gb->capture_debug_node(0, "forward_enc_out", enc_out);
-    //gb->capture_debug_node(0, "forward_logits", logits);
     return logits;
 }
-
 std::vector<float> MoonshineModel::get_audio_embeddings(const std::vector<float>& audio_features) {
     auto* gb = static_cast<CactusGraph*>(graph_handle_);
     build_encoder(gb, audio_features); 
@@ -655,7 +523,6 @@ std::vector<float> MoonshineModel::get_audio_embeddings(const std::vector<float>
     reset_cache();
     return embedding;
 }
-
 uint32_t MoonshineModel::decode_with_audio(
     const std::vector<uint32_t>& tokens,
     const std::vector<float>& audio_features,
@@ -689,7 +556,6 @@ uint32_t MoonshineModel::decode_with_audio(
         logits_node = build_decoder(full_tokens, false, false);
         encoder_ready_ = true;
     }
-
    	else
     {
         gb->soft_reset();
@@ -697,7 +563,6 @@ uint32_t MoonshineModel::decode_with_audio(
         std::vector<uint32_t> last_token_vec = { tokens.back() };
         logits_node = build_decoder(last_token_vec, true, true);
     }
-
     size_t sampled_token_id = gb->sample(logits_node, temperature, top_p, top_k);
     if (!profile_file.empty()) gb->execute(profile_file);
    	else gb->execute();
@@ -718,13 +583,11 @@ uint32_t MoonshineModel::decode_with_audio(
             int8_t* src = static_cast<int8_t*>(logits_ptr);
             Quantization::int8_to_fp32(src, logits.data(), vocab_size, 1.0f);
         }
-
         float max_logit = *std::max_element(logits.begin(), logits.end());
         double sum_exp = 0.0;
         for (size_t i = 0; i < vocab_size; ++i) {
             sum_exp += std::exp(static_cast<double>(logits[i] - max_logit));
         }
-
         double log_sum_exp = static_cast<double>(max_logit) + std::log(sum_exp);
         double entropy = 0.0;
         for (size_t i = 0; i < vocab_size; ++i) {
@@ -733,21 +596,15 @@ uint32_t MoonshineModel::decode_with_audio(
             if (prob > 1e-10) {
                 entropy -= prob * log_prob;
             }
-
         }
-
         double max_entropy = std::log(static_cast<double>(vocab_size));
         *out_entropy = static_cast<float>(entropy / max_entropy);
     }
-
     post_execute_updates(gb, full_tokens.size());
     update_kv_cache(gb, last_new_tokens_);
     auto* out_ptr = gb->get_output(sampled_token_id);
     uint32_t sampled = *reinterpret_cast<uint32_t*>(out_ptr);
     return sampled;
 }
-
 }
-
 }
-

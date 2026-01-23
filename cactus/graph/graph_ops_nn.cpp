@@ -571,7 +571,6 @@ void compute_conv1d_k7s3_node(GraphNode& node, const std::vector<std::unique_ptr
     const size_t C_in = X.shape[1];
     const size_t L = X.shape[2];
     
-    // Weight shape is now [C_in, K, C_out]
     if (W.shape.size() != 3) throw std::runtime_error("Weight must be 3D");
     const size_t C_in_W = W.shape[0];
     const size_t K = W.shape[1];
