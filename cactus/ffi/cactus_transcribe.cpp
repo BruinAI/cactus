@@ -197,8 +197,8 @@ int cactus_transcribe(
 
         float max_tps = handle->model->get_config().default_max_tps;
         if (max_tps < 0) {
-            max_tps = 1;
-            std::cout << "Default max TPS is not set, using 1" << std::endl;
+            max_tps = 100;
+            std::cout << "Default max TPS is not set, using 100" << std::endl;
         }
 
         float audio_length = audio_features.size() / 16000.0f;
