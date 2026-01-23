@@ -196,9 +196,8 @@ void cactus_attention_f16(
 
                             float32x4_t x = vsubq_f32(scores, vdupq_n_f32(block_max));
                             x = vmulq_n_f32(x, 1.442695f); 
-                            float32x4_t x_floor = vrndmq_f32(x);
-                            int32x4_t xi = vcvtq_s32_f32(x_floor);
-                            float32x4_t xf = vsubq_f32(x, x_floor);
+                            int32x4_t xi = vcvtq_s32_f32(x);
+                            float32x4_t xf = vsubq_f32(x, vcvtq_f32_s32(xi));
 
                             float32x4_t y = vfmaq_n_f32(vdupq_n_f32(1.0f), xf, 0.6931472f);
                             y = vfmaq_f32(y, vmulq_f32(xf, xf), vdupq_n_f32(0.2402265f));
