@@ -230,7 +230,6 @@ uint32_t Model::decode(const std::vector<uint32_t>& tokens, float temperature, f
     if (top_k == 0) {
         top_k = config_.default_top_k;
     }
-
     auto final_hidden = forward(tokens, true);
 
     auto* gb = static_cast<CactusGraph*>(graph_handle_);
@@ -538,6 +537,11 @@ bool Config::from_json(const std::string& config_path) {
         default_temperature = 0.0f;
         default_top_p = 0.0f;
         default_top_k = 0;
+    } else if (model_type == ModelType::MOONSHINE) {
+        default_temperature = 0.0f;
+        default_top_p = 0.0f;
+        default_top_k = 0;
+        default_max_tps = 6.5f;
     }
 
     return true;

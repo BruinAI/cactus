@@ -130,6 +130,8 @@ int cactus_transcribe(
             std::vector<float> waveform_16k = resample_to_16k_fp32(waveform_fp32, WHISPER_SAMPLE_RATE); 
             
             if (is_moonshine) {
+                 size_t silence_samples = 4800; // 300ms * 16000
+                 waveform_16k.insert(waveform_16k.end(), silence_samples, 0.0f);
                  audio_features = waveform_16k;
             } else {
                  if (!waveform_16k.empty()) {
@@ -145,6 +147,8 @@ int cactus_transcribe(
              std::vector<float> waveform_16k = resample_to_16k_fp32(audio.samples, audio.sample_rate);
              
              if (is_moonshine) {
+                 size_t silence_samples = 4800; // 300ms * 16000
+                 waveform_16k.insert(waveform_16k.end(), silence_samples, 0.0f);
                  audio_features = waveform_16k;
              } else {
                   auto cfg = get_whisper_spectrogram_config();
@@ -190,6 +194,19 @@ int cactus_transcribe(
         size_t completion_tokens = 0;
         std::vector<uint32_t> generated_tokens;
         std::string final_text;
+
+        float max_tps = handle->model->get_config().default_max_tps;
+        if (max_tps < 0) {
+            max_tps = 1;
+            std::cout << "Default max TPS is not set, using 1" << std::endl;
+        }
+
+        float audio_length = audio_features.size() / 16000.0f;
+        size_t max_tps_tokens = static_cast<size_t>(audio_length * max_tps);
+        if (max_tokens > max_tps_tokens) {
+            CACTUS_LOG_WARN("transcribe", "max_tokens exceeds limit, reducing to " << max_tps_tokens);
+            max_tokens = max_tps_tokens;
+        }
 
         uint32_t next_token = handle->model->decode_with_audio(tokens, audio_features, temperature, top_p, top_k);
         {

@@ -503,8 +503,7 @@ size_t MoonshineModel::build_encoder(CactusGraph* gb, const std::vector<float>& 
 
         std::vector<__fp16> audio_f16(audio_features.size());
         cactus_fp32_to_fp16(audio_features.data(), audio_f16.data(), audio_features.size());
-        std::vector<int> input_shape = {1, 80, static_cast<int>(T_enc)}
-;
+        std::vector<int> input_shape = {1, 80, static_cast<int>(T_enc)};
         __fp16* output_buffer = npu_encoder_->get_output_buffer();
         if (output_buffer) {
             size_t elements_written = npu_encoder_->encode(
@@ -515,8 +514,7 @@ size_t MoonshineModel::build_encoder(CactusGraph* gb, const std::vector<float>& 
                 ""
             );
             if (elements_written > 0) {
-                size_t enc_output_node = gb->input({T_enc, D_enc}
-, Precision::FP16);
+                size_t enc_output_node = gb->input({T_enc, D_enc}, Precision::FP16);
                 gb->set_input(enc_output_node, output_buffer, Precision::FP16);
                 size_t enc_output_persistent = gb->persistent(enc_output_node);
                 last_encoder_post_norm_node_ = enc_output_persistent;
@@ -534,8 +532,7 @@ size_t MoonshineModel::build_encoder(CactusGraph* gb, const std::vector<float>& 
                 ""
             );
             if (elements_written > 0) {
-                size_t enc_output_node = gb->input({T_enc, D_enc}
-, Precision::FP16);
+                size_t enc_output_node = gb->input({T_enc, D_enc}, Precision::FP16);
                 gb->set_input(enc_output_node, npu_output.data(), Precision::FP16);
                 size_t enc_output_persistent = gb->persistent(enc_output_node);
                 last_encoder_post_norm_node_ = enc_output_persistent;
@@ -554,8 +551,7 @@ size_t MoonshineModel::build_encoder(CactusGraph* gb, const std::vector<float>& 
     std::vector<__fp16> audio_f16(audio_features.size());
     cactus_fp32_to_fp16(audio_features.data(), audio_f16.data(), audio_features.size());
     size_t audio_length = audio_features.size();  
-    audio_input = gb->input({1, 1, audio_length}
-, Precision::FP16);
+    audio_input = gb->input({1, 1, audio_length}, Precision::FP16);
     gb->set_input(audio_input, audio_f16.data(), Precision::FP16);
     //gb->capture_debug_node(0, "audio_input_real", audio_input);
     size_t conv2_transposed = build_audio_preprocessor(gb, audio_input);
@@ -698,8 +694,7 @@ uint32_t MoonshineModel::decode_with_audio(
     {
         gb->soft_reset();
         reset_graph_side_cache_nodes();
-        std::vector<uint32_t> last_token_vec = { tokens.back() }
-;
+        std::vector<uint32_t> last_token_vec = { tokens.back() };
         logits_node = build_decoder(last_token_vec, true, true);
     }
 
