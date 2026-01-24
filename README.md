@@ -128,6 +128,7 @@ Example response from Gemma3-270m
 
 - <sub>Cactus smartly and compactly blends INT4, INT8 and F16 for all weights.</sub>
 - <sub>You could still quantize everything with one precision, but mixed is optimal</sub>
+- <sub>`UsefulSensors/moonshine-base` requires `--precision FP16`.</sub>
 
 | Model | Zipped Size | Completion | Tools | Vision | Embed | Speech | Pro |
 |-------|------------------|------------|-------|--------|-------|--------|-----|
@@ -147,6 +148,7 @@ Example response from Gemma3-270m
 | openai/whisper-medium | 658MB | ✗ | ✗ | ✗ | ✓ | ✓ | Apple |
 | LiquidAI/LFM2.5-VL-1.6B | 954MB | ✓ | ✗ | ✓ | ✓ | ✗ | Apple |
 | Qwen/Qwen3-1.7B | 749MB | ✓ | ✓ | ✗ | ✓ | ✗ | ✗ |
+| UsefulSensors/moonshine-base | TBD | ✗ | ✗ | ✗ | ✓ | ✓ | ✗ |
 
 # Using this repo on a Mac
 

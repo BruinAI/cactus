@@ -11,9 +11,11 @@ Before using the Cactus Engine, you need to download model weights:
 cactus download LiquidAI/LFM2-1.2B
 cactus download LiquidAI/LFM2-VL-450M
 cactus download openai/whisper-small
+cactus download UsefulSensors/moonshine-base --precision FP16
 ```
 
 Weights are saved to the `weights/` directory and can be loaded using `cactus_init()`.
+Moonshine requires FP16 precision when downloading and running.
 
 ## Types
 
@@ -1066,6 +1068,7 @@ int find_similar_image(cactus_model_t model, const char* query,
 | Smol | ✓ | - | - | ✓ | SmolLM compact models |
 | Nomic | - | - | - | ✓ | Nomic embedding models |
 | Whisper | - | - | ✓ | ✓ | OpenAI Whisper transcription |
+| Moonshine | - | - | ✓ | ✓ | UsefulSensors Moonshine transcription (FP16 only) |
 | Siglip2 | - | ✓ | - | ✓ | Vision encoder for embeddings |
 
 ## Environment Variables
