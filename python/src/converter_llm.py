@@ -7,7 +7,7 @@ except ImportError:
     torch = None
 
 from .tensor_io import save_tensor_with_header, create_quantization_stats, print_quantization_summary
-from .config_utils import cfg_get, detect_model_type, extract_base_config, extract_vision_config, extract_lfm2_config, is_vlm_model
+from .config_utils import cfg_get, detect_model_type, extract_base_config, extract_vision_config, extract_lfm2_config, is_vlm_model, extract_moonshine_config
 from .weight_patterns import (
     EMBED_NAMES, OUTPUT_NAMES, OUTPUT_NORM_NAMES, LAYER_PREFIXES,
     VISION_ITEMS, PROJECTOR_WEIGHTS, WHISPER_GLOBAL_WEIGHTS, MOONSHINE_GLOBAL_WEIGHTS,
@@ -61,6 +61,8 @@ def convert_hf_model_weights(model, output_dir, precision='INT8', args=None):
 
     if detected_model_type == 'lfm2':
         model_config.update(extract_lfm2_config(cfg))
+    elif detected_model_type == 'moonshine':
+        model_config.update(extract_moonshine_config(cfg))
 
     num_layers = model_config['num_layers']
 

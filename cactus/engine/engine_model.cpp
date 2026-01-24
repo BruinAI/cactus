@@ -511,6 +511,7 @@ bool Config::from_json(const std::string& config_path) {
         else if (key == "dec_hidden_act") decoder_act_gelu = (value == "gelu");
         else if (key == "num_encoder_layers") num_encoder_layers = static_cast<uint32_t>(std::stoul(value));
         else if (key == "num_decoder_layers") num_decoder_layers = static_cast<uint32_t>(std::stoul(value));
+        else if (key == "partial_rotary_factor") partial_rotary_factor = std::stof(value);
     }
 
     if (model_type == ModelType::GEMMA) {

@@ -268,7 +268,7 @@ size_t MoonshineModel::build_encoder_self_attention(CactusGraph* gb, size_t inpu
     auto q = gb->reshape(q_proj, {1, seq_len, num_heads, head_dim});
     auto k = gb->reshape(k_proj, {1, seq_len, num_heads, head_dim});
     auto v = gb->reshape(v_proj, {1, seq_len, num_heads, head_dim});
-    size_t rot_dim = static_cast<size_t>(head_dim * 0.9f); 
+    size_t rot_dim = static_cast<size_t>(head_dim * config_.partial_rotary_factor); 
     if (rot_dim % 2 != 0) throw std::runtime_error("rot_dim must be even");
     if (config_.rope_theta > 0) {
         q = gb->rope_gptj(q, config_.rope_theta, 0, rot_dim);

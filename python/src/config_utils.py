@@ -108,6 +108,13 @@ def extract_lfm2_config(cfg):
         'conv_L_cache': conv_L_cache,
     }
 
+def extract_moonshine_config(cfg):
+    """Extract Moonshine-specific configuration parameters."""
+    rot_factor = getattr(cfg, "partial_rotary_factor", 0.9)
+    return {
+        'partial_rotary_factor': rot_factor,
+    }
+
 
 def is_vlm_model(config):
     """Check if a model config indicates a vision-language model."""
