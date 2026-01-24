@@ -1068,7 +1068,7 @@ int find_similar_image(cactus_model_t model, const char* query,
 | Smol | ✓ | - | - | ✓ | SmolLM compact models |
 | Nomic | - | - | - | ✓ | Nomic embedding models |
 | Whisper | - | - | ✓ | ✓ | OpenAI Whisper transcription |
-| Moonshine | - | - | ✓ | ✓ | UsefulSensors Moonshine transcription (FP16 only) |
+| Moonshine | - | - | ✓ | ✓ | UsefulSensors Moonshine transcription |
 | Siglip2 | - | ✓ | - | ✓ | Vision encoder for embeddings |
 
 ## Environment Variables
