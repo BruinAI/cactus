@@ -35,8 +35,10 @@ void MoonshineModel::load_weights_to_graph(CactusGraph* gb) {
         npu_encoder_ = npu::create_encoder();
         if (npu_encoder_ && npu_encoder_->load(npu_encoder_path)) {
             use_npu_encoder_ = true;
-            std::vector<int> typical_input_shape = {1, 80, 3000};
-            npu_encoder_->preallocate(typical_input_shape, "x", "");
+            std::vector<int> input_shape = npu_encoder_->get_input_shape();
+            if (!input_shape.empty()) {
+                npu_encoder_->preallocate(input_shape, "x", "");
+            }
         }
         else {
             use_npu_encoder_ = false;
@@ -392,9 +394,19 @@ size_t MoonshineModel::build_encoder(CactusGraph* gb, const std::vector<float>& 
         else {
             throw std::runtime_error("NPU encoder output has unexpected shape");
         }
-        std::vector<__fp16> audio_f16(audio_features.size());
-        cactus_fp32_to_fp16(audio_features.data(), audio_f16.data(), audio_features.size());
-        std::vector<int> input_shape = {1, 80, static_cast<int>(T_enc)};
+        std::vector<int> input_shape = npu_encoder_->get_input_shape();
+        if (input_shape.size() != 3) {
+            input_shape = {1, 1, static_cast<int>(audio_features.size())};
+        }
+        if (input_shape[1] != 1) {
+            throw std::runtime_error("Moonshine NPU encoder expects mono audio input");
+        }
+        size_t expected_samples = static_cast<size_t>(input_shape[2]);
+        std::vector<__fp16> audio_f16(expected_samples, 0);
+        size_t copy_samples = std::min(audio_features.size(), expected_samples);
+        if (copy_samples > 0) {
+            cactus_fp32_to_fp16(audio_features.data(), audio_f16.data(), copy_samples);
+        }
         __fp16* output_buffer = npu_encoder_->get_output_buffer();
         if (output_buffer) {
             size_t elements_written = npu_encoder_->encode(
