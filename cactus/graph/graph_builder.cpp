@@ -68,7 +68,14 @@ size_t CactusGraph::matmul(size_t input1, size_t input2, bool pretransposed_rhs,
     size_t M = lhs_buffer.shape[0];
     size_t K = lhs_buffer.shape[1];
     size_t rhs_K = pretransposed_rhs ? rhs_buffer.shape[1] : rhs_buffer.shape[0];
-    size_t N = pretransposed_rhs ? rhs_buffer.shape[0] : rhs_buffer.shape[1];
+
+    // For interleaved weights, use original_N (shape stores padded N)
+    size_t N;
+    if (rhs_buffer.is_interleaved && rhs_buffer.original_N > 0) {
+        N = rhs_buffer.original_N;
+    } else {
+        N = pretransposed_rhs ? rhs_buffer.shape[0] : rhs_buffer.shape[1];
+    }
 
     if (K != rhs_K) {
         std::cout << "Matrix dimensions incompatible for multiplication: " << K << " != " << rhs_K << std::endl;

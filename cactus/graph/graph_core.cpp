@@ -87,8 +87,8 @@ BufferDesc::BufferDesc(BufferDesc&& other) noexcept
       num_groups(other.num_groups),
       scales_data(other.scales_data),
       owned_scales(std::move(other.owned_scales)),
-      packed_int4_data(other.packed_int4_data),
-      packed_int4_size(other.packed_int4_size),
+      is_interleaved(other.is_interleaved),
+      original_N(other.original_N),
       activation_scales_data(other.activation_scales_data),
       owned_activation_scales(std::move(other.owned_activation_scales)),
       num_rows_for_activation_scales(other.num_rows_for_activation_scales) {
@@ -99,8 +99,8 @@ BufferDesc::BufferDesc(BufferDesc&& other) noexcept
     other.group_size = 0;
     other.num_groups = 0;
     other.scales_data = nullptr;
-    other.packed_int4_data = nullptr;
-    other.packed_int4_size = 0;
+    other.is_interleaved = false;
+    other.original_N = 0;
     other.activation_scales_data = nullptr;
     other.num_rows_for_activation_scales = 0;
 }
@@ -122,8 +122,8 @@ BufferDesc& BufferDesc::operator=(BufferDesc&& other) noexcept {
         num_groups = other.num_groups;
         scales_data = other.scales_data;
         owned_scales = std::move(other.owned_scales);
-        packed_int4_data = other.packed_int4_data;
-        packed_int4_size = other.packed_int4_size;
+        is_interleaved = other.is_interleaved;
+        original_N = other.original_N;
         activation_scales_data = other.activation_scales_data;
         owned_activation_scales = std::move(other.owned_activation_scales);
         num_rows_for_activation_scales = other.num_rows_for_activation_scales;
@@ -135,8 +135,8 @@ BufferDesc& BufferDesc::operator=(BufferDesc&& other) noexcept {
         other.group_size = 0;
         other.num_groups = 0;
         other.scales_data = nullptr;
-        other.packed_int4_data = nullptr;
-        other.packed_int4_size = 0;
+        other.is_interleaved = false;
+        other.original_N = 0;
         other.activation_scales_data = nullptr;
         other.num_rows_for_activation_scales = 0;
     }

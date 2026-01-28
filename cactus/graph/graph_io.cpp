@@ -9,10 +9,10 @@
 #include <cstring>
 
 namespace {
-    constexpr uint32_t CACTUS_MAGIC = 0x54434143;  // "CACT" in little-endian
-    constexpr uint32_t TENSOR_FORMAT_VERSION = 1;
+    constexpr uint32_t CACTUS_MAGIC = 0x54434143;  
     constexpr uint32_t FLAG_HAS_SCALES = 1 << 0;
-    constexpr size_t HEADER_SIZE = 80;
+    constexpr uint32_t FLAG_INTERLEAVED = 1 << 3;
+    constexpr size_t HEADER_SIZE = 84;  
 
     inline size_t align_offset(size_t offset, size_t alignment) {
         size_t remainder = offset % alignment;
@@ -30,7 +30,7 @@ size_t CactusGraph::mmap_embeddings(const std::string& filename) {
         throw std::runtime_error("Memory-mapped embeddings must be 2D [vocab_size, embedding_dim]");
     }
 
-    Precision precision = mapped_file->effective_precision();
+    Precision precision = mapped_file->precision();
 
     size_t node_id = input(shape, precision);
     set_external_input(node_id, const_cast<void*>(mapped_file->data()), precision);
@@ -38,6 +38,11 @@ size_t CactusGraph::mmap_embeddings(const std::string& filename) {
     if (precision == Precision::INT8 && mapped_file->group_size() > 0) {
         set_grouped_scales(node_id, mapped_file->group_size(), mapped_file->num_groups(),
                           const_cast<void*>(mapped_file->scales_data()));
+
+        if (mapped_file->is_interleaved()) {
+            auto& buffer = nodes_[node_index_map_.at(node_id)]->output_buffer;
+            buffer.set_interleaved(true, mapped_file->original_N());
+        }
     }
 
     size_t file_idx = mapped_files_.size();
@@ -56,7 +61,7 @@ size_t CactusGraph::mmap_weights(const std::string& filename) {
     auto mapped_file = std::make_unique<GraphFile::MappedFile>(filename);
 
     const auto& shape = mapped_file->shape();
-    Precision precision = mapped_file->effective_precision();
+    Precision precision = mapped_file->precision();
 
     size_t node_id = input(shape, precision);
     set_external_input(node_id, const_cast<void*>(mapped_file->data()), precision);
@@ -64,6 +69,11 @@ size_t CactusGraph::mmap_weights(const std::string& filename) {
     if (precision == Precision::INT8 && mapped_file->group_size() > 0) {
         set_grouped_scales(node_id, mapped_file->group_size(), mapped_file->num_groups(),
                           const_cast<void*>(mapped_file->scales_data()));
+
+        if (mapped_file->is_interleaved()) {
+            auto& buffer = nodes_[node_index_map_.at(node_id)]->output_buffer;
+            buffer.set_interleaved(true, mapped_file->original_N());
+        }
     }
 
     size_t file_idx = mapped_files_.size();
@@ -119,13 +129,18 @@ size_t CactusGraph::embedding(const std::string& filename, size_t indices) {
         throw std::runtime_error("Embedding file must contain 2D tensor [vocab_size, hidden_dim]");
     }
 
-    Precision precision = mapped_file->effective_precision();
+    Precision precision = mapped_file->precision();
     size_t embeddings_node = input(shape, precision);
     set_external_input(embeddings_node, const_cast<void*>(mapped_file->data()), precision);
 
     if (precision == Precision::INT8 && mapped_file->group_size() > 0) {
         set_grouped_scales(embeddings_node, mapped_file->group_size(), mapped_file->num_groups(),
                           const_cast<void*>(mapped_file->scales_data()));
+
+        if (mapped_file->is_interleaved()) {
+            auto& buffer = nodes_[node_index_map_.at(embeddings_node)]->output_buffer;
+            buffer.set_interleaved(true, mapped_file->original_N());
+        }
     }
 
     mapped_files_.push_back(std::move(mapped_file));
@@ -170,12 +185,13 @@ void save_node(CactusGraph& graph, size_t node_id, const std::string& filename) 
 
     uint32_t ndim = static_cast<uint32_t>(shape.size());
     uint32_t flags = has_scales ? FLAG_HAS_SCALES : 0;
+    if (buffer.is_interleaved) {
+        flags |= FLAG_INTERLEAVED;
+    }
     uint32_t alignment = 32;
 
     uint32_t magic = CACTUS_MAGIC;
-    uint32_t version = TENSOR_FORMAT_VERSION;
     file.write(reinterpret_cast<const char*>(&magic), sizeof(magic));
-    file.write(reinterpret_cast<const char*>(&version), sizeof(version));
     file.write(reinterpret_cast<const char*>(&flags), sizeof(flags));
     file.write(reinterpret_cast<const char*>(&alignment), sizeof(alignment));
     file.write(reinterpret_cast<const char*>(&ndim), sizeof(ndim));
@@ -198,7 +214,10 @@ void save_node(CactusGraph& graph, size_t node_id, const std::string& filename) 
     file.write(reinterpret_cast<const char*>(&group_size), sizeof(group_size));
     file.write(reinterpret_cast<const char*>(&num_groups), sizeof(num_groups));
 
-    size_t header_end = 80;
+    uint64_t original_N = buffer.is_interleaved ? buffer.original_N : N;
+    file.write(reinterpret_cast<const char*>(&original_N), sizeof(original_N));
+
+    size_t header_end = HEADER_SIZE;
     size_t aligned_header = align_offset(header_end, alignment);
     size_t header_padding = aligned_header - header_end;
     for (size_t i = 0; i < header_padding; i++) {
@@ -246,8 +265,9 @@ LoadedNode load_into_graph(CactusGraph& graph, const std::string& filename) {
         throw std::runtime_error("Invalid tensor file: missing CACT magic number");
     }
 
+    uint32_t flags = *reinterpret_cast<const uint32_t*>(ptr + offset);
     offset += sizeof(uint32_t);
-    offset += sizeof(uint32_t);
+    bool is_interleaved = (flags & FLAG_INTERLEAVED) != 0;
 
     uint32_t alignment = *reinterpret_cast<const uint32_t*>(ptr + offset);
     offset += sizeof(uint32_t);
@@ -281,27 +301,30 @@ LoadedNode load_into_graph(CactusGraph& graph, const std::string& filename) {
     size_t num_groups = *reinterpret_cast<const uint32_t*>(ptr + offset);
     offset += sizeof(uint32_t);
 
+    size_t original_N = *reinterpret_cast<const uint64_t*>(ptr + offset);
+    offset += sizeof(uint64_t);
+
     size_t aligned_header = align_offset(HEADER_SIZE, alignment);
     size_t padding = aligned_header - HEADER_SIZE;
     if (padding > 0) {
-        file.seekg(padding, std::ios::cur);
+        file.seekg(static_cast<std::streamoff>(padding), std::ios::cur);
     }
 
     std::vector<char> scales_buffer;
     if (scales_bytes > 0) {
         scales_buffer.resize(scales_bytes);
-        file.read(scales_buffer.data(), scales_bytes);
+        file.read(scales_buffer.data(), static_cast<std::streamsize>(scales_bytes));
 
         size_t scales_end = aligned_header + scales_bytes;
         size_t data_start = align_offset(scales_end, alignment);
         size_t scales_padding = data_start - scales_end;
         if (scales_padding > 0) {
-            file.seekg(scales_padding, std::ios::cur);
+            file.seekg(static_cast<std::streamoff>(scales_padding), std::ios::cur);
         }
     }
 
     std::vector<char> buffer(byte_size);
-    file.read(buffer.data(), byte_size);
+    file.read(buffer.data(), static_cast<std::streamsize>(byte_size));
 
     if (!file || file.gcount() != static_cast<std::streamsize>(byte_size)) {
         throw std::runtime_error("Error reading node data: " + filename);
@@ -315,6 +338,10 @@ LoadedNode load_into_graph(CactusGraph& graph, const std::string& filename) {
         node_buffer.owned_scales = std::make_unique<char[]>(scales_buffer.size());
         std::memcpy(node_buffer.owned_scales.get(), scales_buffer.data(), scales_buffer.size());
         node_buffer.set_grouped_scales(group_size, num_groups, node_buffer.owned_scales.get());
+
+        if (is_interleaved) {
+            node_buffer.set_interleaved(true, original_N);
+        }
     }
 
     return {node_id, shape, precision, byte_size};
@@ -338,7 +365,7 @@ MappedFile::MappedFile(const std::string& filename)
         close(fd_);
         throw std::runtime_error("Cannot get file size: " + filename);
     }
-    file_size_ = st.st_size;
+    file_size_ = static_cast<size_t>(st.st_size);
 
     mapped_data_ = mmap(nullptr, file_size_, PROT_READ, MAP_SHARED, fd_, 0);
     if (mapped_data_ == MAP_FAILED) {
@@ -371,13 +398,14 @@ MappedFile::MappedFile(MappedFile&& other) noexcept
       precision_(other.precision_), byte_size_(other.byte_size_),
       group_size_(other.group_size_), num_groups_(other.num_groups_),
       scales_offset_(other.scales_offset_), scales_bytes_(other.scales_bytes_),
-      version_(other.version_), alignment_(other.alignment_),
-      is_int4_(other.is_int4_),
-      unpacked_int4_data_(std::move(other.unpacked_int4_data_)) {
+      alignment_(other.alignment_),
+      is_interleaved_(other.is_interleaved_),
+      original_N_(other.original_N_) {
     other.fd_ = -1;
     other.mapped_data_ = nullptr;
     other.file_size_ = 0;
-    other.is_int4_ = false;
+    other.is_interleaved_ = false;
+    other.original_N_ = 0;
 }
 
 MappedFile& MappedFile::operator=(MappedFile&& other) noexcept {
@@ -400,15 +428,15 @@ MappedFile& MappedFile::operator=(MappedFile&& other) noexcept {
         num_groups_ = other.num_groups_;
         scales_offset_ = other.scales_offset_;
         scales_bytes_ = other.scales_bytes_;
-        version_ = other.version_;
         alignment_ = other.alignment_;
-        is_int4_ = other.is_int4_;
-        unpacked_int4_data_ = std::move(other.unpacked_int4_data_);
+        is_interleaved_ = other.is_interleaved_;
+        original_N_ = other.original_N_;
 
         other.fd_ = -1;
         other.mapped_data_ = nullptr;
         other.file_size_ = 0;
-        other.is_int4_ = false;
+        other.is_interleaved_ = false;
+        other.original_N_ = 0;
     }
     return *this;
 }
@@ -429,37 +457,11 @@ const void* MappedFile::scales_data() const {
     return static_cast<const char*>(mapped_data_) + scales_offset_;
 }
 
-const void* MappedFile::raw_packed_data() const {
-    return static_cast<const char*>(mapped_data_) + data_offset_;
-}
-
-void MappedFile::unpack_int4_if_needed() const {
-    if (!is_int4_ || unpacked_int4_data_) {
-        return;
-    }
-
-    size_t unpacked_count = byte_size_ * 2;
-    unpacked_int4_data_ = std::make_unique<int8_t[]>(unpacked_count);
-
-    const uint8_t* packed = reinterpret_cast<const uint8_t*>(
-        static_cast<const char*>(mapped_data_) + data_offset_);
-
-    cactus_unpack_int4_to_int8(packed, unpacked_int4_data_.get(), unpacked_count);
-}
-
 void* MappedFile::data() {
-    if (is_int4_) {
-        unpack_int4_if_needed();
-        return unpacked_int4_data_.get();
-    }
     return static_cast<char*>(mapped_data_) + data_offset_;
 }
 
 const void* MappedFile::data() const {
-    if (is_int4_) {
-        unpack_int4_if_needed();
-        return unpacked_int4_data_.get();
-    }
     return static_cast<const char*>(mapped_data_) + data_offset_;
 }
 
@@ -469,30 +471,20 @@ const T* MappedFile::typed_data() const {
 }
 
 LoadedNode MappedFile::load_into_graph(CactusGraph& graph) const {
-    Precision eff_prec = effective_precision();
+    size_t node_id = graph.input(shape_, precision_);
+    graph.set_external_input(node_id, const_cast<void*>(data()), precision_);
 
-    size_t node_id = graph.input(shape_, eff_prec);
+    if (precision_ == Precision::INT8 && group_size_ > 0) {
+        graph.set_grouped_scales(node_id, group_size_, num_groups_,
+                                 const_cast<void*>(scales_data()));
 
-    if (is_int4_) {
-        auto& node_buffer = graph.nodes_[graph.node_index_map_.at(node_id)]->output_buffer;
-        node_buffer.set_external(const_cast<void*>(raw_packed_data()));
-        node_buffer.set_packed_int4(raw_packed_data(), byte_size_);
-        node_buffer.byte_size = byte_size_;
-
-        if (group_size_ > 0) {
-            graph.set_grouped_scales(node_id, group_size_, num_groups_,
-                                     const_cast<void*>(scales_data()));
-        }
-    } else {
-        graph.set_external_input(node_id, const_cast<void*>(data()), eff_prec);
-
-        if ((eff_prec == Precision::INT8) && group_size_ > 0) {
-            graph.set_grouped_scales(node_id, group_size_, num_groups_,
-                                     const_cast<void*>(scales_data()));
+        if (is_interleaved_) {
+            auto& buffer = graph.nodes_[graph.node_index_map_.at(node_id)]->output_buffer;
+            buffer.set_interleaved(true, original_N_);
         }
     }
 
-    return {node_id, shape_, eff_prec, byte_size_};
+    return {node_id, shape_, precision_, byte_size_};
 }
 
 void MappedFile::parse_header() {
@@ -509,12 +501,9 @@ void MappedFile::parse_header() {
         throw std::runtime_error("Invalid tensor file: missing CACT magic number");
     }
 
-    version_ = *reinterpret_cast<const uint32_t*>(ptr + offset);
-    offset += sizeof(uint32_t);
-
     uint32_t flags = *reinterpret_cast<const uint32_t*>(ptr + offset);
     offset += sizeof(uint32_t);
-    (void)flags;
+    is_interleaved_ = (flags & FLAG_INTERLEAVED) != 0;
 
     alignment_ = *reinterpret_cast<const uint32_t*>(ptr + offset);
     offset += sizeof(uint32_t);
@@ -536,8 +525,6 @@ void MappedFile::parse_header() {
     precision_ = static_cast<Precision>(prec_val);
     offset += sizeof(uint32_t);
 
-    is_int4_ = (precision_ == Precision::INT4);
-
     byte_size_ = *reinterpret_cast<const uint64_t*>(ptr + offset);
     offset += sizeof(uint64_t);
 
@@ -549,6 +536,9 @@ void MappedFile::parse_header() {
 
     num_groups_ = *reinterpret_cast<const uint32_t*>(ptr + offset);
     offset += sizeof(uint32_t);
+
+    original_N_ = *reinterpret_cast<const uint64_t*>(ptr + offset);
+    offset += sizeof(uint64_t);
 
     size_t aligned_header = align_offset(HEADER_SIZE, alignment_);
 
@@ -562,7 +552,7 @@ void MappedFile::parse_header() {
     }
 
     if (data_offset_ + byte_size_ > file_size_) {
-        throw std::runtime_error("File corrupted: data extends beyond file size (v2)");
+        throw std::runtime_error("File corrupted: data extends beyond file size");
     }
 }
 
@@ -585,10 +575,6 @@ void MappedFile::release_pages() {
         madvise(static_cast<char*>(mapped_data_) + scales_offset_, scales_bytes_, MADV_DONTNEED);
     }
     madvise(static_cast<char*>(mapped_data_) + data_offset_, byte_size_, MADV_DONTNEED);
-
-    if (is_int4_ && unpacked_int4_data_) {
-        unpacked_int4_data_.reset();
-    }
 }
 
 void MappedFile::prefetch_pages() {

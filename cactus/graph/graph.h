@@ -207,12 +207,12 @@ struct BufferDesc {
     void* scales_data = nullptr;
     std::unique_ptr<char[]> owned_scales;
 
-    const void* packed_int4_data = nullptr;
-    size_t packed_int4_size = 0;
+    bool is_interleaved = false;
+    size_t original_N = 0;  
 
     void* activation_scales_data = nullptr;
     std::unique_ptr<char[]> owned_activation_scales;
-    size_t num_rows_for_activation_scales = 0; 
+    size_t num_rows_for_activation_scales = 0;
 
     BufferDesc();
     BufferDesc(const std::vector<size_t>& s, Precision prec = Precision::INT8);
@@ -236,23 +236,20 @@ struct BufferDesc {
     const __fp16* scales_as_fp16() const {
         return reinterpret_cast<const __fp16*>(scales_data);
     }
+
     bool is_grouped_int8() const {
         return precision == Precision::INT8 && group_size > 0;
     }
-    bool is_packed_int4() const {
-        return packed_int4_data != nullptr && packed_int4_size > 0;
-    }
-    const uint8_t* packed_int4_as_uint8() const {
-        return reinterpret_cast<const uint8_t*>(packed_int4_data);
-    }
+
     void set_grouped_scales(size_t gs, size_t ng, void* scales_ptr) {
         group_size = gs;
         num_groups = ng;
         scales_data = scales_ptr;
     }
-    void set_packed_int4(const void* packed_data, size_t packed_size) {
-        packed_int4_data = packed_data;
-        packed_int4_size = packed_size;
+
+    void set_interleaved(bool interleaved, size_t orig_n) {
+        is_interleaved = interleaved;
+        original_N = orig_n;
     }
 
     bool has_activation_scales() const {
@@ -542,16 +539,14 @@ namespace GraphFile {
 
         const std::vector<size_t>& shape() const;
         Precision precision() const;
-        Precision effective_precision() const {
-            return is_int4_ ? Precision::INT8 : precision_;
-        }
         size_t byte_size() const;
 
         size_t group_size() const { return group_size_; }
         size_t num_groups() const { return num_groups_; }
         const void* scales_data() const;
-        const void* raw_packed_data() const;  // Get raw mmap'd data without unpacking (for INT4)
-        bool is_int4() const { return is_int4_; }
+
+        bool is_interleaved() const { return is_interleaved_; }
+        size_t original_N() const { return original_N_; }
 
         void* data();
         const void* data() const;
@@ -575,13 +570,13 @@ namespace GraphFile {
         size_t num_groups_ = 0;
         size_t scales_offset_ = 0;
         size_t scales_bytes_ = 0;
-        uint32_t version_ = 1;
         uint32_t alignment_ = 32;
-        bool is_int4_ = false;
-        mutable std::unique_ptr<int8_t[]> unpacked_int4_data_;
+
+        bool is_interleaved_ = false;
+        size_t original_N_ = 0;
+
         void parse_header();
         void apply_madvise_hints();
-        void unpack_int4_if_needed() const;
     };
 
     MappedFile mmap_load(const std::string& filename);

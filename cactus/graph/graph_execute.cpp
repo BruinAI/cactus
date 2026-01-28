@@ -228,10 +228,6 @@ void CactusGraph::set_input(size_t node_id, const void* data, Precision) {
         throw std::invalid_argument("Can only set data on input nodes");
     }
 
-    if (node.output_buffer.is_packed_int4()) {
-        throw std::invalid_argument("Cannot use set_input on packed INT4 buffer - use set_external_input instead");
-    }
-
     if (!node.output_buffer.data && !node.output_buffer.external_data) {
         node.output_buffer.allocate();
     }

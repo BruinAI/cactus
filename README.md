@@ -1,30 +1,76 @@
 <img src="assets/banner.jpg" alt="Logo" style="border-radius: 30px; width: 100%;">
 
-Cross-platform & energy-efficient kernels, runtime and AI inference engine for mobile devices. 
-
 ```
-┌─────────────────┐
-│   Cactus FFI    │ ←── OpenAI compatible C API for integration (tools, RAG, cloud handoff)
-└─────────────────┘
+┌─────────────────┐     Energy-efficient inference engine for running AI on mobile devices 
+│  Cactus Engine  │ ←── OpenAI compatible APIs for C/C++, Swift, Kotlin, Flutter & React-Native
+└─────────────────┘     Supports tool call, auto RAG, NPU, INT4, and cloud handoff for complex tasks
          │
-┌─────────────────┐
-│  Cactus Engine  │ ←── High-level transformer engine (NPU support, INT4/INT8/FP16/MIXED)
-└─────────────────┘
+┌─────────────────┐     Zero-copy computation graph, think PyTorch for mobile devices
+│  Cactus Graph   │ ←── You can implement custom models directly using this
+└─────────────────┘     Highly optimised for RAM & lossless weight quantisation 
          │
-┌─────────────────┐
-│ Cactus Models   │ ←── Implements SOTA models using Cactus Graphs 
-└─────────────────┘
-         │
-┌─────────────────┐  
-│  Cactus Graph   │ ←── Unified zero-copy computation graph (think NumPy for mobile)
-└─────────────────┘
-         │
-┌─────────────────┐
-│ Cactus Kernels  │ ←── Low-level ARM-specific SIMD operations (think CUDA for mobile)
-└─────────────────┘
+┌─────────────────┐     Low-level ARM-specific SIMD kernels (Apple, Snapdragon, Google, Exynos, MediaTek & Raspberry Pi)
+│ Cactus Kernels  │ ←── Optimised Matrix Multiplication & n
+└─────────────────┘     Custom attention kernels with KV-Cache Quantisation, chunked prefill, streaming LLM, etc.
 ```
 
-# Cactus Graph & Kernel
+
+## Cactus Engine 
+
+```cpp
+#include cactus.h
+
+cactus_set_pro_key("optional, email founders@cactuscompute.com"); 
+
+cactus_model_t model = cactus_init(
+    "path/to/weight/folder",            
+    "path to txt or dir of txts for auto-rag",  
+);
+
+const char* messages = R"([
+    {"role": "system", "content": "You are a helpful assistant."},
+    {"role": "user", "content": "My name is Henry Ndubuaku"}
+])";
+
+const char* options = R"({
+    "max_tokens": 50,
+    "stop_sequences": ["<|im_end|>"]
+})";
+
+char response[4096];
+int result = cactus_complete(
+    model,                            // model handle from cactus_init
+    messages,                         // JSON array of chat messages
+    response,                         // buffer to store response JSON
+    sizeof(response),                 // size of response buffer
+    options,                          // optional: generation options (nullptr for defaults)
+    nullptr,                          // optional: tools JSON for function calling 
+    nullptr,                          // optional: streaming callback fn(token, id, user_data)
+    nullptr                           // optional: user data passed to callback
+);
+```
+Example response from Gemma3-270m
+```json
+{
+    "success": true,                 // when successfully generated locally
+    "error": null,                   // returns specific errors if success = false
+    "cloud_handoff": false,          // true when model is unconfident, simply route to cloud
+    "response": "Hi there!",         // null when error is not null or cloud_handoff = true
+    "function_calls": [],            // parsed to [{"name":"set_alarm","arguments":{"hour":"10","minute":"0"}}]
+    "confidence": 0.8193,            // how confident the model is with its response
+    "time_to_first_token_ms": 45.23, // latency (time to first token)
+    "total_time_ms": 163.67,         // total execution time
+    "prefill_tps": 1621.89,          // prefill tokens per second
+    "decode_tps": 168.42,            // decode tokens per second
+    "ram_usage_mb": 245.67,          // current process RAM usage in MB
+    "prefill_tokens": 28,
+    "decode_tokens": 50,
+    "total_tokens": 78
+}
+```
+
+## Cactus Graph
+
 ```cpp
 #include cactus.h
 
@@ -46,131 +92,81 @@ graph.execute();
 void* output_data = graph.get_output(result);
 
 graph.hard_reset(); 
-
 ```
 
-# Cactus Engine & FFI
-```cpp
-#include cactus.h
+## High-End Devices Benchmark (INT8)
 
-cactus_set_pro_key("");                  // email founders@cactuscompute.com for optional key
+- Tested for worst case (big model + 1k context size)
+- Small models and small context yield flashier numbers, but hides stress points. 
 
-cactus_model_t model = cactus_init(
-    "path/to/weight/folder",             // section to generate weigths below
-    "txt/or/md/file/or/dir/with/many",   // nullptr if none, cactus does automatic fast RAG
-);
+| Device | LFM2.5-1.2B<br>(1k-Prefill/100-Decode) | LFM2.5-VL-1.6B<br>(256px-Latency & Decode) | Whisper-Small<br>(30s-audio-Latency & Decode)
+|--------|--------|--------|----------|
+| Mac M4 Pro | 582/77 toks/sec| 1.2s(0.3s*) & 76 toks/sec | 1.5s(0.2s*) & 65 toks/sec |
+| iPad/Mac M4 | - | - | - |
+| iPhone 17 Pro | 300/33 toks/sec | 1.6s(0.3s*) & 33 toks/sec | 3.0s(0.6s*) & 70 toks/sec |
+| Galaxy S25 Ultra | 226/35 toks/sec | 2.6s & 35 toks/sec | 2.9s & 44 toks/sec |
+| Pixel 10 Pro | - | - | - |
+| Vivo X200 Pro | - | - | - |
 
-const char* messages = R"([
-    {"role": "system", "content": "You are a helpful assistant."},
-    {"role": "user", "content": "My name is Henry Ndubuaku"}
-])";
+## Budget Devices Benchmark (INT8)
 
-const char* options = R"({
-    "max_tokens": 50,
-    "stop_sequences": ["<|im_end|>"]
-})";
+- We recommend <=600m LLM/VLM and sub-300m transcription for ALL mobiles + cloud fallback
+- Cactus decides in sub 100ms when to fallback to private cloud due to complexity, happens <20%
 
-char response[4096];
-int result = cactus_complete(
-    model,                               // model handle from cactus_init
-    messages,                            // JSON array of chat messages
-    response,                            // buffer to store response JSON
-    sizeof(response),                    // size of response buffer
-    options,                             // optional: generation options (nullptr for defaults)
-    nullptr,                             // optional: tools JSON for function calling 
-    nullptr,                             // optional: streaming callback fn(token, id, user_data)
-    nullptr                              // optional: user data passed to callback
-);
-```
-Example response from Gemma3-270m
-```json
-{
-    "success": true,                    // when successfully generated locally
-    "error": null,                      // returns specific errors if success = false
-    "cloud_handoff": false,             // true when model is unconfident, simply route to cloud
-    "response": "Hi there!",            // null when error is not null or cloud_handoff = true
-    "function_calls": [],               // parsed to [{"name":"set_alarm","arguments":{"hour":"10","minute":"0"}}]
-    "confidence": 0.8193,               // how confident the model is with its response
-    "time_to_first_token_ms": 45.23,    // latency (time to first token)
-    "total_time_ms": 163.67,            // total execution time
-    "prefill_tps": 1621.89,             // prefill tokens per second
-    "decode_tps": 168.42,               // decode tokens per second
-    "ram_usage_mb": 245.67,             // current process RAM usage in MB
-    "prefill_tokens": 28,
-    "decode_tokens": 50,
-    "total_tokens": 78
-}
-```
-
-# Performance
-
-- <sub>**Models:** LFM2-VL-450m & Whisper-Small</sub>
-- <sub>**Precision:** Cactus smartly blends INT4, INT8 and F16 for all weights.</sub>
-- <sub>**Decode** = toks/sec, **P/D** = prefill/decode, **VLM** = 256×256 image, **STT** = 30s audio</sub>
-- <sub>**Cactus Pro**: Uses NPU for realtime and large context (Apple for now), scores are marked with *</sub>
-
-| Device | Short Decode | 4k-P/D | VLM-TTFT | VLM-Dec | STT-TTFT | STT-Dec |
-|--------|--------|--------|----------|---------|----------|---------|
-| Mac M4 Pro | 170 | 989/150 | 0.2s/0.1s* | 168 | 1.0s/0.2s* | 92 |
-| Mac M3 Pro | 140 | 890/123 | 0.3s/0.1s* | 149 | 1.5s/0.4s* | 81 |
-| iPad/Mac M4 | 134 | 603/106 | 0.3s/0.1s* | 129 | 1.8s0.3s* | 70 |
-| iPad/Mac M3 | 117 | 525/93 | 0.4s/0.1s* | 111 | 2.8s/0.7s* | 61 |
-| iPhone 17 Pro | 126 | 428/84 | 0.5s/0.1s* | 120 | 3.0s/0.6s* | 80 |
-| iPhone 16 Pro | 106 | 380/81 | 0.6s/0.2s* | 101 | 4.3s/0.7s* | 75 |
-| iPhone 15 Pro | 90 | 330/75 | 0.7s/0.3s* | 92 | 4.5s/0.8s* | 70 |
-| Galaxy S25 Ultra | 80 | 355/52 | 0.7s | 70 | 3.6s/- | 32 |
-| Nothing 3 | 56 | 320/46 | 0.8s | 54 | 4.5s | 55 |
-| Pixel 6a | 25 | 108/24 | 2.3s | 25 | 9.6 | 15 |
-| Raspberry Pi 5 | 20 | 292/18 | 1.7s | 23 | 15s | 16 |
+| Device | LFM2-350m<br>(1k-Prefill/100-Decode) | LFM2-VL-450m<br>(256px-Latency & Decode) | Moonshine-Base<br>(30s-audio-Latency & Decode)
+|--------|--------|--------|----------|
+| iPad/Mac M1 | - | - | - |
+| iPhone 13 Mini | - | - | - |
+| Galaxy A56 | - | - | - |
+| Pixel 6a | 218/44 toks/sec | 3.0s & 42 toks/sec | - |
+| Nothing CMF | - | - | - |
+| Raspberry Pi 5 | - | - | - |
 
 
-# Supported models
+ ## Supported Models                                                                                                                                                     
+                                                                                                                                                                          
+  | Model | Size | Features |                                                                                                                                             
+  |-------|------|----------|                                                                                                                                             
+  | **LLMs** | | |                                                                                                                                                        
+  | google/gemma-3-270m-it | 252MB | completion |                                                                                                                         
+  | google/functiongemma-270m-it | 252MB | completion, tools |                                                                                                            
+  | LiquidAI/LFM2-350M | 244MB | completion, tools, embed |                                                                                                               
+  | Qwen/Qwen3-0.6B | 514MB | completion, tools, embed |                                                                                                                  
+  | LiquidAI/LFM2-700M | 498MB | completion, tools, embed |                                                                                                               
+  | google/gemma-3-1b-it | 642MB | completion |                                                                                                                           
+  | LiquidAI/LFM2.5-1.2B-Thinking | 474MB | completion, tools, embed |                                                                                                    
+  | LiquidAI/LFM2.5-1.2B-Instruct | 474MB | completion, tools, embed |                                                                                                    
+  | LiquidAI/LFM2-1.2B-RAG | 474MB | completion, tools, embed |                                                                                                           
+  | LiquidAI/LFM2-1.2B-Tool | 474MB | completion, tools, embed |                                                                                                          
+  | Qwen/Qwen3-1.7B | 749MB | completion, tools, embed |                                                                                                                  
+  | **VLMs** | | |                                                                                                                                                        
+  | LiquidAI/LFM2-VL-450M | 448MB | vision, txt & img embed, Apple NPU |                                                                                                            
+  | LiquidAI/LFM2.5-VL-1.6B | 954MB | vision, txt & img embed, Apple NPU |                                                                                                          
+  | **Speech** | | |                                                                                                                                                      
+  | UsefulSensors/moonshine-base | 150MB | transcription, speech embed |                                                                                                         
+  | openai/whisper-small | 283MB | transcription, speech embed, Apple NPU |                                                                                                                 
+  | openai/whisper-medium | 658MB | transcription, speech embed, Apple NPU |                                                                                                                
+  | **Embeddings** | | |                                                                                                                                                  
+  | nomic-ai/nomic-embed-text-v2-moe | 451MB | embed |                                                                                                                    
+  | Qwen/Qwen3-Embedding-0.6B | 514MB | embed |          
 
-- <sub>Cactus smartly and compactly blends INT4, INT8 and F16 for all weights.</sub>
-- <sub>You could still quantize everything with one precision, but mixed is optimal</sub>
-- <sub>`UsefulSensors/moonshine-base` requires `--precision FP16`.</sub>
-
-| Model | Zipped Size | Completion | Tools | Vision | Embed | Speech | Pro |
-|-------|------------------|------------|-------|--------|-------|--------|-----|
-| google/gemma-3-270m-it | 252MB | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ |
-| google/functiongemma-270m-it | 252MB | ✓ | ✓ | ✗ | ✗ | ✗ | ✗ |
-| openai/whisper-small | 283MB | ✗ | ✗ | ✗ | ✓ | ✓ | Apple |
-| LiquidAI/LFM2-350M | 244MB | ✓ | ✓ | ✗ | ✓ | ✗ | ✗ |
-| LiquidAI/LFM2-VL-450M | 448MB | ✓ | ✗ | ✓ | ✓ | ✗ | Apple |
-| nomic-ai/nomic-embed-text-v2-moe | 451MB | ✗ | ✗ | ✗ | ✓ | ✗ | ✗ |
-| Qwen/Qwen3-0.6B | 514MB | ✓ | ✓ | ✗ | ✓ | ✗ | ✗ |
-| Qwen/Qwen3-Embedding-0.6B | 514MB | ✗ | ✗ | ✗ | ✓ | ✗ | ✗ |
-| LiquidAI/LFM2-700M | 498MB | ✓ | ✓ | ✗ | ✓ | ✗ | ✗ |
-| google/gemma-3-1b-it | 642MB | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ |
-| LiquidAI/LFM2.5-1.2B-Instruct | 474MB | ✓ | ✓ | ✗ | ✓ | ✗ | ✗ |
-| LiquidAI/LFM2-1.2B-RAG | 474MB | ✓ | ✓ | ✗ | ✓ | ✗ | ✗ |
-| LiquidAI/LFM2-1.2B-Tool | 474MB | ✓ | ✓ | ✗ | ✓ | ✗ | ✗ |
-| openai/whisper-medium | 658MB | ✗ | ✗ | ✗ | ✓ | ✓ | Apple |
-| LiquidAI/LFM2.5-VL-1.6B | 954MB | ✓ | ✗ | ✓ | ✓ | ✗ | Apple |
-| Qwen/Qwen3-1.7B | 749MB | ✓ | ✓ | ✗ | ✓ | ✗ | ✗ |
-| UsefulSensors/moonshine-base | TBD | ✗ | ✗ | ✗ | ✓ | ✓ | ✗ |
-
-# Using this repo on a Mac
+## Using this repo on a Mac
 
 ```bash
 git clone https://github.com/cactus-compute/cactus && cd cactus && source ./setup
 ```
 
-- <sub> `[model]` is a HuggingFace name from the table above (default: `google/gemma-3-270m-it`)</sub>
-- <sub> Common flags: `--precision INT4|INT8|FP16` (default: INT4), `--token <hf_token>`</sub>
-- <sub>Always run `source ./setup` in any new terminal.</sub>
-
 | Command | Description |
 |---------|-------------|
-| `cactus run [model]` | Opens playground (auto downloads model) |
+| `cactus run [model-name-as-written-in-above-tables]` | Opens playground (auto downloads model) |
 | `cactus download [model]` | Downloads model to `./weights` |
 | `cactus convert [model] [dir]` | Converts model, supports LoRA merging (`--lora <path>`) |
 | `cactus build` | Builds for ARM (`--apple` or `--android`) |
-| `cactus test` | Runs tests (`--ios` / `--android`, `--model [name/path]`) |
+| `cactus test` | Runs tests (`--ios` / `--android`, `--model [name/path]`), `--precision` |
 | `cactus clean` | Removes build artifacts |
-| `cactus --help` | Shows all commands and flags |
+| `cactus --help` | Shows all commands and flags (please run this to see all commands) |
 
-# Using in your apps 
+## Using in your apps 
 
 - [Python for Mac](/python/)
 - [React Native SDK](https://github.com/cactus-compute/cactus-react-native)
@@ -179,11 +175,20 @@ git clone https://github.com/cactus-compute/cactus && cd cactus && source ./setu
 - [Flutter SDK](https://github.com/cactus-compute/cactus-flutter)
 - [Rust SDK](https://github.com/mrsarac/cactus-rs)
 
-# Try demo apps 
+## Try demo apps 
 
 - [iOS Demo](https://apps.apple.com/gb/app/cactus-chat/id6744444212)
 - [Android Demo](https://play.google.com/store/apps/details?id=com.rshemetsubuser.myapp)
 
-# Maintaining Organisations
+## Maintaining Organisations
 1. [Cactus Compute, Inc](https://cactuscompute.com/) 
 2. [UCLA's BruinAI](https://bruinai.org/) 
+3. [Yale's AI Society](https://www.yale-ai.org/team)
+4. [National Unoversity of Singapore's AI Society](https://www.nusaisociety.org/)
+5. [UC Irvine's AI@UCI](https://aiclub.ics.uci.edu/)
+6. [Imperial College's AI Society](https://www.imperialcollegeunion.org/csp/1391)
+7. [University of Pennsylvania's AI@Penn](https://ai-at-penn-main-105.vercel.app/)
+8. [Universit of Colorado Boulder's AI Club](https://www.cuaiclub.org/)
+
+## Join The Community
+- [Reddit Channel](https://www.reddit.com/r/cactuscompute/)

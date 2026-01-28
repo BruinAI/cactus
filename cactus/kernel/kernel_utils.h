@@ -103,6 +103,7 @@ inline int32x4_t accum_matmul(int32x4_t acc, int8x16_t a, int8x16_t b) {
 
 #endif
 
+
 inline float16x8_t accum_f16_dot(float16x8_t acc, float16x8_t a_low, float16x8_t a_high,
                                  float16x8_t b_low, float16x8_t b_high) {
     acc = vfmaq_f16(acc, a_low, b_low);
@@ -164,102 +165,6 @@ inline float32x4_t fast_tanh_f32x4(float32x4_t x) {
     result = vbslq_f32(neg_sat, neg_one, result);
 
     return result;
-}
-
-inline int8x16_t unpack_int4_lo(uint8x16_t packed) {
-    uint8x16_t lo = vandq_u8(packed, vdupq_n_u8(0x0F));
-    uint8x16_t sign_mask = vcgtq_u8(lo, vdupq_n_u8(7));
-    uint8x16_t correction = vandq_u8(sign_mask, vdupq_n_u8(16));
-    return vreinterpretq_s8_u8(vsubq_u8(lo, correction));
-}
-
-inline int8x16_t unpack_int4_hi(uint8x16_t packed) {
-    uint8x16_t hi = vshrq_n_u8(packed, 4);
-    uint8x16_t sign_mask = vcgtq_u8(hi, vdupq_n_u8(7));
-    uint8x16_t correction = vandq_u8(sign_mask, vdupq_n_u8(16));
-    return vreinterpretq_s8_u8(vsubq_u8(hi, correction));
-}
-
-inline void unpack_int4_to_int8x32(uint8x16_t packed, int8x16_t& out_lo, int8x16_t& out_hi) {
-    int8x16_t lo_nibbles = unpack_int4_lo(packed);
-    int8x16_t hi_nibbles = unpack_int4_hi(packed);
-    int8x16x2_t interleaved = vzipq_s8(lo_nibbles, hi_nibbles);
-    out_lo = interleaved.val[0];
-    out_hi = interleaved.val[1];
-}
-
-inline int32x4_t int4_dot_asm(int32x4_t acc, uint8x16_t packed, int8x16_t a_lo, int8x16_t a_hi) {
-#if defined(__aarch64__)
-    int8x16_t b_lo, b_hi;
-
-    __asm__ __volatile__ (
-        "movi   v16.16b, #0x0F          \n"  // low nibble mask
-        "movi   v17.16b, #7             \n"  // sign threshold
-        "movi   v18.16b, #16            \n"  // sign correction
-
-        "and    %[b_lo].16b, %[packed].16b, v16.16b  \n"
-
-        "ushr   %[b_hi].16b, %[packed].16b, #4      \n"
-
-        "cmgt   v19.16b, %[b_lo].16b, v17.16b       \n"
-        "and    v19.16b, v19.16b, v18.16b           \n"
-        "sub    %[b_lo].16b, %[b_lo].16b, v19.16b   \n"
-
-        "cmgt   v20.16b, %[b_hi].16b, v17.16b       \n"
-        "and    v20.16b, v20.16b, v18.16b           \n"
-        "sub    %[b_hi].16b, %[b_hi].16b, v20.16b   \n"
-
-        "zip1   v21.16b, %[b_lo].16b, %[b_hi].16b   \n"
-        "zip2   v22.16b, %[b_lo].16b, %[b_hi].16b   \n"
-
-        ".arch armv8.2-a+dotprod                    \n"
-        "sdot   %[acc].4s, %[a_lo].16b, v21.16b     \n"
-        "sdot   %[acc].4s, %[a_hi].16b, v22.16b     \n"
-
-        : [acc] "+w"(acc), [b_lo] "=w"(b_lo), [b_hi] "=w"(b_hi)
-        : [packed] "w"(packed), [a_lo] "w"(a_lo), [a_hi] "w"(a_hi)
-        : "v16", "v17", "v18", "v19", "v20", "v21", "v22"
-    );
-
-    return acc;
-#else
-    int8x16_t b_lo, b_hi;
-    unpack_int4_to_int8x32(packed, b_lo, b_hi);
-    acc = accum_dot(acc, a_lo, b_lo);
-    acc = accum_dot(acc, a_hi, b_hi);
-    return acc;
-#endif
-}
-
-inline int32_t int4_dot_m1_asm(const int8_t* a_ptr, const uint8_t* b_packed, size_t group_size) {
-#if defined(__aarch64__)
-    int32x4_t acc = vdupq_n_s32(0);
-
-    for (size_t k = 0; k < group_size; k += 64) {
-        uint8x16_t p0 = vld1q_u8(b_packed + k/2);
-        uint8x16_t p1 = vld1q_u8(b_packed + k/2 + 16);
-
-        int8x16_t a0 = vld1q_s8(a_ptr + k);
-        int8x16_t a1 = vld1q_s8(a_ptr + k + 16);
-        int8x16_t a2 = vld1q_s8(a_ptr + k + 32);
-        int8x16_t a3 = vld1q_s8(a_ptr + k + 48);
-
-        acc = int4_dot_asm(acc, p0, a0, a1);
-        acc = int4_dot_asm(acc, p1, a2, a3);
-    }
-
-    return vaddvq_s32(acc);
-#else
-    int32x4_t acc = vdupq_n_s32(0);
-    for (size_t k = 0; k < group_size; k += 32) {
-        uint8x16_t packed = vld1q_u8(b_packed + k/2);
-        int8x16_t b_lo, b_hi;
-        unpack_int4_to_int8x32(packed, b_lo, b_hi);
-        acc = accum_dot(acc, vld1q_s8(a_ptr + k), b_lo);
-        acc = accum_dot(acc, vld1q_s8(a_ptr + k + 16), b_hi);
-    }
-    return vaddvq_s32(acc);
-#endif
 }
 
 namespace CactusThreading {
@@ -443,18 +348,32 @@ namespace CactusThreading {
     struct GemmThreading {
         #if defined(__ANDROID__)
         static size_t get_num_threads(size_t M, size_t pool_size) {
-            if (M <= 1) return 1; 
-            return pool_size; 
+            if (M <= 1) return 1;
+            return pool_size;
+        }
+        static size_t get_gemv_threads(size_t /*N_blocks*/, size_t /*pool_size*/) {
+            return 1; 
         }
         #elif defined(__APPLE__) && TARGET_OS_IPHONE
+        static constexpr size_t GEMV_MIN_N_BLOCKS = 512; 
         static size_t get_num_threads(size_t M, size_t pool_size) {
-            if (M <= 1) return std::min(pool_size, static_cast<size_t>(2)); 
-            return pool_size; 
+            if (M <= 1) return std::min(pool_size, static_cast<size_t>(2));
+            return pool_size;
         }
-        #else // Mac
+        static size_t get_gemv_threads(size_t N_blocks, size_t pool_size) {
+            if (N_blocks < GEMV_MIN_N_BLOCKS) return 1;
+            return std::min(pool_size, static_cast<size_t>(2));
+        }
+        #else 
+        static constexpr size_t GEMV_MIN_N_BLOCKS = 256;  
         static size_t get_num_threads(size_t M, size_t pool_size) {
             if (M <= 1) return std::min(pool_size, static_cast<size_t>(4));
-            return pool_size; 
+            return pool_size;
+        }
+        static size_t get_gemv_threads(size_t N_blocks, size_t pool_size) {
+            if (N_blocks < GEMV_MIN_N_BLOCKS) return 1;
+            if (N_blocks < 512) return std::min(pool_size, static_cast<size_t>(2));
+            return std::min(pool_size, static_cast<size_t>(4));
         }
         #endif
     };

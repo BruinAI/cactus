@@ -17,13 +17,4 @@ def __getattr__(name):
     if name == "convert_hf_tokenizer":
         from .tokenizer import convert_hf_tokenizer
         return convert_hf_tokenizer
-    if name == "MixedPrecisionConfig":
-        from .precision_config import MixedPrecisionConfig
-        return MixedPrecisionConfig
-    if name == "determine_precision":
-        from .precision_config import determine_precision
-        return determine_precision
-    if name == "count_model_parameters":
-        from .precision_config import count_model_parameters
-        return count_model_parameters
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

@@ -270,10 +270,6 @@ void compute_reduce_node(GraphNode& node, const std::vector<std::unique_ptr<Grap
 void compute_reshape_node(GraphNode& node, const std::vector<std::unique_ptr<GraphNode>>& nodes, const std::unordered_map<size_t, size_t>& node_index_map) {
     const auto& input_buffer = nodes[node_index_map.at(node.input_ids[0])]->output_buffer;
 
-    if (input_buffer.is_packed_int4()) {
-        throw std::runtime_error("Reshape operation not supported on packed INT4 data");
-    }
-
     size_t input_total_elements = input_buffer.total_size;
     size_t output_total_elements = node.output_buffer.total_size;
 
@@ -287,10 +283,6 @@ void compute_reshape_node(GraphNode& node, const std::vector<std::unique_ptr<Gra
 
 void compute_precision_cast_node(GraphNode& node, const std::vector<std::unique_ptr<GraphNode>>& nodes, const std::unordered_map<size_t, size_t>& node_index_map) {
     const auto& input_node = *nodes[node_index_map.at(node.input_ids[0])];
-
-    if (input_node.output_buffer.is_packed_int4()) {
-        throw std::runtime_error("Precision cast not supported on packed INT4 data");
-    }
 
     if (input_node.output_buffer.precision == node.output_buffer.precision) {
         std::memcpy(node.output_buffer.get_data(), input_node.output_buffer.get_data(), input_node.output_buffer.byte_size);

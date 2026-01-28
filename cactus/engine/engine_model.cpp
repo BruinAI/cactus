@@ -184,13 +184,7 @@ void Model::prefill(const std::vector<uint32_t>& tokens, size_t chunk_size, cons
 
     auto process_chunk = [&](const std::vector<uint32_t>& chunk) {
         forward(chunk, true);
-
-        if (!profile_file.empty()) {
-            gb->execute(profile_file);
-        } else {
-            gb->execute(profile_file);
-        }
-
+        gb->execute(profile_file);
         post_execute_updates(gb, chunk.size());
         update_kv_cache(gb, chunk.size());
     };
@@ -245,11 +239,7 @@ uint32_t Model::decode(const std::vector<uint32_t>& tokens, float temperature, f
     auto logits_node_id = gb->matmul(last_hidden, output_weight_node_id_, true, backend);
     auto sampled_token_id = gb->sample(logits_node_id, temperature, top_p, top_k, tool_constrainer_.get_bias());
 
-    if (!profile_file.empty()) {
-        gb->execute(profile_file);
-    } else {
-        gb->execute();
-    }
+    gb->execute(profile_file);
 
     if (out_entropy) {
         const auto& logits_buf = gb->get_output_buffer(logits_node_id);

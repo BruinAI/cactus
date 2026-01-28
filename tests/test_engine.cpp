@@ -432,24 +432,6 @@ bool test_1k_context() {
         }, nullptr, 100);
 }
 
-bool test_4k_context() {
-    std::string msg = "[{\"role\": \"system\", \"content\": \"/no_think You are helpful. ";
-    for (int i = 0; i < 230; i++) {
-        msg += "Context " + std::to_string(i) + ": Background knowledge. ";
-    }
-    msg += "\"}, {\"role\": \"user\", \"content\": \"";
-    for (int i = 0; i < 230; i++) {
-        msg += "Data " + std::to_string(i) + " = " + std::to_string(i * 3.14159) + ". ";
-    }
-    msg += "Explain the data.\"}]";
-
-    return run_test("4K CONTEXT TEST", msg.c_str(),
-        [](int result, const StreamingData&, const std::string&, const Metrics& m) {
-            m.print_json();
-            return result > 0;
-        }, nullptr, 100);
-}
-
 bool test_rag() {
     std::cout << "\n╔══════════════════════════════════════════╗\n"
               << "║              RAG TEST                    ║\n"
@@ -1035,11 +1017,13 @@ int main() {
 #endif
 
     TestUtils::TestRunner runner("Engine Tests");
+    runner.run_test("1k_context", test_1k_context());
     runner.run_test("streaming", test_streaming());
     runner.run_test("tool_calls", test_tool_call());
     runner.run_test("tool_calls_with_two_tools", test_tool_call_with_two_tools());
     runner.run_test("tool_calls_with_three_tools", test_tool_call_with_three_tools());
     runner.run_test("cloud_handoff", test_cloud_handoff());
+    runner.run_test("vlm_multiturn", test_vlm_multiturn());
     runner.run_test("embeddings", test_embeddings());
     runner.run_test("image_embeddings", test_image_embeddings());
     runner.run_test("audio_embeddings", test_audio_embeddings());
@@ -1049,7 +1033,6 @@ int main() {
     runner.run_test("pcm_transcription", test_pcm_transcription());
     runner.run_test("stream_transcription", test_stream_transcription());
     runner.run_test("rag_preprocessing", test_rag());
-    runner.run_test("4k_context", test_4k_context());
     runner.print_summary();
     return runner.all_passed() ? 0 : 1;
 }

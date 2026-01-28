@@ -228,106 +228,99 @@ void compute_embedding_node(GraphNode& node, const std::vector<std::unique_ptr<G
     const auto& embeddings_buffer = nodes[node_index_map.at(node.input_ids[0])]->output_buffer;
     const auto& indices_buffer = nodes[node_index_map.at(node.input_ids[1])]->output_buffer;
 
-    size_t vocab_size = embeddings_buffer.shape[0];
     size_t hidden_dim = embeddings_buffer.shape[1];
     size_t num_indices = indices_buffer.total_size;
+    size_t vocab_size = embeddings_buffer.original_N > 0
+                      ? embeddings_buffer.original_N
+                      : embeddings_buffer.shape[0];
 
-    if (embeddings_buffer.precision == Precision::INT8) {
+    std::vector<float> indices_float;
+    const float* indices_ptr;
+    if (indices_buffer.precision == Precision::FP32) {
+        indices_ptr = indices_buffer.data_as<float>();
+    } else {
+        indices_float.resize(num_indices);
+        const int8_t* int_indices = indices_buffer.data_as<int8_t>();
+        for (size_t i = 0; i < num_indices; i++) {
+            indices_float[i] = static_cast<float>(int_indices[i]);
+        }
+        indices_ptr = indices_float.data();
+    }
+
+    __fp16* output = node.output_buffer.data_as<__fp16>();
+
+    if (embeddings_buffer.precision == Precision::INT8 && embeddings_buffer.is_grouped_int8()) {
         const int8_t* embeddings = embeddings_buffer.data_as<int8_t>();
-        __fp16* output = node.output_buffer.data_as<__fp16>();
+        const __fp16* scales = embeddings_buffer.scales_as_fp16();
+        size_t group_size = embeddings_buffer.group_size;
+        size_t num_groups = embeddings_buffer.num_groups;
 
-        if (embeddings_buffer.is_grouped_int8()) {
-            const __fp16* scales = embeddings_buffer.scales_as_fp16();
-            size_t group_size = embeddings_buffer.group_size;
-            size_t num_groups = embeddings_buffer.num_groups;
+        static const uint8_t gather_indices[4][16] = {
+            {0, 1, 2, 3, 16, 17, 18, 19, 32, 33, 34, 35, 48, 49, 50, 51},  // lane 0
+            {4, 5, 6, 7, 20, 21, 22, 23, 36, 37, 38, 39, 52, 53, 54, 55},  // lane 1
+            {8, 9, 10, 11, 24, 25, 26, 27, 40, 41, 42, 43, 56, 57, 58, 59}, // lane 2
+            {12, 13, 14, 15, 28, 29, 30, 31, 44, 45, 46, 47, 60, 61, 62, 63} // lane 3
+        };
 
-            auto dequant_row = [&](size_t i, size_t idx) {
-                const int8_t* emb_row = embeddings + idx * hidden_dim;
-                __fp16* out_row = output + i * hidden_dim;
-
-                for (size_t g = 0; g < num_groups; g++) {
-                    float scale = (float)scales[idx * num_groups + g];
-                    size_t k_start = g * group_size;
-                    size_t k_end = std::min(k_start + group_size, hidden_dim);
-                    for (size_t k = k_start; k < k_end; k++) {
-                        out_row[k] = static_cast<__fp16>(emb_row[k] * scale);
-                    }
-                }
-            };
-
-            if (indices_buffer.precision == Precision::FP32) {
-                const float* indices = indices_buffer.data_as<float>();
-                for (size_t i = 0; i < num_indices; i++) {
-                    size_t idx = static_cast<size_t>(indices[i]);
-                    if (idx >= vocab_size) {
-                        throw std::runtime_error("Embedding index out of bounds: " + std::to_string(idx) + " >= " + std::to_string(vocab_size));
-                    }
-                    dequant_row(i, idx);
-                }
-            } else {
-                const int8_t* indices = indices_buffer.data_as<int8_t>();
-                for (size_t i = 0; i < num_indices; i++) {
-                    size_t idx = static_cast<size_t>(indices[i]);
-                    if (idx >= vocab_size) {
-                        throw std::runtime_error("Embedding index out of bounds: " + std::to_string(idx) + " >= " + std::to_string(vocab_size));
-                    }
-                    dequant_row(i, idx);
-                }
+        for (size_t i = 0; i < num_indices; i++) {
+            size_t idx = static_cast<size_t>(indices_ptr[i]);
+            if (idx >= vocab_size) {
+                throw std::runtime_error("Embedding index out of bounds: " + std::to_string(idx) + " >= " + std::to_string(vocab_size));
             }
-        } else {
-            if (indices_buffer.precision == Precision::FP32) {
-                const float* indices = indices_buffer.data_as<float>();
-                for (size_t i = 0; i < num_indices; i++) {
-                    size_t idx = static_cast<size_t>(indices[i]);
-                    if (idx >= vocab_size) {
-                        throw std::runtime_error("Embedding index out of bounds: " + std::to_string(idx) + " >= " + std::to_string(vocab_size));
-                    }
-                    for (size_t j = 0; j < hidden_dim; j++) {
-                        output[i * hidden_dim + j] = static_cast<__fp16>(embeddings[idx * hidden_dim + j]);
-                    }
+
+            size_t block = idx / 4;
+            size_t lane = idx % 4;
+            __fp16* out_row = output + i * hidden_dim;
+
+            uint8x16_t indices_vec = vld1q_u8(gather_indices[lane]);
+
+            for (size_t g = 0; g < num_groups; g++) {
+                float scale = (float)scales[(block * num_groups + g) * 4 + lane];
+                float32x4_t scale_vec = vdupq_n_f32(scale);
+
+                size_t k_start = g * group_size;
+                size_t k_end = std::min(k_start + group_size, hidden_dim);
+
+                const int8_t* group_base = embeddings + (block * hidden_dim + k_start) * 4;
+
+                size_t k = k_start;
+                for (; k + 16 <= k_end; k += 16) {
+                    const int8_t* chunk_base = group_base + (k - k_start) * 4;
+                    int8x16x4_t table = vld1q_s8_x4(chunk_base);
+
+                    int8x16_t values = vqtbl4q_s8(table, indices_vec);
+
+                    int16x8_t lo16 = vmovl_s8(vget_low_s8(values));
+                    int16x8_t hi16 = vmovl_s8(vget_high_s8(values));
+
+                    float32x4_t f0 = vmulq_f32(vcvtq_f32_s32(vmovl_s16(vget_low_s16(lo16))), scale_vec);
+                    float32x4_t f1 = vmulq_f32(vcvtq_f32_s32(vmovl_s16(vget_high_s16(lo16))), scale_vec);
+                    float32x4_t f2 = vmulq_f32(vcvtq_f32_s32(vmovl_s16(vget_low_s16(hi16))), scale_vec);
+                    float32x4_t f3 = vmulq_f32(vcvtq_f32_s32(vmovl_s16(vget_high_s16(hi16))), scale_vec);
+
+                    vst1q_f16(out_row + k, vcombine_f16(vcvt_f16_f32(f0), vcvt_f16_f32(f1)));
+                    vst1q_f16(out_row + k + 8, vcombine_f16(vcvt_f16_f32(f2), vcvt_f16_f32(f3)));
                 }
-            } else {
-                const int8_t* indices = indices_buffer.data_as<int8_t>();
-                for (size_t i = 0; i < num_indices; i++) {
-                    size_t idx = static_cast<size_t>(indices[i]);
-                    if (idx >= vocab_size) {
-                        throw std::runtime_error("Embedding index out of bounds: " + std::to_string(idx) + " >= " + std::to_string(vocab_size));
-                    }
-                    for (size_t j = 0; j < hidden_dim; j++) {
-                        output[i * hidden_dim + j] = static_cast<__fp16>(embeddings[idx * hidden_dim + j]);
-                    }
+
+                for (; k < k_end; k++) {
+                    size_t k_group = k / 4;
+                    size_t k_within = k % 4;
+                    int8_t val = embeddings[(block * (hidden_dim / 4) + k_group) * 16 + lane * 4 + k_within];
+                    out_row[k] = static_cast<__fp16>(val * scale);
                 }
             }
         }
     } else if (embeddings_buffer.precision == Precision::FP16) {
         const __fp16* embeddings = embeddings_buffer.data_as<__fp16>();
-        __fp16* output = node.output_buffer.data_as<__fp16>();
-
-        if (indices_buffer.precision == Precision::FP32) {
-            const float* indices = indices_buffer.data_as<float>();
-            for (size_t i = 0; i < num_indices; i++) {
-                size_t idx = static_cast<size_t>(indices[i]);
-                if (idx >= vocab_size) {
-                    throw std::runtime_error("Embedding index out of bounds: " + std::to_string(idx) + " >= " + std::to_string(vocab_size));
-                }
-                for (size_t j = 0; j < hidden_dim; j++) {
-                    output[i * hidden_dim + j] = embeddings[idx * hidden_dim + j];
-                }
+        for (size_t i = 0; i < num_indices; i++) {
+            size_t idx = static_cast<size_t>(indices_ptr[i]);
+            if (idx >= vocab_size) {
+                throw std::runtime_error("Embedding index out of bounds: " + std::to_string(idx) + " >= " + std::to_string(vocab_size));
             }
-        } else {
-            const int8_t* indices = indices_buffer.data_as<int8_t>();
-            for (size_t i = 0; i < num_indices; i++) {
-                size_t idx = static_cast<size_t>(indices[i]);
-                if (idx >= vocab_size) {
-                    throw std::runtime_error("Embedding index out of bounds: " + std::to_string(idx) + " >= " + std::to_string(vocab_size));
-                }
-                for (size_t j = 0; j < hidden_dim; j++) {
-                    output[i * hidden_dim + j] = embeddings[idx * hidden_dim + j];
-                }
-            }
+            std::memcpy(output + i * hidden_dim, embeddings + idx * hidden_dim, hidden_dim * sizeof(__fp16));
         }
     } else {
-        throw std::runtime_error("Embedding only supports INT8 and FP16 precision");
+        throw std::runtime_error("Embedding requires interleaved grouped INT8 or FP16");
     }
 }
 

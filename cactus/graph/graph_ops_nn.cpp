@@ -134,8 +134,13 @@ void compute_matmul_node(GraphNode& node, const std::vector<std::unique_ptr<Grap
 
     size_t M = lhs_shape[lhs_shape.size() - 2];
     size_t K = lhs_shape[lhs_shape.size() - 1];
-    size_t N = node.params.pretransposed_rhs ?
-               rhs_shape[rhs_shape.size() - 2] : rhs_shape[rhs_shape.size() - 1];
+    size_t N;
+    if (rhs_buffer.is_interleaved && rhs_buffer.original_N > 0) {
+        N = rhs_buffer.original_N;
+    } else {
+        N = node.params.pretransposed_rhs ?
+            rhs_shape[rhs_shape.size() - 2] : rhs_shape[rhs_shape.size() - 1];
+    }
 
     bool pretransposed_rhs = node.params.pretransposed_rhs;
 
@@ -148,37 +153,7 @@ void compute_matmul_node(GraphNode& node, const std::vector<std::unique_ptr<Grap
     const bool lhs_is_prequantized_int8 = (lhs_buffer.precision == Precision::INT8 &&
                                             lhs_buffer.has_activation_scales());
 
-    if (rhs_buffer.is_packed_int4()) {
-        const uint8_t* rhs_packed = rhs_buffer.packed_int4_as_uint8();
-        const __fp16* rhs_scales = rhs_buffer.scales_as_fp16();
-        __fp16* output = node.output_buffer.data_as<__fp16>();
-
-        if (!pretransposed_rhs) {
-            throw std::runtime_error("INT4 matmul requires pretransposed weights");
-        }
-
-        const int8_t* lhs_int8;
-        const float* lhs_scales;
-
-        if (lhs_is_prequantized_int8) {
-            lhs_int8 = lhs_buffer.data_as<int8_t>();
-            lhs_scales = lhs_buffer.activation_scales_as_float();
-        } else if (lhs_buffer.precision == Precision::FP16) {
-            const __fp16* lhs = lhs_buffer.data_as<__fp16>();
-            ensure_quant_buffers(M, K);
-            quantize_activations_fp16_to_int8(lhs, quant_activation_buffer.data(),
-                                              quant_scales_buffer.data(), M, K);
-            lhs_int8 = quant_activation_buffer.data();
-            lhs_scales = quant_scales_buffer.data();
-        } else {
-            throw std::runtime_error("INT4 matmul requires INT8 (pre-quantized) or FP16 activations");
-        }
-
-        cactus_matmul_int4(lhs_int8, lhs_scales,
-                           rhs_packed, rhs_scales, output,
-                           M, K, N, rhs_buffer.group_size);
-
-    } else if (rhs_buffer.is_grouped_int8()) {
+    if (rhs_buffer.is_grouped_int8()) {
         const int8_t* rhs = rhs_buffer.data_as<int8_t>();
         const __fp16* rhs_scales = rhs_buffer.scales_as_fp16();
         __fp16* output = node.output_buffer.data_as<__fp16>();

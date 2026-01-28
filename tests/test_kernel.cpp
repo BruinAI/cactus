@@ -302,108 +302,6 @@ bool test_matmul_int8_grouped_correctness() {
     return max_abs_error < 0.1f;
 }
 
-bool test_matmul_int4_grouped_correctness() {
-    // Kernel processes 64 K elements at a time, so group_size must be >= 64
-    const size_t M = 2, K = 128, N = 4;
-    const size_t group_size = 64;
-    const size_t num_groups = K / group_size;
-    const size_t K_packed = K / 2;  
-
-    std::vector<__fp16> A(M * K);
-    for (size_t i = 0; i < M * K; ++i) {
-        A[i] = static_cast<__fp16>((static_cast<float>(rand()) / RAND_MAX - 0.5f) * 0.5f);
-    }
-
-    std::vector<int8_t> B_unpacked(N * K);
-    for (size_t i = 0; i < N * K; ++i) {
-        B_unpacked[i] = static_cast<int8_t>((rand() % 16) - 8); 
-    }
-
-    std::vector<uint8_t> B_packed(N * K_packed);
-    for (size_t n = 0; n < N; ++n) {
-        for (size_t k = 0; k < K; k += 2) {
-            int8_t lo = B_unpacked[n * K + k];
-            int8_t hi = B_unpacked[n * K + k + 1];
-            uint8_t packed = (static_cast<uint8_t>(lo & 0x0F)) | (static_cast<uint8_t>(hi & 0x0F) << 4);
-            B_packed[n * K_packed + k/2] = packed;
-        }
-    }
-
-    std::vector<__fp16> B_scales(N * num_groups);
-    for (size_t n = 0; n < N; ++n) {
-        for (size_t g = 0; g < num_groups; ++g) {
-            float max_abs = 0.0f;
-            for (size_t k = 0; k < group_size; ++k) {
-                float val = std::abs(static_cast<float>(B_unpacked[n * K + g * group_size + k]));
-                if (val > max_abs) max_abs = val;
-            }
-            float scale = max_abs / 7.0f;
-            if (scale < 1e-6f) scale = 1e-6f;
-            B_scales[n * num_groups + g] = static_cast<__fp16>(scale);
-        }
-    }
-
-    // Pre-quantize A to INT8 + scales
-    std::vector<int8_t> A_quant(M * K);
-    std::vector<float> A_scales(M);
-    for (size_t m = 0; m < M; ++m) {
-        float max_abs = cactus_fp16_max_abs(A.data() + m * K, K);
-        float scale = max_abs / 127.0f;
-        if (scale < 1e-10f) scale = 1e-10f;
-        A_scales[m] = scale;
-        cactus_fp16_to_int8(A.data() + m * K, A_quant.data() + m * K, K, scale);
-    }
-
-    std::vector<__fp16> C(M * N);
-
-    cactus_matmul_int4(A_quant.data(), A_scales.data(), B_packed.data(), B_scales.data(), C.data(),
-                       M, K, N, group_size);
-
-    std::vector<float> C_ref(M * N, 0.0f);
-    for (size_t m = 0; m < M; ++m) {
-        float a_max_abs = 0.0f;
-        for (size_t k = 0; k < K; ++k) {
-            float val = std::abs(static_cast<float>(A[m * K + k]));
-            if (val > a_max_abs) a_max_abs = val;
-        }
-        float a_scale = a_max_abs / 127.0f;
-        if (a_scale < 1e-10f) a_scale = 1e-10f;
-
-        std::vector<int8_t> A_quant(K);
-        for (size_t k = 0; k < K; ++k) {
-            float val = static_cast<float>(A[m * K + k]) / a_scale;
-            int32_t q = static_cast<int32_t>(std::round(val));
-            q = std::max(-128, std::min(127, q));
-            A_quant[k] = static_cast<int8_t>(q);
-        }
-
-        for (size_t n = 0; n < N; ++n) {
-            float acc = 0.0f;
-            for (size_t g = 0; g < num_groups; ++g) {
-                float b_scale = static_cast<float>(B_scales[n * num_groups + g]);
-                float combined_scale = a_scale * b_scale;
-
-                int32_t group_sum = 0;
-                for (size_t k = 0; k < group_size; ++k) {
-                    size_t k_idx = g * group_size + k;
-                    group_sum += static_cast<int32_t>(A_quant[k_idx]) *
-                                 static_cast<int32_t>(B_unpacked[n * K + k_idx]);
-                }
-                acc += static_cast<float>(group_sum) * combined_scale;
-            }
-            C_ref[m * N + n] = acc;
-        }
-    }
-
-    float max_abs_error = 0.0f;
-    for (size_t i = 0; i < M * N; ++i) {
-        float error = std::abs(static_cast<float>(C[i]) - C_ref[i]);
-        if (error > max_abs_error) max_abs_error = error;
-    }
-
-    return max_abs_error < 0.1f;
-}
-
 int main() {
     TestUtils::TestRunner runner("Kernel Backend Tests");
 
@@ -417,7 +315,6 @@ int main() {
     runner.run_test("Kernel RoPE Correctness", test_neon_rope_correctness());
     runner.run_test("Kernel Attention FP16 Correctness", test_neon_attention_fp16_correctness());
     runner.run_test("Kernel Grouped INT8 MatMul Correctness", test_matmul_int8_grouped_correctness());
-    runner.run_test("Kernel Grouped INT4 MatMul Correctness", test_matmul_int4_grouped_correctness());
 
     runner.print_summary();
     return runner.all_passed() ? 0 : 1;
