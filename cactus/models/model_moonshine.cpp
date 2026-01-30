@@ -407,33 +407,18 @@ size_t MoonshineModel::build_encoder(CactusGraph* gb, const std::vector<float>& 
         if (copy_samples > 0) {
             cactus_fp32_to_fp16(audio_features.data(), audio_f16.data(), copy_samples);
         }
-        size_t elements_written = npu_encoder_->encode(
-            audio_f16.data(),
-            nullptr,
-            input_shape,
-            "x",
-            ""
-        );
-        std::vector<int> out_shape = npu_encoder_->get_output_shape();
-        size_t T_enc = 0;
-        size_t D_enc = 0;
-        if (out_shape.size() == 3) {
-            T_enc = static_cast<size_t>(out_shape[1]);
-            D_enc = static_cast<size_t>(out_shape[2]);
-        }
-        else if (out_shape.size() == 2) {
-            T_enc = static_cast<size_t>(out_shape[0]);
-            D_enc = static_cast<size_t>(out_shape[1]);
-        }
-        else {
-            std::cout << "NPU encoder output has unexpected shape: " << out_shape.size() << std::endl;
+        size_t T_enc = moonshine_downsampled_len(expected_samples);
+        size_t D_enc = static_cast<size_t>(config_.hidden_dim);
+        if (T_enc == 0 || D_enc == 0) {
+            std::cout << "NPU encoder output has unexpected shape for input size "
+                      << expected_samples << std::endl;
             std::cout << "Falling back to CPU encoder path." << std::endl;
             goto encoder_cpu_fallback;
         }
         
         size_t total_elements = T_enc * D_enc;
         std::vector<__fp16> npu_output(total_elements);
-        elements_written = npu_encoder_->encode(
+        size_t elements_written = npu_encoder_->encode(
             audio_f16.data(),
             npu_output.data(),
             input_shape,
@@ -557,7 +542,7 @@ uint32_t MoonshineModel::decode_with_audio(
     if (!initialized_ || !graph_handle_)
         throw std::runtime_error("Model not initialized - call init() first");
     if (audio_features.empty())
-        throw std::runtime_error("Mel bins cannot be empty in Moonshine decode_with_audio");
+        throw std::runtime_error("Audio features cannot be empty in Moonshine decode_with_audio");
     auto* gb = static_cast<CactusGraph*>(graph_handle_);
     gb->clear_debug_nodes();
     bool cold_start = !encoder_ready_;
