@@ -476,7 +476,6 @@ encoder_cpu_fallback:
         h,
         weight_nodes_.encoder_layer_norm_weight
     );
-    gb->capture_debug_node(0, "moonshine.encoder.output", h_norm);
     size_t h_norm_persistent = gb->persistent(h_norm);
     last_encoder_post_norm_node_ = h_norm_persistent;
     return h_norm_persistent;
@@ -499,9 +498,7 @@ size_t MoonshineModel::build_decoder(const std::vector<uint32_t>& tokens, bool u
         tok_f[i] = static_cast<float>(tokens[start_idx + i]);
     }
     gb->set_input(tok_input, tok_f.data(), Precision::FP32);
-    gb->capture_debug_node(0, "moonshine.decoder.tokens", tok_input);
     size_t dec_hidden = gb->embedding(embedding_node_id_, tok_input);
-    gb->capture_debug_node(0, "moonshine.decoder.embed", dec_hidden);
     for (uint32_t layer_idx = 0; layer_idx < config_.num_decoder_layers; ++layer_idx) {
         dec_hidden = build_decoder_transformer_block(
             gb,
@@ -516,7 +513,6 @@ size_t MoonshineModel::build_decoder(const std::vector<uint32_t>& tokens, bool u
         dec_hidden,
         weight_nodes_.decoder_norm_weight
     );
-    gb->capture_debug_node(0, "moonshine.decoder.norm", dec_norm);
     size_t logits_input = dec_norm;
     if (last_token_only) {
         size_t row_index = new_tokens - 1;
@@ -524,7 +520,6 @@ size_t MoonshineModel::build_decoder(const std::vector<uint32_t>& tokens, bool u
     }
     auto w_shape = gb->get_output_buffer(output_weight_node_id_).shape;
     size_t logits = gb->matmul(logits_input, output_weight_node_id_, true, backend);
-    gb->capture_debug_node(0, "moonshine.decoder.logits", logits);
     last_new_tokens_ = new_tokens;
     return logits;
 }
