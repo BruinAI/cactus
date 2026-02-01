@@ -3,7 +3,6 @@
 #include <cmath>
 #include <stdexcept>
 #include <algorithm>
-#include <numeric>
 #include <filesystem>
 #include <iostream>
 
