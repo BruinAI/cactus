@@ -6,7 +6,7 @@ echo "============================"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 
-DEFAULT_MODEL="LiquidAI/LFM2-VL-450M"
+DEFAULT_MODEL="LiquidAI/LFM2-VL-1.6B"
 DEFAULT_TRANSCRIBE_MODEL="openai/whisper-small"
 
 MODEL_NAME="$DEFAULT_MODEL"

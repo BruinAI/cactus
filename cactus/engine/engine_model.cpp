@@ -245,16 +245,21 @@ uint32_t Model::decode(const std::vector<uint32_t>& tokens, float temperature, f
         const auto& logits_buf = gb->get_output_buffer(logits_node_id);
         void* logits_ptr = gb->get_output(logits_node_id);
         size_t vocab_size = logits_buf.shape.back();
+        size_t seq_len = 1;
+        if (logits_buf.shape.size() >= 2) {
+            seq_len = logits_buf.shape[logits_buf.shape.size() - 2];
+        }
+        size_t row_offset = (seq_len > 0 ? (seq_len - 1) * vocab_size : 0);
 
         std::vector<float> logits(vocab_size);
         if (logits_buf.precision == Precision::FP32) {
-            float* src = static_cast<float*>(logits_ptr);
+            float* src = static_cast<float*>(logits_ptr) + row_offset;
             std::copy(src, src + vocab_size, logits.begin());
         } else if (logits_buf.precision == Precision::FP16) {
-            __fp16* src = static_cast<__fp16*>(logits_ptr);
+            __fp16* src = static_cast<__fp16*>(logits_ptr) + row_offset;
             Quantization::fp16_to_fp32(src, logits.data(), vocab_size);
         } else {
-            int8_t* src = static_cast<int8_t*>(logits_ptr);
+            int8_t* src = static_cast<int8_t*>(logits_ptr) + row_offset;
             Quantization::int8_to_fp32(src, logits.data(), vocab_size, 1.0f);
         }
 
