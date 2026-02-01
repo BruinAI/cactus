@@ -42,6 +42,8 @@ OUTPUT_NORM_NAMES = [
     'transformer.ln_f.weight',
     'model.embedding_norm.weight',
     'model.language_model.embedding_norm.weight',
+    'language_model.model.norm.weight',
+    'model.language_model.norm.weight',
     'model.text_model.norm.weight',
     'decoder.norm.weight'
 ]
