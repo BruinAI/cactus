@@ -83,6 +83,19 @@ std::string extract_json_value(const std::string& json, const std::string& key) 
     return json.substr(start, end - start);
 }
 
+std::string extract_json_number(const std::string& json, const std::string& key) {
+    std::string pattern = "\"" + key + "\":";
+    size_t start = json.find(pattern);
+    if (start == std::string::npos) return "";
+    start += pattern.length();
+    while (start < json.length() && std::isspace(json[start])) start++;
+    size_t end = start;
+    while (end < json.length() && (isdigit(json[end]) || json[end] == '.' || json[end] == '-')) {
+        end++;
+    }
+    return json.substr(start, end - start);
+}
+
 void print_token(const char* token, uint32_t /*token_id*/, void* /*user_data*/) {
     std::cout << token << std::flush;
 }
@@ -259,7 +272,7 @@ int run_live_transcription(cactus_model_t model) {
     }
 
     cactus_stream_transcribe_t stream = cactus_stream_transcribe_start(
-        model, R"({"confirmation_threshold": 1.0, "min_chunk_size": 16000})"
+        model, R"({"confirmation_threshold": 1.0})"
     );
 
     if (!stream) {
@@ -284,6 +297,7 @@ int run_live_transcription(cactus_model_t model) {
     });
 
     std::string confirmed_text;
+    std::string last_stats;
     std::vector<char> response_buffer(RESPONSE_BUFFER_SIZE, 0);
 
     auto last_process_time = std::chrono::steady_clock::now();
@@ -309,6 +323,7 @@ int run_live_transcription(cactus_model_t model) {
                     audio_chunk, g_audio_state.actual_sample_rate, TARGET_SAMPLE_RATE
                 );
 
+                auto t_start = std::chrono::high_resolution_clock::now();
                 int process_result = cactus_stream_transcribe_process(
                     stream,
                     resampled.data(),
@@ -316,20 +331,38 @@ int run_live_transcription(cactus_model_t model) {
                     response_buffer.data(),
                     response_buffer.size()
                 );
+                auto t_end = std::chrono::high_resolution_clock::now();
+                double latency_ms = std::chrono::duration_cast<std::chrono::microseconds>(t_end - t_start).count() / 1000.0;
 
                 if (process_result >= 0) {
                     std::string json_str(response_buffer.data());
                     std::string confirmed = extract_json_value(json_str, "confirmed");
                     std::string pending = extract_json_value(json_str, "pending");
+                    std::string ttft = extract_json_number(json_str, "time_to_first_token_ms");
 
+                    // Update stats if we have activity
+                    if (!confirmed.empty() || !pending.empty()) {
+                         int ttft_val = ttft.empty() ? 0 : std::stoi(ttft);
+                         last_stats = colored("[Lat:" + std::to_string(int(latency_ms)) + "ms TTFT:" + std::to_string(ttft_val) + "ms] ", Color::GRAY);
+                    }
+
+                    // Always print line clear + last stats + status
                     std::cout << Color::CLEAR_LINE;
-                    if (!confirmed_text.empty()) {
-                        std::cout << colored(confirmed_text, Color::GREEN);
+                    if (!last_stats.empty()) {
+                        std::cout << last_stats;
                     }
-                    if (!pending.empty()) {
-                        std::cout << colored(pending, Color::YELLOW);
-                    }
+                    std::cout << colored(" (Writing to live_transcript.txt...)", Color::GRAY);
                     std::cout << std::flush;
+
+                    // Write full transcript to file
+                    std::ofstream outfile("live_transcript.txt");
+                    if (outfile.is_open()) {
+                        outfile << confirmed_text << confirmed;
+                        if (!pending.empty()) {
+                            outfile << "*" << pending << "*";
+                        }
+                        outfile.close();
+                    }
 
                     if (!confirmed.empty()) {
                         confirmed_text += confirmed + " ";

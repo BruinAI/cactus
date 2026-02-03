@@ -107,8 +107,8 @@ static std::string suppress_unwanted_text(const std::string& text) {
 }
 
 static void parse_stream_transcribe_init_options(const std::string& json, double& confirmation_threshold, size_t& min_chunk_size) {
-    confirmation_threshold = 0.99;
-    min_chunk_size = 32000;
+    // Defaults are set by caller
+
 
     if (json.empty()) {
         return;
@@ -165,8 +165,10 @@ cactus_stream_transcribe_t cactus_stream_transcribe_start(cactus_model_t model, 
         stream_handle->previous_audio_buffer_size = 0;
         stream_handle->transcribe_response_buffer[0] = '\0';
 
-        double confirmation_threshold;
-        size_t min_chunk_size;
+        bool is_moonshine = model_handle->model->get_config().model_type == cactus::engine::Config::ModelType::MOONSHINE;
+        double confirmation_threshold = 1.0;
+        size_t min_chunk_size = is_moonshine ? 8000 : 16000; // 500ms for Moonshine, 1s for Whisper
+
         parse_stream_transcribe_init_options(
             options_json ? options_json : "",
             confirmation_threshold,
@@ -176,7 +178,7 @@ cactus_stream_transcribe_t cactus_stream_transcribe_start(cactus_model_t model, 
         stream_handle->options = { confirmation_threshold, min_chunk_size };
 
         CACTUS_LOG_INFO("stream_transcribe_start",
-            "Stream transcription initialized for model: " << model_handle->model_name);
+            "Stream transcription initialized for model: " << model_handle->model_name << " (min_chunk_size=" << min_chunk_size << ")");
 
         return stream_handle;
     } catch (const std::exception& e) {
@@ -268,7 +270,11 @@ int cactus_stream_transcribe_process(
 
         std::string confirmed;
         const size_t n = std::min(handle->previous_transcription.size(), response.size());
-        if (fuzzy_match(handle->previous_transcription, response, n, handle->options.confirmation_threshold)) {
+        
+        // Only allow confirmation if we have enough audio context (e.g. > 1s)
+        bool enough_context = handle->audio_buffer.size() >= 16000 * sizeof(int16_t);
+        
+        if (enough_context && fuzzy_match(handle->previous_transcription, response, n, handle->options.confirmation_threshold)) {
             handle->audio_buffer.erase(
                 handle->audio_buffer.begin(),
                 handle->audio_buffer.begin() + handle->previous_audio_buffer_size

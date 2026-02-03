@@ -186,7 +186,7 @@ int cactus_transcribe(
         if (max_tokens > max_tps_tokens) {
             max_tokens = max_tps_tokens;
         }
-        
+
         uint32_t next_token = handle->model->decode_with_audio(tokens, audio_features, temperature, top_p, top_k, "", &first_token_entropy);
         {
             auto t_first = std::chrono::high_resolution_clock::now();
