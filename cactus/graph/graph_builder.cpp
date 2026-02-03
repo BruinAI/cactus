@@ -710,4 +710,5 @@ bool CactusGraph::is_populated(size_t persistent_node_id) const {
 
 void CactusGraph::invalidate_persistent(size_t persistent_node_id) {
     populated_node_ids_.erase(persistent_node_id);
+    persistent_node_ids_.erase(persistent_node_id);
 }
