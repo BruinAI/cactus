@@ -12,13 +12,12 @@
 #include <mutex>
 #include <vector>
 #include <algorithm>
+#include <sys/ioctl.h>
+#include <unistd.h>
 
 #ifdef HAVE_SDL2
 #include <SDL2/SDL.h>
 #endif
-
-#include <sys/ioctl.h>
-#include <unistd.h>
 
 
 
@@ -346,7 +345,7 @@ int run_live_transcription(cactus_model_t model) {
 
     std::string confirmed_text;
     std::string last_stats;
-    std::string current_line_confirmed; // Buffer for the current active line
+    std::string current_line_confirmed;
     bool status_line_visible = false;
     std::vector<char> response_buffer(RESPONSE_BUFFER_SIZE, 0);
 
