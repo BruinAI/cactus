@@ -320,7 +320,7 @@ int run_live_transcription(cactus_model_t model) {
     }
 
     cactus_stream_transcribe_t stream = cactus_stream_transcribe_start(
-        model, R"({"confirmation_threshold": 1.0})"
+        model, R"({"confirmation_threshold": 1.0, "min_chunk_size": 16000})"
     );
 
     if (!stream) {
