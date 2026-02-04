@@ -131,7 +131,6 @@ std::string truncate_visible(const std::string& s, size_t limit) {
     return out + "\033[0m";
 }
 
-// Find the index of the first space AFTER the limit, ignoring ANSI codes
 size_t find_safe_split_index(const std::string& s, size_t limit) {
     size_t len = 0;
     bool in_esc = false;
@@ -139,13 +138,8 @@ size_t find_safe_split_index(const std::string& s, size_t limit) {
         char c = s[i];
         if (c == '\033') { in_esc = true; continue; }
         if (in_esc) { if (c == 'm') in_esc = false; continue; }
-        
         if ((c & 0xC0) != 0x80) len++;
-
-        // If we passed the limit and hit a space (outside escape), this is a split point
-        if (len >= limit && c == ' ' && !in_esc) {
-            return i;
-        }
+        if (len >= limit && c == ' ' && !in_esc) return i;
     }
     return std::string::npos;
 }
@@ -396,45 +390,35 @@ int run_live_transcription(cactus_model_t model) {
                     std::string pending = extract_json_value(json_str, "pending");
                     std::string ttft = extract_json_number(json_str, "time_to_first_token_ms");
 
-                    // Update stats if we have activity
                     if (!confirmed.empty() || !pending.empty()) {
-                         int ttft_val = ttft.empty() ? 0 : std::stoi(ttft);
-                         last_stats = colored("[Lat:" + std::to_string(int(latency_ms)) + "ms TTFT:" + std::to_string(ttft_val) + "ms] ", Color::GRAY);
+                        int val = ttft.empty() ? 0 : std::stoi(ttft);
+                        last_stats = colored("[Lat:" + std::to_string(int(latency_ms)) + "ms TTFT:" + std::to_string(val) + "ms] ", Color::GRAY);
                     }
 
                     int width = get_terminal_width();
                     int limit = (width < 20 ? 80 : width) * 0.7;
 
                     if (status_line_visible) {
-                         std::cout << "\r\033[2K\033[1A";
-                         status_line_visible = false;
+                        std::cout << "\r\033[2K\033[1A";
+                        status_line_visible = false;
                     }
 
-                    // 2. Process & Print Confirmed Text
                     if (!confirmed.empty()) {
                         current_line_confirmed += colored(confirmed, Color::GREEN) + " ";
                         confirmed_text += confirmed + " ";
                     }
-                    
-                    // Wrap Loop: Check if we need to split the current line
-                    while (true) {
-                        size_t split_idx = find_safe_split_index(current_line_confirmed, limit);
-                        if (split_idx == std::string::npos) break;
 
-                        // Emit up to split point + newline
-                        std::string part = current_line_confirmed.substr(0, split_idx);
-                        std::string rem = current_line_confirmed.substr(split_idx + 1);
+                    while (true) {
+                        size_t idx = find_safe_split_index(current_line_confirmed, limit);
+                        if (idx == std::string::npos) break;
                         
-                        // Fix ANSI state
-                        part += Color::RESET; // Close split line
-                        rem = Color::GREEN + rem; // Restore green for next line
+                        std::string part = current_line_confirmed.substr(0, idx);
+                        std::string rem = current_line_confirmed.substr(idx + 1);
                         
-                        std::cout << "\r\033[K" << part << "\n";
-                        
-                        // Keep remainder
-                        current_line_confirmed = rem;
+                        std::cout << "\r\033[K" << part + Color::RESET << "\n";
+                        current_line_confirmed = Color::GREEN + rem;
                     }
-                    
+
                     std::cout << "\r\033[K" << current_line_confirmed;
 
                     std::stringstream ss;
@@ -442,9 +426,7 @@ int run_live_transcription(cactus_model_t model) {
                     if (!pending.empty()) ss << colored(pending, Color::YELLOW);
                     
                     std::string ghost = ss.str();
-                    if (visible_length(ghost) >= width) {
-                        ghost = truncate_visible(ghost, width - 1);
-                    }
+                    if (visible_length(ghost) >= width) ghost = truncate_visible(ghost, width - 1);
 
                     if (!ghost.empty()) {
                         std::cout << "\n" << ghost << std::flush;
