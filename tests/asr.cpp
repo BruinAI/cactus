@@ -19,8 +19,6 @@
 #include <SDL2/SDL.h>
 #endif
 
-
-
 constexpr size_t RESPONSE_BUFFER_SIZE = 65536;
 
 namespace Color {
