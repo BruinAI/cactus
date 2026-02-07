@@ -36,16 +36,28 @@ static std::atomic<int> inference_active{0};
 static std::atomic<bool> shutdown_called{false};
 static std::atomic<bool> atexit_registered{false};
 static std::atomic<bool> cloud_disabled{false};
-static const char* supabase_url = "https://ivzeouvbwsnepwojsjya.supabase.co";
-static const char* supabase_key = "sb_publishable_hgsggXPMkAsEuyhQE_bwuQ_ouLN3rcc";
+static std::string supabase_url = "https://ivzeouvbwsnepwojsjya.supabase.co";
+static std::string supabase_key = "sb_publishable_hgsggXPMkAsEuyhQE_bwuQ_ouLN3rcc";
 static std::string device_id;
 static std::string project_id;
 static std::string cloud_key;
+static std::string project_scope;
 static std::string device_model;
 static std::string device_os;
 static std::string device_os_version;
 static std::string device_brand;
 static std::atomic<bool> ids_ready{false};
+
+static std::string new_uuid();
+static std::string model_basename(const char* model_path) {
+    if (!model_path) return {};
+    std::string m(model_path);
+    size_t pos = m.find_last_of("/\\");
+    if (pos != std::string::npos && pos + 1 < m.size()) {
+        m = m.substr(pos + 1);
+    }
+    return m;
+}
 
 // Forward declarations for helpers used before definition
 static std::string event_type_to_string(EventType t);
@@ -101,7 +113,8 @@ static Event make_event(EventType type, const char* model, bool success, double 
     e.timestamp = std::chrono::system_clock::now();
     std::memset(e.model, 0, sizeof(e.model));
     std::memset(e.message, 0, sizeof(e.message));
-    if (model) std::strncpy(e.model, model, sizeof(e.model)-1);
+    std::string safe_model = model_basename(model);
+    if (!safe_model.empty()) std::strncpy(e.model, safe_model.c_str(), sizeof(e.model)-1);
     if (message) std::strncpy(e.message, message, sizeof(e.message)-1);
     return e;
 }
@@ -222,7 +235,8 @@ static std::string new_uuid() {
     return oss.str();
 }
 
-static bool is_valid_uuid(const std::string& s) {
+[[maybe_unused]] static bool is_valid_uuid(const std::string& s) {
+    // Simple check used only for validation when accepting user-provided IDs.
     if (s.size() != 36) return false;
     for (size_t i = 0; i < s.size(); ++i) {
         char c = s[i];
@@ -246,10 +260,46 @@ static void collect_device_info() {
     }
 }
 
+static void ensure_project_row(CURL* curl) {
+    if (project_id.empty()) return;
+    std::string url = supabase_url + "/rest/v1/projects";
+    std::ostringstream payload;
+    payload << "[{";
+    payload << "\"id\":\"" << project_id << "\"";
+    payload << ",\"project_key\":\"" << project_id << "\"";
+    if (!cloud_key.empty()) {
+        payload << ",\"cloud_key\":\"" << cloud_key << "\"";
+    }
+    if (!project_scope.empty()) {
+        payload << ",\"name\":\"" << project_scope << "\"";
+    }
+    payload << "}]";
+    struct curl_slist* headers = nullptr;
+    headers = curl_slist_append(headers, "Content-Type: application/json");
+    std::string apikey_hdr = std::string("apikey: ") + supabase_key;
+    std::string auth_hdr = std::string("Authorization: Bearer ") + supabase_key;
+    headers = curl_slist_append(headers, apikey_hdr.c_str());
+    headers = curl_slist_append(headers, auth_hdr.c_str());
+    headers = curl_slist_append(headers, "Prefer: resolution=merge-duplicates");
+    headers = curl_slist_append(headers, "Content-Profile: cactus");
+    headers = curl_slist_append(headers, "Accept-Profile: cactus");
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
+    curl_easy_setopt(curl, CURLOPT_POST, 1L);
+    std::string body = payload.str();
+    curl_easy_setopt(curl, CURLOPT_POSTFIELDS, body.c_str());
+    curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, body.size());
+    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 1L);
+    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 2L);
+    curl_easy_setopt(curl, CURLOPT_TIMEOUT, 5L);
+    curl_easy_perform(curl);
+    if (headers) curl_slist_free_all(headers);
+}
+
 static void ensure_device_row(CURL* curl) {
     if (device_id.empty()) device_id = new_uuid();
     if (device_os.empty()) collect_device_info();
-    std::string url = std::string(supabase_url) + "/rest/v1/devices";
+    std::string url = supabase_url + "/rest/v1/devices";
     std::ostringstream payload;
     payload << "[{";
     payload << "\"id\":\"" << device_id << "\"";
@@ -313,8 +363,9 @@ static bool send_batch_to_cloud(const std::vector<Event>& local) {
     if (device_id.empty()) device_id = new_uuid();
     CURL* curl = curl_easy_init();
     if (!curl) return false;
+    ensure_project_row(curl);
     ensure_device_row(curl);
-    std::string url = std::string(supabase_url) + "/rest/v1/logs";
+    std::string url = supabase_url + "/rest/v1/logs";
     std::ostringstream payload;
     payload << "[";
     for (size_t i = 0; i < local.size(); ++i) {
@@ -424,6 +475,11 @@ void init(const char* project_id_param, const char* project_scope, const char* c
             cloud_disabled.store(true);
         }
     }
+    const char* env_url = std::getenv("CACTUS_SUPABASE_URL");
+    const char* env_key = std::getenv("CACTUS_SUPABASE_KEY");
+    if (env_url && *env_url) supabase_url = env_url;
+    if (env_key && *env_key) supabase_key = env_key;
+
     const char* env_project = std::getenv("CACTUS_PROJECT_ID");
     if (project_id_param && *project_id_param) {
         project_id = project_id_param;

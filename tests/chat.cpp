@@ -238,7 +238,7 @@ int main(int argc, char* argv[]) {
 
         std::string options = "{\"temperature\":0.7,\"top_p\":0.95,\"top_k\":40,\"max_tokens\":"
                     + std::to_string(MAX_TOKENS)
-                    + ",\"stop_sequences\":[\"<|im_end|>\",\"<end_of_turn>\"],\"telemetry_enabled\":false}";
+                    + ",\"stop_sequences\":[\"<|im_end|>\",\"<end_of_turn>\"]}";
 
         std::vector<char> response_buffer(RESPONSE_BUFFER_SIZE, 0);
 
