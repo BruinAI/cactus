@@ -226,12 +226,12 @@ static std::string new_uuid() {
     a = (a & 0xffffffffffff0fffULL) | 0x0000000000004000ULL;
     b = (b & 0x3fffffffffffffffULL) | 0x8000000000000000ULL;
     std::ostringstream oss;
-    oss << std::hex;
-    oss << ((a >> 32) & 0xffffffffULL);
-    oss << "-" << ((a >> 16) & 0xffffULL);
-    oss << "-" << (a & 0xffffULL);
-    oss << "-" << ((b >> 48) & 0xffffULL);
-    oss << "-" << (b & 0xffffffffffffULL);
+    oss << std::hex << std::setfill('0');
+    oss << std::setw(8) << ((a >> 32) & 0xffffffffULL);
+    oss << "-" << std::setw(4) << ((a >> 16) & 0xffffULL);
+    oss << "-" << std::setw(4) << (a & 0xffffULL);
+    oss << "-" << std::setw(4) << ((b >> 48) & 0xffffULL);
+    oss << "-" << std::setw(12) << (b & 0xffffffffffffULL);
     return oss.str();
 }
 
