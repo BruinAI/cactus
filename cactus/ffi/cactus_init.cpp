@@ -366,7 +366,7 @@ cactus_model_t cactus_init(const char* model_path, const char* corpus_dir, bool 
     CACTUS_LOG_INFO("init", "Loading model: " << model_name << " from " << model_path_str);
 
     apply_no_cloud_telemetry_env();
-    cactus::telemetry::setEnabled(true);
+    cactus::telemetry::init(nullptr, model_path_str.c_str(), nullptr);
 
     try {
         auto* handle = new CactusModelHandle();

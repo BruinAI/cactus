@@ -13,6 +13,7 @@
 #include <sys/utsname.h>
 #include <curl/curl.h>
 #include <dirent.h>
+#include <functional>
 
 namespace cactus {
 namespace telemetry {
@@ -31,18 +32,20 @@ struct Event {
     std::chrono::system_clock::time_point timestamp;
 };
 static std::atomic<bool> enabled{false};
-static std::string telemetry_token;
 static std::atomic<int> inference_active{0};
 static std::atomic<bool> shutdown_called{false};
 static std::atomic<bool> atexit_registered{false};
 static std::atomic<bool> cloud_disabled{false};
 static const char* supabase_url = "https://ivzeouvbwsnepwojsjya.supabase.co";
 static const char* supabase_key = "sb_publishable_hgsggXPMkAsEuyhQE_bwuQ_ouLN3rcc";
-static std::string device_row_id;
+static std::string device_id;
+static std::string project_id;
+static std::string cloud_key;
 static std::string device_model;
 static std::string device_os;
 static std::string device_os_version;
 static std::string device_brand;
+static std::atomic<bool> ids_ready{false};
 
 // Forward declarations for helpers used before definition
 static std::string event_type_to_string(EventType t);
@@ -61,6 +64,30 @@ static std::string get_telemetry_dir() {
     mkdir((std::string(home) + "/Library/Caches/cactus").c_str(), 0755);
     mkdir(dir.c_str(), 0755);
     return dir;
+}
+
+static std::string scoped_file_name(const std::string& prefix, const std::string& scope) {
+    std::hash<std::string> hasher;
+    size_t h = hasher(scope);
+    std::ostringstream oss;
+    oss << prefix << std::hex << h;
+    return oss.str();
+}
+
+static std::string load_or_create_id(const std::string& file) {
+    std::ifstream in(file);
+    if (in.is_open()) {
+        std::string line;
+        if (std::getline(in, line) && !line.empty()) {
+            return line;
+        }
+    }
+    std::string id = new_uuid();
+    std::ofstream out(file, std::ios::trunc);
+    if (out.is_open()) {
+        out << id;
+    }
+    return id;
 }
 
 static Event make_event(EventType type, const char* model, bool success, double ttft_ms, double tps, double response_time_ms, int tokens, const char* message) {
@@ -220,13 +247,13 @@ static void collect_device_info() {
 }
 
 static void ensure_device_row(CURL* curl) {
-    if (device_row_id.empty()) device_row_id = new_uuid();
+    if (device_id.empty()) device_id = new_uuid();
     if (device_os.empty()) collect_device_info();
     std::string url = std::string(supabase_url) + "/rest/v1/devices";
     std::ostringstream payload;
     payload << "[{";
-    payload << "\"id\":\"" << device_row_id << "\"";
-    payload << ",\"device_id\":\"" << device_row_id << "\"";
+    payload << "\"id\":\"" << device_id << "\"";
+    payload << ",\"device_id\":\"" << device_id << "\"";
     if (!device_model.empty()) payload << ",\"model\":\"" << device_model << "\"";
     if (!device_os.empty()) payload << ",\"os\":\"" << device_os << "\"";
     if (!device_os_version.empty()) payload << ",\"os_version\":\"" << device_os_version << "\"";
@@ -281,10 +308,9 @@ static bool send_payload(CURL* curl, const std::string& url, const std::string& 
 
 static bool send_batch_to_cloud(const std::vector<Event>& local) {
     if (!enabled.load()) return false;
-    if (telemetry_token.empty()) return false;
     if (local.empty()) return true;
     if (cloud_disabled.load()) return false;
-    if (device_row_id.empty()) device_row_id = new_uuid();
+    if (device_id.empty()) device_id = new_uuid();
     CURL* curl = curl_easy_init();
     if (!curl) return false;
     ensure_device_row(curl);
@@ -301,11 +327,14 @@ static bool send_batch_to_cloud(const std::vector<Event>& local) {
         payload << "\"tps\":" << e.tps << ",";
         payload << "\"response_time\":" << e.response_time_ms << ",";
         payload << "\"tokens\":" << e.tokens << ",";
-        if (is_valid_uuid(telemetry_token)) {
-            payload << "\"telemetry_token\":\"" << telemetry_token << "\",";
+        if (!project_id.empty()) {
+            payload << "\"project_id\":\"" << project_id << "\",";
+        }
+        if (!cloud_key.empty()) {
+            payload << "\"cloud_key\":\"" << cloud_key << "\",";
         }
         payload << "\"framework\":\"cpp\",";
-        payload << "\"device_id\":\"" << device_row_id << "\"";
+        payload << "\"device_id\":\"" << device_id << "\"";
         if (e.message[0] != '\0') {
             payload << ",\"message\":\"" << e.message << "\"";
         }
@@ -388,18 +417,41 @@ static void flush_logs_with_event(const Event* latest) {
     }
 }
 
-void init(const char* token) {
-    if (!token) return;
-    telemetry_token = token;
+void init(const char* project_id_param, const char* project_scope, const char* cloud_key_param) {
+    std::string scope = project_scope ? project_scope : "default";
     if (const char* env = std::getenv("CACTUS_NO_CLOUD_TELE")) {
         if (env[0] != '\0' && !(env[0] == '0' && env[1] == '\0')) {
             cloud_disabled.store(true);
         }
     }
+    const char* env_project = std::getenv("CACTUS_PROJECT_ID");
+    if (project_id_param && *project_id_param) {
+        project_id = project_id_param;
+    } else if (env_project && *env_project) {
+        project_id = env_project;
+    } else {
+        std::string dir = get_telemetry_dir();
+        std::string file = dir + "/" + scoped_file_name("project_", scope);
+        project_id = load_or_create_id(file);
+    }
+
+    const char* env_cloud = std::getenv("CACTUS_CLOUD_KEY");
+    if (cloud_key_param && *cloud_key_param) {
+        cloud_key = cloud_key_param;
+    } else if (env_cloud && *env_cloud) {
+        cloud_key = env_cloud;
+    }
+
+    std::string dir = get_telemetry_dir();
+    std::string device_file = dir + "/device_id";
+    device_id = load_or_create_id(device_file);
+    collect_device_info();
+
     curl_global_init(CURL_GLOBAL_DEFAULT);
     if (!atexit_registered.exchange(true)) {
         std::atexit([](){ shutdown(); });
     }
+    ids_ready.store(true);
     setEnabled(true);
 }
 
@@ -412,7 +464,7 @@ void setCloudDisabled(bool disabled) {
 }
 
 void recordInit(const char* model, bool success, const char* message) {
-    if (!enabled.load()) return;
+    if (!enabled.load() || !ids_ready.load() || cloud_disabled.load()) return;
     Event e = make_event(INIT, model, success, 0.0, 0.0, 0.0, 0, message);
     if (success) {
         write_events_to_cache({e});
@@ -422,19 +474,19 @@ void recordInit(const char* model, bool success, const char* message) {
 }
 
 void recordCompletion(const char* model, bool success, double ttft_ms, double tps, double response_time_ms, int tokens, const char* message) {
-    if (!enabled.load()) return;
+    if (!enabled.load() || !ids_ready.load() || cloud_disabled.load()) return;
     Event e = make_event(COMPLETION, model, success, ttft_ms, tps, response_time_ms, tokens, message);
     flush_logs_with_event(&e);
 }
 
 void recordEmbedding(const char* model, bool success, const char* message) {
-    if (!enabled.load()) return;
+    if (!enabled.load() || !ids_ready.load() || cloud_disabled.load()) return;
     Event e = make_event(EMBEDDING, model, success, 0.0, 0.0, 0.0, 0, message);
     flush_logs_with_event(&e);
 }
 
 void recordTranscription(const char* model, bool success, double ttft_ms, double tps, double response_time_ms, int tokens, const char* message) {
-    if (!enabled.load()) return;
+    if (!enabled.load() || !ids_ready.load() || cloud_disabled.load()) return;
     Event e = make_event(TRANSCRIPTION, model, success, ttft_ms, tps, response_time_ms, tokens, message);
     flush_logs_with_event(&e);
 }

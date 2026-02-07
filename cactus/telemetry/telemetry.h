@@ -5,7 +5,7 @@
 namespace cactus {
 namespace telemetry {
 
-void init(const char* token);
+void init(const char* project_id = nullptr, const char* project_scope = nullptr, const char* cloud_key = nullptr);
 void setEnabled(bool enabled);
 void setCloudDisabled(bool disabled);
 void recordInit(const char* model, bool success, const char* message);
