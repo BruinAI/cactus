@@ -1,5 +1,6 @@
 #include "cactus_ffi.h"
 #include "cactus_utils.h"
+#include "telemetry/telemetry.h"
 #include <cstring>
 #include <regex>
 
@@ -106,9 +107,13 @@ static std::string suppress_unwanted_text(const std::string& text) {
     return result.substr(start, end - start + 1);
 }
 
-static void parse_stream_transcribe_init_options(const std::string& json, double& confirmation_threshold, size_t& min_chunk_size) {
+static void parse_stream_transcribe_init_options(const std::string& json,
+                                                 double& confirmation_threshold,
+                                                 size_t& min_chunk_size,
+                                                 bool& telemetry_enabled) {
     confirmation_threshold = 0.99;
     min_chunk_size = 32000;
+    telemetry_enabled = true;
 
     if (json.empty()) {
         return;
@@ -124,6 +129,11 @@ static void parse_stream_transcribe_init_options(const std::string& json, double
     if (pos != std::string::npos) {
         pos = json.find(':', pos) + 1;
         min_chunk_size = static_cast<size_t>(std::stod(json.substr(pos)));
+    }
+
+    pos = json.find("\"telemetry_enabled\"");
+    if (pos != std::string::npos) {
+        telemetry_enabled = json_bool(json, "telemetry_enabled");
     }
 }
 
@@ -167,11 +177,15 @@ cactus_stream_transcribe_t cactus_stream_transcribe_start(cactus_model_t model, 
 
         double confirmation_threshold;
         size_t min_chunk_size;
+        bool telemetry_enabled;
         parse_stream_transcribe_init_options(
             options_json ? options_json : "",
             confirmation_threshold,
-            min_chunk_size
+            min_chunk_size,
+            telemetry_enabled
         );
+
+        cactus::telemetry::setCloudDisabled(!telemetry_enabled);
 
         stream_handle->options = { confirmation_threshold, min_chunk_size };
 

@@ -321,7 +321,8 @@ inline void parse_options_json(const std::string& json,
                                bool& force_tools,
                                size_t& tool_rag_top_k,
                                float& confidence_threshold,
-                               bool& include_stop_sequences) {
+                               bool& include_stop_sequences,
+                               bool& telemetry_enabled) {
     temperature = 0.0f;
     top_p = 0.0f;
     top_k = 0;
@@ -330,6 +331,7 @@ inline void parse_options_json(const std::string& json,
     tool_rag_top_k = 2;  
     confidence_threshold = 0.7f;  
     include_stop_sequences = false;
+    telemetry_enabled = true;
     stop_sequences.clear();
 
     if (json.empty()) return;
@@ -382,6 +384,13 @@ inline void parse_options_json(const std::string& json,
         pos = json.find(':', pos) + 1;
         while (pos < json.length() && std::isspace(json[pos])) pos++;
         include_stop_sequences = (json.substr(pos, 4) == "true");
+    }
+
+    pos = json.find("\"telemetry_enabled\"");
+    if (pos != std::string::npos) {
+        pos = json.find(':', pos) + 1;
+        while (pos < json.length() && std::isspace(json[pos])) pos++;
+        telemetry_enabled = (json.substr(pos, 4) == "true");
     }
 
     pos = json.find("\"stop_sequences\"");

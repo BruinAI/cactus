@@ -1,5 +1,6 @@
 #include "cactus_ffi.h"
 #include "cactus_utils.h"
+#include "telemetry/telemetry.h"
 #include "../../libs/audio/wav.h"
 #include <chrono>
 #include <cstring>
@@ -60,7 +61,6 @@ int cactus_transcribe(
         handle_error_response(error_msg, response_buffer, buffer_size);
         return -1;
     }
-
     if (!prompt || !response_buffer || buffer_size == 0) {
         CACTUS_LOG_ERROR("transcribe", "Invalid parameters: prompt, response_buffer, or buffer_size");
         handle_error_response("Invalid parameters", response_buffer, buffer_size);
@@ -94,8 +94,10 @@ int cactus_transcribe(
         float temperature, top_p, confidence_threshold;
         size_t top_k, max_tokens, tool_rag_top_k;
         std::vector<std::string> stop_sequences;
-        bool force_tools, include_stop_sequences;
-        parse_options_json(options_json ? options_json : "", temperature, top_p, top_k, max_tokens, stop_sequences, force_tools, tool_rag_top_k, confidence_threshold, include_stop_sequences);
+        bool force_tools, include_stop_sequences, telemetry_enabled;
+        parse_options_json(options_json ? options_json : "", temperature, top_p, top_k, max_tokens, stop_sequences, force_tools, tool_rag_top_k, confidence_threshold, include_stop_sequences, telemetry_enabled);
+
+        cactus::telemetry::setCloudDisabled(!telemetry_enabled);
 
         std::vector<float> audio_features;
         
