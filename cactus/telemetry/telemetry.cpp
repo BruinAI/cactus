@@ -49,7 +49,9 @@ static std::string device_os;
 static std::string device_os_version;
 static std::string device_brand;
 static std::string device_registered_file;
+static std::string project_registered_file;
 static std::atomic<bool> device_registered{false};
+static std::atomic<bool> project_registered{false};
 static std::atomic<bool> ids_ready{false};
 
 static std::string new_uuid();
@@ -342,8 +344,8 @@ static void collect_device_info() {
     }
 }
 
-static void ensure_project_row(CURL* curl) {
-    if (project_id.empty()) return;
+static bool ensure_project_row(CURL* curl) {
+    if (project_id.empty() || project_registered.load()) return true;
     std::string url = supabase_url + "/rest/v1/projects";
     std::ostringstream payload;
     payload << "[{";
@@ -362,7 +364,7 @@ static void ensure_project_row(CURL* curl) {
     std::string auth_hdr = std::string("Authorization: Bearer ") + supabase_key;
     headers = curl_slist_append(headers, apikey_hdr.c_str());
     headers = curl_slist_append(headers, auth_hdr.c_str());
-    headers = curl_slist_append(headers, "Prefer: resolution=merge-duplicates");
+    headers = curl_slist_append(headers, "Prefer: resolution=ignore-duplicates");
     headers = curl_slist_append(headers, "Content-Profile: cactus");
     headers = curl_slist_append(headers, "Accept-Profile: cactus");
     curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
@@ -374,8 +376,18 @@ static void ensure_project_row(CURL* curl) {
     curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 1L);
     curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 2L);
     curl_easy_setopt(curl, CURLOPT_TIMEOUT, 5L);
-    curl_easy_perform(curl);
+    CURLcode res = curl_easy_perform(curl);
+    long code = 0;
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &code);
     if (headers) curl_slist_free_all(headers);
+    bool ok = (res == CURLE_OK) && ((code >= 200 && code < 300) || code == 409);
+    if (ok) {
+        if (!project_registered_file.empty()) {
+            persist_registered_flag(project_registered_file);
+        }
+        project_registered.store(true);
+    }
+    return ok;
 }
 
 static bool ensure_device_row(CURL* curl) {
@@ -576,15 +588,19 @@ void init(const char* project_id_param, const char* project_scope, const char* c
     if (env_key && *env_key) supabase_key = env_key;
 
     const char* env_project = std::getenv("CACTUS_PROJECT_ID");
+    std::string dir = get_telemetry_dir();
     if (project_id_param && *project_id_param) {
         project_id = project_id_param;
     } else if (env_project && *env_project) {
         project_id = env_project;
     } else {
-        std::string dir = get_telemetry_dir();
         std::string file = dir + "/" + scoped_file_name("project_", scope);
         project_id = load_or_create_id(file);
     }
+
+    std::string project_flag_file = dir + "/" + scoped_file_name("project_reg_", scope);
+    project_registered_file = project_flag_file;
+    project_registered.store(load_registered_flag(project_flag_file));
 
     const char* env_cloud = std::getenv("CACTUS_CLOUD_KEY");
     if (cloud_key_param && *cloud_key_param) {
@@ -593,7 +609,6 @@ void init(const char* project_id_param, const char* project_scope, const char* c
         cloud_key = env_cloud;
     }
 
-    std::string dir = get_telemetry_dir();
     std::string device_file = dir + "/device_id";
     std::string device_flag_file = dir + "/device_registered";
     device_registered_file = device_flag_file;
