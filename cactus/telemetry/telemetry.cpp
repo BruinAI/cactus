@@ -5,12 +5,14 @@
 #include <cstring>
 #include <fstream>
 #include <cstdlib>
+#include <ctime>
 #include <random>
 #include <sstream>
 #include <string>
 #include <vector>
 #include <sys/stat.h>
 #include <sys/utsname.h>
+#include <sys/sysctl.h>
 #include <curl/curl.h>
 #include <dirent.h>
 #include <functional>
@@ -46,9 +48,12 @@ static std::string device_model;
 static std::string device_os;
 static std::string device_os_version;
 static std::string device_brand;
+static std::string device_registered_file;
+static std::atomic<bool> device_registered{false};
 static std::atomic<bool> ids_ready{false};
 
 static std::string new_uuid();
+static std::string format_timestamp(const std::chrono::system_clock::time_point& tp);
 static std::string model_basename(const char* model_path) {
     if (!model_path) return {};
     std::string m(model_path);
@@ -66,6 +71,7 @@ static bool extract_string_field(const std::string& line, const std::string& key
 static bool extract_bool_field(const std::string& line, const std::string& key, bool& out);
 static bool extract_double_field(const std::string& line, const std::string& key, double& out);
 static bool extract_int_field(const std::string& line, const std::string& key, int& out);
+static bool extract_double_field_raw(const std::string& line, const std::string& key, double& out);
 
 static std::string get_telemetry_dir() {
     const char* home = getenv("HOME");
@@ -100,6 +106,32 @@ static std::string load_or_create_id(const std::string& file) {
         out << id;
     }
     return id;
+}
+
+static bool load_registered_flag(const std::string& file) {
+    std::ifstream in(file);
+    if (!in.is_open()) return false;
+    std::string line;
+    if (std::getline(in, line) && !line.empty()) {
+        return line[0] == '1';
+    }
+    return false;
+}
+
+static void persist_registered_flag(const std::string& file) {
+    std::ofstream out(file, std::ios::trunc);
+    if (out.is_open()) {
+        out << "1";
+    }
+}
+
+static std::string sysctl_string(const char* key) {
+    size_t size = 0;
+    if (sysctlbyname(key, nullptr, &size, nullptr, 0) != 0 || size == 0) return {};
+    std::string out(size, '\0');
+    if (sysctlbyname(key, out.data(), &size, nullptr, 0) != 0) return {};
+    if (!out.empty() && out.back() == '\0') out.pop_back();
+    return out;
 }
 
 static Event make_event(EventType type, const char* model, bool success, double ttft_ms, double tps, double response_time_ms, int tokens, const char* message) {
@@ -139,6 +171,14 @@ static bool parse_event_line(const std::string& line, Event& out) {
     extract_int_field(line, "tokens", tokens);
     std::string message;
     extract_string_field(line, "message", message);
+    double ts_ms = 0.0;
+    if (!extract_double_field_raw(line, "ts_ms", ts_ms)) {
+        extract_double_field(line, "ts_ms", ts_ms);
+    }
+    auto ts_point = std::chrono::system_clock::now();
+    if (ts_ms > 0.0) {
+        ts_point = std::chrono::system_clock::time_point(std::chrono::milliseconds(static_cast<long long>(ts_ms)));
+    }
 
     out = make_event(et,
                      model.empty() ? nullptr : model.c_str(),
@@ -148,6 +188,7 @@ static bool parse_event_line(const std::string& line, Event& out) {
                      response_time,
                      tokens,
                      message.empty() ? nullptr : message.c_str());
+    out.timestamp = ts_point;
     return true;
 }
 
@@ -208,6 +249,25 @@ static bool extract_double_field(const std::string& line, const std::string& key
     }
 }
 
+// Helper used when the field is already numeric (no quotes) in the log cache.
+static bool extract_double_field_raw(const std::string& line, const std::string& key, double& out) {
+    std::string needle = "\"" + key + "\":";
+    size_t pos = line.find(needle);
+    if (pos == std::string::npos) return false;
+    pos += needle.size();
+    while (pos < line.size() && line[pos] == ' ') pos++;
+    if (pos >= line.size()) return false;
+    size_t end = line.find_first_of(",}", pos);
+    if (end == std::string::npos) end = line.size();
+    std::string raw = line.substr(pos, end - pos);
+    try {
+        out = std::stod(raw);
+        return true;
+    } catch (...) {
+        return false;
+    }
+}
+
 static bool extract_int_field(const std::string& line, const std::string& key, int& out) {
     std::string raw;
     if (!extract_string_field(line, key, raw)) return false;
@@ -235,6 +295,25 @@ static std::string new_uuid() {
     return oss.str();
 }
 
+static std::string format_timestamp(const std::chrono::system_clock::time_point& tp) {
+    using namespace std::chrono;
+    auto secs = time_point_cast<std::chrono::seconds>(tp);
+    auto ms = duration_cast<std::chrono::milliseconds>(tp - secs).count();
+    std::time_t t = system_clock::to_time_t(secs);
+    std::tm tm{};
+#if defined(_WIN32)
+    gmtime_s(&tm, &t);
+#else
+    gmtime_r(&t, &tm);
+#endif
+    char buf[32];
+    std::snprintf(buf, sizeof(buf), "%04d-%02d-%02dT%02d:%02d:%02d.%03lldZ",
+                  tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday,
+                  tm.tm_hour, tm.tm_min, tm.tm_sec,
+                  static_cast<long long>(ms));
+    return std::string(buf);
+}
+
 [[maybe_unused]] static bool is_valid_uuid(const std::string& s) {
     // Simple check used only for validation when accepting user-provided IDs.
     if (s.size() != 36) return false;
@@ -253,9 +332,12 @@ static std::string new_uuid() {
 static void collect_device_info() {
     struct utsname u;
     if (uname(&u) == 0) {
-        device_os = u.sysname;
-        device_os_version = u.release;
-        device_model = u.machine;
+        // Prefer user-facing macOS info over Darwin kernel version.
+        std::string hw_model = sysctl_string("hw.model");
+        std::string os_product = sysctl_string("kern.osproductversion");
+        device_os = (std::string(u.sysname) == "Darwin") ? "macos" : u.sysname;
+        device_os_version = !os_product.empty() ? os_product : u.release;
+        device_model = !hw_model.empty() ? hw_model : u.machine;
         device_brand = "apple";
     }
 }
@@ -296,7 +378,8 @@ static void ensure_project_row(CURL* curl) {
     if (headers) curl_slist_free_all(headers);
 }
 
-static void ensure_device_row(CURL* curl) {
+static bool ensure_device_row(CURL* curl) {
+    if (device_registered.load()) return true;
     if (device_id.empty()) device_id = new_uuid();
     if (device_os.empty()) collect_device_info();
     std::string url = supabase_url + "/rest/v1/devices";
@@ -315,7 +398,7 @@ static void ensure_device_row(CURL* curl) {
     std::string auth_hdr = std::string("Authorization: Bearer ") + supabase_key;
     headers = curl_slist_append(headers, apikey_hdr.c_str());
     headers = curl_slist_append(headers, auth_hdr.c_str());
-    headers = curl_slist_append(headers, "Prefer: resolution=merge-duplicates");
+    headers = curl_slist_append(headers, "Prefer: resolution=ignore-duplicates");
     headers = curl_slist_append(headers, "Content-Profile: cactus");
     headers = curl_slist_append(headers, "Accept-Profile: cactus");
     curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
@@ -327,8 +410,16 @@ static void ensure_device_row(CURL* curl) {
     curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 1L);
     curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 2L);
     curl_easy_setopt(curl, CURLOPT_TIMEOUT, 5L);
-    curl_easy_perform(curl);
+    CURLcode res = curl_easy_perform(curl);
+    long code = 0;
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &code);
     if (headers) curl_slist_free_all(headers);
+    bool ok = (res == CURLE_OK) && ((code >= 200 && code < 300) || code == 409);
+    if (ok) {
+        persist_registered_flag(device_registered_file);
+        device_registered.store(true);
+    }
+    return ok;
 }
 
 static bool send_payload(CURL* curl, const std::string& url, const std::string& body) {
@@ -364,7 +455,9 @@ static bool send_batch_to_cloud(const std::vector<Event>& local) {
     CURL* curl = curl_easy_init();
     if (!curl) return false;
     ensure_project_row(curl);
-    ensure_device_row(curl);
+    if (!device_registered.load()) {
+        ensure_device_row(curl);
+    }
     std::string url = supabase_url + "/rest/v1/logs";
     std::ostringstream payload;
     payload << "[";
@@ -378,6 +471,7 @@ static bool send_batch_to_cloud(const std::vector<Event>& local) {
         payload << "\"tps\":" << e.tps << ",";
         payload << "\"response_time\":" << e.response_time_ms << ",";
         payload << "\"tokens\":" << e.tokens << ",";
+        payload << "\"created_at\":\"" << format_timestamp(e.timestamp) << "\",";
         if (!project_id.empty()) {
             payload << "\"project_id\":\"" << project_id << "\",";
         }
@@ -409,6 +503,7 @@ static void write_events_to_cache(const std::vector<Event>& local) {
         oss << "\"tps\":" << e.tps << ",";
         oss << "\"response_time\":" << e.response_time_ms << ",";
         oss << "\"tokens\":" << e.tokens;
+        oss << ",\"ts_ms\":" << std::chrono::duration_cast<std::chrono::milliseconds>(e.timestamp.time_since_epoch()).count();
         if (e.message[0] != '\0') {
             oss << ",\"message\":\"" << e.message << "\"";
         }
@@ -500,6 +595,9 @@ void init(const char* project_id_param, const char* project_scope, const char* c
 
     std::string dir = get_telemetry_dir();
     std::string device_file = dir + "/device_id";
+    std::string device_flag_file = dir + "/device_registered";
+    device_registered_file = device_flag_file;
+    device_registered.store(load_registered_flag(device_flag_file));
     device_id = load_or_create_id(device_file);
     collect_device_info();
 
