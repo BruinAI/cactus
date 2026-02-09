@@ -266,6 +266,9 @@ int cactus_transcribe(
             return -1;
         }
 
+        double tps = (total_time_ms > 0.0) ? (completion_tokens * 1000.0) / total_time_ms : 0.0;
+        cactus::telemetry::recordTranscription(handle->model_name.c_str(), true, time_to_first_token, tps, total_time_ms, static_cast<int>(completion_tokens), "");
+
         std::strcpy(response_buffer, json.c_str());
 
         return static_cast<int>(json.size());
