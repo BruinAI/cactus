@@ -322,16 +322,21 @@ int cactus_stream_transcribe_process(
         double ram_usage_mb = json_number(json_str, "ram_usage_mb");
         double prefill_tokens = json_number(json_str, "prefill_tokens");
         double decode_tokens = json_number(json_str, "decode_tokens");
-        double total_tokens = json_number(json_str, "total_tokens");
 
-        
-        if (!handle->stream_first_token_seen && total_tokens > 0) {
-            auto now = std::chrono::steady_clock::now();
-            double first_ms = std::chrono::duration_cast<std::chrono::milliseconds>(now - handle->stream_start).count();
+        double chunk_decode_tokens = decode_tokens;
+        if (chunk_decode_tokens < 0.0) chunk_decode_tokens = 0.0;
+
+        if (!handle->stream_first_token_seen && chunk_decode_tokens > 0.0) {
+            if (time_to_first_token_ms > 0.0) {
+                handle->stream_first_token_ms = time_to_first_token_ms;
+            } else {
+                auto now = std::chrono::steady_clock::now();
+                handle->stream_first_token_ms = std::chrono::duration_cast<std::chrono::milliseconds>(now - handle->stream_start).count();
+            }
             handle->stream_first_token_seen = true;
-            handle->stream_first_token_ms = first_ms;
         }
-        handle->stream_total_tokens += static_cast<int>(total_tokens);
+
+        handle->stream_total_tokens += static_cast<int>(std::round(chunk_decode_tokens));
 
         constexpr int STREAM_TOKENS_CAP = 20000;
         constexpr double STREAM_DURATION_CAP_MS = 600000.0;
@@ -340,13 +345,14 @@ int cactus_stream_transcribe_process(
         if (handle->stream_total_tokens >= STREAM_TOKENS_CAP || elapsed_ms >= STREAM_DURATION_CAP_MS) {
             double tps = (elapsed_ms > 0.0) ? (static_cast<double>(handle->stream_total_tokens) * 1000.0) / elapsed_ms : 0.0;
             cactus::telemetry::recordStreamTranscription(handle->model_handle->model_name.c_str(), true, handle->stream_first_token_ms, tps, elapsed_ms, handle->stream_total_tokens, "");
-            
+
             handle->stream_start = std::chrono::steady_clock::now();
             handle->stream_first_token_seen = false;
             handle->stream_first_token_ms = 0.0;
             handle->stream_total_tokens = 0;
         }
 
+        double total_tokens = prefill_tokens + decode_tokens;
         std::ostringstream json_builder;
         json_builder << "{";
         json_builder << "\"success\":true,";
