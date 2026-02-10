@@ -8,7 +8,7 @@ namespace telemetry {
 void init(const char* project_id = nullptr, const char* project_scope = nullptr, const char* cloud_key = nullptr);
 void setEnabled(bool enabled);
 void setCloudDisabled(bool disabled);
-void recordInit(const char* model, bool success, const char* message);
+void recordInit(const char* model, bool success, double response_time_ms, const char* message);
 void recordCompletion(const char* model, bool success, double ttft_ms, double tps, double response_time_ms, int tokens, const char* message);
 void recordEmbedding(const char* model, bool success, const char* message);
 void recordTranscription(const char* model, bool success, double ttft_ms, double tps, double response_time_ms, int tokens, const char* message);

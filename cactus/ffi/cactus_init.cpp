@@ -9,6 +9,7 @@
 #include <dirent.h>
 #include <sys/stat.h>
 #include <cstdlib>
+#include <chrono>
 
 using namespace cactus::engine;
 using namespace cactus::ffi;
@@ -368,6 +369,8 @@ cactus_model_t cactus_init(const char* model_path, const char* corpus_dir, bool 
     apply_no_cloud_telemetry_env();
     cactus::telemetry::init(nullptr, model_path_str.c_str(), nullptr);
 
+    auto __cactus_init_start = std::chrono::steady_clock::now();
+
     try {
         auto* handle = new CactusModelHandle();
         handle->model = create_model(model_path);
@@ -376,7 +379,10 @@ cactus_model_t cactus_init(const char* model_path, const char* corpus_dir, bool 
         if (!handle->model) {
             last_error_message = "Failed to create model - check config.txt exists at: " + model_path_str;
             CACTUS_LOG_ERROR("init", last_error_message);
-            cactus::telemetry::recordInit(model_name.c_str(), false, last_error_message.c_str());
+            {
+                auto __cactus_init_err_dur = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - __cactus_init_start).count();
+                cactus::telemetry::recordInit(model_name.c_str(), false, static_cast<double>(__cactus_init_err_dur), last_error_message.c_str());
+            }
             delete handle;
             return nullptr;
         }
@@ -384,7 +390,10 @@ cactus_model_t cactus_init(const char* model_path, const char* corpus_dir, bool 
         if (!handle->model->init(model_path, DEFAULT_CONTEXT_SIZE)) {
             last_error_message = "Failed to initialize model - check weight files at: " + model_path_str;
             CACTUS_LOG_ERROR("init", last_error_message);
-            cactus::telemetry::recordInit(model_name.c_str(), false, last_error_message.c_str());
+            {
+                auto __cactus_init_err_dur = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - __cactus_init_start).count();
+                cactus::telemetry::recordInit(model_name.c_str(), false, static_cast<double>(__cactus_init_err_dur), last_error_message.c_str());
+            }
             delete handle;
             return nullptr;
         }
@@ -406,18 +415,27 @@ cactus_model_t cactus_init(const char* model_path, const char* corpus_dir, bool 
         }
 
         CACTUS_LOG_INFO("init", "Model loaded successfully: " << model_name);
-        cactus::telemetry::recordInit(model_name.c_str(), true, "");
+        {
+            auto __cactus_init_ok_dur = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - __cactus_init_start).count();
+            cactus::telemetry::recordInit(model_name.c_str(), true, static_cast<double>(__cactus_init_ok_dur), "");
+        }
 
         return handle;
     } catch (const std::exception& e) {
         last_error_message = "Exception during init: " + std::string(e.what());
         CACTUS_LOG_ERROR("init", last_error_message);
-        cactus::telemetry::recordInit(model_name.c_str(), false, last_error_message.c_str());
+        {
+            auto __cactus_init_err_dur = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - __cactus_init_start).count();
+            cactus::telemetry::recordInit(model_name.c_str(), false, static_cast<double>(__cactus_init_err_dur), last_error_message.c_str());
+        }
         return nullptr;
     } catch (...) {
         last_error_message = "Unknown exception during model initialization";
         CACTUS_LOG_ERROR("init", last_error_message);
-        cactus::telemetry::recordInit(model_name.c_str(), false, last_error_message.c_str());
+        {
+            auto __cactus_init_err_dur = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - __cactus_init_start).count();
+            cactus::telemetry::recordInit(model_name.c_str(), false, static_cast<double>(__cactus_init_err_dur), last_error_message.c_str());
+        }
         return nullptr;
     }
 }

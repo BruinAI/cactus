@@ -16,6 +16,8 @@
 #include <curl/curl.h>
 #include <dirent.h>
 #include <functional>
+#include <cmath>
+#include <limits>
 
 namespace cactus {
 namespace telemetry {
@@ -479,8 +481,13 @@ static bool send_batch_to_cloud(const std::vector<Event>& local) {
         payload << "\"event_type\":\"" << event_type_to_string(e.type) << "\",";
         payload << "\"model\":\"" << e.model << "\",";
         payload << "\"success\":" << (e.success ? "true" : "false") << ",";
-        payload << "\"ttft\":" << e.ttft_ms << ",";
-        payload << "\"tps\":" << e.tps << ",";
+        if (e.type == INIT) {
+            payload << "\"ttft\":null,";
+            payload << "\"tps\":null,";
+        } else {
+            payload << "\"ttft\":" << e.ttft_ms << ",";
+            payload << "\"tps\":" << e.tps << ",";
+        }
         payload << "\"response_time\":" << e.response_time_ms << ",";
         payload << "\"tokens\":" << e.tokens << ",";
         payload << "\"created_at\":\"" << format_timestamp(e.timestamp) << "\",";
@@ -511,8 +518,13 @@ static void write_events_to_cache(const std::vector<Event>& local) {
         oss << "{\"event_type\":\"" << event_type_to_string(e.type) << "\",";
         oss << "\"model\":\"" << e.model << "\",";
         oss << "\"success\":" << (e.success ? "true" : "false") << ",";
-        oss << "\"ttft\":" << e.ttft_ms << ",";
-        oss << "\"tps\":" << e.tps << ",";
+        if (e.type == INIT) {
+            oss << "\"ttft\":null,";
+            oss << "\"tps\":null,";
+        } else {
+            oss << "\"ttft\":" << e.ttft_ms << ",";
+            oss << "\"tps\":" << e.tps << ",";
+        }
         oss << "\"response_time\":" << e.response_time_ms << ",";
         oss << "\"tokens\":" << e.tokens;
         oss << ",\"ts_ms\":" << std::chrono::duration_cast<std::chrono::milliseconds>(e.timestamp.time_since_epoch()).count();
@@ -632,9 +644,10 @@ void setCloudDisabled(bool disabled) {
     cloud_disabled.store(disabled);
 }
 
-void recordInit(const char* model, bool success, const char* message) {
+void recordInit(const char* model, bool success, double response_time_ms, const char* message) {
     if (!enabled.load() || !ids_ready.load() || cloud_disabled.load()) return;
-    Event e = make_event(INIT, model, success, 0.0, 0.0, 0.0, 0, message);
+    double nan = std::numeric_limits<double>::quiet_NaN();
+    Event e = make_event(INIT, model, success, nan, nan, response_time_ms, 0, message);
     if (success) {
         write_events_to_cache({e});
     } else {
