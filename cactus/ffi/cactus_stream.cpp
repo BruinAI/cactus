@@ -3,6 +3,7 @@
 #include "telemetry/telemetry.h"
 #include <cstring>
 #include <regex>
+#include <chrono>
 
 using namespace cactus::ffi;
 
@@ -151,6 +152,11 @@ struct CactusStreamTranscribeHandle {
     size_t previous_audio_buffer_size;
 
     char transcribe_response_buffer[8192];
+    // stream aggregation
+    std::chrono::steady_clock::time_point stream_start;
+    bool stream_first_token_seen;
+    double stream_first_token_ms;
+    int stream_total_tokens;
 };
 
 extern "C" {
@@ -174,6 +180,10 @@ cactus_stream_transcribe_t cactus_stream_transcribe_start(cactus_model_t model, 
         stream_handle->model_handle = model_handle;
         stream_handle->previous_audio_buffer_size = 0;
         stream_handle->transcribe_response_buffer[0] = '\0';
+        stream_handle->stream_start = std::chrono::steady_clock::now();
+        stream_handle->stream_first_token_seen = false;
+        stream_handle->stream_first_token_ms = 0.0;
+        stream_handle->stream_total_tokens = 0;
 
         double confirmation_threshold;
         size_t min_chunk_size;
@@ -256,6 +266,7 @@ int cactus_stream_transcribe_process(
 
         bool is_moonshine = handle->model_handle->model->get_config().model_type == cactus::engine::Config::ModelType::MOONSHINE;
 
+        cactus::telemetry::setStreamMode(true);
         const int result = cactus_transcribe(
             handle->model_handle,
             nullptr,
@@ -267,6 +278,7 @@ int cactus_stream_transcribe_process(
             nullptr,
             handle->audio_buffer.data(),
             handle->audio_buffer.size());
+        cactus::telemetry::setStreamMode(false);
 
         cactus_reset(handle->model_handle);
 
@@ -307,6 +319,30 @@ int cactus_stream_transcribe_process(
         double prefill_tokens = json_number(json_str, "prefill_tokens");
         double decode_tokens = json_number(json_str, "decode_tokens");
         double total_tokens = json_number(json_str, "total_tokens");
+
+        // update stream aggregation
+        if (!handle->stream_first_token_seen && total_tokens > 0) {
+            auto now = std::chrono::steady_clock::now();
+            double first_ms = std::chrono::duration_cast<std::chrono::milliseconds>(now - handle->stream_start).count();
+            handle->stream_first_token_seen = true;
+            handle->stream_first_token_ms = first_ms;
+        }
+        handle->stream_total_tokens += static_cast<int>(total_tokens);
+
+        // enforced caps
+        constexpr int STREAM_TOKENS_CAP = 20000; // generous
+        constexpr double STREAM_DURATION_CAP_MS = 600000.0; // 10 minutes
+        auto now = std::chrono::steady_clock::now();
+        double elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(now - handle->stream_start).count();
+        if (handle->stream_total_tokens >= STREAM_TOKENS_CAP || elapsed_ms >= STREAM_DURATION_CAP_MS) {
+            double tps = (elapsed_ms > 0.0) ? (static_cast<double>(handle->stream_total_tokens) * 1000.0) / elapsed_ms : 0.0;
+            cactus::telemetry::recordStreamTranscription(handle->model_handle->model_name.c_str(), true, handle->stream_first_token_ms, tps, elapsed_ms, handle->stream_total_tokens, "");
+            // reset aggregation to continue session
+            handle->stream_start = std::chrono::steady_clock::now();
+            handle->stream_first_token_seen = false;
+            handle->stream_first_token_ms = 0.0;
+            handle->stream_total_tokens = 0;
+        }
 
         std::ostringstream json_builder;
         json_builder << "{";
@@ -374,6 +410,14 @@ int cactus_stream_transcribe_stop(
 
         std::string json_response = "{\"success\":true,\"confirmed\":\"" +
             escape_json(suppressed) + "\"}";
+
+        // emit final aggregated stream telemetry
+        if (handle->stream_total_tokens > 0 || handle->stream_first_token_seen) {
+            auto now = std::chrono::steady_clock::now();
+            double elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(now - handle->stream_start).count();
+            double tps = (elapsed_ms > 0.0) ? (static_cast<double>(handle->stream_total_tokens) * 1000.0) / elapsed_ms : 0.0;
+            cactus::telemetry::recordStreamTranscription(handle->model_handle->model_name.c_str(), true, handle->stream_first_token_ms, tps, elapsed_ms, handle->stream_total_tokens, "");
+        }
 
         if (json_response.length() >= buffer_size) {
             last_error_message = "Response buffer too small";

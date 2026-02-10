@@ -22,7 +22,7 @@
 namespace cactus {
 namespace telemetry {
 
-enum EventType { INIT = 0, COMPLETION = 1, EMBEDDING = 2, TRANSCRIPTION = 3 };
+enum EventType { INIT = 0, COMPLETION = 1, EMBEDDING = 2, TRANSCRIPTION = 3, STREAM_TRANSCRIBE = 4 };
 
 struct Event {
     EventType type;
@@ -55,6 +55,7 @@ static std::string project_registered_file;
 static std::atomic<bool> device_registered{false};
 static std::atomic<bool> project_registered{false};
 static std::atomic<bool> ids_ready{false};
+static std::atomic<bool> in_stream_mode{false};
 
 static std::string new_uuid();
 static std::string format_timestamp(const std::chrono::system_clock::time_point& tp);
@@ -202,6 +203,7 @@ static std::string event_type_to_string(EventType t) {
         case COMPLETION: return "completion";
         case EMBEDDING: return "embedding";
         case TRANSCRIPTION: return "transcription";
+        case STREAM_TRANSCRIBE: return "stream_transcribe";
         default: return "unknown";
     }
 }
@@ -211,6 +213,7 @@ static bool event_type_from_string(const std::string& s, EventType& t) {
     if (s == "completion") { t = COMPLETION; return true; }
     if (s == "embedding") { t = EMBEDDING; return true; }
     if (s == "transcription") { t = TRANSCRIPTION; return true; }
+    if (s == "stream_transcribe") { t = STREAM_TRANSCRIBE; return true; }
     return false;
 }
 
@@ -669,8 +672,19 @@ void recordEmbedding(const char* model, bool success, const char* message) {
 
 void recordTranscription(const char* model, bool success, double ttft_ms, double tps, double response_time_ms, int tokens, const char* message) {
     if (!enabled.load() || !ids_ready.load() || cloud_disabled.load()) return;
+    if (in_stream_mode.load()) return;
     Event e = make_event(TRANSCRIPTION, model, success, ttft_ms, tps, response_time_ms, tokens, message);
     flush_logs_with_event(&e);
+}
+
+void recordStreamTranscription(const char* model, bool success, double ttft_ms, double tps, double response_time_ms, int tokens, const char* message) {
+    if (!enabled.load() || !ids_ready.load() || cloud_disabled.load()) return;
+    Event e = make_event(STREAM_TRANSCRIBE, model, success, ttft_ms, tps, response_time_ms, tokens, message);
+    flush_logs_with_event(&e);
+}
+
+void setStreamMode(bool in_stream) {
+    in_stream_mode.store(in_stream);
 }
 
 void markInference(bool active) {

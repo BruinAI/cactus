@@ -12,6 +12,8 @@ void recordInit(const char* model, bool success, double response_time_ms, const 
 void recordCompletion(const char* model, bool success, double ttft_ms, double tps, double response_time_ms, int tokens, const char* message);
 void recordEmbedding(const char* model, bool success, const char* message);
 void recordTranscription(const char* model, bool success, double ttft_ms, double tps, double response_time_ms, int tokens, const char* message);
+void recordStreamTranscription(const char* model, bool success, double ttft_ms, double tps, double response_time_ms, int tokens, const char* message);
+void setStreamMode(bool in_stream);
 void markInference(bool active);
 void flush();
 void shutdown();
