@@ -648,7 +648,7 @@ void setCloudDisabled(bool disabled) {
 }
 
 void recordInit(const char* model, bool success, double response_time_ms, const char* message) {
-    if (!enabled.load() || !ids_ready.load() || cloud_disabled.load()) return;
+    if (!enabled.load() || !ids_ready.load()) return;
     double nan = std::numeric_limits<double>::quiet_NaN();
     Event e = make_event(INIT, model, success, nan, nan, response_time_ms, 0, message);
     if (success) {
@@ -659,26 +659,26 @@ void recordInit(const char* model, bool success, double response_time_ms, const 
 }
 
 void recordCompletion(const char* model, bool success, double ttft_ms, double tps, double response_time_ms, int tokens, const char* message) {
-    if (!enabled.load() || !ids_ready.load() || cloud_disabled.load()) return;
+    if (!enabled.load() || !ids_ready.load()) return;
     Event e = make_event(COMPLETION, model, success, ttft_ms, tps, response_time_ms, tokens, message);
     flush_logs_with_event(&e);
 }
 
 void recordEmbedding(const char* model, bool success, const char* message) {
-    if (!enabled.load() || !ids_ready.load() || cloud_disabled.load()) return;
+    if (!enabled.load() || !ids_ready.load()) return;
     Event e = make_event(EMBEDDING, model, success, 0.0, 0.0, 0.0, 0, message);
     flush_logs_with_event(&e);
 }
 
 void recordTranscription(const char* model, bool success, double ttft_ms, double tps, double response_time_ms, int tokens, const char* message) {
-    if (!enabled.load() || !ids_ready.load() || cloud_disabled.load()) return;
+    if (!enabled.load() || !ids_ready.load()) return;
     if (in_stream_mode.load()) return;
     Event e = make_event(TRANSCRIPTION, model, success, ttft_ms, tps, response_time_ms, tokens, message);
     flush_logs_with_event(&e);
 }
 
 void recordStreamTranscription(const char* model, bool success, double ttft_ms, double tps, double response_time_ms, int tokens, const char* message) {
-    if (!enabled.load() || !ids_ready.load() || cloud_disabled.load()) return;
+    if (!enabled.load() || !ids_ready.load()) return;
     Event e = make_event(STREAM_TRANSCRIBE, model, success, ttft_ms, tps, response_time_ms, tokens, message);
     flush_logs_with_event(&e);
 }
