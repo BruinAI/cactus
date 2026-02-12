@@ -685,6 +685,18 @@ inline std::string construct_cloud_handoff_json(float confidence,
     return json.str();
 }
 
+inline std::string serialize_function_calls(const std::vector<std::string>& calls) {
+    if (calls.empty()) return "[]";
+    std::ostringstream oss;
+    oss << "[";
+    for (size_t i = 0; i < calls.size(); ++i) {
+        if (i > 0) oss << ",";
+        oss << calls[i];
+    }
+    oss << "]";
+    return oss.str();
+}
+
 } // namespace ffi
 } // namespace cactus
 

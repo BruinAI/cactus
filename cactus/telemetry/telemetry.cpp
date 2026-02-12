@@ -28,11 +28,21 @@ struct Event {
     EventType type;
     char model[128];
     bool success;
+    bool cloud_handoff;
     double ttft_ms;
+    double prefill_tps;
+    double decode_tps;
     double tps;
     double response_time_ms;
+    double confidence;
+    double ram_usage_mb;
     int tokens;
+    int prefill_tokens;
+    int decode_tokens;
     char message[256];
+    char error[256];
+    char response[2048];
+    char function_calls[1024];
     std::chrono::system_clock::time_point timestamp;
 };
 static std::atomic<bool> enabled{false};
@@ -143,16 +153,55 @@ static Event make_event(EventType type, const char* model, bool success, double 
     Event e;
     e.type = type;
     e.success = success;
+    e.cloud_handoff = false;
     e.ttft_ms = ttft_ms;
+    e.prefill_tps = 0.0;
+    e.decode_tps = tps;
     e.tps = tps;
     e.response_time_ms = response_time_ms;
+    e.confidence = 0.0;
+    e.ram_usage_mb = 0.0;
     e.tokens = tokens;
+    e.prefill_tokens = 0;
+    e.decode_tokens = tokens;
     e.timestamp = std::chrono::system_clock::now();
     std::memset(e.model, 0, sizeof(e.model));
     std::memset(e.message, 0, sizeof(e.message));
+    std::memset(e.error, 0, sizeof(e.error));
+    std::memset(e.response, 0, sizeof(e.response));
+    std::memset(e.function_calls, 0, sizeof(e.function_calls));
     std::string safe_model = model_basename(model);
     if (!safe_model.empty()) std::strncpy(e.model, safe_model.c_str(), sizeof(e.model)-1);
     if (message) std::strncpy(e.message, message, sizeof(e.message)-1);
+    return e;
+}
+
+static Event make_event_extended(EventType type, const char* model, const CompletionMetrics& metrics) {
+    Event e;
+    e.type = type;
+    e.success = metrics.success;
+    e.cloud_handoff = metrics.cloud_handoff;
+    e.ttft_ms = metrics.ttft_ms;
+    e.prefill_tps = metrics.prefill_tps;
+    e.decode_tps = metrics.decode_tps;
+    e.tps = metrics.decode_tps;
+    e.response_time_ms = metrics.response_time_ms;
+    e.confidence = metrics.confidence;
+    e.ram_usage_mb = metrics.ram_usage_mb;
+    e.tokens = static_cast<int>(metrics.prefill_tokens + metrics.decode_tokens);
+    e.prefill_tokens = static_cast<int>(metrics.prefill_tokens);
+    e.decode_tokens = static_cast<int>(metrics.decode_tokens);
+    e.timestamp = std::chrono::system_clock::now();
+    std::memset(e.model, 0, sizeof(e.model));
+    std::memset(e.message, 0, sizeof(e.message));
+    std::memset(e.error, 0, sizeof(e.error));
+    std::memset(e.response, 0, sizeof(e.response));
+    std::memset(e.function_calls, 0, sizeof(e.function_calls));
+    std::string safe_model = model_basename(model);
+    if (!safe_model.empty()) std::strncpy(e.model, safe_model.c_str(), sizeof(e.model)-1);
+    if (!metrics.success && metrics.error_message) std::strncpy(e.error, metrics.error_message, sizeof(e.error)-1);
+    if (metrics.success && metrics.response_text && !metrics.cloud_handoff) std::strncpy(e.response, metrics.response_text, sizeof(e.response)-1);
+    if (metrics.function_calls_json) std::strncpy(e.function_calls, metrics.function_calls_json, sizeof(e.function_calls)-1);
     return e;
 }
 
@@ -166,16 +215,37 @@ static bool parse_event_line(const std::string& line, Event& out) {
     extract_string_field(line, "model", model);
     bool success = false;
     extract_bool_field(line, "success", success);
+    bool cloud_handoff = false;
+    extract_bool_field(line, "cloud_handoff", cloud_handoff);
     double ttft = 0.0;
     extract_double_field(line, "ttft", ttft);
+    double prefill_tps = 0.0;
+    extract_double_field(line, "prefill_tps", prefill_tps);
+    double decode_tps = 0.0;
+    extract_double_field(line, "decode_tps", decode_tps);
     double tps = 0.0;
     extract_double_field(line, "tps", tps);
+    if (decode_tps == 0.0 && tps != 0.0) decode_tps = tps;
     double response_time = 0.0;
     extract_double_field(line, "response_time", response_time);
+    double confidence = 0.0;
+    extract_double_field(line, "confidence", confidence);
+    double ram_usage_mb = 0.0;
+    extract_double_field(line, "ram_usage_mb", ram_usage_mb);
     int tokens = 0;
     extract_int_field(line, "tokens", tokens);
+    int prefill_tokens = 0;
+    extract_int_field(line, "prefill_tokens", prefill_tokens);
+    int decode_tokens = 0;
+    extract_int_field(line, "decode_tokens", decode_tokens);
     std::string message;
     extract_string_field(line, "message", message);
+    std::string error;
+    extract_string_field(line, "error", error);
+    std::string response;
+    extract_string_field(line, "response", response);
+    std::string function_calls;
+    extract_string_field(line, "function_calls", function_calls);
     double ts_ms = 0.0;
     if (!extract_double_field_raw(line, "ts_ms", ts_ms)) {
         extract_double_field(line, "ts_ms", ts_ms);
@@ -194,6 +264,16 @@ static bool parse_event_line(const std::string& line, Event& out) {
                      tokens,
                      message.empty() ? nullptr : message.c_str());
     out.timestamp = ts_point;
+    out.cloud_handoff = cloud_handoff;
+    out.prefill_tps = prefill_tps;
+    out.decode_tps = decode_tps;
+    out.confidence = confidence;
+    out.ram_usage_mb = ram_usage_mb;
+    out.prefill_tokens = prefill_tokens;
+    out.decode_tokens = decode_tokens;
+    if (!error.empty()) std::strncpy(out.error, error.c_str(), sizeof(out.error)-1);
+    if (!response.empty()) std::strncpy(out.response, response.c_str(), sizeof(out.response)-1);
+    if (!function_calls.empty()) std::strncpy(out.function_calls, function_calls.c_str(), sizeof(out.function_calls)-1);
     return true;
 }
 
@@ -484,15 +564,24 @@ static bool send_batch_to_cloud(const std::vector<Event>& local) {
         payload << "\"event_type\":\"" << event_type_to_string(e.type) << "\",";
         payload << "\"model\":\"" << e.model << "\",";
         payload << "\"success\":" << (e.success ? "true" : "false") << ",";
+        payload << "\"cloud_handoff\":" << (e.cloud_handoff ? "true" : "false") << ",";
         if (e.type == INIT) {
             payload << "\"ttft\":null,";
+            payload << "\"prefill_tps\":null,";
+            payload << "\"decode_tps\":null,";
             payload << "\"tps\":null,";
         } else {
             payload << "\"ttft\":" << e.ttft_ms << ",";
+            payload << "\"prefill_tps\":" << e.prefill_tps << ",";
+            payload << "\"decode_tps\":" << e.decode_tps << ",";
             payload << "\"tps\":" << e.tps << ",";
         }
         payload << "\"response_time\":" << e.response_time_ms << ",";
+        payload << "\"confidence\":" << e.confidence << ",";
+        payload << "\"ram_usage_mb\":" << e.ram_usage_mb << ",";
         payload << "\"tokens\":" << e.tokens << ",";
+        payload << "\"prefill_tokens\":" << e.prefill_tokens << ",";
+        payload << "\"decode_tokens\":" << e.decode_tokens << ",";
         payload << "\"created_at\":\"" << format_timestamp(e.timestamp) << "\",";
         if (!project_id.empty()) {
             payload << "\"project_id\":\"" << project_id << "\",";
@@ -504,6 +593,21 @@ static bool send_batch_to_cloud(const std::vector<Event>& local) {
         payload << "\"device_id\":\"" << device_id << "\"";
         if (e.message[0] != '\0') {
             payload << ",\"message\":\"" << e.message << "\"";
+        }
+        if (e.error[0] != '\0') {
+            payload << ",\"error\":\"" << e.error << "\"";
+        } else {
+            payload << ",\"error\":null";
+        }
+        if (e.response[0] != '\0') {
+            payload << ",\"response\":\"" << e.response << "\"";
+        } else {
+            payload << ",\"response\":null";
+        }
+        if (e.function_calls[0] != '\0') {
+            payload << ",\"function_calls\":" << e.function_calls;
+        } else {
+            payload << ",\"function_calls\":[]";
         }
         payload << "}";
         if (i + 1 < local.size()) payload << ",";
@@ -521,18 +625,42 @@ static void write_events_to_cache(const std::vector<Event>& local) {
         oss << "{\"event_type\":\"" << event_type_to_string(e.type) << "\",";
         oss << "\"model\":\"" << e.model << "\",";
         oss << "\"success\":" << (e.success ? "true" : "false") << ",";
+        oss << "\"cloud_handoff\":" << (e.cloud_handoff ? "true" : "false") << ",";
         if (e.type == INIT) {
             oss << "\"ttft\":null,";
+            oss << "\"prefill_tps\":null,";
+            oss << "\"decode_tps\":null,";
             oss << "\"tps\":null,";
         } else {
             oss << "\"ttft\":" << e.ttft_ms << ",";
+            oss << "\"prefill_tps\":" << e.prefill_tps << ",";
+            oss << "\"decode_tps\":" << e.decode_tps << ",";
             oss << "\"tps\":" << e.tps << ",";
         }
         oss << "\"response_time\":" << e.response_time_ms << ",";
-        oss << "\"tokens\":" << e.tokens;
+        oss << "\"confidence\":" << e.confidence << ",";
+        oss << "\"ram_usage_mb\":" << e.ram_usage_mb << ",";
+        oss << "\"tokens\":" << e.tokens << ",";
+        oss << "\"prefill_tokens\":" << e.prefill_tokens << ",";
+        oss << "\"decode_tokens\":" << e.decode_tokens;
         oss << ",\"ts_ms\":" << std::chrono::duration_cast<std::chrono::milliseconds>(e.timestamp.time_since_epoch()).count();
         if (e.message[0] != '\0') {
             oss << ",\"message\":\"" << e.message << "\"";
+        }
+        if (e.error[0] != '\0') {
+            oss << ",\"error\":\"" << e.error << "\"";
+        } else {
+            oss << ",\"error\":null";
+        }
+        if (e.response[0] != '\0') {
+            oss << ",\"response\":\"" << e.response << "\"";
+        } else {
+            oss << ",\"response\":null";
+        }
+        if (e.function_calls[0] != '\0') {
+            oss << ",\"function_calls\":" << e.function_calls;
+        } else {
+            oss << ",\"function_calls\":[]";
         }
         oss << "}";
         std::string file = dir + "/" + event_type_to_string(e.type) + ".log";
@@ -656,6 +784,12 @@ void recordInit(const char* model, bool success, double response_time_ms, const 
     } else {
         flush_logs_with_event(&e);
     }
+}
+
+void recordCompletion(const char* model, const CompletionMetrics& metrics) {
+    if (!enabled.load() || !ids_ready.load()) return;
+    Event e = make_event_extended(COMPLETION, model, metrics);
+    flush_logs_with_event(&e);
 }
 
 void recordCompletion(const char* model, bool success, double ttft_ms, double tps, double response_time_ms, int tokens, const char* message) {
