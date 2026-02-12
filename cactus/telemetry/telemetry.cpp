@@ -39,6 +39,10 @@ struct Event {
     int tokens;
     int prefill_tokens;
     int decode_tokens;
+    double session_ttft_ms;
+    double session_tps;
+    double session_time_ms;
+    int session_tokens;
     char message[256];
     char error[256];
     char response[2048];
@@ -164,6 +168,10 @@ static Event make_event(EventType type, const char* model, bool success, double 
     e.tokens = tokens;
     e.prefill_tokens = 0;
     e.decode_tokens = tokens;
+    e.session_ttft_ms = 0.0;
+    e.session_tps = 0.0;
+    e.session_time_ms = 0.0;
+    e.session_tokens = 0;
     e.timestamp = std::chrono::system_clock::now();
     std::memset(e.model, 0, sizeof(e.model));
     std::memset(e.message, 0, sizeof(e.message));
@@ -238,6 +246,14 @@ static bool parse_event_line(const std::string& line, Event& out) {
     extract_int_field(line, "prefill_tokens", prefill_tokens);
     int decode_tokens = 0;
     extract_int_field(line, "decode_tokens", decode_tokens);
+    double session_ttft_ms = 0.0;
+    extract_double_field(line, "session_ttft", session_ttft_ms);
+    double session_tps = 0.0;
+    extract_double_field(line, "session_tps", session_tps);
+    double session_time_ms = 0.0;
+    extract_double_field(line, "session_time_ms", session_time_ms);
+    int session_tokens = 0;
+    extract_int_field(line, "session_tokens", session_tokens);
     std::string message;
     extract_string_field(line, "message", message);
     std::string error;
@@ -271,6 +287,10 @@ static bool parse_event_line(const std::string& line, Event& out) {
     out.ram_usage_mb = ram_usage_mb;
     out.prefill_tokens = prefill_tokens;
     out.decode_tokens = decode_tokens;
+    out.session_ttft_ms = session_ttft_ms;
+    out.session_tps = session_tps;
+    out.session_time_ms = session_time_ms;
+    out.session_tokens = session_tokens;
     if (!error.empty()) std::strncpy(out.error, error.c_str(), sizeof(out.error)-1);
     if (!response.empty()) std::strncpy(out.response, response.c_str(), sizeof(out.response)-1);
     if (!function_calls.empty()) std::strncpy(out.function_calls, function_calls.c_str(), sizeof(out.function_calls)-1);
@@ -582,6 +602,10 @@ static bool send_batch_to_cloud(const std::vector<Event>& local) {
         payload << "\"tokens\":" << e.tokens << ",";
         payload << "\"prefill_tokens\":" << e.prefill_tokens << ",";
         payload << "\"decode_tokens\":" << e.decode_tokens << ",";
+        payload << "\"session_ttft\":" << e.session_ttft_ms << ",";
+        payload << "\"session_tps\":" << e.session_tps << ",";
+        payload << "\"session_time_ms\":" << e.session_time_ms << ",";
+        payload << "\"session_tokens\":" << e.session_tokens << ",";
         payload << "\"created_at\":\"" << format_timestamp(e.timestamp) << "\",";
         if (!project_id.empty()) {
             payload << "\"project_id\":\"" << project_id << "\",";
@@ -642,7 +666,11 @@ static void write_events_to_cache(const std::vector<Event>& local) {
         oss << "\"ram_usage_mb\":" << e.ram_usage_mb << ",";
         oss << "\"tokens\":" << e.tokens << ",";
         oss << "\"prefill_tokens\":" << e.prefill_tokens << ",";
-        oss << "\"decode_tokens\":" << e.decode_tokens;
+        oss << "\"decode_tokens\":" << e.decode_tokens << ",";
+        oss << "\"session_ttft\":" << e.session_ttft_ms << ",";
+        oss << "\"session_tps\":" << e.session_tps << ",";
+        oss << "\"session_time_ms\":" << e.session_time_ms << ",";
+        oss << "\"session_tokens\":" << e.session_tokens;
         oss << ",\"ts_ms\":" << std::chrono::duration_cast<std::chrono::milliseconds>(e.timestamp.time_since_epoch()).count();
         if (e.message[0] != '\0') {
             oss << ",\"message\":\"" << e.message << "\"";
@@ -811,9 +839,13 @@ void recordTranscription(const char* model, bool success, double ttft_ms, double
     flush_logs_with_event(&e);
 }
 
-void recordStreamTranscription(const char* model, bool success, double ttft_ms, double tps, double response_time_ms, int tokens, const char* message) {
+void recordStreamTranscription(const char* model, bool success, double ttft_ms, double tps, double response_time_ms, int tokens, double session_ttft_ms, double session_tps, double session_time_ms, int session_tokens, const char* message) {
     if (!enabled.load() || !ids_ready.load()) return;
     Event e = make_event(STREAM_TRANSCRIBE, model, success, ttft_ms, tps, response_time_ms, tokens, message);
+    e.session_ttft_ms = session_ttft_ms;
+    e.session_tps = session_tps;
+    e.session_time_ms = session_time_ms;
+    e.session_tokens = session_tokens;
     flush_logs_with_event(&e);
 }
 

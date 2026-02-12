@@ -152,10 +152,16 @@ struct CactusStreamTranscribeHandle {
     size_t previous_audio_buffer_size;
 
     char transcribe_response_buffer[8192];
+
     std::chrono::steady_clock::time_point stream_start;
     bool stream_first_token_seen;
     double stream_first_token_ms;
     int stream_total_tokens;
+
+    std::chrono::steady_clock::time_point stream_session_start;
+    bool stream_session_first_token_seen;
+    double stream_session_first_token_ms;
+    int stream_cumulative_tokens;
 };
 
 extern "C" {
@@ -179,10 +185,17 @@ cactus_stream_transcribe_t cactus_stream_transcribe_start(cactus_model_t model, 
         stream_handle->model_handle = model_handle;
         stream_handle->previous_audio_buffer_size = 0;
         stream_handle->transcribe_response_buffer[0] = '\0';
-        stream_handle->stream_start = std::chrono::steady_clock::now();
+
+        auto session_start_time = std::chrono::steady_clock::now();
+        stream_handle->stream_start = session_start_time;
         stream_handle->stream_first_token_seen = false;
         stream_handle->stream_first_token_ms = 0.0;
         stream_handle->stream_total_tokens = 0;
+
+        stream_handle->stream_session_start = session_start_time;
+        stream_handle->stream_session_first_token_seen = false;
+        stream_handle->stream_session_first_token_ms = 0.0;
+        stream_handle->stream_cumulative_tokens = 0;
 
         double confirmation_threshold;
         size_t min_chunk_size;
@@ -193,8 +206,6 @@ cactus_stream_transcribe_t cactus_stream_transcribe_start(cactus_model_t model, 
             min_chunk_size,
             telemetry_enabled
         );
-
-        cactus::telemetry::setCloudDisabled(!telemetry_enabled);
 
         stream_handle->options = { confirmation_threshold, min_chunk_size };
 
@@ -223,21 +234,21 @@ int cactus_stream_transcribe_process(
     if (!stream) {
         last_error_message = "Stream not initialized.";
         CACTUS_LOG_ERROR("stream_transcribe_process", last_error_message);
-        cactus::telemetry::recordStreamTranscription(nullptr, false, 0.0, 0.0, 0.0, 0, last_error_message.c_str());
+        cactus::telemetry::recordStreamTranscription(nullptr, false, 0.0, 0.0, 0.0, 0, 0.0, 0.0, 0.0, 0, last_error_message.c_str());
         return -1;
     }
 
     if (!pcm_buffer || pcm_buffer_size == 0) {
         last_error_message = "Invalid parameters: pcm_buffer or pcm_buffer_size";
         CACTUS_LOG_ERROR("stream_transcribe_process", last_error_message);
-        cactus::telemetry::recordStreamTranscription(nullptr, false, 0.0, 0.0, 0.0, 0, last_error_message.c_str());
+        cactus::telemetry::recordStreamTranscription(nullptr, false, 0.0, 0.0, 0.0, 0, 0.0, 0.0, 0.0, 0, last_error_message.c_str());
         return -1;
     }
 
     if (!response_buffer || buffer_size == 0) {
         last_error_message = "Invalid parameters: response_buffer or buffer_size";
         CACTUS_LOG_ERROR("stream_transcribe_process", last_error_message);
-        cactus::telemetry::recordStreamTranscription(nullptr, false, 0.0, 0.0, 0.0, 0, last_error_message.c_str());
+        cactus::telemetry::recordStreamTranscription(nullptr, false, 0.0, 0.0, 0.0, 0, 0.0, 0.0, 0.0, 0, last_error_message.c_str());
         return -1;
     }
 
@@ -259,7 +270,7 @@ int cactus_stream_transcribe_process(
                 last_error_message = "Response buffer too small";
                 CACTUS_LOG_ERROR("stream_transcribe_process", last_error_message);
                 handle_error_response(last_error_message, response_buffer, buffer_size);
-                cactus::telemetry::recordStreamTranscription(nullptr, false, 0.0, 0.0, 0.0, 0, last_error_message.c_str());
+                cactus::telemetry::recordStreamTranscription(nullptr, false, 0.0, 0.0, 0.0, 0, 0.0, 0.0, 0.0, 0, last_error_message.c_str());
                 return -1;
             }
 
@@ -289,27 +300,12 @@ int cactus_stream_transcribe_process(
             last_error_message = "Transcription failed in stream process.";
             CACTUS_LOG_ERROR("stream_transcribe_process", last_error_message);
             handle_error_response(last_error_message, response_buffer, buffer_size);
-            cactus::telemetry::recordStreamTranscription(handle->model_handle ? handle->model_handle->model_name.c_str() : nullptr, false, 0.0, 0.0, 0.0, 0, last_error_message.c_str());
+            cactus::telemetry::recordStreamTranscription(handle->model_handle ? handle->model_handle->model_name.c_str() : nullptr, false, 0.0, 0.0, 0.0, 0, 0.0, 0.0, 0.0, 0, last_error_message.c_str());
             return -1;
         }
 
         std::string json_str(handle->transcribe_response_buffer);
         std::string response = suppress_unwanted_text(json_string(json_str, "response"));
-
-        std::string confirmed;
-        const size_t n = std::min(handle->previous_transcription.size(), response.size());
-        if (fuzzy_match(handle->previous_transcription, response, n, handle->options.confirmation_threshold)) {
-            handle->audio_buffer.erase(
-                handle->audio_buffer.begin(),
-                handle->audio_buffer.begin() + handle->previous_audio_buffer_size
-            );
-            confirmed = suppress_unwanted_text(handle->previous_transcription);
-            handle->previous_transcription.clear();
-            handle->previous_audio_buffer_size = 0;
-        } else {
-            handle->previous_transcription = response;
-            handle->previous_audio_buffer_size = handle->audio_buffer.size();
-        }
 
         std::string error = json_string(json_str, "error");
         bool cloud_handoff = json_bool(json_str, "cloud_handoff");
@@ -326,25 +322,61 @@ int cactus_stream_transcribe_process(
         double chunk_decode_tokens = decode_tokens;
         if (chunk_decode_tokens < 0.0) chunk_decode_tokens = 0.0;
 
-        if (!handle->stream_first_token_seen && chunk_decode_tokens > 0.0) {
-            if (time_to_first_token_ms > 0.0) {
-                handle->stream_first_token_ms = time_to_first_token_ms;
-            } else {
+        std::string confirmed;
+        const size_t n = std::min(handle->previous_transcription.size(), response.size());
+        if (fuzzy_match(handle->previous_transcription, response, n, handle->options.confirmation_threshold)) {
+            handle->audio_buffer.erase(
+                handle->audio_buffer.begin(),
+                handle->audio_buffer.begin() + handle->previous_audio_buffer_size
+            );
+            confirmed = suppress_unwanted_text(handle->previous_transcription);
+            handle->previous_transcription.clear();
+            handle->previous_audio_buffer_size = 0;
+
+            if (chunk_decode_tokens > 0.0) {
+                handle->stream_total_tokens += static_cast<int>(std::round(chunk_decode_tokens));
+                handle->stream_cumulative_tokens += static_cast<int>(std::round(chunk_decode_tokens));
+            }
+
+            if (!handle->stream_first_token_seen) {
                 auto now = std::chrono::steady_clock::now();
                 handle->stream_first_token_ms = std::chrono::duration_cast<std::chrono::milliseconds>(now - handle->stream_start).count();
+                handle->stream_first_token_seen = true;
             }
-            handle->stream_first_token_seen = true;
-        }
 
-        handle->stream_total_tokens += static_cast<int>(std::round(chunk_decode_tokens));
+            if (!handle->stream_session_first_token_seen) {
+                auto now = std::chrono::steady_clock::now();
+                handle->stream_session_first_token_ms = std::chrono::duration_cast<std::chrono::milliseconds>(now - handle->stream_session_start).count();
+                handle->stream_session_first_token_seen = true;
+            }
+        } else {
+            handle->previous_transcription = response;
+            handle->previous_audio_buffer_size = handle->audio_buffer.size();
+        }
 
         constexpr int STREAM_TOKENS_CAP = 20000;
         constexpr double STREAM_DURATION_CAP_MS = 600000.0;
         auto now = std::chrono::steady_clock::now();
         double elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(now - handle->stream_start).count();
         if (handle->stream_total_tokens >= STREAM_TOKENS_CAP || elapsed_ms >= STREAM_DURATION_CAP_MS) {
-            double tps = (elapsed_ms > 0.0) ? (static_cast<double>(handle->stream_total_tokens) * 1000.0) / elapsed_ms : 0.0;
-            cactus::telemetry::recordStreamTranscription(handle->model_handle->model_name.c_str(), true, handle->stream_first_token_ms, tps, elapsed_ms, handle->stream_total_tokens, "");
+            double period_tps = (elapsed_ms > 0.0) ? (static_cast<double>(handle->stream_total_tokens) * 1000.0) / elapsed_ms : 0.0;
+
+            double cumulative_elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(now - handle->stream_session_start).count();
+            double cumulative_tps = (cumulative_elapsed_ms > 0.0) ? (static_cast<double>(handle->stream_cumulative_tokens) * 1000.0) / cumulative_elapsed_ms : 0.0;
+
+            cactus::telemetry::recordStreamTranscription(
+                handle->model_handle->model_name.c_str(),
+                true,
+                handle->stream_first_token_ms,
+                period_tps,
+                elapsed_ms,
+                handle->stream_total_tokens,
+                handle->stream_session_first_token_ms,
+                cumulative_tps,
+                cumulative_elapsed_ms,
+                handle->stream_cumulative_tokens,
+                ""
+            );
 
             handle->stream_start = std::chrono::steady_clock::now();
             handle->stream_first_token_seen = false;
@@ -378,7 +410,7 @@ int cactus_stream_transcribe_process(
             last_error_message = "Response buffer too small";
             CACTUS_LOG_ERROR("stream_transcribe_process", last_error_message);
             handle_error_response(last_error_message, response_buffer, buffer_size);
-            cactus::telemetry::recordStreamTranscription(handle->model_handle ? handle->model_handle->model_name.c_str() : nullptr, false, 0.0, 0.0, 0.0, 0, last_error_message.c_str());
+            cactus::telemetry::recordStreamTranscription(handle->model_handle ? handle->model_handle->model_name.c_str() : nullptr, false, 0.0, 0.0, 0.0, 0, 0.0, 0.0, 0.0, 0, last_error_message.c_str());
             return -1;
         }
 
@@ -388,13 +420,13 @@ int cactus_stream_transcribe_process(
         last_error_message = "Exception during stream_transcribe_process: " + std::string(e.what());
         CACTUS_LOG_ERROR("stream_transcribe_process", last_error_message);
         handle_error_response(e.what(), response_buffer, buffer_size);
-        cactus::telemetry::recordStreamTranscription(nullptr, false, 0.0, 0.0, 0.0, 0, e.what());
+        cactus::telemetry::recordStreamTranscription(nullptr, false, 0.0, 0.0, 0.0, 0, 0.0, 0.0, 0.0, 0, e.what());
         return -1;
     } catch (...) {
         last_error_message = "Unknown exception during stream transcription processing";
         CACTUS_LOG_ERROR("stream_transcribe_process", last_error_message);
         handle_error_response("Unknown error during stream processing", response_buffer, buffer_size);
-        cactus::telemetry::recordStreamTranscription(nullptr, false, 0.0, 0.0, 0.0, 0, "Unknown error during stream processing");
+        cactus::telemetry::recordStreamTranscription(nullptr, false, 0.0, 0.0, 0.0, 0, 0.0, 0.0, 0.0, 0, "Unknown error during stream processing");
         return -1;
     }
 }
@@ -423,18 +455,32 @@ int cactus_stream_transcribe_stop(
         std::string json_response = "{\"success\":true,\"confirmed\":\"" +
             escape_json(suppressed) + "\"}";
 
-        if (handle->stream_total_tokens > 0 || handle->stream_first_token_seen) {
-            auto now = std::chrono::steady_clock::now();
-            double elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(now - handle->stream_start).count();
-            double tps = (elapsed_ms > 0.0) ? (static_cast<double>(handle->stream_total_tokens) * 1000.0) / elapsed_ms : 0.0;
-            cactus::telemetry::recordStreamTranscription(handle->model_handle->model_name.c_str(), true, handle->stream_first_token_ms, tps, elapsed_ms, handle->stream_total_tokens, "");
-        }
+        auto now = std::chrono::steady_clock::now();
+        double elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(now - handle->stream_start).count();
+        double period_tps = (elapsed_ms > 0.0) ? (static_cast<double>(handle->stream_total_tokens) * 1000.0) / elapsed_ms : 0.0;
+
+        double cumulative_elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(now - handle->stream_session_start).count();
+        double cumulative_tps = (cumulative_elapsed_ms > 0.0) ? (static_cast<double>(handle->stream_cumulative_tokens) * 1000.0) / cumulative_elapsed_ms : 0.0;
+
+        cactus::telemetry::recordStreamTranscription(
+            handle->model_handle->model_name.c_str(),
+            true,
+            handle->stream_first_token_ms,
+            period_tps,
+            elapsed_ms,
+            handle->stream_total_tokens,
+            handle->stream_session_first_token_ms,
+            cumulative_tps,
+            cumulative_elapsed_ms,
+            handle->stream_cumulative_tokens,
+            ""
+        );
 
         if (json_response.length() >= buffer_size) {
             last_error_message = "Response buffer too small";
             CACTUS_LOG_ERROR("stream_transcribe_stop", last_error_message);
             handle_error_response(last_error_message, response_buffer, buffer_size);
-            cactus::telemetry::recordStreamTranscription(handle->model_handle ? handle->model_handle->model_name.c_str() : nullptr, false, handle->stream_first_token_ms, 0.0, 0.0, handle->stream_total_tokens, last_error_message.c_str());
+            cactus::telemetry::recordStreamTranscription(handle->model_handle ? handle->model_handle->model_name.c_str() : nullptr, false, handle->stream_first_token_ms, 0.0, 0.0, handle->stream_total_tokens, handle->stream_session_first_token_ms, 0.0, 0.0, handle->stream_cumulative_tokens, last_error_message.c_str());
             delete handle;
             return -1;
         }
@@ -446,14 +492,14 @@ int cactus_stream_transcribe_stop(
         last_error_message = "Exception during stream_transcribe_stop: " + std::string(e.what());
         CACTUS_LOG_ERROR("stream_transcribe_stop", last_error_message);
         handle_error_response(e.what(), response_buffer, buffer_size);
-        cactus::telemetry::recordStreamTranscription(handle->model_handle ? handle->model_handle->model_name.c_str() : nullptr, false, handle->stream_first_token_ms, 0.0, 0.0, handle->stream_total_tokens, e.what());
+        cactus::telemetry::recordStreamTranscription(handle->model_handle ? handle->model_handle->model_name.c_str() : nullptr, false, handle->stream_first_token_ms, 0.0, 0.0, handle->stream_total_tokens, handle->stream_session_first_token_ms, 0.0, 0.0, handle->stream_cumulative_tokens, e.what());
         delete handle;
         return -1;
     } catch (...) {
         last_error_message = "Unknown exception during stream transcription stop";
         CACTUS_LOG_ERROR("stream_transcribe_stop", last_error_message);
         handle_error_response("Unknown error during stream stop", response_buffer, buffer_size);
-        cactus::telemetry::recordStreamTranscription(handle->model_handle ? handle->model_handle->model_name.c_str() : nullptr, false, handle->stream_first_token_ms, 0.0, 0.0, handle->stream_total_tokens, "Unknown error during stream stop");
+        cactus::telemetry::recordStreamTranscription(handle->model_handle ? handle->model_handle->model_name.c_str() : nullptr, false, handle->stream_first_token_ms, 0.0, 0.0, handle->stream_total_tokens, handle->stream_session_first_token_ms, 0.0, 0.0, handle->stream_cumulative_tokens, "Unknown error during stream stop");
         delete handle;
         return -1;
     }

@@ -29,7 +29,7 @@ void recordCompletion(const char* model, const CompletionMetrics& metrics);
 void recordCompletion(const char* model, bool success, double ttft_ms, double tps, double response_time_ms, int tokens, const char* message);
 void recordEmbedding(const char* model, bool success, const char* message);
 void recordTranscription(const char* model, bool success, double ttft_ms, double tps, double response_time_ms, int tokens, const char* message);
-void recordStreamTranscription(const char* model, bool success, double ttft_ms, double tps, double response_time_ms, int tokens, const char* message);
+void recordStreamTranscription(const char* model, bool success, double ttft_ms, double tps, double response_time_ms, int tokens, double session_ttft_ms, double session_tps, double session_time_ms, int session_tokens, const char* message);
 void setStreamMode(bool in_stream);
 void markInference(bool active);
 void flush();

@@ -207,7 +207,6 @@ int cactus_complete(
         bool force_tools, include_stop_sequences, telemetry_enabled;
         parse_options_json(options_json ? options_json : "",
                   temperature, top_p, top_k, max_tokens, stop_sequences, force_tools, tool_rag_top_k, confidence_threshold, include_stop_sequences, telemetry_enabled);
-        cactus::telemetry::setCloudDisabled(!telemetry_enabled);
 
         std::vector<ToolFunction> tools;
         if (tools_json && strlen(tools_json) > 0)

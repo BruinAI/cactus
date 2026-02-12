@@ -102,8 +102,6 @@ int cactus_transcribe(
         bool force_tools, include_stop_sequences, telemetry_enabled;
         parse_options_json(options_json ? options_json : "", temperature, top_p, top_k, max_tokens, stop_sequences, force_tools, tool_rag_top_k, confidence_threshold, include_stop_sequences, telemetry_enabled);
 
-        cactus::telemetry::setCloudDisabled(!telemetry_enabled);
-
         std::vector<float> audio_features;
         
         bool is_moonshine = handle->model->get_config().model_type == cactus::engine::Config::ModelType::MOONSHINE;
@@ -275,8 +273,7 @@ int cactus_transcribe(
             return -1;
         }
 
-        double tps = (total_time_ms > 0.0) ? (completion_tokens * 1000.0) / total_time_ms : 0.0;
-        cactus::telemetry::recordTranscription(handle->model_name.c_str(), true, time_to_first_token, tps, total_time_ms, static_cast<int>(completion_tokens), "");
+        cactus::telemetry::recordTranscription(handle->model_name.c_str(), true, time_to_first_token, decode_tps, total_time_ms, static_cast<int>(completion_tokens), "");
 
         std::strcpy(response_buffer, json.c_str());
 
