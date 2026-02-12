@@ -267,8 +267,13 @@ int cactus_stream_transcribe_process(
         std::string response = suppress_unwanted_text(json_string(json_str, "response"));
 
         std::string confirmed;
+        double buffer_duration_ms = 0.0;
         const size_t n = std::min(handle->previous_transcription.size(), response.size());
         if (fuzzy_match(handle->previous_transcription, response, n, handle->options.confirmation_threshold)) {
+            if (handle->previous_audio_buffer_size > 0) {
+                 buffer_duration_ms = (handle->previous_audio_buffer_size / 2.0) / 16000.0 * 1000.0;
+            }
+
             handle->audio_buffer.erase(
                 handle->audio_buffer.begin(),
                 handle->audio_buffer.begin() + handle->previous_audio_buffer_size
@@ -297,6 +302,7 @@ int cactus_stream_transcribe_process(
         std::ostringstream json_builder;
         json_builder << "{";
         json_builder << "\"success\":true,";
+        json_builder << "\"buffer_duration_ms\":" << buffer_duration_ms << ",";
         json_builder << "\"error\":" << (error.empty() ? "null" : "\"" + escape_json(error) + "\"") << ",";
         json_builder << "\"cloud_handoff\":" << (cloud_handoff ? "true" : "false") << ",";
         json_builder << "\"confirmed\":\"" << escape_json(confirmed) << "\",";
