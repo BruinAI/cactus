@@ -327,6 +327,7 @@ static bool extract_string_field(const std::string& line, const std::string& key
     size_t end = line.find_first_of(",}", pos);
     if (end == std::string::npos) end = line.size();
     out = line.substr(pos, end - pos);
+    if (out == "null") out.clear();
     return true;
 }
 
@@ -578,7 +579,7 @@ static bool send_batch_to_cloud(const std::vector<Event>& local) {
         payload << "\"model\":\"" << e.model << "\",";
         payload << "\"success\":" << (e.success ? "true" : "false") << ",";
         payload << "\"cloud_handoff\":" << (e.cloud_handoff ? "true" : "false") << ",";
-        if (e.type == INIT) {
+        if (e.type == INIT || !e.success) {
             payload << "\"ttft\":null,";
             payload << "\"prefill_tps\":null,";
             payload << "\"decode_tps\":null,";
@@ -589,16 +590,29 @@ static bool send_batch_to_cloud(const std::vector<Event>& local) {
             payload << "\"decode_tps\":" << e.decode_tps << ",";
             payload << "\"tps\":" << e.tps << ",";
         }
-        payload << "\"response_time\":" << e.response_time_ms << ",";
-        payload << "\"confidence\":" << e.confidence << ",";
-        payload << "\"ram_usage_mb\":" << e.ram_usage_mb << ",";
-        payload << "\"tokens\":" << e.tokens << ",";
-        payload << "\"prefill_tokens\":" << e.prefill_tokens << ",";
-        payload << "\"decode_tokens\":" << e.decode_tokens << ",";
-        payload << "\"session_ttft\":" << e.session_ttft_ms << ",";
-        payload << "\"session_tps\":" << e.session_tps << ",";
-        payload << "\"session_time_ms\":" << e.session_time_ms << ",";
-        payload << "\"session_tokens\":" << e.session_tokens << ",";
+        if (!e.success) {
+            payload << "\"response_time\":null,";
+            payload << "\"confidence\":null,";
+            payload << "\"ram_usage_mb\":null,";
+            payload << "\"tokens\":null,";
+            payload << "\"prefill_tokens\":null,";
+            payload << "\"decode_tokens\":null,";
+            payload << "\"session_ttft\":null,";
+            payload << "\"session_tps\":null,";
+            payload << "\"session_time_ms\":null,";
+            payload << "\"session_tokens\":null,";
+        } else {
+            payload << "\"response_time\":" << e.response_time_ms << ",";
+            payload << "\"confidence\":" << e.confidence << ",";
+            payload << "\"ram_usage_mb\":" << e.ram_usage_mb << ",";
+            payload << "\"tokens\":" << e.tokens << ",";
+            payload << "\"prefill_tokens\":" << e.prefill_tokens << ",";
+            payload << "\"decode_tokens\":" << e.decode_tokens << ",";
+            payload << "\"session_ttft\":" << e.session_ttft_ms << ",";
+            payload << "\"session_tps\":" << e.session_tps << ",";
+            payload << "\"session_time_ms\":" << e.session_time_ms << ",";
+            payload << "\"session_tokens\":" << e.session_tokens << ",";
+        }
         payload << "\"created_at\":\"" << format_timestamp(e.timestamp) << "\",";
         if (!project_id.empty()) {
             payload << "\"project_id\":\"" << project_id << "\",";
@@ -639,7 +653,7 @@ static void write_events_to_cache(const std::vector<Event>& local) {
         oss << "\"model\":\"" << e.model << "\",";
         oss << "\"success\":" << (e.success ? "true" : "false") << ",";
         oss << "\"cloud_handoff\":" << (e.cloud_handoff ? "true" : "false") << ",";
-        if (e.type == INIT) {
+        if (e.type == INIT || !e.success) {
             oss << "\"ttft\":null,";
             oss << "\"prefill_tps\":null,";
             oss << "\"decode_tps\":null,";
@@ -650,16 +664,29 @@ static void write_events_to_cache(const std::vector<Event>& local) {
             oss << "\"decode_tps\":" << e.decode_tps << ",";
             oss << "\"tps\":" << e.tps << ",";
         }
-        oss << "\"response_time\":" << e.response_time_ms << ",";
-        oss << "\"confidence\":" << e.confidence << ",";
-        oss << "\"ram_usage_mb\":" << e.ram_usage_mb << ",";
-        oss << "\"tokens\":" << e.tokens << ",";
-        oss << "\"prefill_tokens\":" << e.prefill_tokens << ",";
-        oss << "\"decode_tokens\":" << e.decode_tokens << ",";
-        oss << "\"session_ttft\":" << e.session_ttft_ms << ",";
-        oss << "\"session_tps\":" << e.session_tps << ",";
-        oss << "\"session_time_ms\":" << e.session_time_ms << ",";
-        oss << "\"session_tokens\":" << e.session_tokens;
+        if (!e.success) {
+            oss << "\"response_time\":null,";
+            oss << "\"confidence\":null,";
+            oss << "\"ram_usage_mb\":null,";
+            oss << "\"tokens\":null,";
+            oss << "\"prefill_tokens\":null,";
+            oss << "\"decode_tokens\":null,";
+            oss << "\"session_ttft\":null,";
+            oss << "\"session_tps\":null,";
+            oss << "\"session_time_ms\":null,";
+            oss << "\"session_tokens\":null";
+        } else {
+            oss << "\"response_time\":" << e.response_time_ms << ",";
+            oss << "\"confidence\":" << e.confidence << ",";
+            oss << "\"ram_usage_mb\":" << e.ram_usage_mb << ",";
+            oss << "\"tokens\":" << e.tokens << ",";
+            oss << "\"prefill_tokens\":" << e.prefill_tokens << ",";
+            oss << "\"decode_tokens\":" << e.decode_tokens << ",";
+            oss << "\"session_ttft\":" << e.session_ttft_ms << ",";
+            oss << "\"session_tps\":" << e.session_tps << ",";
+            oss << "\"session_time_ms\":" << e.session_time_ms << ",";
+            oss << "\"session_tokens\":" << e.session_tokens;
+        }
         oss << ",\"ts_ms\":" << std::chrono::duration_cast<std::chrono::milliseconds>(e.timestamp.time_since_epoch()).count();
         if (e.message[0] != '\0') {
             oss << ",\"message\":\"" << e.message << "\"";
