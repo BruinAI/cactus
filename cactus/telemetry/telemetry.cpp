@@ -45,7 +45,6 @@ struct Event {
     int session_tokens;
     char message[256];
     char error[256];
-    char response[2048];
     char function_calls[1024];
     std::chrono::system_clock::time_point timestamp;
 };
@@ -176,7 +175,6 @@ static Event make_event(EventType type, const char* model, bool success, double 
     std::memset(e.model, 0, sizeof(e.model));
     std::memset(e.message, 0, sizeof(e.message));
     std::memset(e.error, 0, sizeof(e.error));
-    std::memset(e.response, 0, sizeof(e.response));
     std::memset(e.function_calls, 0, sizeof(e.function_calls));
     std::string safe_model = model_basename(model);
     if (!safe_model.empty()) std::strncpy(e.model, safe_model.c_str(), sizeof(e.model)-1);
@@ -203,12 +201,10 @@ static Event make_event_extended(EventType type, const char* model, const Comple
     std::memset(e.model, 0, sizeof(e.model));
     std::memset(e.message, 0, sizeof(e.message));
     std::memset(e.error, 0, sizeof(e.error));
-    std::memset(e.response, 0, sizeof(e.response));
     std::memset(e.function_calls, 0, sizeof(e.function_calls));
     std::string safe_model = model_basename(model);
     if (!safe_model.empty()) std::strncpy(e.model, safe_model.c_str(), sizeof(e.model)-1);
     if (!metrics.success && metrics.error_message) std::strncpy(e.error, metrics.error_message, sizeof(e.error)-1);
-    if (metrics.success && metrics.response_text && !metrics.cloud_handoff) std::strncpy(e.response, metrics.response_text, sizeof(e.response)-1);
     if (metrics.function_calls_json) std::strncpy(e.function_calls, metrics.function_calls_json, sizeof(e.function_calls)-1);
     return e;
 }
@@ -258,8 +254,6 @@ static bool parse_event_line(const std::string& line, Event& out) {
     extract_string_field(line, "message", message);
     std::string error;
     extract_string_field(line, "error", error);
-    std::string response;
-    extract_string_field(line, "response", response);
     std::string function_calls;
     extract_string_field(line, "function_calls", function_calls);
     double ts_ms = 0.0;
@@ -292,7 +286,6 @@ static bool parse_event_line(const std::string& line, Event& out) {
     out.session_time_ms = session_time_ms;
     out.session_tokens = session_tokens;
     if (!error.empty()) std::strncpy(out.error, error.c_str(), sizeof(out.error)-1);
-    if (!response.empty()) std::strncpy(out.response, response.c_str(), sizeof(out.response)-1);
     if (!function_calls.empty()) std::strncpy(out.function_calls, function_calls.c_str(), sizeof(out.function_calls)-1);
     return true;
 }
@@ -623,11 +616,7 @@ static bool send_batch_to_cloud(const std::vector<Event>& local) {
         } else {
             payload << ",\"error\":null";
         }
-        if (e.response[0] != '\0') {
-            payload << ",\"response\":\"" << e.response << "\"";
-        } else {
-            payload << ",\"response\":null";
-        }
+        payload << ",\"response\":null";
         if (e.function_calls[0] != '\0') {
             payload << ",\"function_calls\":" << e.function_calls;
         } else {
@@ -680,11 +669,7 @@ static void write_events_to_cache(const std::vector<Event>& local) {
         } else {
             oss << ",\"error\":null";
         }
-        if (e.response[0] != '\0') {
-            oss << ",\"response\":\"" << e.response << "\"";
-        } else {
-            oss << ",\"response\":null";
-        }
+        oss << ",\"response\":null";
         if (e.function_calls[0] != '\0') {
             oss << ",\"function_calls\":" << e.function_calls;
         } else {
