@@ -701,6 +701,12 @@ public:
         const std::vector<float>& waveform,
         const SpectrogramConfig& config);
 
+    std::vector<float> high_freq_energy_ratio(
+        const std::vector<float>& stft_power,
+        const std::vector<float>& freqs_hz,
+        size_t num_frames,
+        float cutoff_hz) const;
+
     const std::vector<float>& get_mel_filters() const { return mel_filters_; }
 
     size_t get_num_mel_filters() const { return num_mel_filters_; }
