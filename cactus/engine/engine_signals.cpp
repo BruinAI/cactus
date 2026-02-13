@@ -18,6 +18,8 @@
 namespace cactus {
 namespace engine {
 
+static constexpr float SIGNALS_EPS = 1e-8f;
+
 static void to_db(
     float* spectrogram,
     size_t size,
@@ -589,6 +591,51 @@ std::vector<float> AudioProcessor::compute_spectrogram(
     );
 
     return output;
+}
+
+std::vector<float> AudioProcessor::high_freq_energy_ratio(
+    const std::vector<float>& stft_power,
+    const std::vector<float>& freqs_hz,
+    size_t num_frames,
+    float cutoff_hz) const {
+
+    if (num_frames == 0) {
+        return {};
+    }
+    if (freqs_hz.empty()) {
+        throw std::invalid_argument("freqs_hz must not be empty");
+    }
+    if (stft_power.size() != freqs_hz.size() * num_frames) {
+        throw std::invalid_argument(
+            "stft_power size must equal freqs_hz.size() * num_frames");
+    }
+
+    const size_t num_freq_bins = freqs_hz.size();
+    std::vector<uint8_t> mask(num_freq_bins, 0);
+    for (size_t f = 0; f < num_freq_bins; f++) {
+        mask[f] = (freqs_hz[f] >= cutoff_hz) ? 1 : 0;
+    }
+
+    std::vector<float> ratio(num_frames, 0.0f);
+    CactusThreading::parallel_for(
+        num_frames,
+        CactusThreading::Thresholds::ALL_REDUCE,
+        [&](size_t start, size_t end) {
+            for (size_t t = start; t < end; t++) {
+                float num = 0.0f;
+                float den = 0.0f;
+                for (size_t f = 0; f < num_freq_bins; f++) {
+                    const float p = stft_power[f * num_frames + t];
+                    den += p;
+                    if (mask[f]) {
+                        num += p;
+                    }
+                }
+                ratio[t] = num / (den + SIGNALS_EPS);
+            }
+        });
+
+    return ratio;
 }
 
 }
