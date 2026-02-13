@@ -633,7 +633,6 @@ static bool send_batch_to_cloud(const std::vector<Event>& local) {
         } else {
             payload << ",\"error\":null";
         }
-        payload << ",\"response\":null";
         if (e.function_calls[0] != '\0') {
             payload << ",\"function_calls\":" << e.function_calls;
         } else {
@@ -702,7 +701,6 @@ static void write_events_to_cache(const std::vector<Event>& local) {
         } else {
             oss << ",\"error\":null";
         }
-        oss << ",\"response\":null";
         if (e.function_calls[0] != '\0') {
             oss << ",\"function_calls\":" << e.function_calls;
         } else {
