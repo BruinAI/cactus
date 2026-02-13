@@ -63,6 +63,8 @@ def detect_model_type(cfg, config, output_dir=None):
         return 'qwen'
     elif 'moonshine' in model_type_str:
         return 'moonshine'
+    elif 'adapter' in model_type_str:
+        return 'adapter_mlp'
     elif 'llama' in model_type_str:
         if output_dir and 'smol' in str(output_dir):
             return 'smol'
