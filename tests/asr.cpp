@@ -7,9 +7,7 @@
 #include <iomanip>
 #include <chrono>
 #include <fstream>
-#include <atomic>
 #include <thread>
-#include <mutex>
 #include <vector>
 #include <deque>
 #include <cctype>
@@ -20,6 +18,104 @@
 #ifdef HAVE_SDL2
 #include <SDL2/SDL.h>
 #endif
+
+#include <curl/curl.h>
+#include <future>
+
+static const std::string CLOUD_API_URL = "http://104.198.76.3/api/v1/transcribe";
+
+static std::string get_cloud_api_key() {
+    const char* key = std::getenv("CACTUS_CLOUD_API_KEY");
+    return key ? std::string(key) : "";
+}
+
+static size_t curl_write_cb(void* ptr, size_t size, size_t nmemb, void* userdata) {
+    auto* s = static_cast<std::string*>(userdata);
+    s->append(static_cast<char*>(ptr), size * nmemb);
+    return size * nmemb;
+}
+
+static std::string cloud_transcribe(const std::string& audio_b64, const std::string& original_text) {
+    std::string api_key = get_cloud_api_key();
+    if (api_key.empty()) {
+        // No API key set - return original text (identity function)
+        return original_text;
+    }
+
+    std::string payload = "{\"audio\":\"" + audio_b64 + "\",\"mime_type\":\"audio/wav\",\"language\":\"en-US\"}";
+
+    CURL* curl = curl_easy_init();
+    if (!curl) return original_text;
+
+    std::string response_body;
+    struct curl_slist* headers = nullptr;
+    headers = curl_slist_append(headers, ("X-API-Key: " + api_key).c_str());
+    headers = curl_slist_append(headers, "Content-Type: application/json");
+
+    curl_easy_setopt(curl, CURLOPT_URL, CLOUD_API_URL.c_str());
+    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
+    curl_easy_setopt(curl, CURLOPT_POSTFIELDS, payload.c_str());
+    curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, (long)payload.size());
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, curl_write_cb);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response_body);
+    curl_easy_setopt(curl, CURLOPT_TIMEOUT, 15L);
+
+    CURLcode res = curl_easy_perform(curl);
+    curl_slist_free_all(headers);
+    curl_easy_cleanup(curl);
+
+    if (res != CURLE_OK) return original_text;
+
+    // Minimal JSON parsing for "transcript"
+    std::string pattern = "\"transcript\":\"";
+    size_t pos = response_body.find(pattern);
+    if (pos == std::string::npos) return original_text;
+    size_t start = pos + pattern.length();
+    size_t end = response_body.find('"', start);
+    if (end == std::string::npos) return original_text;
+    return response_body.substr(start, end - start);
+}
+
+static std::string base64_encode(const uint8_t* data, size_t len) {
+    static const char table[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    std::string out;
+    out.reserve(((len + 2) / 3) * 4);
+    for (size_t i = 0; i < len; i += 3) {
+        uint32_t n = (uint32_t)data[i] << 16;
+        if (i + 1 < len) n |= (uint32_t)data[i + 1] << 8;
+        if (i + 2 < len) n |= (uint32_t)data[i + 2];
+        out += table[(n >> 18) & 0x3F];
+        out += table[(n >> 12) & 0x3F];
+        out += (i + 1 < len) ? table[(n >> 6) & 0x3F] : '=';
+        out += (i + 2 < len) ? table[n & 0x3F] : '=';
+    }
+    return out;
+}
+
+static std::vector<uint8_t> build_wav(const uint8_t* pcm, size_t pcm_bytes) {
+    uint32_t sample_rate = 16000;
+    uint16_t channels = 1;
+    uint16_t bits = 16;
+    uint32_t byte_rate = sample_rate * channels * bits / 8;
+    uint16_t block_align = channels * bits / 8;
+    uint32_t data_size = (uint32_t)pcm_bytes;
+    uint32_t file_size = 36 + data_size;
+
+    std::vector<uint8_t> wav(44 + pcm_bytes);
+    auto w16 = [&](size_t off, uint16_t v) { wav[off] = v & 0xFF; wav[off+1] = v >> 8; };
+    auto w32 = [&](size_t off, uint32_t v) { wav[off]=v&0xFF; wav[off+1]=(v>>8)&0xFF; wav[off+2]=(v>>16)&0xFF; wav[off+3]=(v>>24)&0xFF; };
+    std::memcpy(wav.data(), "RIFF", 4);
+    w32(4, file_size);
+    std::memcpy(wav.data() + 8, "WAVE", 4);
+    std::memcpy(wav.data() + 12, "fmt ", 4);
+    w32(16, 16); w16(20, 1); w16(22, channels);
+    w32(24, sample_rate); w32(28, byte_rate);
+    w16(32, block_align); w16(34, bits);
+    std::memcpy(wav.data() + 36, "data", 4);
+    w32(40, data_size);
+    std::memcpy(wav.data() + 44, pcm, pcm_bytes);
+    return wav;
+}
 
 constexpr size_t RESPONSE_BUFFER_SIZE = 65536;
 
@@ -266,20 +362,9 @@ struct Segment {
     std::string text;
     bool pending_cloud = false;
     std::chrono::steady_clock::time_point cloud_start_time;
+    int64_t cloud_job_id = -1;
 };
 
-struct CloudSimulator {
-    std::string improve(const std::string& text) {
-        std::string res = text;
-        std::transform(res.begin(), res.end(), res.begin(), ::toupper);
-        return res; // Just uppercase to show it's "cloud"
-    }
-    
-    bool should_trigger(const std::string& text) {
-        // Random 50% chance if text is long enough
-        return text.length() > 5 && ((std::hash<std::string>{}(text) % 2) == 0);
-    }
-};
 AudioState g_audio_state;
 
 void audio_callback(void* /*userdata*/, Uint8* stream, int len) {
@@ -345,6 +430,15 @@ int run_live_transcription(cactus_model_t model) {
         return 1;
     }
 
+    // Check if cloud API key is configured
+    std::string api_key = get_cloud_api_key();
+    if (api_key.empty()) {
+        std::cout << colored("Warning: ", Color::YELLOW + Color::BOLD)
+                  << "CACTUS_CLOUD_API_KEY environment variable not set.\n";
+        std::cout << colored("         Cloud handoff will be disabled (fallback to local transcription).\n", Color::YELLOW);
+        std::cout << "\n";
+    }
+
     print_header_live_mode();
 
     g_audio_state.recording = true;
@@ -359,13 +453,22 @@ int run_live_transcription(cactus_model_t model) {
     });
 
     std::deque<Segment> segments;
-    CloudSimulator cloud_sim;
     std::string confirmed_text;
     std::string current_line_confirmed;
     
     int last_pending_line_count = 0;
     std::string last_stats;
 
+    struct AppCloudJob {
+        int64_t id;
+        std::future<std::string> result;
+    };
+    std::vector<AppCloudJob> app_pending_jobs;
+    std::vector<std::pair<int64_t, std::string>> app_completed_results;
+    uint64_t next_cloud_job_id = 1;
+
+    // Track accumulated audio sent to library for cloud handoff
+    std::vector<uint8_t> accumulated_audio;
     std::vector<char> response_buffer(RESPONSE_BUFFER_SIZE, 0);
 
     auto last_process_time = std::chrono::steady_clock::now();
@@ -391,6 +494,9 @@ int run_live_transcription(cactus_model_t model) {
                     audio_chunk, g_audio_state.actual_sample_rate, TARGET_SAMPLE_RATE
                 );
 
+                // Accumulate audio for potential cloud handoff
+                accumulated_audio.insert(accumulated_audio.end(), resampled.begin(), resampled.end());
+
                 auto t_start = std::chrono::high_resolution_clock::now();
                 int process_result = cactus_stream_transcribe_process(
                     stream,
@@ -411,23 +517,69 @@ int run_live_transcription(cactus_model_t model) {
                     if (!confirmed.empty()) {
                         Segment seg;
                         seg.text = confirmed;
-                        if (cloud_sim.should_trigger(seg.text)) {
-                            seg.pending_cloud = true;
-                            seg.cloud_start_time = std::chrono::steady_clock::now();
+
+                        // Check if stream layer triggered cloud handoff
+                        // extract_json_value won't work for bool, check raw
+                        bool is_cloud = json_str.find("\"cloud_handoff\":true") != std::string::npos;
+                        if (is_cloud && !accumulated_audio.empty()) {
+                             seg.pending_cloud = true;
+                             seg.cloud_start_time = std::chrono::steady_clock::now();
+                             seg.cloud_job_id = next_cloud_job_id++;
+
+                             // Encode accumulated audio for this confirmed segment
+                             auto wav = build_wav(accumulated_audio.data(), accumulated_audio.size());
+                             std::string b64 = base64_encode(wav.data(), wav.size());
+
+                             app_pending_jobs.push_back({
+                                 seg.cloud_job_id,
+                                 std::async(std::launch::async, cloud_transcribe, b64, confirmed)
+                             });
+
+                             // Clear accumulated audio after handoff
+                             accumulated_audio.clear();
+                        } else if (!confirmed.empty()) {
+                             // Clear accumulator on normal confirmation (no handoff)
+                             accumulated_audio.clear();
                         }
                         segments.push_back(seg);
                     }
 
+                    // Poll app-side cloud jobs
+                    for (auto it = app_pending_jobs.begin(); it != app_pending_jobs.end(); ) {
+                        if (it->result.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready) {
+                            app_completed_results.push_back({it->id, it->result.get()});
+                            it = app_pending_jobs.erase(it);
+                        } else {
+                            ++it;
+                        }
+                    }
+
+                    // Apply any completed cloud results to existing segments
+                    for (auto it = app_completed_results.begin(); it != app_completed_results.end(); ) {
+                        bool matched = false;
+                        for (auto& seg : segments) {
+                            if (seg.pending_cloud && seg.cloud_job_id == it->first) {
+                                seg.text = it->second;
+                                seg.pending_cloud = false;
+                                matched = true;
+                                break;
+                            }
+                        }
+                        it = app_completed_results.erase(it);
+                    }
+
+                    // Timeout fallback: give up on cloud after 10s
                     for (auto& seg : segments) {
-                        if (seg.pending_cloud && std::chrono::steady_clock::now() - seg.cloud_start_time > std::chrono::seconds(2)) {
-                            seg.text = cloud_sim.improve(seg.text);
+                        if (seg.pending_cloud &&
+                            std::chrono::steady_clock::now() - seg.cloud_start_time > std::chrono::seconds(10)) {
                             seg.pending_cloud = false;
                         }
                     }
 
                     if (!confirmed.empty() || !pending.empty()) {
                         int val = ttft.empty() ? 0 : std::stoi(ttft);
-                        last_stats = colored("[Lat:" + std::to_string(int(latency_ms)) + "ms TTFT:" + std::to_string(val) + "ms] ", Color::GRAY);
+                        int decode_ms = std::max(0, int(latency_ms) - val);
+                        last_stats = colored("[Lat:" + std::to_string(int(latency_ms)) + "ms Decode:" + std::to_string(decode_ms) + "ms] ", Color::GRAY);
                     }
 
                     int width = get_terminal_width();

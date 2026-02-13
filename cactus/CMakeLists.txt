@@ -24,7 +24,6 @@ if(APPLE)
     )
 
     enable_language(OBJCXX)
-    find_package(CURL REQUIRED)
     find_library(COREML_FRAMEWORK CoreML REQUIRED)
     find_library(FOUNDATION_FRAMEWORK Foundation REQUIRED)
     find_library(ACCELERATE_FRAMEWORK Accelerate REQUIRED)
@@ -85,9 +84,7 @@ function(configure_cactus_target target_name)
             ${COREML_FRAMEWORK}
             ${FOUNDATION_FRAMEWORK}
             ${ACCELERATE_FRAMEWORK}
-            ${CURL_LIBRARIES}
         )
-        target_include_directories(${target_name} PUBLIC ${CURL_INCLUDE_DIRS})
     endif()
 endfunction()
 

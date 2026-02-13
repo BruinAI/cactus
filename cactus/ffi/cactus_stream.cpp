@@ -5,6 +5,11 @@
 
 using namespace cactus::ffi;
 
+// Forward declaration (defined below)
+std::string json_string(const std::string& json, const std::string& key);
+
+// ── JSON Helpers ────────────────────────────────────────────────────────
+
 double json_number(const std::string& json, const std::string& key) {
     std::string pattern = "\"" + key + "\":";
     size_t pos = json.find(pattern);
@@ -139,9 +144,53 @@ struct CactusStreamTranscribeHandle {
 
     std::string previous_transcription;
     size_t previous_audio_buffer_size;
+    bool previous_cloud_handoff = false;
 
     char transcribe_response_buffer[8192];
 };
+
+
+
+static std::string build_stream_response(
+    const std::string& raw_json_str,
+    const std::string& error_msg,
+    const std::string& confirmed,
+    const std::string& pending,
+    bool cloud_handoff,
+    double buffer_duration_ms
+) {
+    std::string function_calls = json_array(raw_json_str, "function_calls");
+    double confidence = json_number(raw_json_str, "confidence");
+    double time_to_first_token_ms = json_number(raw_json_str, "time_to_first_token_ms");
+    double total_time_ms = json_number(raw_json_str, "total_time_ms");
+    double prefill_tps = json_number(raw_json_str, "prefill_tps");
+    double decode_tps = json_number(raw_json_str, "decode_tps");
+    double ram_usage_mb = json_number(raw_json_str, "ram_usage_mb");
+    double prefill_tokens = json_number(raw_json_str, "prefill_tokens");
+    double decode_tokens = json_number(raw_json_str, "decode_tokens");
+    double total_tokens = json_number(raw_json_str, "total_tokens");
+
+    std::ostringstream json_builder;
+    json_builder << "{";
+    json_builder << "\"success\":true,";
+    json_builder << "\"buffer_duration_ms\":" << buffer_duration_ms << ",";
+    json_builder << "\"error\":" << (error_msg.empty() ? "null" : "\"" + escape_json(error_msg) + "\"") << ",";
+    json_builder << "\"cloud_handoff\":" << (cloud_handoff ? "true" : "false") << ",";
+    json_builder << "\"confirmed\":\"" << escape_json(confirmed) << "\",";
+    json_builder << "\"pending\":\"" << escape_json(pending) << "\",";
+    json_builder << "\"function_calls\":" << function_calls << ",";
+    json_builder << "\"confidence\":" << confidence << ",";
+    json_builder << "\"time_to_first_token_ms\":" << time_to_first_token_ms << ",";
+    json_builder << "\"total_time_ms\":" << total_time_ms << ",";
+    json_builder << "\"prefill_tps\":" << prefill_tps << ",";
+    json_builder << "\"decode_tps\":" << decode_tps << ",";
+    json_builder << "\"ram_usage_mb\":" << ram_usage_mb << ",";
+    json_builder << "\"prefill_tokens\":" << prefill_tokens << ",";
+    json_builder << "\"decode_tokens\":" << decode_tokens << ",";
+    json_builder << "\"total_tokens\":" << total_tokens;
+    json_builder << "}";
+    return json_builder.str();
+}
 
 extern "C" {
 
@@ -268,58 +317,42 @@ int cactus_stream_transcribe_process(
 
         std::string confirmed;
         double buffer_duration_ms = 0.0;
+        bool cloud_handoff_triggered = false;
+
         const size_t n = std::min(handle->previous_transcription.size(), response.size());
         if (fuzzy_match(handle->previous_transcription, response, n, handle->options.confirmation_threshold)) {
             if (handle->previous_audio_buffer_size > 0) {
                  buffer_duration_ms = (handle->previous_audio_buffer_size / 2.0) / 16000.0 * 1000.0;
             }
 
+            confirmed = suppress_unwanted_text(handle->previous_transcription);
+
+            // Pass through cloud_handoff flag from cactus_transcribe (stored from previous poll)
+            if (handle->previous_cloud_handoff && !confirmed.empty()) {
+                cloud_handoff_triggered = true;
+            }
+
             handle->audio_buffer.erase(
                 handle->audio_buffer.begin(),
                 handle->audio_buffer.begin() + handle->previous_audio_buffer_size
             );
-            confirmed = suppress_unwanted_text(handle->previous_transcription);
             handle->previous_transcription.clear();
             handle->previous_audio_buffer_size = 0;
+            handle->previous_cloud_handoff = false;
         } else {
             handle->previous_transcription = response;
             handle->previous_audio_buffer_size = handle->audio_buffer.size();
+            handle->previous_cloud_handoff = json_bool(json_str, "cloud_handoff");
         }
 
-        std::string error = json_string(json_str, "error");
-        bool cloud_handoff = json_bool(json_str, "cloud_handoff");
-        std::string function_calls = json_array(json_str, "function_calls");
-        double confidence = json_number(json_str, "confidence");
-        double time_to_first_token_ms = json_number(json_str, "time_to_first_token_ms");
-        double total_time_ms = json_number(json_str, "total_time_ms");
-        double prefill_tps = json_number(json_str, "prefill_tps");
-        double decode_tps = json_number(json_str, "decode_tps");
-        double ram_usage_mb = json_number(json_str, "ram_usage_mb");
-        double prefill_tokens = json_number(json_str, "prefill_tokens");
-        double decode_tokens = json_number(json_str, "decode_tokens");
-        double total_tokens = json_number(json_str, "total_tokens");
-
-        std::ostringstream json_builder;
-        json_builder << "{";
-        json_builder << "\"success\":true,";
-        json_builder << "\"buffer_duration_ms\":" << buffer_duration_ms << ",";
-        json_builder << "\"error\":" << (error.empty() ? "null" : "\"" + escape_json(error) + "\"") << ",";
-        json_builder << "\"cloud_handoff\":" << (cloud_handoff ? "true" : "false") << ",";
-        json_builder << "\"confirmed\":\"" << escape_json(confirmed) << "\",";
-        json_builder << "\"pending\":\"" << escape_json(response) << "\",";
-        json_builder << "\"function_calls\":" << function_calls << ",";
-        json_builder << "\"confidence\":" << confidence << ",";
-        json_builder << "\"time_to_first_token_ms\":" << time_to_first_token_ms << ",";
-        json_builder << "\"total_time_ms\":" << total_time_ms << ",";
-        json_builder << "\"prefill_tps\":" << prefill_tps << ",";
-        json_builder << "\"decode_tps\":" << decode_tps << ",";
-        json_builder << "\"ram_usage_mb\":" << ram_usage_mb << ",";
-        json_builder << "\"prefill_tokens\":" << prefill_tokens << ",";
-        json_builder << "\"decode_tokens\":" << decode_tokens << ",";
-        json_builder << "\"total_tokens\":" << total_tokens;
-        json_builder << "}";
-
-        std::string json_response = json_builder.str();
+        std::string json_response = build_stream_response(
+            json_str,
+            json_string(json_str, "error"),
+            confirmed,
+            response,
+            cloud_handoff_triggered,
+            buffer_duration_ms
+        );
 
         if (json_response.length() >= buffer_size) {
             last_error_message = "Response buffer too small";
