@@ -592,8 +592,13 @@ static bool send_batch_to_cloud(const std::vector<Event>& local) {
         }
         if (!e.success) {
             payload << "\"response_time\":null,";
-            payload << "\"confidence\":null,";
             payload << "\"ram_usage_mb\":null,";
+        } else {
+            payload << "\"response_time\":" << e.response_time_ms << ",";
+            payload << "\"ram_usage_mb\":" << e.ram_usage_mb << ",";
+        }
+        if (e.type == INIT || !e.success) {
+            payload << "\"confidence\":null,";
             payload << "\"tokens\":null,";
             payload << "\"prefill_tokens\":null,";
             payload << "\"decode_tokens\":null,";
@@ -602,9 +607,7 @@ static bool send_batch_to_cloud(const std::vector<Event>& local) {
             payload << "\"session_time_ms\":null,";
             payload << "\"session_tokens\":null,";
         } else {
-            payload << "\"response_time\":" << e.response_time_ms << ",";
             payload << "\"confidence\":" << e.confidence << ",";
-            payload << "\"ram_usage_mb\":" << e.ram_usage_mb << ",";
             payload << "\"tokens\":" << e.tokens << ",";
             payload << "\"prefill_tokens\":" << e.prefill_tokens << ",";
             payload << "\"decode_tokens\":" << e.decode_tokens << ",";
@@ -666,8 +669,13 @@ static void write_events_to_cache(const std::vector<Event>& local) {
         }
         if (!e.success) {
             oss << "\"response_time\":null,";
-            oss << "\"confidence\":null,";
             oss << "\"ram_usage_mb\":null,";
+        } else {
+            oss << "\"response_time\":" << e.response_time_ms << ",";
+            oss << "\"ram_usage_mb\":" << e.ram_usage_mb << ",";
+        }
+        if (e.type == INIT || !e.success) {
+            oss << "\"confidence\":null,";
             oss << "\"tokens\":null,";
             oss << "\"prefill_tokens\":null,";
             oss << "\"decode_tokens\":null,";
@@ -676,9 +684,7 @@ static void write_events_to_cache(const std::vector<Event>& local) {
             oss << "\"session_time_ms\":null,";
             oss << "\"session_tokens\":null";
         } else {
-            oss << "\"response_time\":" << e.response_time_ms << ",";
             oss << "\"confidence\":" << e.confidence << ",";
-            oss << "\"ram_usage_mb\":" << e.ram_usage_mb << ",";
             oss << "\"tokens\":" << e.tokens << ",";
             oss << "\"prefill_tokens\":" << e.prefill_tokens << ",";
             oss << "\"decode_tokens\":" << e.decode_tokens << ",";
