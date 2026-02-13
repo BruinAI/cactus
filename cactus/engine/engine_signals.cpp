@@ -20,6 +20,28 @@ namespace engine {
 
 static constexpr float SIGNALS_EPS = 1e-8f;
 
+static void compute_mean_std(const float* values, size_t size, float& mean, float& stddev) {
+    if (size == 0 || values == nullptr) {
+        mean = 0.0f;
+        stddev = 0.0f;
+        return;
+    }
+
+    const float n = static_cast<float>(size);
+    float sum = 0.0f;
+    for (size_t i = 0; i < size; i++) {
+        sum += values[i];
+    }
+    mean = sum / n;
+
+    float var_sum = 0.0f;
+    for (size_t i = 0; i < size; i++) {
+        const float d = values[i] - mean;
+        var_sum += d * d;
+    }
+    stddev = std::sqrt(std::max(0.0f, var_sum / n));
+}
+
 static void to_db(
     float* spectrogram,
     size_t size,
@@ -593,17 +615,21 @@ std::vector<float> AudioProcessor::compute_spectrogram(
     return output;
 }
 
-std::vector<float> AudioProcessor::high_freq_energy_ratio(
+static void high_freq_energy_ratio_sequence(
     const std::vector<float>& stft_power,
     const std::vector<float>& freqs_hz,
     size_t num_frames,
-    float cutoff_hz) const {
+    float cutoff_hz,
+    float* out_ratio) {
 
     if (num_frames == 0) {
-        return {};
+        return;
     }
     if (freqs_hz.empty()) {
         throw std::invalid_argument("freqs_hz must not be empty");
+    }
+    if (out_ratio == nullptr) {
+        throw std::invalid_argument("out_ratio must not be null");
     }
     if (stft_power.size() != freqs_hz.size() * num_frames) {
         throw std::invalid_argument(
@@ -616,7 +642,6 @@ std::vector<float> AudioProcessor::high_freq_energy_ratio(
         mask[f] = (freqs_hz[f] >= cutoff_hz) ? 1 : 0;
     }
 
-    std::vector<float> ratio(num_frames, 0.0f);
     CactusThreading::parallel_for(
         num_frames,
         CactusThreading::Thresholds::ALL_REDUCE,
@@ -631,11 +656,187 @@ std::vector<float> AudioProcessor::high_freq_energy_ratio(
                         num += p;
                     }
                 }
-                ratio[t] = num / (den + SIGNALS_EPS);
+                out_ratio[t] = num / (den + SIGNALS_EPS);
             }
         });
+}
 
-    return ratio;
+float AudioProcessor::high_freq_energy_ratio_mean(
+    const std::vector<float>& stft_power,
+    const std::vector<float>& freqs_hz,
+    size_t num_frames,
+    float cutoff_hz) const {
+    if (num_frames == 0) {
+        return 0.0f;
+    }
+    std::vector<float> ratio(num_frames, 0.0f);
+    high_freq_energy_ratio_sequence(stft_power, freqs_hz, num_frames, cutoff_hz, ratio.data());
+    float mean = 0.0f;
+    float stddev = 0.0f;
+    compute_mean_std(ratio.data(), ratio.size(), mean, stddev);
+    return mean;
+}
+
+float AudioProcessor::high_freq_energy_ratio_std(
+    const std::vector<float>& stft_power,
+    const std::vector<float>& freqs_hz,
+    size_t num_frames,
+    float cutoff_hz) const {
+    if (num_frames == 0) {
+        return 0.0f;
+    }
+    std::vector<float> ratio(num_frames, 0.0f);
+    high_freq_energy_ratio_sequence(stft_power, freqs_hz, num_frames, cutoff_hz, ratio.data());
+    float mean = 0.0f;
+    float stddev = 0.0f;
+    compute_mean_std(ratio.data(), ratio.size(), mean, stddev);
+    return stddev;
+}
+
+static void spectral_flatness_sequence(
+    const std::vector<float>& stft_power,
+    size_t num_frames,
+    float* out_flatness) {
+
+    if (num_frames == 0) {
+        return;
+    }
+    if (stft_power.empty()) {
+        throw std::invalid_argument("stft_power must not be empty");
+    }
+    if (out_flatness == nullptr) {
+        throw std::invalid_argument("out_flatness must not be null");
+    }
+    if (stft_power.size() % num_frames != 0) {
+        throw std::invalid_argument(
+            "stft_power size must be divisible by num_frames");
+    }
+
+    const size_t num_freq_bins = stft_power.size() / num_frames;
+    if (num_freq_bins == 0) {
+        return;
+    }
+
+    CactusThreading::parallel_for(
+        num_frames,
+        CactusThreading::Thresholds::ALL_REDUCE,
+        [&](size_t start, size_t end) {
+            for (size_t t = start; t < end; t++) {
+                float log_sum = 0.0f;
+                float arith_sum = 0.0f;
+                for (size_t f = 0; f < num_freq_bins; f++) {
+                    const float p = stft_power[f * num_frames + t] + SIGNALS_EPS;
+                    log_sum += std::log(p);
+                    arith_sum += p;
+                }
+                const float geo = std::exp(log_sum / static_cast<float>(num_freq_bins));
+                const float arith = arith_sum / static_cast<float>(num_freq_bins);
+                out_flatness[t] = geo / arith;
+            }
+        });
+}
+
+float AudioProcessor::spectral_flatness_mean(
+    const std::vector<float>& stft_power,
+    size_t num_frames) const {
+    if (num_frames == 0) {
+        return 0.0f;
+    }
+    std::vector<float> flatness(num_frames, 0.0f);
+    spectral_flatness_sequence(stft_power, num_frames, flatness.data());
+    float mean = 0.0f;
+    float stddev = 0.0f;
+    compute_mean_std(flatness.data(), flatness.size(), mean, stddev);
+    return mean;
+}
+
+float AudioProcessor::spectral_flatness_std(
+    const std::vector<float>& stft_power,
+    size_t num_frames) const {
+    if (num_frames == 0) {
+        return 0.0f;
+    }
+    std::vector<float> flatness(num_frames, 0.0f);
+    spectral_flatness_sequence(stft_power, num_frames, flatness.data());
+    float mean = 0.0f;
+    float stddev = 0.0f;
+    compute_mean_std(flatness.data(), flatness.size(), mean, stddev);
+    return stddev;
+}
+
+static void spectral_entropy_sequence(
+    const std::vector<float>& stft_power,
+    size_t num_frames,
+    float* out_entropy) {
+
+    if (num_frames == 0) {
+        return;
+    }
+    if (stft_power.empty()) {
+        throw std::invalid_argument("stft_power must not be empty");
+    }
+    if (out_entropy == nullptr) {
+        throw std::invalid_argument("out_entropy must not be null");
+    }
+    if (stft_power.size() % num_frames != 0) {
+        throw std::invalid_argument(
+            "stft_power size must be divisible by num_frames");
+    }
+
+    const size_t num_freq_bins = stft_power.size() / num_frames;
+    if (num_freq_bins == 0) {
+        return;
+    }
+    const float log_bins = (num_freq_bins > 1)
+        ? std::log(static_cast<float>(num_freq_bins))
+        : 1.0f;
+
+    CactusThreading::parallel_for(
+        num_frames,
+        CactusThreading::Thresholds::ALL_REDUCE,
+        [&](size_t start, size_t end) {
+            for (size_t t = start; t < end; t++) {
+                float den = 0.0f;
+                for (size_t f = 0; f < num_freq_bins; f++) {
+                    den += stft_power[f * num_frames + t] + SIGNALS_EPS;
+                }
+
+                float h = 0.0f;
+                for (size_t f = 0; f < num_freq_bins; f++) {
+                    const float p = (stft_power[f * num_frames + t] + SIGNALS_EPS) / den;
+                    h -= p * std::log(p);
+                }
+                out_entropy[t] = h / log_bins;
+            }
+        });
+}
+
+float AudioProcessor::spectral_entropy_mean(
+    const std::vector<float>& stft_power,
+    size_t num_frames) const {
+    if (num_frames == 0) {
+        return 0.0f;
+    }
+    std::vector<float> entropy(num_frames, 0.0f);
+    spectral_entropy_sequence(stft_power, num_frames, entropy.data());
+    float mean = 0.0f;
+    float stddev = 0.0f;
+    compute_mean_std(entropy.data(), entropy.size(), mean, stddev);
+    return mean;
+}
+
+float AudioProcessor::spectral_entropy_std(
+    const std::vector<float>& stft_power,
+    size_t num_frames) const {
+    if (num_frames == 0) {
+        return 0.0f;
+    }
+    std::vector<float> entropy(num_frames, 0.0f);
+    spectral_entropy_sequence(stft_power, num_frames, entropy.data());
+    float mean = 0.0f;
+    float stddev = 0.0f;
+    compute_mean_std(entropy.data(), entropy.size(), mean, stddev);
+    return stddev;
 }
 
 }
