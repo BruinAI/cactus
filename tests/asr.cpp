@@ -38,7 +38,6 @@ static size_t curl_write_cb(void* ptr, size_t size, size_t nmemb, void* userdata
 static std::string cloud_transcribe(const std::string& audio_b64, const std::string& original_text) {
     std::string api_key = get_cloud_api_key();
     if (api_key.empty()) {
-        // No API key set - return original text (identity function)
         return original_text;
     }
 
@@ -66,7 +65,6 @@ static std::string cloud_transcribe(const std::string& audio_b64, const std::str
 
     if (res != CURLE_OK) return original_text;
 
-    // Minimal JSON parsing for "transcript"
     std::string pattern = "\"transcript\":\"";
     size_t pos = response_body.find(pattern);
     if (pos == std::string::npos) return original_text;
@@ -430,7 +428,6 @@ int run_live_transcription(cactus_model_t model) {
         return 1;
     }
 
-    // Check if cloud API key is configured
     std::string api_key = get_cloud_api_key();
     if (api_key.empty()) {
         std::cout << colored("Warning: ", Color::YELLOW + Color::BOLD)
@@ -467,7 +464,6 @@ int run_live_transcription(cactus_model_t model) {
     std::vector<std::pair<int64_t, std::string>> app_completed_results;
     uint64_t next_cloud_job_id = 1;
 
-    // Track accumulated audio sent to library for cloud handoff
     std::vector<uint8_t> accumulated_audio;
     std::vector<char> response_buffer(RESPONSE_BUFFER_SIZE, 0);
 
@@ -494,7 +490,6 @@ int run_live_transcription(cactus_model_t model) {
                     audio_chunk, g_audio_state.actual_sample_rate, TARGET_SAMPLE_RATE
                 );
 
-                // Accumulate audio for potential cloud handoff
                 accumulated_audio.insert(accumulated_audio.end(), resampled.begin(), resampled.end());
 
                 auto t_start = std::chrono::high_resolution_clock::now();
@@ -518,15 +513,12 @@ int run_live_transcription(cactus_model_t model) {
                         Segment seg;
                         seg.text = confirmed;
 
-                        // Check if stream layer triggered cloud handoff
-                        // extract_json_value won't work for bool, check raw
                         bool is_cloud = json_str.find("\"cloud_handoff\":true") != std::string::npos;
                         if (is_cloud && !accumulated_audio.empty()) {
                              seg.pending_cloud = true;
                              seg.cloud_start_time = std::chrono::steady_clock::now();
                              seg.cloud_job_id = next_cloud_job_id++;
 
-                             // Encode accumulated audio for this confirmed segment
                              auto wav = build_wav(accumulated_audio.data(), accumulated_audio.size());
                              std::string b64 = base64_encode(wav.data(), wav.size());
 
@@ -535,16 +527,13 @@ int run_live_transcription(cactus_model_t model) {
                                  std::async(std::launch::async, cloud_transcribe, b64, confirmed)
                              });
 
-                             // Clear accumulated audio after handoff
                              accumulated_audio.clear();
                         } else if (!confirmed.empty()) {
-                             // Clear accumulator on normal confirmation (no handoff)
                              accumulated_audio.clear();
                         }
                         segments.push_back(seg);
                     }
 
-                    // Poll app-side cloud jobs
                     for (auto it = app_pending_jobs.begin(); it != app_pending_jobs.end(); ) {
                         if (it->result.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready) {
                             app_completed_results.push_back({it->id, it->result.get()});
@@ -554,7 +543,6 @@ int run_live_transcription(cactus_model_t model) {
                         }
                     }
 
-                    // Apply any completed cloud results to existing segments
                     for (auto it = app_completed_results.begin(); it != app_completed_results.end(); ) {
                         bool matched = false;
                         for (auto& seg : segments) {
@@ -568,7 +556,6 @@ int run_live_transcription(cactus_model_t model) {
                         it = app_completed_results.erase(it);
                     }
 
-                    // Timeout fallback: give up on cloud after 10s
                     for (auto& seg : segments) {
                         if (seg.pending_cloud &&
                             std::chrono::steady_clock::now() - seg.cloud_start_time > std::chrono::seconds(10)) {

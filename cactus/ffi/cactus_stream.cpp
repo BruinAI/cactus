@@ -5,11 +5,6 @@
 
 using namespace cactus::ffi;
 
-// Forward declaration (defined below)
-std::string json_string(const std::string& json, const std::string& key);
-
-// ── JSON Helpers ────────────────────────────────────────────────────────
-
 double json_number(const std::string& json, const std::string& key) {
     std::string pattern = "\"" + key + "\":";
     size_t pos = json.find(pattern);
@@ -327,7 +322,6 @@ int cactus_stream_transcribe_process(
 
             confirmed = suppress_unwanted_text(handle->previous_transcription);
 
-            // Pass through cloud_handoff flag from cactus_transcribe (stored from previous poll)
             if (handle->previous_cloud_handoff && !confirmed.empty()) {
                 cloud_handoff_triggered = true;
             }

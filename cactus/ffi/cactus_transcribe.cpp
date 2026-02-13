@@ -263,7 +263,6 @@ int cactus_transcribe(
             cleaned_text.erase(0, 1);
         }
 
-        // Cloud handoff decision based on entropy threshold
         bool cloud_handoff = false;
         if (!cleaned_text.empty() && cleaned_text.length() > 5) {
              if (cloud_handoff_threshold > 0.0f && max_token_entropy_norm > cloud_handoff_threshold) {
