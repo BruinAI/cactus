@@ -103,6 +103,40 @@ WHISPER_GLOBAL_WEIGHTS = [
     ('encoder.layer_norm.weight', 'encoder_norm_weight.weights')
 ]
 
+ADAPTER_GLOBAL_WEIGHTS = [
+    ('adapter.fc1.weight', 'adapter_fc1.weights'),
+    ('model.adapter.fc1.weight', 'adapter_fc1.weights'),
+    ('adapter.mlp.fc1.weight', 'adapter_fc1.weights'),
+    ('model.adapter.mlp.fc1.weight', 'adapter_fc1.weights'),
+    ('mlp_adapter.fc1.weight', 'adapter_fc1.weights'),
+    ('model.mlp_adapter.fc1.weight', 'adapter_fc1.weights'),
+    ('fc1.weight', 'adapter_fc1.weights'),
+
+    ('adapter.fc1.bias', 'adapter_fc1.bias'),
+    ('model.adapter.fc1.bias', 'adapter_fc1.bias'),
+    ('adapter.mlp.fc1.bias', 'adapter_fc1.bias'),
+    ('model.adapter.mlp.fc1.bias', 'adapter_fc1.bias'),
+    ('mlp_adapter.fc1.bias', 'adapter_fc1.bias'),
+    ('model.mlp_adapter.fc1.bias', 'adapter_fc1.bias'),
+    ('fc1.bias', 'adapter_fc1.bias'),
+
+    ('adapter.fc2.weight', 'adapter_fc2.weights'),
+    ('model.adapter.fc2.weight', 'adapter_fc2.weights'),
+    ('adapter.mlp.fc2.weight', 'adapter_fc2.weights'),
+    ('model.adapter.mlp.fc2.weight', 'adapter_fc2.weights'),
+    ('mlp_adapter.fc2.weight', 'adapter_fc2.weights'),
+    ('model.mlp_adapter.fc2.weight', 'adapter_fc2.weights'),
+    ('fc2.weight', 'adapter_fc2.weights'),
+
+    ('adapter.fc2.bias', 'adapter_fc2.bias'),
+    ('model.adapter.fc2.bias', 'adapter_fc2.bias'),
+    ('adapter.mlp.fc2.bias', 'adapter_fc2.bias'),
+    ('model.adapter.mlp.fc2.bias', 'adapter_fc2.bias'),
+    ('mlp_adapter.fc2.bias', 'adapter_fc2.bias'),
+    ('model.mlp_adapter.fc2.bias', 'adapter_fc2.bias'),
+    ('fc2.bias', 'adapter_fc2.bias'),
+]
+
 
 def get_layer_weight_patterns(i, precision, model_type=None):
     is_whisper = model_type == 'whisper'
