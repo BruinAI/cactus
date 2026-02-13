@@ -508,6 +508,7 @@ int run_live_transcription(cactus_model_t model) {
                     std::string confirmed = extract_json_value(json_str, "confirmed");
                     std::string pending = extract_json_value(json_str, "pending");
                     std::string ttft = extract_json_number(json_str, "time_to_first_token_ms");
+                    std::string decode_tps = extract_json_number(json_str, "decode_tps");
 
                     if (!confirmed.empty()) {
                         Segment seg;
@@ -564,9 +565,7 @@ int run_live_transcription(cactus_model_t model) {
                     }
 
                     if (!confirmed.empty() || !pending.empty()) {
-                        int val = ttft.empty() ? 0 : std::stoi(ttft);
-                        int decode_ms = std::max(0, int(latency_ms) - val);
-                        last_stats = colored("[Lat:" + std::to_string(int(latency_ms)) + "ms Decode:" + std::to_string(decode_ms) + "ms] ", Color::GRAY);
+                        last_stats = colored("[Latency:" + std::to_string(int(latency_ms)) + " Decode speed:" + decode_tps + " tokens/sec] ", Color::GRAY);
                     }
 
                     int width = get_terminal_width();
