@@ -19,100 +19,9 @@
 #include <SDL2/SDL.h>
 #endif
 
-#include <curl/curl.h>
-#include <future>
-
-static const std::string CLOUD_API_URL = "http://104.198.76.3/api/v1/transcribe";
-
 static std::string get_cloud_api_key() {
     const char* key = std::getenv("CACTUS_CLOUD_API_KEY");
     return key ? std::string(key) : "";
-}
-
-static size_t curl_write_cb(void* ptr, size_t size, size_t nmemb, void* userdata) {
-    auto* s = static_cast<std::string*>(userdata);
-    s->append(static_cast<char*>(ptr), size * nmemb);
-    return size * nmemb;
-}
-
-static std::string cloud_transcribe(const std::string& audio_b64, const std::string& original_text) {
-    std::string api_key = get_cloud_api_key();
-    if (api_key.empty()) {
-        return original_text;
-    }
-
-    std::string payload = "{\"audio\":\"" + audio_b64 + "\",\"mime_type\":\"audio/wav\",\"language\":\"en-US\"}";
-
-    CURL* curl = curl_easy_init();
-    if (!curl) return original_text;
-
-    std::string response_body;
-    struct curl_slist* headers = nullptr;
-    headers = curl_slist_append(headers, ("X-API-Key: " + api_key).c_str());
-    headers = curl_slist_append(headers, "Content-Type: application/json");
-
-    curl_easy_setopt(curl, CURLOPT_URL, CLOUD_API_URL.c_str());
-    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
-    curl_easy_setopt(curl, CURLOPT_POSTFIELDS, payload.c_str());
-    curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, (long)payload.size());
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, curl_write_cb);
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response_body);
-    curl_easy_setopt(curl, CURLOPT_TIMEOUT, 15L);
-
-    CURLcode res = curl_easy_perform(curl);
-    curl_slist_free_all(headers);
-    curl_easy_cleanup(curl);
-
-    if (res != CURLE_OK) return original_text;
-
-    std::string pattern = "\"transcript\":\"";
-    size_t pos = response_body.find(pattern);
-    if (pos == std::string::npos) return original_text;
-    size_t start = pos + pattern.length();
-    size_t end = response_body.find('"', start);
-    if (end == std::string::npos) return original_text;
-    return response_body.substr(start, end - start);
-}
-
-static std::string base64_encode(const uint8_t* data, size_t len) {
-    static const char table[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    std::string out;
-    out.reserve(((len + 2) / 3) * 4);
-    for (size_t i = 0; i < len; i += 3) {
-        uint32_t n = (uint32_t)data[i] << 16;
-        if (i + 1 < len) n |= (uint32_t)data[i + 1] << 8;
-        if (i + 2 < len) n |= (uint32_t)data[i + 2];
-        out += table[(n >> 18) & 0x3F];
-        out += table[(n >> 12) & 0x3F];
-        out += (i + 1 < len) ? table[(n >> 6) & 0x3F] : '=';
-        out += (i + 2 < len) ? table[n & 0x3F] : '=';
-    }
-    return out;
-}
-
-static std::vector<uint8_t> build_wav(const uint8_t* pcm, size_t pcm_bytes) {
-    uint32_t sample_rate = 16000;
-    uint16_t channels = 1;
-    uint16_t bits = 16;
-    uint32_t byte_rate = sample_rate * channels * bits / 8;
-    uint16_t block_align = channels * bits / 8;
-    uint32_t data_size = (uint32_t)pcm_bytes;
-    uint32_t file_size = 36 + data_size;
-
-    std::vector<uint8_t> wav(44 + pcm_bytes);
-    auto w16 = [&](size_t off, uint16_t v) { wav[off] = v & 0xFF; wav[off+1] = v >> 8; };
-    auto w32 = [&](size_t off, uint32_t v) { wav[off]=v&0xFF; wav[off+1]=(v>>8)&0xFF; wav[off+2]=(v>>16)&0xFF; wav[off+3]=(v>>24)&0xFF; };
-    std::memcpy(wav.data(), "RIFF", 4);
-    w32(4, file_size);
-    std::memcpy(wav.data() + 8, "WAVE", 4);
-    std::memcpy(wav.data() + 12, "fmt ", 4);
-    w32(16, 16); w16(20, 1); w16(22, channels);
-    w32(24, sample_rate); w32(28, byte_rate);
-    w16(32, block_align); w16(34, bits);
-    std::memcpy(wav.data() + 36, "data", 4);
-    w32(40, data_size);
-    std::memcpy(wav.data() + 44, pcm, pcm_bytes);
-    return wav;
 }
 
 constexpr size_t RESPONSE_BUFFER_SIZE = 65536;
@@ -456,15 +365,6 @@ int run_live_transcription(cactus_model_t model) {
     int last_pending_line_count = 0;
     std::string last_stats;
 
-    struct AppCloudJob {
-        int64_t id;
-        std::future<std::string> result;
-    };
-    std::vector<AppCloudJob> app_pending_jobs;
-    std::vector<std::pair<int64_t, std::string>> app_completed_results;
-    uint64_t next_cloud_job_id = 1;
-
-    std::vector<uint8_t> accumulated_audio;
     std::vector<char> response_buffer(RESPONSE_BUFFER_SIZE, 0);
 
     auto last_process_time = std::chrono::steady_clock::now();
@@ -490,8 +390,6 @@ int run_live_transcription(cactus_model_t model) {
                     audio_chunk, g_audio_state.actual_sample_rate, TARGET_SAMPLE_RATE
                 );
 
-                accumulated_audio.insert(accumulated_audio.end(), resampled.begin(), resampled.end());
-
                 auto t_start = std::chrono::high_resolution_clock::now();
                 int process_result = cactus_stream_transcribe_process(
                     stream,
@@ -507,6 +405,9 @@ int run_live_transcription(cactus_model_t model) {
                     std::string json_str(response_buffer.data());
                     std::string confirmed = extract_json_value(json_str, "confirmed");
                     std::string pending = extract_json_value(json_str, "pending");
+                    std::string cloud_result = extract_json_value(json_str, "cloud_result");
+                    std::string cloud_job_id = extract_json_number(json_str, "cloud_job_id");
+                    std::string cloud_result_job_id = extract_json_number(json_str, "cloud_result_job_id");
                     std::string ttft = extract_json_number(json_str, "time_to_first_token_ms");
                     std::string decode_tps = extract_json_number(json_str, "decode_tps");
 
@@ -515,46 +416,26 @@ int run_live_transcription(cactus_model_t model) {
                         seg.text = confirmed;
 
                         bool is_cloud = json_str.find("\"cloud_handoff\":true") != std::string::npos;
-                        if (is_cloud && !accumulated_audio.empty()) {
-                             seg.pending_cloud = true;
-                             seg.cloud_start_time = std::chrono::steady_clock::now();
-                             seg.cloud_job_id = next_cloud_job_id++;
-
-                             auto wav = build_wav(accumulated_audio.data(), accumulated_audio.size());
-                             std::string b64 = base64_encode(wav.data(), wav.size());
-
-                             app_pending_jobs.push_back({
-                                 seg.cloud_job_id,
-                                 std::async(std::launch::async, cloud_transcribe, b64, confirmed)
-                             });
-
-                             accumulated_audio.clear();
-                        } else if (!confirmed.empty()) {
-                             accumulated_audio.clear();
+                        int64_t parsed_cloud_job_id = cloud_job_id.empty() ? 0 : std::stoll(cloud_job_id);
+                        if (is_cloud && parsed_cloud_job_id > 0) {
+                            seg.pending_cloud = true;
+                            seg.cloud_start_time = std::chrono::steady_clock::now();
+                            seg.cloud_job_id = parsed_cloud_job_id;
                         }
                         segments.push_back(seg);
                     }
 
-                    for (auto it = app_pending_jobs.begin(); it != app_pending_jobs.end(); ) {
-                        if (it->result.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready) {
-                            app_completed_results.push_back({it->id, it->result.get()});
-                            it = app_pending_jobs.erase(it);
-                        } else {
-                            ++it;
-                        }
-                    }
-
-                    for (auto it = app_completed_results.begin(); it != app_completed_results.end(); ) {
-                        bool matched = false;
-                        for (auto& seg : segments) {
-                            if (seg.pending_cloud && seg.cloud_job_id == it->first) {
-                                seg.text = it->second;
-                                seg.pending_cloud = false;
-                                matched = true;
-                                break;
+                    if (!cloud_result.empty()) {
+                        int64_t result_job_id = cloud_result_job_id.empty() ? 0 : std::stoll(cloud_result_job_id);
+                        if (result_job_id > 0) {
+                            for (auto& seg : segments) {
+                                if (seg.pending_cloud && seg.cloud_job_id == result_job_id) {
+                                    seg.text = cloud_result;
+                                    seg.pending_cloud = false;
+                                    break;
+                                }
                             }
                         }
-                        it = app_completed_results.erase(it);
                     }
 
                     for (auto& seg : segments) {

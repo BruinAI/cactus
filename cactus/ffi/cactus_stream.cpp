@@ -2,6 +2,13 @@
 #include "cactus_utils.h"
 #include <cstring>
 #include <regex>
+#include <cstdlib>
+#include <future>
+#include <chrono>
+
+#ifdef CACTUS_USE_CURL
+#include <curl/curl.h>
+#endif
 
 using namespace cactus::ffi;
 
@@ -127,6 +134,114 @@ static void parse_stream_transcribe_init_options(const std::string& json, double
     }
 }
 
+#ifdef CACTUS_USE_CURL
+static const std::string CLOUD_API_URL = "http://104.198.76.3/api/v1/transcribe";
+
+static std::string get_cloud_api_key() {
+    const char* key = std::getenv("CACTUS_CLOUD_API_KEY");
+    return key ? std::string(key) : "";
+}
+
+static size_t curl_write_cb(void* ptr, size_t size, size_t nmemb, void* userdata) {
+    auto* s = static_cast<std::string*>(userdata);
+    s->append(static_cast<char*>(ptr), size * nmemb);
+    return size * nmemb;
+}
+
+static std::string base64_encode(const uint8_t* data, size_t len) {
+    static const char table[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    std::string out;
+    out.reserve(((len + 2) / 3) * 4);
+    for (size_t i = 0; i < len; i += 3) {
+        uint32_t n = static_cast<uint32_t>(data[i]) << 16;
+        if (i + 1 < len) n |= static_cast<uint32_t>(data[i + 1]) << 8;
+        if (i + 2 < len) n |= static_cast<uint32_t>(data[i + 2]);
+        out += table[(n >> 18) & 0x3F];
+        out += table[(n >> 12) & 0x3F];
+        out += (i + 1 < len) ? table[(n >> 6) & 0x3F] : '=';
+        out += (i + 2 < len) ? table[n & 0x3F] : '=';
+    }
+    return out;
+}
+
+static std::vector<uint8_t> build_wav(const uint8_t* pcm, size_t pcm_bytes) {
+    constexpr uint32_t sample_rate = 16000;
+    constexpr uint16_t channels = 1;
+    constexpr uint16_t bits = 16;
+    const uint32_t byte_rate = sample_rate * channels * bits / 8;
+    const uint16_t block_align = channels * bits / 8;
+    const uint32_t data_size = static_cast<uint32_t>(pcm_bytes);
+    const uint32_t file_size = 36 + data_size;
+
+    std::vector<uint8_t> wav(44 + pcm_bytes);
+    auto w16 = [&](size_t off, uint16_t v) {
+        wav[off] = v & 0xFF;
+        wav[off + 1] = v >> 8;
+    };
+    auto w32 = [&](size_t off, uint32_t v) {
+        wav[off] = v & 0xFF;
+        wav[off + 1] = (v >> 8) & 0xFF;
+        wav[off + 2] = (v >> 16) & 0xFF;
+        wav[off + 3] = (v >> 24) & 0xFF;
+    };
+
+    std::memcpy(wav.data(), "RIFF", 4);
+    w32(4, file_size);
+    std::memcpy(wav.data() + 8, "WAVE", 4);
+    std::memcpy(wav.data() + 12, "fmt ", 4);
+    w32(16, 16);
+    w16(20, 1);
+    w16(22, channels);
+    w32(24, sample_rate);
+    w32(28, byte_rate);
+    w16(32, block_align);
+    w16(34, bits);
+    std::memcpy(wav.data() + 36, "data", 4);
+    w32(40, data_size);
+    std::memcpy(wav.data() + 44, pcm, pcm_bytes);
+    return wav;
+}
+
+static std::string cloud_transcribe(const std::string& audio_b64, const std::string& original_text) {
+    std::string api_key = get_cloud_api_key();
+    if (api_key.empty()) {
+        return original_text;
+    }
+
+    std::string payload = "{\"audio\":\"" + audio_b64 + "\",\"mime_type\":\"audio/wav\",\"language\":\"en-US\"}";
+
+    CURL* curl = curl_easy_init();
+    if (!curl) return original_text;
+
+    std::string response_body;
+    struct curl_slist* headers = nullptr;
+    headers = curl_slist_append(headers, ("X-API-Key: " + api_key).c_str());
+    headers = curl_slist_append(headers, "Content-Type: application/json");
+
+    curl_easy_setopt(curl, CURLOPT_URL, CLOUD_API_URL.c_str());
+    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
+    curl_easy_setopt(curl, CURLOPT_POSTFIELDS, payload.c_str());
+    curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, static_cast<long>(payload.size()));
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, curl_write_cb);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response_body);
+    curl_easy_setopt(curl, CURLOPT_TIMEOUT, 15L);
+
+    CURLcode res = curl_easy_perform(curl);
+    curl_slist_free_all(headers);
+    curl_easy_cleanup(curl);
+
+    if (res != CURLE_OK) return original_text;
+
+    std::string pattern = "\"transcript\":\"";
+    size_t pos = response_body.find(pattern);
+    if (pos == std::string::npos) return original_text;
+    size_t start = pos + pattern.length();
+    size_t end = response_body.find('"', start);
+    if (end == std::string::npos) return original_text;
+    return response_body.substr(start, end - start);
+}
+#endif
+
 struct CactusStreamTranscribeHandle {
     CactusModelHandle* model_handle;
 
@@ -140,6 +255,14 @@ struct CactusStreamTranscribeHandle {
     std::string previous_transcription;
     size_t previous_audio_buffer_size;
     bool previous_cloud_handoff = false;
+    uint64_t next_cloud_job_id = 1;
+
+    struct CloudJob {
+        uint64_t id;
+        std::future<std::string> result;
+    };
+    std::vector<CloudJob> pending_cloud_jobs;
+    std::vector<std::pair<uint64_t, std::string>> completed_cloud_results;
 
     char transcribe_response_buffer[8192];
 };
@@ -152,7 +275,10 @@ static std::string build_stream_response(
     const std::string& confirmed,
     const std::string& pending,
     bool cloud_handoff,
-    double buffer_duration_ms
+    double buffer_duration_ms,
+    uint64_t cloud_job_id,
+    uint64_t cloud_result_job_id,
+    const std::string& cloud_result
 ) {
     std::string function_calls = json_array(raw_json_str, "function_calls");
     double confidence = json_number(raw_json_str, "confidence");
@@ -171,6 +297,9 @@ static std::string build_stream_response(
     json_builder << "\"buffer_duration_ms\":" << buffer_duration_ms << ",";
     json_builder << "\"error\":" << (error_msg.empty() ? "null" : "\"" + escape_json(error_msg) + "\"") << ",";
     json_builder << "\"cloud_handoff\":" << (cloud_handoff ? "true" : "false") << ",";
+    json_builder << "\"cloud_job_id\":" << cloud_job_id << ",";
+    json_builder << "\"cloud_result_job_id\":" << cloud_result_job_id << ",";
+    json_builder << "\"cloud_result\":\"" << escape_json(cloud_result) << "\",";
     json_builder << "\"confirmed\":\"" << escape_json(confirmed) << "\",";
     json_builder << "\"pending\":\"" << escape_json(pending) << "\",";
     json_builder << "\"function_calls\":" << function_calls << ",";
@@ -313,6 +442,9 @@ int cactus_stream_transcribe_process(
         std::string confirmed;
         double buffer_duration_ms = 0.0;
         bool cloud_handoff_triggered = false;
+        uint64_t cloud_job_id = 0;
+        uint64_t cloud_result_job_id = 0;
+        std::string cloud_result;
 
         const size_t n = std::min(handle->previous_transcription.size(), response.size());
         if (fuzzy_match(handle->previous_transcription, response, n, handle->options.confirmation_threshold)) {
@@ -324,6 +456,19 @@ int cactus_stream_transcribe_process(
 
             if (handle->previous_cloud_handoff && !confirmed.empty()) {
                 cloud_handoff_triggered = true;
+#ifdef CACTUS_USE_CURL
+                std::vector<uint8_t> confirmed_audio(
+                    handle->audio_buffer.begin(),
+                    handle->audio_buffer.begin() + handle->previous_audio_buffer_size
+                );
+                auto wav = build_wav(confirmed_audio.data(), confirmed_audio.size());
+                std::string b64 = base64_encode(wav.data(), wav.size());
+                cloud_job_id = handle->next_cloud_job_id++;
+                handle->pending_cloud_jobs.push_back({
+                    cloud_job_id,
+                    std::async(std::launch::async, cloud_transcribe, b64, confirmed)
+                });
+#endif
             }
 
             handle->audio_buffer.erase(
@@ -339,13 +484,31 @@ int cactus_stream_transcribe_process(
             handle->previous_cloud_handoff = json_bool(json_str, "cloud_handoff");
         }
 
+        for (auto it = handle->pending_cloud_jobs.begin(); it != handle->pending_cloud_jobs.end(); ) {
+            if (it->result.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready) {
+                handle->completed_cloud_results.push_back({it->id, it->result.get()});
+                it = handle->pending_cloud_jobs.erase(it);
+            } else {
+                ++it;
+            }
+        }
+
+        if (!handle->completed_cloud_results.empty()) {
+            cloud_result_job_id = handle->completed_cloud_results.front().first;
+            cloud_result = handle->completed_cloud_results.front().second;
+            handle->completed_cloud_results.erase(handle->completed_cloud_results.begin());
+        }
+
         std::string json_response = build_stream_response(
             json_str,
             json_string(json_str, "error"),
             confirmed,
             response,
             cloud_handoff_triggered,
-            buffer_duration_ms
+            buffer_duration_ms,
+            cloud_job_id,
+            cloud_result_job_id,
+            cloud_result
         );
 
         if (json_response.length() >= buffer_size) {

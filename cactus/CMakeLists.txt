@@ -9,6 +9,8 @@ if(NOT CMAKE_BUILD_TYPE)
     message(STATUS "CMAKE_BUILD_TYPE was not set, defaulting to Release.")
 endif()
 
+find_package(CURL QUIET)
+
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
@@ -85,6 +87,12 @@ function(configure_cactus_target target_name)
             ${FOUNDATION_FRAMEWORK}
             ${ACCELERATE_FRAMEWORK}
         )
+    endif()
+
+    if(CURL_FOUND)
+        target_include_directories(${target_name} PRIVATE ${CURL_INCLUDE_DIRS})
+        target_link_libraries(${target_name} PUBLIC ${CURL_LIBRARIES})
+        target_compile_definitions(${target_name} PRIVATE CACTUS_USE_CURL)
     endif()
 endfunction()
 
