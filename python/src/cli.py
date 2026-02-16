@@ -141,8 +141,7 @@ def cmd_download(args):
         print("Please run: ./setup")
         return 1
 
-    from .converter_llm import convert_hf_model_weights
-    from .converter_vlm import convert_processors
+    from .converter import convert_hf_model_weights
     from .tokenizer import convert_hf_tokenizer
     from .tensor_io import format_config_value
     from .config_utils import is_lfm2_vl, pick_dtype, vision_weight_sanity_check
@@ -220,11 +219,6 @@ def cmd_download(args):
                 print_color(RED, "Vision embeddings look randomly initialized.")
                 return 1
 
-            try:
-                convert_processors(processor, model_id, weights_dir, token=token)
-            except Exception as e:
-                print(f"  Warning: convert_processors failed: {e}")
-
         elif 'moonshine' in model_id.lower():
             from transformers import MoonshineForConditionalGeneration
             print(f"  Note: Loading Moonshine model using MoonshineForConditionalGeneration...")
@@ -243,7 +237,7 @@ def cmd_download(args):
                 print("Install with: pip install torchaudio")
                 return 1
 
-            from .converter_silero_vad import convert_silero_vad_weights
+            from .converter import convert_silero_vad_weights
 
             model, _ = torch.hub.load("snakers4/silero-vad", "silero_vad", force_reload=False)
             convert_silero_vad_weights(model, weights_dir, precision, args)
@@ -608,8 +602,37 @@ def cmd_build_python(args):
     return 0
 
 
+def prompt_for_api_key(config):
+    """Prompt user to set Cactus Cloud API key if not already configured. Returns the key or empty string."""
+    api_key = config.get_api_key()
+    if api_key:
+        return api_key
+
+    print("\n" + "="*50)
+    print("  Cactus Cloud Setup (Optional)")
+    print("="*50 + "\n")
+    print("Get your cloud key at \033[1;36mhttps://www.cactuscompute.com/dashboard/api-keys\033[0m")
+    print("to enable automatic cloud fallback.\n")
+
+    api_key = input("Your Cactus Cloud key (press Enter to skip): ").strip()
+    if api_key:
+        config.set_api_key(api_key)
+        masked = api_key[:4] + "..." + api_key[-4:]
+        print_color(GREEN, f"API key saved: {masked}")
+    print()
+    return api_key
+
+
 def cmd_run(args):
     """Download model if needed and start interactive chat."""
+    from .config_utils import CactusConfig
+
+    config = CactusConfig()
+    api_key = prompt_for_api_key(config)
+
+    if api_key:
+        os.environ["CACTUS_CLOUD_API_KEY"] = api_key
+
     model_id = args.model_id
 
     if getattr(args, 'no_cloud_tele', False):
@@ -648,6 +671,14 @@ DEFAULT_ASR_MODEL_ID = "openai/whisper-small"
 
 def cmd_transcribe(args):
     """Download ASR model if needed and start transcription."""
+    from .config_utils import CactusConfig
+
+    config = CactusConfig()
+    api_key = prompt_for_api_key(config)
+
+    if api_key:
+        os.environ["CACTUS_CLOUD_API_KEY"] = api_key
+
     model_id = getattr(args, 'model_id', DEFAULT_ASR_MODEL_ID)
     audio_file = getattr(args, 'audio_file', None)
 
@@ -684,6 +715,38 @@ def cmd_transcribe(args):
         cmd_args.append(audio_file)
 
     os.execv(str(asr_binary), cmd_args)
+
+
+def cmd_auth(args):
+    """Manage Cactus Cloud API key."""
+    from .config_utils import CactusConfig
+
+    config = CactusConfig()
+
+    if args.clear:
+        config.clear_api_key()
+        print_color(GREEN, "API key cleared.")
+        return 0
+
+    api_key = config.get_api_key()
+
+    if api_key:
+        masked = api_key[:4] + "..." + api_key[-4:]
+        print(f"Current API key: {masked}")
+    else:
+        print("No API key set.")
+
+    if args.status:
+        return 0
+
+    print()
+    print("Get your cloud key at \033[1;36mhttps://www.cactuscompute.com/dashboard/api-keys\033[0m")
+    new_key = input("Enter new API key (press Enter to skip): ").strip()
+    if new_key:
+        config.set_api_key(new_key)
+        masked = new_key[:4] + "..." + new_key[-4:]
+        print_color(GREEN, f"API key saved: {masked}")
+    return 0
 
 
 def cmd_eval(args):
@@ -1094,6 +1157,15 @@ def create_parser():
 
   -----------------------------------------------------------------
 
+  cactus auth                          manage Cactus Cloud API key
+                                       shows status and prompts to set key
+
+    Optional flags:
+    --status                           show key status without prompting
+    --clear                            remove the saved API key
+
+  -----------------------------------------------------------------
+
   cactus run <model>                   opens playground for the model
                                        auto downloads and spins up
 
@@ -1287,6 +1359,12 @@ def create_parser():
     test_parser.add_argument('--reconvert', action='store_true',
                              help='Download original model and convert (instead of using pre-converted from cactus-compute)')
 
+    auth_parser = subparsers.add_parser('auth', help='Manage Cactus Cloud API key')
+    auth_parser.add_argument('--clear', action='store_true',
+                             help='Remove the saved API key')
+    auth_parser.add_argument('--status', action='store_true',
+                             help='Show current key status without prompting')
+
     clean_parser = subparsers.add_parser('clean', help='Remove all build artifacts')
 
     convert_parser = subparsers.add_parser('convert', help='Convert model to custom output directory')
@@ -1334,6 +1412,8 @@ def main():
         sys.exit(cmd_test(args))
     elif args.command == 'eval':
         sys.exit(cmd_eval(args))
+    elif args.command == 'auth':
+        sys.exit(cmd_auth(args))
     elif args.command == 'clean':
         sys.exit(cmd_clean(args))
     elif args.command == 'convert':
