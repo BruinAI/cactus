@@ -5,7 +5,6 @@
 #import <unistd.h>
 #include "graph/graph.h"
 
-extern int test_curl_main();
 extern int test_engine_main();
 extern int test_graph_main();
 extern int test_index_main();
@@ -55,7 +54,7 @@ extern int test_performance_main();
     setbuf(stderr, NULL);
 #endif
 
-    cactus::Logger::instance().set_level(cactus::LogLevel::WARN);
+    cactus::Logger::instance().set_level(cactus::LogLevel::DEBUG);
 
     NSString *bundlePath = [[NSBundle mainBundle] bundlePath];
     [self copyFromBundle:bundlePath toDocuments:getenv("CACTUS_TEST_MODEL")];
@@ -64,7 +63,6 @@ extern int test_performance_main();
     [self copyFromBundle:bundlePath toDocuments:getenv("CACTUS_TEST_ASSETS")];
 
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(NSEC_PER_SEC)), dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
-        test_curl_main();
         test_engine_main();
         test_graph_main();
         test_index_main();
