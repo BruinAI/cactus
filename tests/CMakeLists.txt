@@ -4,15 +4,25 @@ project(CactusTests LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 
+function(cactus_require_vendored_curl include_dir library_path platform_label)
+    if(NOT EXISTS "${include_dir}/curl/curl.h" OR NOT EXISTS "${library_path}")
+        message(WARNING "==============================================================================")
+        message(WARNING " Vendored libcurl is required for ${platform_label} tests but is missing.")
+        message(WARNING " Expected header: ${include_dir}/curl/curl.h")
+        message(WARNING " Expected library: ${library_path}")
+        message(WARNING " Populate libs/curl from your local curl build before running cactus test.")
+        message(WARNING "==============================================================================")
+        message(FATAL_ERROR "Missing vendored libcurl artifacts for ${platform_label} tests")
+    endif()
+endfunction()
+
 if(APPLE)
     set(CMAKE_OSX_ARCHITECTURES "arm64")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -arch arm64 -pthread -Wall -Wextra -pedantic -O3")
     set(CACTUS_CURL_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../libs/curl" CACHE PATH "Path to vendored libcurl artifacts")
     set(CACTUS_CURL_INCLUDE_DIR "${CACTUS_CURL_ROOT}/include")
     set(CACTUS_CURL_LIBRARY_MACOS "${CACTUS_CURL_ROOT}/macos/libcurl.a")
-    if(NOT EXISTS "${CACTUS_CURL_INCLUDE_DIR}/curl/curl.h" OR NOT EXISTS "${CACTUS_CURL_LIBRARY_MACOS}")
-        message(FATAL_ERROR "Vendored macOS libcurl not found. Expected: ${CACTUS_CURL_INCLUDE_DIR}/curl/curl.h and ${CACTUS_CURL_LIBRARY_MACOS}")
-    endif()
+    cactus_require_vendored_curl("${CACTUS_CURL_INCLUDE_DIR}" "${CACTUS_CURL_LIBRARY_MACOS}" "macOS")
 else()
 endif()
 
@@ -75,8 +85,6 @@ foreach(TEST_FILE ${TEST_SOURCES})
         target_include_directories(${TEST_NAME} PRIVATE ${CACTUS_CURL_INCLUDE_DIR})
         message(STATUS "Test ${TEST_NAME} will link with libcurl")
     endif()
-
-
     if(APPLE)
         target_link_libraries(${TEST_NAME} PRIVATE
             ${COREML_FRAMEWORK}
@@ -107,7 +115,6 @@ foreach(APP_NAME chat asr)
             target_link_libraries(${APP_NAME} PRIVATE ${CACTUS_CURL_LIBRARY_MACOS})
             target_include_directories(${APP_NAME} PRIVATE ${CACTUS_CURL_INCLUDE_DIR})
         endif()
-
         if(APPLE)
             target_link_libraries(${APP_NAME} PRIVATE
                 ${COREML_FRAMEWORK}
