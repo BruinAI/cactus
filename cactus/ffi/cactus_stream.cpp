@@ -146,7 +146,7 @@ static void parse_stream_transcribe_init_options(const std::string& json,
 }
 
 #ifdef CACTUS_USE_CURL
-static const std::string CLOUD_API_URL = "http://104.198.76.3/api/v1/transcribe";
+static const std::string CLOUD_API_URL = "https://104.198.76.3/api/v1/transcribe";
 
 static std::string get_cloud_api_key() {
     const char* key = std::getenv("CACTUS_CLOUD_API_KEY");
@@ -243,13 +243,42 @@ static std::string cloud_transcribe(const std::string& audio_b64, const std::str
 
     if (res != CURLE_OK) return original_text;
 
-    std::string pattern = "\"transcript\":\"";
+    std::string pattern = "\"transcript\":";
     size_t pos = response_body.find(pattern);
     if (pos == std::string::npos) return original_text;
-    size_t start = pos + pattern.length();
-    size_t end = response_body.find('"', start);
-    if (end == std::string::npos) return original_text;
-    return response_body.substr(start, end - start);
+
+    size_t i = pos + pattern.length();
+    while (i < response_body.size() && (response_body[i] == ' ' || response_body[i] == '\t' || response_body[i] == '\n' || response_body[i] == '\r')) {
+        ++i;
+    }
+    if (i >= response_body.size() || response_body[i] != '"') return original_text;
+    ++i;
+
+    std::string out;
+    out.reserve(128);
+    while (i < response_body.size()) {
+        char c = response_body[i++];
+        if (c == '"') {
+            return out;
+        }
+        if (c == '\\' && i < response_body.size()) {
+            char e = response_body[i++];
+            switch (e) {
+                case '"': out.push_back('"'); break;
+                case '\\': out.push_back('\\'); break;
+                case '/': out.push_back('/'); break;
+                case 'b': out.push_back('\b'); break;
+                case 'f': out.push_back('\f'); break;
+                case 'n': out.push_back('\n'); break;
+                case 'r': out.push_back('\r'); break;
+                case 't': out.push_back('\t'); break;
+                default: out.push_back(e); break;
+            }
+            continue;
+        }
+        out.push_back(c);
+    }
+    return original_text;
 }
 #endif
 
