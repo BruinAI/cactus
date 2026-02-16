@@ -7,6 +7,14 @@ def fail_with(message)
 end
 
 def generate_app_delegate(output_path, test_files)
+  raw_level = ENV.fetch('CACTUS_TEST_LOG_LEVEL', 'WARN').to_s.upcase
+  level = case raw_level
+          when 'DEBUG', 'INFO', 'WARN', 'ERROR', 'NONE'
+            raw_level
+          else
+            'WARN'
+          end
+
   test_names = test_files.map { |f| File.basename(f, '.cpp') }
   extern_declarations = test_names.map { |name| "extern int #{name}_main();" }.join("\n")
   test_calls = test_names.map { |name| "        #{name}_main();" }.join("\n")
@@ -63,7 +71,7 @@ def generate_app_delegate(output_path, test_files)
         setbuf(stderr, NULL);
     #endif
 
-        cactus::Logger::instance().set_level(cactus::LogLevel::DEBUG);
+        cactus::Logger::instance().set_level(cactus::LogLevel::#{level});
 
         NSString *bundlePath = [[NSBundle mainBundle] bundlePath];
         [self copyFromBundle:bundlePath toDocuments:getenv("CACTUS_TEST_MODEL")];
@@ -213,7 +221,7 @@ target.build_configurations.each do |config|
   config.build_settings['OTHER_LDFLAGS'].reject! { |flag| flag.to_s.include?('libcactus') }
   config.build_settings['OTHER_LDFLAGS'] << static_lib_path
 
-  ['-framework CoreML', '-framework Foundation', '-framework Accelerate'].each do |framework|
+  ['-framework CoreML', '-framework Foundation', '-framework Accelerate', '-framework Security', '-framework SystemConfiguration', '-framework CFNetwork'].each do |framework|
     config.build_settings['OTHER_LDFLAGS'] << framework unless config.build_settings['OTHER_LDFLAGS'].include?(framework)
   end
   if vendored_curl_lib
