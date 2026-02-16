@@ -1,6 +1,7 @@
 #include "test_utils.h"
 
 #include <iostream>
+#include <sstream>
 #include <string>
 
 #if __has_include(<curl/curl.h>)
@@ -51,6 +52,100 @@ bool test_curl_url_api() {
 #endif
 }
 
+bool test_curl_http_request() {
+#if !CACTUS_TEST_HAS_CURL
+    return false;
+#else
+    CURL* handle = curl_easy_init();
+    if (!handle) return false;
+
+    bool ok = true;
+    ok = ok && (curl_easy_setopt(handle, CURLOPT_URL, "https://example.com/") == CURLE_OK);
+    ok = ok && (curl_easy_setopt(handle, CURLOPT_NOBODY, 1L) == CURLE_OK);
+    ok = ok && (curl_easy_setopt(handle, CURLOPT_FOLLOWLOCATION, 1L) == CURLE_OK);
+    ok = ok && (curl_easy_setopt(handle, CURLOPT_TIMEOUT_MS, 3000L) == CURLE_OK);
+    ok = ok && (curl_easy_setopt(handle, CURLOPT_CONNECTTIMEOUT_MS, 2000L) == CURLE_OK);
+    if (!ok) {
+        curl_easy_cleanup(handle);
+        return false;
+    }
+
+    CURLcode rc = curl_easy_perform(handle);
+    long http_code = 0;
+    curl_easy_getinfo(handle, CURLINFO_RESPONSE_CODE, &http_code);
+    curl_easy_cleanup(handle);
+
+    return (rc == CURLE_OK) && (http_code >= 100);
+#endif
+}
+
+struct CurlHttpCheck {
+    bool pass = false;
+    bool skip = false;
+    std::string reason;
+};
+
+static bool curl_supports_protocol(const char* name) {
+#if !CACTUS_TEST_HAS_CURL
+    (void)name;
+    return false;
+#else
+    curl_version_info_data* info = curl_version_info(CURLVERSION_NOW);
+    if (!info || !info->protocols) return false;
+    for (const char* const* p = info->protocols; *p; ++p) {
+        if (std::string(*p) == name) return true;
+    }
+    return false;
+#endif
+}
+
+CurlHttpCheck run_curl_http_request_check() {
+#if !CACTUS_TEST_HAS_CURL
+    return {false, true, "curl/curl.h not available in include path"};
+#else
+    if (!curl_supports_protocol("https")) {
+        return {false, false, "libcurl built without HTTPS protocol support"};
+    }
+
+    CURL* handle = curl_easy_init();
+    if (!handle) return {false, false, "curl_easy_init returned null"};
+
+    bool opts_ok = true;
+    opts_ok = opts_ok && (curl_easy_setopt(handle, CURLOPT_URL, "https://www.google.com/generate_204") == CURLE_OK);
+    opts_ok = opts_ok && (curl_easy_setopt(handle, CURLOPT_NOBODY, 1L) == CURLE_OK);
+    opts_ok = opts_ok && (curl_easy_setopt(handle, CURLOPT_FOLLOWLOCATION, 1L) == CURLE_OK);
+    opts_ok = opts_ok && (curl_easy_setopt(handle, CURLOPT_USERAGENT, "cactus-curl-test/1.0") == CURLE_OK);
+    opts_ok = opts_ok && (curl_easy_setopt(handle, CURLOPT_TIMEOUT_MS, 3000L) == CURLE_OK);
+    opts_ok = opts_ok && (curl_easy_setopt(handle, CURLOPT_CONNECTTIMEOUT_MS, 2000L) == CURLE_OK);
+    if (!opts_ok) {
+        curl_easy_cleanup(handle);
+        return {false, false, "failed to configure curl options"};
+    }
+
+    CURLcode rc = curl_easy_perform(handle);
+    long http_code = 0;
+    curl_easy_getinfo(handle, CURLINFO_RESPONSE_CODE, &http_code);
+    curl_easy_cleanup(handle);
+
+    if (rc == CURLE_OK && http_code >= 100) return {true, false, ""};
+
+    if (rc == CURLE_COULDNT_RESOLVE_HOST ||
+        rc == CURLE_COULDNT_CONNECT ||
+        rc == CURLE_OPERATION_TIMEDOUT ||
+        rc == CURLE_SSL_CONNECT_ERROR ||
+        rc == CURLE_PEER_FAILED_VERIFICATION) {
+        std::ostringstream oss;
+        oss << "network unavailable for outbound HTTPS (" << curl_easy_strerror(rc) << ")";
+        return {false, true, oss.str()};
+    }
+
+    std::ostringstream oss;
+    oss << "request failed rc=" << static_cast<int>(rc)
+        << " (" << curl_easy_strerror(rc) << "), http_code=" << http_code;
+    return {false, false, oss.str()};
+#endif
+}
+
 int main() {
     TestUtils::TestRunner runner("Curl Tests");
 
@@ -69,6 +164,15 @@ int main() {
     runner.run_test("version_info", test_curl_version_info());
     runner.run_test("easy_init", test_curl_easy_init());
     runner.run_test("url_api", test_curl_url_api());
+    CurlHttpCheck http_check = run_curl_http_request_check();
+    if (http_check.skip) {
+        runner.log_skip("http_request", http_check.reason);
+    } else {
+        runner.run_test("http_request", http_check.pass);
+        if (!http_check.pass && !http_check.reason.empty()) {
+            std::cout << "  reason: " << http_check.reason << "\n";
+        }
+    }
 
     curl_global_cleanup();
     runner.print_summary();
