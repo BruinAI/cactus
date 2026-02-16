@@ -159,6 +159,20 @@ static_lib_path = device_type == 'simulator' ?
 fail_with("Static library not found at: #{static_lib_path}") unless File.exist?(static_lib_path)
 puts "Using static library: #{static_lib_path}"
 
+curl_root = ENV['CACTUS_CURL_ROOT']
+vendored_curl_lib = nil
+if curl_root && !curl_root.empty?
+  vendored_curl_lib = device_type == 'simulator' ?
+    File.join(curl_root, 'ios', 'simulator', 'libcurl.a') :
+    File.join(curl_root, 'ios', 'device', 'libcurl.a')
+  if File.exist?(vendored_curl_lib)
+    puts "Using vendored iOS libcurl: #{vendored_curl_lib}"
+  else
+    vendored_curl_lib = nil
+    puts "Vendored iOS libcurl not found under CACTUS_CURL_ROOT=#{curl_root}; continuing without explicit curl link"
+  end
+end
+
 target.frameworks_build_phase.files.to_a.each do |build_file|
   if build_file.file_ref&.path&.to_s&.include?('libcactus')
     target.frameworks_build_phase.files.delete(build_file)
@@ -176,6 +190,12 @@ target.build_configurations.each do |config|
   config.build_settings['HEADER_SEARCH_PATHS'] ||= ['$(inherited)']
   [tests_root, cactus_root].each do |path|
     config.build_settings['HEADER_SEARCH_PATHS'] << path unless config.build_settings['HEADER_SEARCH_PATHS'].include?(path)
+  end
+  if curl_root && !curl_root.empty?
+    curl_include = File.join(curl_root, 'include')
+    if File.exist?(File.join(curl_include, 'curl', 'curl.h'))
+      config.build_settings['HEADER_SEARCH_PATHS'] << curl_include unless config.build_settings['HEADER_SEARCH_PATHS'].include?(curl_include)
+    end
   end
 
   config.build_settings['CLANG_CXX_LANGUAGE_STANDARD'] = 'c++20'
@@ -195,6 +215,9 @@ target.build_configurations.each do |config|
 
   ['-framework CoreML', '-framework Foundation', '-framework Accelerate'].each do |framework|
     config.build_settings['OTHER_LDFLAGS'] << framework unless config.build_settings['OTHER_LDFLAGS'].include?(framework)
+  end
+  if vendored_curl_lib
+    config.build_settings['OTHER_LDFLAGS'] << vendored_curl_lib unless config.build_settings['OTHER_LDFLAGS'].include?(vendored_curl_lib)
   end
 end
 

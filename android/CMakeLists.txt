@@ -5,6 +5,7 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 
 set(SOURCE_DIR ${CMAKE_SOURCE_DIR}/../cactus)
+set(CACTUS_CURL_ROOT "${CMAKE_SOURCE_DIR}/../libs/curl" CACHE PATH "Path to vendored libcurl artifacts")
 
 if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Release)
@@ -72,6 +73,24 @@ target_include_directories(cactus PRIVATE ${COMMON_INCLUDE_DIRS})
 target_include_directories(cactus_static PRIVATE ${COMMON_INCLUDE_DIRS})
 
 target_link_libraries(cactus ${LOG_LIB} android)
+
+set(CACTUS_CURL_INCLUDE_DIR "${CACTUS_CURL_ROOT}/include")
+set(CACTUS_CURL_LIBRARY_ANDROID "${CACTUS_CURL_ROOT}/android/${ANDROID_ABI}/libcurl.a")
+set(CACTUS_CURL_ENABLED FALSE)
+if(EXISTS "${CACTUS_CURL_INCLUDE_DIR}/curl/curl.h" AND EXISTS "${CACTUS_CURL_LIBRARY_ANDROID}")
+    set(CACTUS_CURL_ENABLED TRUE)
+    message(STATUS "Using vendored libcurl for Android: ${CACTUS_CURL_LIBRARY_ANDROID}")
+
+    target_include_directories(cactus PRIVATE "${CACTUS_CURL_INCLUDE_DIR}")
+    target_include_directories(cactus_static PRIVATE "${CACTUS_CURL_INCLUDE_DIR}")
+    target_compile_definitions(cactus PRIVATE CACTUS_USE_CURL=1)
+    target_compile_definitions(cactus_static PRIVATE CACTUS_USE_CURL=1)
+
+    target_link_libraries(cactus "${CACTUS_CURL_LIBRARY_ANDROID}")
+    target_link_libraries(cactus_static "${CACTUS_CURL_LIBRARY_ANDROID}")
+else()
+    message(STATUS "Vendored libcurl not found for Android ABI ${ANDROID_ABI}; building without CACTUS_USE_CURL")
+endif()
 
 set(COMMON_COMPILE_DEFINITIONS
     PLATFORM_CPU_ONLY=1

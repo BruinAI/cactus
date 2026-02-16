@@ -12,6 +12,7 @@ endif()
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
+set(CACTUS_CURL_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../libs/curl" CACHE PATH "Path to vendored libcurl artifacts")
 
 if(APPLE)
     set(CMAKE_OSX_ARCHITECTURES "arm64")
@@ -25,10 +26,17 @@ if(APPLE)
     )
 
     enable_language(OBJCXX)
-    find_package(CURL REQUIRED)
+    set(CACTUS_CURL_INCLUDE_DIR "${CACTUS_CURL_ROOT}/include")
+    set(CACTUS_CURL_LIBRARY_MACOS "${CACTUS_CURL_ROOT}/macos/libcurl.a")
+    if(NOT EXISTS "${CACTUS_CURL_INCLUDE_DIR}/curl/curl.h" OR NOT EXISTS "${CACTUS_CURL_LIBRARY_MACOS}")
+        message(FATAL_ERROR "Vendored macOS libcurl not found. Expected: ${CACTUS_CURL_INCLUDE_DIR}/curl/curl.h and ${CACTUS_CURL_LIBRARY_MACOS}")
+    endif()
     find_library(COREML_FRAMEWORK CoreML REQUIRED)
     find_library(FOUNDATION_FRAMEWORK Foundation REQUIRED)
     find_library(ACCELERATE_FRAMEWORK Accelerate REQUIRED)
+    find_library(SECURITY_FRAMEWORK Security REQUIRED)
+    find_library(SYSTEMCONFIGURATION_FRAMEWORK SystemConfiguration REQUIRED)
+    find_library(CFNETWORK_FRAMEWORK CFNetwork REQUIRED)
 else()
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -march=armv8.2-a+fp16+simd+dotprod+i8mm -pthread -Wall -Wextra -pedantic -O3 -Wno-missing-field-initializers")
     add_compile_definitions(
@@ -89,9 +97,13 @@ function(configure_cactus_target target_name)
             ${COREML_FRAMEWORK}
             ${FOUNDATION_FRAMEWORK}
             ${ACCELERATE_FRAMEWORK}
-            ${CURL_LIBRARIES}
+            ${SECURITY_FRAMEWORK}
+            ${SYSTEMCONFIGURATION_FRAMEWORK}
+            ${CFNETWORK_FRAMEWORK}
+            ${CACTUS_CURL_LIBRARY_MACOS}
         )
-        target_include_directories(${target_name} PUBLIC ${CURL_INCLUDE_DIRS})
+        target_include_directories(${target_name} PUBLIC ${CACTUS_CURL_INCLUDE_DIR})
+        target_compile_definitions(${target_name} PRIVATE CACTUS_USE_CURL=1)
     endif()
 endfunction()
 

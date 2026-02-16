@@ -2,6 +2,8 @@
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+CACTUS_CURL_ROOT="${CACTUS_CURL_ROOT:-$PROJECT_ROOT/libs/curl}"
+export CACTUS_CURL_ROOT
 
 MODEL_NAME="$1"
 TRANSCRIBE_MODEL_NAME="$2"
@@ -204,7 +206,7 @@ if ! gem list xcodeproj -i; then
     fi
 fi
 
-export PROJECT_ROOT TESTS_ROOT="$tests_root" CACTUS_ROOT="$cactus_root" XCODEPROJ_PATH="$xcodeproj_path" BUNDLE_ID="$bundle_id" DEVELOPMENT_TEAM="$development_team" DEVICE_TYPE="$device_type"
+export PROJECT_ROOT TESTS_ROOT="$tests_root" CACTUS_ROOT="$cactus_root" XCODEPROJ_PATH="$xcodeproj_path" BUNDLE_ID="$bundle_id" DEVELOPMENT_TEAM="$development_team" DEVICE_TYPE="$device_type" CACTUS_CURL_ROOT="$CACTUS_CURL_ROOT"
 if ! ruby "$SCRIPT_DIR/configure_xcode.rb"; then
     echo "Failed to configure Xcode project"
     exit 1
