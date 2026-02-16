@@ -643,7 +643,7 @@ def cmd_run(args):
     os.execv(str(chat_binary), [str(chat_binary), str(weights_dir)])
 
 
-DEFAULT_ASR_MODEL_ID = "UsefulSensors/moonshine-base"
+DEFAULT_ASR_MODEL_ID = "openai/whisper-small"
 
 
 def cmd_transcribe(args):
@@ -833,7 +833,7 @@ def cmd_test(args):
         if download_result != 0:
             return download_result
 
-        transcribe_model_id = getattr(args, 'transcribe_model', 'UsefulSensors/moonshine-base')
+        transcribe_model_id = getattr(args, 'transcribe_model', 'openai/whisper-small')
 
         dl_args_transcribe = DownloadArgs()
         dl_args_transcribe.model_id = transcribe_model_id
@@ -1105,7 +1105,7 @@ def create_parser():
   -----------------------------------------------------------------
 
   cactus transcribe [model]            live microphone transcription
-                                       default model: moonshine-base
+                                       default model: whisper-small
 
     Optional flags:
     --file <audio.wav>                 transcribe audio file instead of mic
@@ -1266,7 +1266,7 @@ def create_parser():
     test_parser = subparsers.add_parser('test', help='Run the test suite')
     test_parser.add_argument('--model', default='LiquidAI/LFM2-VL-450M',
                              help='Model to use for tests')
-    test_parser.add_argument('--transcribe_model', default='UsefulSensors/moonshine-base',
+    test_parser.add_argument('--transcribe_model', default='openai/whisper-small',
                              help='Transcribe model to use')
     test_parser.add_argument('--vad_model', default='snakers4/silero-vad',
                              help='VAD model to use')
