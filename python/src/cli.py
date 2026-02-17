@@ -230,16 +230,10 @@ def cmd_download(args):
             model = AutoModel.from_pretrained(model_id, cache_dir=cache_dir, trust_remote_code=True, token=token)
 
         elif is_vad:
-            try:
-                import torchaudio
-            except ImportError:
-                print_color(RED, "Error: torchaudio is required for Silero-VAD")
-                print("Install with: pip install torchaudio")
-                return 1
-
             from .converter import convert_silero_vad_weights
+            from silero_vad import load_silero_vad
 
-            model, _ = torch.hub.load("snakers4/silero-vad", "silero_vad", force_reload=False)
+            model = load_silero_vad()
             convert_silero_vad_weights(model, weights_dir, precision, args)
 
             del model
@@ -1154,6 +1148,14 @@ def cmd_clean(args):
     remove_if_exists(PROJECT_ROOT / "venv")
 
     remove_if_exists(PROJECT_ROOT / "weights")
+
+    # Clean telemetry cache
+    telemetry_cache = Path.home() / "Library" / "Caches" / "cactus" / "telemetry"
+    if telemetry_cache.exists():
+        print(f"Removing telemetry cache: {telemetry_cache}")
+        shutil.rmtree(telemetry_cache)
+    else:
+        print(f"Telemetry cache not found: {telemetry_cache}")
 
     print()
     print("Removing compiled libraries and frameworks...")
