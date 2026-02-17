@@ -33,6 +33,8 @@ def get_model_dir_name(model_id):
 
 def get_weights_dir(model_id):
     """Get the weights directory path for a model."""
+    if 'silero-vad' in model_id.lower():
+        return PROJECT_ROOT / "weights" / "silero-vad"
     model_dir = get_model_dir_name(model_id)
     return PROJECT_ROOT / "weights" / model_dir
 
@@ -50,10 +52,74 @@ def run_command(cmd, cwd=None, check=True):
     return result
 
 
+def download_from_hf(model_id, weights_dir):
+    """Download pre-converted model from cactus-compute HuggingFace."""
+    try:
+        from huggingface_hub import hf_hub_download, list_repo_files
+        import zipfile
+    except ImportError:
+        print_color(RED, "Error: huggingface_hub package not found.")
+        print("Please run: pip install huggingface_hub")
+        return False
+
+    model_name = get_model_dir_name(model_id)
+    org = "cactus-compute"
+    repo_id = f"{org}/{model_id.split('/')[-1]}"
+
+    try:
+        apple_zip = f"{model_name}-apple.zip"
+        standard_zip = f"{model_name}.zip"
+
+        repo_files = list_repo_files(repo_id, repo_type="model")
+
+        zip_file = None
+        if f"weights/{apple_zip}" in repo_files:
+            zip_file = apple_zip
+        elif f"weights/{standard_zip}" in repo_files:
+            zip_file = standard_zip
+        else:
+            print_color(YELLOW, f"Pre-converted model not found in {repo_id}")
+            return False
+
+        print_color(BLUE, f"Downloading from {repo_id}...")
+
+        zip_path = hf_hub_download(
+            repo_id=repo_id,
+            filename=f"weights/{zip_file}",
+            repo_type="model"
+        )
+
+        weights_dir.mkdir(parents=True, exist_ok=True)
+
+        print_color(YELLOW, "Extracting model weights...")
+        with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+            zip_ref.extractall(weights_dir)
+
+        if not (weights_dir / "config.txt").exists():
+            print_color(RED, f"Error: Downloaded model is missing config.txt")
+            if weights_dir.exists():
+                shutil.rmtree(weights_dir)
+            return False
+
+        print_color(GREEN, f"Successfully downloaded pre-converted model to {weights_dir}")
+        return True
+
+    except Exception:
+        print_color(YELLOW, f"Could not download from {repo_id}")
+        if weights_dir.exists():
+            shutil.rmtree(weights_dir)
+        return False
+
+
 def cmd_download(args):
-    """Download and convert HuggingFace model weights to Cactus format."""
+    """Download model weights. By default downloads pre-converted weights from cactus-compute."""
     model_id = args.model_id
     weights_dir = get_weights_dir(model_id)
+    reconvert = getattr(args, 'reconvert', False)
+
+    if reconvert and weights_dir.exists():
+        print_color(YELLOW, f"Removing cached weights for reconversion...")
+        shutil.rmtree(weights_dir)
 
     if weights_dir.exists() and (weights_dir / "config.txt").exists():
         print_color(GREEN, f"Model weights found at {weights_dir}")
@@ -63,6 +129,10 @@ def cmd_download(args):
     print_color(YELLOW, f"Model weights not found. Downloading {model_id}...")
     print("=" * 45)
 
+    if not reconvert:
+        if download_from_hf(model_id, weights_dir):
+            return 0
+
     try:
         import torch
         from transformers import AutoTokenizer
@@ -71,8 +141,7 @@ def cmd_download(args):
         print("Please run: ./setup")
         return 1
 
-    from .converter_llm import convert_hf_model_weights
-    from .converter_vlm import convert_processors
+    from .converter import convert_hf_model_weights
     from .tokenizer import convert_hf_tokenizer
     from .tensor_io import format_config_value
     from .config_utils import is_lfm2_vl, pick_dtype, vision_weight_sanity_check
@@ -94,6 +163,7 @@ def cmd_download(args):
 
     is_vlm = 'vl' in model_id.lower() or 'vlm' in model_id.lower()
     is_whisper = 'whisper' in model_id.lower()
+    is_vad = 'silero-vad' in model_id.lower()
 
     try:
         if is_vlm:
@@ -149,11 +219,6 @@ def cmd_download(args):
                 print_color(RED, "Vision embeddings look randomly initialized.")
                 return 1
 
-            try:
-                convert_processors(processor, model_id, weights_dir, token=token)
-            except Exception as e:
-                print(f"  Warning: convert_processors failed: {e}")
-
         elif 'moonshine' in model_id.lower():
             from transformers import MoonshineForConditionalGeneration
             print(f"  Note: Loading Moonshine model using MoonshineForConditionalGeneration...")
@@ -163,6 +228,21 @@ def cmd_download(args):
         elif is_whisper:
             tokenizer = AutoTokenizer.from_pretrained(model_id, cache_dir=cache_dir, trust_remote_code=True, token=token)
             model = AutoModel.from_pretrained(model_id, cache_dir=cache_dir, trust_remote_code=True, token=token)
+
+        elif is_vad:
+            from .converter import convert_silero_vad_weights
+            from silero_vad import load_silero_vad
+
+            model = load_silero_vad()
+            convert_silero_vad_weights(model, weights_dir, precision, args)
+
+            del model
+            import torch
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+
+            print_color(GREEN, f"Successfully downloaded and converted weights to {weights_dir}")
+            return 0
 
         else:
             tokenizer = AutoTokenizer.from_pretrained(model_id, cache_dir=cache_dir, trust_remote_code=True, token=token)
@@ -505,8 +585,37 @@ def cmd_build_python(args):
     return 0
 
 
+def prompt_for_api_key(config):
+    """Prompt user to set Cactus Cloud API key if not already configured. Returns the key or empty string."""
+    api_key = config.get_api_key()
+    if api_key:
+        return api_key
+
+    print("\n" + "="*50)
+    print("  Cactus Cloud Setup (Optional)")
+    print("="*50 + "\n")
+    print("Get your cloud key at \033[1;36mhttps://www.cactuscompute.com/dashboard/api-keys\033[0m")
+    print("to enable automatic cloud fallback.\n")
+
+    api_key = input("Your Cactus Cloud key (press Enter to skip): ").strip()
+    if api_key:
+        config.set_api_key(api_key)
+        masked = api_key[:4] + "..." + api_key[-4:]
+        print_color(GREEN, f"API key saved: {masked}")
+    print()
+    return api_key
+
+
 def cmd_run(args):
     """Download model if needed and start interactive chat."""
+    from .config_utils import CactusConfig
+
+    config = CactusConfig()
+    api_key = prompt_for_api_key(config)
+
+    if api_key:
+        os.environ["CACTUS_CLOUD_API_KEY"] = api_key
+
     model_id = args.model_id
 
     if getattr(args, 'no_cloud_tele', False):
@@ -540,11 +649,19 @@ def cmd_run(args):
     os.execv(str(chat_binary), [str(chat_binary), str(weights_dir)])
 
 
-DEFAULT_ASR_MODEL_ID = "UsefulSensors/moonshine-base"
+DEFAULT_ASR_MODEL_ID = "openai/whisper-small"
 
 
 def cmd_transcribe(args):
     """Download ASR model if needed and start transcription."""
+    from .config_utils import CactusConfig
+
+    config = CactusConfig()
+    api_key = prompt_for_api_key(config)
+
+    if api_key:
+        os.environ["CACTUS_CLOUD_API_KEY"] = api_key
+
     model_id = getattr(args, 'model_id', DEFAULT_ASR_MODEL_ID)
     audio_file = getattr(args, 'audio_file', None)
 
@@ -583,6 +700,38 @@ def cmd_transcribe(args):
     os.execv(str(asr_binary), cmd_args)
 
 
+def cmd_auth(args):
+    """Manage Cactus Cloud API key."""
+    from .config_utils import CactusConfig
+
+    config = CactusConfig()
+
+    if args.clear:
+        config.clear_api_key()
+        print_color(GREEN, "API key cleared.")
+        return 0
+
+    api_key = config.get_api_key()
+
+    if api_key:
+        masked = api_key[:4] + "..." + api_key[-4:]
+        print(f"Current API key: {masked}")
+    else:
+        print("No API key set.")
+
+    if args.status:
+        return 0
+
+    print()
+    print("Get your cloud key at \033[1;36mhttps://www.cactuscompute.com/dashboard/api-keys\033[0m")
+    new_key = input("Enter new API key (press Enter to skip): ").strip()
+    if new_key:
+        config.set_api_key(new_key)
+        masked = new_key[:4] + "..." + new_key[-4:]
+        print_color(GREEN, f"API key saved: {masked}")
+    return 0
+
+
 def cmd_eval(args):
     model_id = getattr(args, 'model_id', DEFAULT_MODEL_ID)
 
@@ -604,6 +753,7 @@ def cmd_eval(args):
     dlargs.precision = getattr(args, 'precision', 'INT8')
     dlargs.cache_dir = getattr(args, 'cache_dir', None)
     dlargs.token = getattr(args, 'token', None)
+    dlargs.reconvert = getattr(args, 'reconvert', False)
 
     download_result = cmd_download(dlargs)
     if download_result != 0:
@@ -699,7 +849,6 @@ def cmd_eval(args):
     return r.returncode
 
 
-
 def cmd_test(args):
     """Run the Cactus test suite."""
     print_color(BLUE, "Running test suite...")
@@ -708,44 +857,53 @@ def cmd_test(args):
     if getattr(args, 'large', False):
         args.model = 'LiquidAI/LFM2.5-VL-1.6B'
         args.transcribe_model = 'openai/whisper-small'
-        print_color(BLUE, f"Using large models: {args.model}, {args.transcribe_model}")
+        print_color(BLUE, f"Using large models: {args.model}, {args.transcribe_model}, {args.vad_model}")
 
     precision = getattr(args, 'precision', None)
-    if precision:
-        # Regenerate main model weights
-        model_id = getattr(args, 'model', 'LiquidAI/LFM2-VL-450M')
-        weights_dir = get_weights_dir(model_id)
+    reconvert = getattr(args, 'reconvert', False)
 
-        if weights_dir.exists():
-            print_color(YELLOW, f"Removing existing weights at {weights_dir} to regenerate with {precision}...")
-            shutil.rmtree(weights_dir)
+    if precision or reconvert:
+        model_id = getattr(args, 'model', 'LiquidAI/LFM2-VL-450M')
 
         class DownloadArgs:
             pass
         dl_args = DownloadArgs()
         dl_args.model_id = model_id
-        dl_args.precision = precision
+        if precision:
+            dl_args.precision = precision
         dl_args.cache_dir = None
         dl_args.token = getattr(args, 'token', None)
+        dl_args.reconvert = True
 
         download_result = cmd_download(dl_args)
         if download_result != 0:
             return download_result
 
         transcribe_model_id = getattr(args, 'transcribe_model', 'UsefulSensors/moonshine-base')
-        transcribe_weights_dir = get_weights_dir(transcribe_model_id)
-
-        if transcribe_weights_dir.exists():
-            print_color(YELLOW, f"Removing existing weights at {transcribe_weights_dir} to regenerate with {precision}...")
-            shutil.rmtree(transcribe_weights_dir)
 
         dl_args_transcribe = DownloadArgs()
         dl_args_transcribe.model_id = transcribe_model_id
-        dl_args_transcribe.precision = precision
+        if precision:
+            dl_args_transcribe.precision = precision
         dl_args_transcribe.cache_dir = None
         dl_args_transcribe.token = getattr(args, 'token', None)
+        dl_args_transcribe.reconvert = True
 
         download_result = cmd_download(dl_args_transcribe)
+        if download_result != 0:
+            return download_result
+
+        vad_model_id = getattr(args, 'vad_model', 'snakers4/silero-vad')
+
+        dl_args_vad = DownloadArgs()
+        dl_args_vad.model_id = vad_model_id
+        if precision:
+            dl_args_vad.precision = precision
+        dl_args_vad.cache_dir = None
+        dl_args_vad.token = getattr(args, 'token', None)
+        dl_args_vad.reconvert = True
+
+        download_result = cmd_download(dl_args_vad)
         if download_result != 0:
             return download_result
 
@@ -761,6 +919,8 @@ def cmd_test(args):
         cmd.extend(["--model", args.model])
     if args.transcribe_model:
         cmd.extend(["--transcribe_model", args.transcribe_model])
+    if args.vad_model:
+        cmd.extend(["--vad_model", args.vad_model])
     if precision:
         cmd.extend(["--precision", precision])
     if getattr(args, 'no_rebuild', False):
@@ -769,6 +929,8 @@ def cmd_test(args):
         cmd.append("--android")
     if args.ios:
         cmd.append("--ios")
+    if args.only:
+        cmd.extend(["--only", args.only])
 
     env = os.environ.copy()
     if getattr(args, 'no_cloud_tele', False):
@@ -945,6 +1107,7 @@ def cmd_convert(args):
     download_args.precision = args.precision
     download_args.cache_dir = cache_dir
     download_args.token = token
+    download_args.reconvert = True
 
     original_get_weights = get_weights_dir
 
@@ -977,12 +1140,22 @@ def create_parser():
 
   -----------------------------------------------------------------
 
+  cactus auth                          manage Cactus Cloud API key
+                                       shows status and prompts to set key
+
+    Optional flags:
+    --status                           show key status without prompting
+    --clear                            remove the saved API key
+
+  -----------------------------------------------------------------
+
   cactus run <model>                   opens playground for the model
                                        auto downloads and spins up
 
     Optional flags:
-    --precision INT4|INT8|FP16   default: INT8
+    --precision INT4|INT8|FP16         default: INT8
     --token <token>                    HF token (for gated models)
+    --reconvert                        force model weights reconversion from source
 
   -----------------------------------------------------------------
 
@@ -993,6 +1166,7 @@ def create_parser():
     --file <audio.wav>                 transcribe audio file instead of mic
     --precision INT4|INT8|FP16         default: INT8
     --token <token>                    HF token (for gated models)
+    --reconvert                        force model weights reconversion from source
 
     Examples:
     cactus transcribe                  live microphone transcription
@@ -1006,8 +1180,9 @@ def create_parser():
                                        see supported weights on ReadMe
 
     Optional flags:
-    --precision INT4|INT8|FP16   quantization (default: INT8)
+    --precision INT4|INT8|FP16         quantization (default: INT8)
     --token <token>                    HuggingFace API token
+    --reconvert                        force model weights reconversion from source
 
   -----------------------------------------------------------------
 
@@ -1040,7 +1215,9 @@ def create_parser():
     --transcribe_model <model>         default: whisper-small
     --large                            use larger models (LFM2.5-VL-1.6B + whisper-small)
     --precision INT4|INT8|FP16         regenerates weights with precision
+    --reconvert                        force model weights reconversion from source
     --no-rebuild                       skip building library and tests
+    --only <test_name>                 run specific test (engine, graph, index, kernel, kv_cache, performance, etc)
     --ios                              run on connected iPhone
     --android                          run on connected Android
 
@@ -1085,6 +1262,8 @@ def create_parser():
                                  help='Quantization precision (default: INT8)')
     download_parser.add_argument('--cache-dir', help='Cache directory for HuggingFace models')
     download_parser.add_argument('--token', help='HuggingFace API token')
+    download_parser.add_argument('--reconvert', action='store_true',
+                                 help='Download original model and convert (instead of using pre-converted from cactus-compute)')
 
     build_parser = subparsers.add_parser('build', help='Build the chat application')
     build_parser.add_argument('--apple', action='store_true',
@@ -1105,6 +1284,8 @@ def create_parser():
     run_parser.add_argument('--token', help='HuggingFace API token')
     run_parser.add_argument('--no-cloud-tele', action='store_true',
                             help='Disable cloud telemetry (write to cache only)')
+    run_parser.add_argument('--reconvert', action='store_true',
+                            help='Download original model and convert (instead of using pre-converted from cactus-compute)')
 
     transcribe_parser = subparsers.add_parser('transcribe', help='Download ASR model and run transcription')
     transcribe_parser.add_argument('model_id', nargs='?', default=DEFAULT_ASR_MODEL_ID,
@@ -1117,6 +1298,8 @@ def create_parser():
     transcribe_parser.add_argument('--token', help='HuggingFace API token')
     transcribe_parser.add_argument('--no-cloud-tele', action='store_true',
                                    help='Disable cloud telemetry (write to cache only)')
+    transcribe_parser.add_argument('--reconvert', action='store_true',
+                                   help='Download original model and convert (instead of using pre-converted from cactus-compute)')
 
     eval_parser = subparsers.add_parser('eval', help='Run evaluation scripts outside the cactus submodule')
     eval_parser.add_argument('model_id', nargs='?', default=DEFAULT_MODEL_ID,
@@ -1132,12 +1315,16 @@ def create_parser():
     eval_parser.add_argument('--embed', action='store_true', help='Run embedding evals')
     eval_parser.add_argument('--no-cloud-tele', action='store_true',
                              help='Disable cloud telemetry (write to cache only)')
+    eval_parser.add_argument('--reconvert', action='store_true',
+                             help='Download original model and convert (instead of using pre-converted from cactus-compute)')
 
     test_parser = subparsers.add_parser('test', help='Run the test suite')
     test_parser.add_argument('--model', default='LiquidAI/LFM2-VL-450M',
                              help='Model to use for tests')
     test_parser.add_argument('--transcribe_model', default='UsefulSensors/moonshine-base',
                              help='Transcribe model to use')
+    test_parser.add_argument('--vad_model', default='snakers4/silero-vad',
+                             help='VAD model to use')
     test_parser.add_argument('--large', action='store_true',
                              help='Use larger models (LFM2.5-VL-1.6B + whisper-small)')
     test_parser.add_argument('--precision', choices=['INT4', 'INT8', 'FP16'],
@@ -1149,8 +1336,17 @@ def create_parser():
                              help='Run tests on Android')
     test_parser.add_argument('--ios', action='store_true',
                              help='Run tests on iOS')
+    test_parser.add_argument('--only', help='Only run the specified test (engine, graph, index, kernel, kv_cache, performance, etc)')
     test_parser.add_argument('--no-cloud-tele', action='store_true',
                              help='Disable cloud telemetry (write to cache only)')
+    test_parser.add_argument('--reconvert', action='store_true',
+                             help='Download original model and convert (instead of using pre-converted from cactus-compute)')
+
+    auth_parser = subparsers.add_parser('auth', help='Manage Cactus Cloud API key')
+    auth_parser.add_argument('--clear', action='store_true',
+                             help='Remove the saved API key')
+    auth_parser.add_argument('--status', action='store_true',
+                             help='Show current key status without prompting')
 
     clean_parser = subparsers.add_parser('clean', help='Remove all build artifacts')
 
@@ -1180,7 +1376,6 @@ def preprocess_eval_args(parser, argv):
     return args
 
 
-
 def main():
     """Main entry point for the Cactus CLI."""
     parser = create_parser()
@@ -1200,6 +1395,8 @@ def main():
         sys.exit(cmd_test(args))
     elif args.command == 'eval':
         sys.exit(cmd_eval(args))
+    elif args.command == 'auth':
+        sys.exit(cmd_auth(args))
     elif args.command == 'clean':
         sys.exit(cmd_clean(args))
     elif args.command == 'convert':

@@ -111,7 +111,7 @@ graph.hard_reset();
 | iPhone 13 Mini | - | - | - |
 | Galaxy A56 | - | - | - |
 | Pixel 6a | 218tps/44tps (395MB RAM)| 2.5s/36tps (631MB RAM) | 1.5s/189tps (111MB RAM)|
-| Nothing CMF | - | - | - |
+| CMF Phone 2 Pro | 146tps/21tps (394MB RAM) | 2.4s/22tps (632MB RAM) | 1.9s/119tps (112MB RAM) |
 | Raspberry Pi 5 | - | - | - |
 
  ## Supported Models                                                                                                                                                     
@@ -132,7 +132,8 @@ graph.hard_reset();
 | LiquidAI/LFM2.5-VL-1.6B | vision, txt & img embed, Apple NPU |                                                                                                               
 | UsefulSensors/moonshine-base | transcription, speech embed |                                                                                                         
 | openai/whisper-small | transcription, speech embed, Apple NPU |                                                                                                                 
-| openai/whisper-medium | transcribe, speech embed, Apple NPU |                                                                             
+| openai/whisper-medium | transcribe, speech embed, Apple NPU |
+| snakers4/silero-vad | vad |
 | nomic-ai/nomic-embed-text-v2-moe | embed |                                                                                                                    
 | Qwen/Qwen3-Embedding-0.6B | embed | 
 
@@ -151,11 +152,12 @@ git clone https://github.com/cactus-compute/cactus && cd cactus && source ./setu
 
 | Command | Description |
 |---------|-------------|
+| `cactus auth` | Setup Cactus cloud fallback (optional) (`--status`, `--clear`) |
 | `cactus run [model]` | Opens playground (auto downloads model) |
 | `cactus download [model]` | Downloads model to `./weights` |
 | `cactus convert [model] [dir]` | Converts model, supports LoRA merging (`--lora <path>`) |
 | `cactus build` | Builds for ARM (`--apple` or `--android`) |
-| `cactus test` | Runs tests (`--ios` / `--android`, `--model [name/path]`, `--transcribe_model [name/path]`), `--precision` |
+| `cactus test` | Runs tests (`--ios` / `--android`, `--model [name/path]`, `--transcribe_model [name/path]`, `--only [test_name]`, `--precision`) |
 | `cactus transcribe [model]` | Transcribe audio file (`--file`) or live microphone |
 | `cactus clean` | Removes build artifacts |
 | `cactus --help` | Shows all commands and flags (always run this) |
@@ -195,6 +197,19 @@ git clone https://github.com/cactus-compute/cactus && cd cactus && source ./setu
 - **Keep It Simple**: Do not go beyond the scope of the GH issue, avoid bloated PRs, keep codes lean.
 - **Benchmark Your Changes**: Test performance impact, Cactus is performance-critical.
 - **Test everything**: A PR that fails to build is the biggest red flag, means it was not tested. 
+
+## Citation
+
+If you use Cactus in your research, please cite it as follows:
+
+```bibtex
+@software{cactus,
+  title        = {Cactus: AI Inference Engine for Phones & Wearables},
+  author       = {Ndubuaku, Henry and Cactus Team},
+  url          = {https://github.com/cactus-compute/cactus},
+  year         = {2025}
+}
+```
 
 ## Join The Community
 - [Reddit Channel](https://www.reddit.com/r/cactuscompute/)
