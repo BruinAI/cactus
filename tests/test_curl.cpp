@@ -83,7 +83,16 @@ struct CurlHttpCheck {
     bool pass = false;
     bool skip = false;
     std::string reason;
+    long http_code = 0;
+    std::string body_preview;
 };
+
+static size_t curl_write_to_string(char* ptr, size_t size, size_t nmemb, void* userdata) {
+    if (!userdata) return 0;
+    std::string* out = static_cast<std::string*>(userdata);
+    out->append(ptr, size * nmemb);
+    return size * nmemb;
+}
 
 static bool curl_supports_protocol(const char* name) {
 #if !CACTUS_TEST_HAS_CURL
@@ -104,30 +113,41 @@ CurlHttpCheck run_curl_http_request_check() {
     return {false, true, "curl/curl.h not available in include path"};
 #else
     if (!curl_supports_protocol("https")) {
-        return {false, false, "libcurl built without HTTPS protocol support"};
+        return {false, false, "libcurl built without HTTPS protocol support", 0, ""};
     }
 
     CURL* handle = curl_easy_init();
-    if (!handle) return {false, false, "curl_easy_init returned null"};
+    if (!handle) return {false, false, "curl_easy_init returned null", 0, ""};
 
     bool opts_ok = true;
-    opts_ok = opts_ok && (curl_easy_setopt(handle, CURLOPT_URL, "https://www.google.com/generate_204") == CURLE_OK);
-    opts_ok = opts_ok && (curl_easy_setopt(handle, CURLOPT_NOBODY, 1L) == CURLE_OK);
+    std::string body;
+    opts_ok = opts_ok && (curl_easy_setopt(handle, CURLOPT_URL, "https://sha256.badssl.com/") == CURLE_OK);
+    opts_ok = opts_ok && (curl_easy_setopt(handle, CURLOPT_HTTPGET, 1L) == CURLE_OK);
     opts_ok = opts_ok && (curl_easy_setopt(handle, CURLOPT_FOLLOWLOCATION, 1L) == CURLE_OK);
     opts_ok = opts_ok && (curl_easy_setopt(handle, CURLOPT_USERAGENT, "cactus-curl-test/1.0") == CURLE_OK);
+    opts_ok = opts_ok && (curl_easy_setopt(handle, CURLOPT_WRITEFUNCTION, curl_write_to_string) == CURLE_OK);
+    opts_ok = opts_ok && (curl_easy_setopt(handle, CURLOPT_WRITEDATA, &body) == CURLE_OK);
     opts_ok = opts_ok && (curl_easy_setopt(handle, CURLOPT_TIMEOUT_MS, 3000L) == CURLE_OK);
     opts_ok = opts_ok && (curl_easy_setopt(handle, CURLOPT_CONNECTTIMEOUT_MS, 2000L) == CURLE_OK);
     if (!opts_ok) {
         curl_easy_cleanup(handle);
-        return {false, false, "failed to configure curl options"};
+        return {false, false, "failed to configure curl options", 0, ""};
     }
 
     CURLcode rc = curl_easy_perform(handle);
     long http_code = 0;
     curl_easy_getinfo(handle, CURLINFO_RESPONSE_CODE, &http_code);
     curl_easy_cleanup(handle);
+    std::string body_preview = body.substr(0, std::min<size_t>(body.size(), 400));
 
-    if (rc == CURLE_OK && http_code >= 100) return {true, false, ""};
+    if (rc == CURLE_OK && http_code >= 200 && http_code < 400) {
+        if (body.find("badssl.com") != std::string::npos) {
+            return {true, false, "", http_code, body_preview};
+        }
+        std::ostringstream oss;
+        oss << "https request succeeded but response body did not contain expected marker";
+        return {false, false, oss.str(), http_code, body_preview};
+    }
 
     if (rc == CURLE_COULDNT_RESOLVE_HOST ||
         rc == CURLE_COULDNT_CONNECT ||
@@ -136,13 +156,13 @@ CurlHttpCheck run_curl_http_request_check() {
         rc == CURLE_PEER_FAILED_VERIFICATION) {
         std::ostringstream oss;
         oss << "network unavailable for outbound HTTPS (" << curl_easy_strerror(rc) << ")";
-        return {false, true, oss.str()};
+        return {false, true, oss.str(), http_code, body_preview};
     }
 
     std::ostringstream oss;
     oss << "request failed rc=" << static_cast<int>(rc)
         << " (" << curl_easy_strerror(rc) << "), http_code=" << http_code;
-    return {false, false, oss.str()};
+    return {false, false, oss.str(), http_code, body_preview};
 #endif
 }
 
@@ -169,6 +189,12 @@ int main() {
         runner.log_skip("http_request", http_check.reason);
     } else {
         runner.run_test("http_request", http_check.pass);
+        if (http_check.http_code > 0) {
+            std::cout << "  http_code: " << http_check.http_code << "\n";
+        }
+        if (!http_check.body_preview.empty()) {
+            std::cout << "  body_preview: " << http_check.body_preview << "\n";
+        }
         if (!http_check.pass && !http_check.reason.empty()) {
             std::cout << "  reason: " << http_check.reason << "\n";
         }
