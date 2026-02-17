@@ -160,6 +160,22 @@ static bool cloud_insecure_ssl_enabled() {
     return !(strict && strict[0] != '\0' && !(strict[0] == '0' && strict[1] == '\0'));
 }
 
+static void apply_curl_tls_trust(CURL* curl) {
+    if (!curl) return;
+    const char* ca_bundle = std::getenv("CACTUS_CA_BUNDLE");
+    if (ca_bundle && ca_bundle[0] != '\0') {
+        curl_easy_setopt(curl, CURLOPT_CAINFO, ca_bundle);
+    }
+#if defined(__ANDROID__)
+    const char* ca_path = std::getenv("CACTUS_CA_PATH");
+    if (ca_path && ca_path[0] != '\0') {
+        curl_easy_setopt(curl, CURLOPT_CAPATH, ca_path);
+    } else {
+        curl_easy_setopt(curl, CURLOPT_CAPATH, "/system/etc/security/cacerts");
+    }
+#endif
+}
+
 static size_t curl_write_cb(void* ptr, size_t size, size_t nmemb, void* userdata) {
     auto* s = static_cast<std::string*>(userdata);
     s->append(static_cast<char*>(ptr), size * nmemb);
@@ -252,6 +268,7 @@ static std::string cloud_transcribe(const std::string& audio_b64, const std::str
     } else {
         curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 1L);
         curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 2L);
+        apply_curl_tls_trust(curl);
     }
 
     CURLcode res = curl_easy_perform(curl);

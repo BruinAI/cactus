@@ -8,6 +8,9 @@ export CACTUS_CURL_ROOT
 MODEL_NAME="$1"
 TRANSCRIBE_MODEL_NAME="$2"
 VAD_MODEL_NAME="$3"
+RUN_ASR="${CACTUS_RUN_ASR:-0}"
+ASR_AUDIO_SOURCE="${CACTUS_ASR_AUDIO_SOURCE:-}"
+ASR_AUDIO_FILE="${CACTUS_ASR_AUDIO_FILE:-}"
 
 echo "Running Cactus tests on iOS..."
 echo "============================"
@@ -289,6 +292,21 @@ if ! cp -R "$assets_src" "$app_path/"; then
     echo "Warning: Could not copy test assets"
 fi
 
+if [ "$RUN_ASR" = "1" ]; then
+    if [ -z "$ASR_AUDIO_SOURCE" ] || [ ! -f "$ASR_AUDIO_SOURCE" ]; then
+        echo "Error: CACTUS_ASR_AUDIO_SOURCE must point to an existing audio file when CACTUS_RUN_ASR=1"
+        exit 1
+    fi
+    if [ -z "$ASR_AUDIO_FILE" ]; then
+        ASR_AUDIO_FILE=$(basename "$ASR_AUDIO_SOURCE")
+    fi
+    echo "Copying ASR audio file to app bundle..."
+    if ! cp "$ASR_AUDIO_SOURCE" "$app_path/$ASR_AUDIO_FILE"; then
+        echo "Error: Could not copy ASR audio file into app bundle"
+        exit 1
+    fi
+fi
+
 echo ""
 echo "Step 5: Running tests..."
 echo "------------------------"
@@ -303,18 +321,38 @@ if [ "$device_type" = "simulator" ]; then
         exit 1
     fi
 
-    echo "Launching tests..."
+    if [ "$RUN_ASR" = "1" ]; then
+        echo "Launching ASR transcription..."
+    else
+        echo "Launching tests..."
+    fi
     echo "Using model path: $model_dir"
     echo "Using transcribe model path: $transcribe_model_dir"
     echo "Using assets path: assets"
     echo "Using index path: assets"
 
-    SIMCTL_CHILD_CACTUS_TEST_MODEL="$model_dir" \
-    SIMCTL_CHILD_CACTUS_TEST_TRANSCRIBE_MODEL="$transcribe_model_dir" \
-    SIMCTL_CHILD_CACTUS_TEST_VAD_MODEL="$vad_model_dir" \
-    SIMCTL_CHILD_CACTUS_TEST_ASSETS="assets" \
-    SIMCTL_CHILD_CACTUS_INDEX_PATH="assets" \
-    xcrun simctl launch --console-pty "$device_uuid" "$bundle_id"
+    sim_env=(
+        "SIMCTL_CHILD_CACTUS_TEST_MODEL=$model_dir"
+        "SIMCTL_CHILD_CACTUS_TEST_TRANSCRIBE_MODEL=$transcribe_model_dir"
+        "SIMCTL_CHILD_CACTUS_TEST_VAD_MODEL=$vad_model_dir"
+        "SIMCTL_CHILD_CACTUS_TEST_ASSETS=assets"
+        "SIMCTL_CHILD_CACTUS_INDEX_PATH=assets"
+    )
+    if [ "$RUN_ASR" = "1" ]; then
+        sim_env+=("SIMCTL_CHILD_CACTUS_RUN_ASR=1")
+        sim_env+=("SIMCTL_CHILD_CACTUS_ASR_AUDIO_FILE=$ASR_AUDIO_FILE")
+    fi
+    if [ -n "$CACTUS_CLOUD_API_KEY" ]; then
+        sim_env+=("SIMCTL_CHILD_CACTUS_CLOUD_API_KEY=$CACTUS_CLOUD_API_KEY")
+    fi
+    if [ -n "$CACTUS_CLOUD_STRICT_SSL" ]; then
+        sim_env+=("SIMCTL_CHILD_CACTUS_CLOUD_STRICT_SSL=$CACTUS_CLOUD_STRICT_SSL")
+    fi
+    if [ -n "$CACTUS_CLOUD_HANDOFF_THRESHOLD" ]; then
+        sim_env+=("SIMCTL_CHILD_CACTUS_CLOUD_HANDOFF_THRESHOLD=$CACTUS_CLOUD_HANDOFF_THRESHOLD")
+    fi
+
+    env "${sim_env[@]}" xcrun simctl launch --console-pty "$device_uuid" "$bundle_id"
 else
     echo "Installing on: $device_name"
 
@@ -327,18 +365,39 @@ else
         exit 1
     fi
 
-    echo "Launching tests..."
+    if [ "$RUN_ASR" = "1" ]; then
+        echo "Launching ASR transcription..."
+    else
+        echo "Launching tests..."
+    fi
     echo "(Logs will be fetched from device after completion)"
     echo "Using model path: $model_dir"
     echo "Using transcribe model path: $transcribe_model_dir"
     echo "Using assets path: assets"
     echo "Using index path: assets"
 
-    launch_output=$(DEVICECTL_CHILD_CACTUS_TEST_MODEL="$model_dir" \
-    DEVICECTL_CHILD_CACTUS_TEST_TRANSCRIBE_MODEL="$transcribe_model_dir" \
-    DEVICECTL_CHILD_CACTUS_TEST_VAD_MODEL="$vad_model_dir" \
-    DEVICECTL_CHILD_CACTUS_TEST_ASSETS="assets" \
-    DEVICECTL_CHILD_CACTUS_INDEX_PATH="assets" \
+    device_env=(
+        "DEVICECTL_CHILD_CACTUS_TEST_MODEL=$model_dir"
+        "DEVICECTL_CHILD_CACTUS_TEST_TRANSCRIBE_MODEL=$transcribe_model_dir"
+        "DEVICECTL_CHILD_CACTUS_TEST_VAD_MODEL=$vad_model_dir"
+        "DEVICECTL_CHILD_CACTUS_TEST_ASSETS=assets"
+        "DEVICECTL_CHILD_CACTUS_INDEX_PATH=assets"
+    )
+    if [ "$RUN_ASR" = "1" ]; then
+        device_env+=("DEVICECTL_CHILD_CACTUS_RUN_ASR=1")
+        device_env+=("DEVICECTL_CHILD_CACTUS_ASR_AUDIO_FILE=$ASR_AUDIO_FILE")
+    fi
+    if [ -n "$CACTUS_CLOUD_API_KEY" ]; then
+        device_env+=("DEVICECTL_CHILD_CACTUS_CLOUD_API_KEY=$CACTUS_CLOUD_API_KEY")
+    fi
+    if [ -n "$CACTUS_CLOUD_STRICT_SSL" ]; then
+        device_env+=("DEVICECTL_CHILD_CACTUS_CLOUD_STRICT_SSL=$CACTUS_CLOUD_STRICT_SSL")
+    fi
+    if [ -n "$CACTUS_CLOUD_HANDOFF_THRESHOLD" ]; then
+        device_env+=("DEVICECTL_CHILD_CACTUS_CLOUD_HANDOFF_THRESHOLD=$CACTUS_CLOUD_HANDOFF_THRESHOLD")
+    fi
+
+    launch_output=$(env "${device_env[@]}" \
     xcrun devicectl device process launch --device "$device_uuid" "$bundle_id" 2>&1) || true
 
     echo "$launch_output"

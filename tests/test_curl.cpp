@@ -1,5 +1,7 @@
 #include "test_utils.h"
 
+#include <algorithm>
+#include <cstdlib>
 #include <iostream>
 #include <sstream>
 #include <string>
@@ -108,6 +110,28 @@ static bool curl_supports_protocol(const char* name) {
 #endif
 }
 
+static void configure_curl_tls(CURL* handle) {
+#if CACTUS_TEST_HAS_CURL
+    if (!handle) return;
+    curl_easy_setopt(handle, CURLOPT_SSL_VERIFYPEER, 1L);
+    curl_easy_setopt(handle, CURLOPT_SSL_VERIFYHOST, 2L);
+    const char* ca_bundle = std::getenv("CACTUS_CA_BUNDLE");
+    if (ca_bundle && ca_bundle[0] != '\0') {
+        curl_easy_setopt(handle, CURLOPT_CAINFO, ca_bundle);
+    }
+#if defined(__ANDROID__)
+    const char* ca_path = std::getenv("CACTUS_CA_PATH");
+    if (ca_path && ca_path[0] != '\0') {
+        curl_easy_setopt(handle, CURLOPT_CAPATH, ca_path);
+    } else {
+        curl_easy_setopt(handle, CURLOPT_CAPATH, "/system/etc/security/cacerts");
+    }
+#endif
+#else
+    (void)handle;
+#endif
+}
+
 CurlHttpCheck run_curl_http_request_check() {
 #if !CACTUS_TEST_HAS_CURL
     return {false, true, "curl/curl.h not available in include path"};
@@ -129,6 +153,7 @@ CurlHttpCheck run_curl_http_request_check() {
     opts_ok = opts_ok && (curl_easy_setopt(handle, CURLOPT_WRITEDATA, &body) == CURLE_OK);
     opts_ok = opts_ok && (curl_easy_setopt(handle, CURLOPT_TIMEOUT_MS, 3000L) == CURLE_OK);
     opts_ok = opts_ok && (curl_easy_setopt(handle, CURLOPT_CONNECTTIMEOUT_MS, 2000L) == CURLE_OK);
+    configure_curl_tls(handle);
     if (!opts_ok) {
         curl_easy_cleanup(handle);
         return {false, false, "failed to configure curl options", 0, ""};
@@ -147,16 +172,6 @@ CurlHttpCheck run_curl_http_request_check() {
         std::ostringstream oss;
         oss << "https request succeeded but response body did not contain expected marker";
         return {false, false, oss.str(), http_code, body_preview};
-    }
-
-    if (rc == CURLE_COULDNT_RESOLVE_HOST ||
-        rc == CURLE_COULDNT_CONNECT ||
-        rc == CURLE_OPERATION_TIMEDOUT ||
-        rc == CURLE_SSL_CONNECT_ERROR ||
-        rc == CURLE_PEER_FAILED_VERIFICATION) {
-        std::ostringstream oss;
-        oss << "network unavailable for outbound HTTPS (" << curl_easy_strerror(rc) << ")";
-        return {false, true, oss.str(), http_code, body_preview};
     }
 
     std::ostringstream oss;
