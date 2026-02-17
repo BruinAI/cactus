@@ -276,20 +276,55 @@ transcribe_model_src="$PROJECT_ROOT/weights/$transcribe_model_dir"
 vad_model_src="$PROJECT_ROOT/weights/$vad_model_dir"
 assets_src="$PROJECT_ROOT/tests/assets"
 
+if [ ! -d "$model_src" ] || [ ! -f "$model_src/config.txt" ]; then
+    echo "Error: model weights missing or invalid at $model_src"
+    exit 1
+fi
+if [ ! -d "$transcribe_model_src" ] || [ ! -f "$transcribe_model_src/config.txt" ]; then
+    echo "Error: transcribe model weights missing or invalid at $transcribe_model_src"
+    exit 1
+fi
+if [ ! -d "$vad_model_src" ] || [ ! -f "$vad_model_src/config.txt" ]; then
+    echo "Error: VAD model weights missing or invalid at $vad_model_src"
+    exit 1
+fi
+
 echo "Copying model weights to app bundle..."
+rm -rf "$app_path/$model_dir" "$app_path/$transcribe_model_dir" "$app_path/$vad_model_dir"
 if ! cp -R "$model_src" "$app_path/"; then
-    echo "Warning: Could not copy model weights"
+    echo "Error: Could not copy model weights from $model_src"
+    exit 1
 fi
 if ! cp -R "$transcribe_model_src" "$app_path/"; then
-    echo "Warning: Could not copy transcribe model weights"
+    echo "Error: Could not copy transcribe model weights from $transcribe_model_src"
+    exit 1
 fi
 if ! cp -R "$vad_model_src" "$app_path/"; then
-    echo "Warning: Could not copy VAD model weights"
+    echo "Error: Could not copy VAD model weights from $vad_model_src"
+    exit 1
+fi
+
+# Whisper/Moonshine init expects a bundled "<transcribe_model>/vad" directory.
+transcribe_lower=$(echo "$transcribe_model_dir" | tr '[:upper:]' '[:lower:]')
+if [[ "$transcribe_lower" == *"whisper"* || "$transcribe_lower" == *"moonshine"* ]]; then
+    if [ ! -f "$app_path/$transcribe_model_dir/vad/config.txt" ]; then
+        echo "Transcribe model missing bundled VAD; injecting from $vad_model_src"
+        mkdir -p "$app_path/$transcribe_model_dir/vad"
+        if ! rsync -a "$vad_model_src/" "$app_path/$transcribe_model_dir/vad/"; then
+            echo "Error: Failed to inject VAD into transcribe model bundle"
+            exit 1
+        fi
+    fi
+    if [ ! -f "$app_path/$transcribe_model_dir/vad/config.txt" ]; then
+        echo "Error: bundled transcribe VAD is missing config.txt after packaging"
+        exit 1
+    fi
 fi
 
 echo "Copying test assets to app bundle..."
 if ! cp -R "$assets_src" "$app_path/"; then
-    echo "Warning: Could not copy test assets"
+    echo "Error: Could not copy test assets from $assets_src"
+    exit 1
 fi
 
 if [ "$RUN_ASR" = "1" ]; then

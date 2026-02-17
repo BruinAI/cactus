@@ -1036,6 +1036,13 @@ def cmd_test(args):
     print_color(BLUE, "Running test suite...")
     print("=" * 20)
 
+    if getattr(args, 'ios', False) and not getattr(args, 'reconvert', False):
+        print_color(
+            YELLOW,
+            "Warning: iOS tests without --reconvert may use stale or inconsistent local weights. "
+            "If tests fail unexpectedly, rerun with --reconvert."
+        )
+
     if getattr(args, 'large', False):
         args.model = 'LiquidAI/LFM2.5-VL-1.6B'
         args.transcribe_model = 'openai/whisper-small'
@@ -1160,6 +1167,25 @@ def cmd_clean(args):
     print()
     print("Removing compiled libraries and frameworks...")
 
+    preserve_roots = [
+        PROJECT_ROOT / "libs" / "curl",
+        PROJECT_ROOT / "android" / "mbedtls",
+        PROJECT_ROOT / "libs" / "mbedtls",
+    ]
+
+    def should_preserve_artifact(path: Path) -> bool:
+        try:
+            resolved = path.resolve()
+        except FileNotFoundError:
+            return False
+        for root in preserve_roots:
+            try:
+                if resolved.is_relative_to(root.resolve()):
+                    return True
+            except FileNotFoundError:
+                continue
+        return False
+
     so_count = 0
     for so_file in PROJECT_ROOT.rglob("*.so"):
         so_file.unlink()
@@ -1167,10 +1193,17 @@ def cmd_clean(args):
     print(f"Removed {so_count} .so files" if so_count else "No .so files found")
 
     a_count = 0
+    a_preserved_count = 0
     for a_file in PROJECT_ROOT.rglob("*.a"):
+        if should_preserve_artifact(a_file):
+            a_preserved_count += 1
+            continue
         a_file.unlink()
         a_count += 1
-    print(f"Removed {a_count} .a files" if a_count else "No .a files found")
+    if a_count or a_preserved_count:
+        print(f"Removed {a_count} .a files (preserved {a_preserved_count} vendored static libs)")
+    else:
+        print("No .a files found")
 
     bin_count = 0
     for bin_file in PROJECT_ROOT.rglob("*.bin"):
