@@ -156,8 +156,6 @@ static std::string get_cloud_api_key() {
 }
 
 static bool cloud_insecure_ssl_enabled() {
-    // Insecure TLS is the default for this endpoint right now; opt into strict
-    // verification by setting CACTUS_CLOUD_STRICT_SSL=1.
     const char* strict = std::getenv("CACTUS_CLOUD_STRICT_SSL");
     return !(strict && strict[0] != '\0' && !(strict[0] == '0' && strict[1] == '\0'));
 }
@@ -248,8 +246,7 @@ static std::string cloud_transcribe(const std::string& audio_b64, const std::str
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, curl_write_cb);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response_body);
     curl_easy_setopt(curl, CURLOPT_TIMEOUT, 15L);
-    if (cloud_insecure_ssl_enabled()) {
-        // Equivalent to curl -k, only for cloud handoff testing.
+    if (cloud_insecure_ssl_enabled()) {// current default path is not verifying ssl certs
         curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
         curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L);
     } else {
