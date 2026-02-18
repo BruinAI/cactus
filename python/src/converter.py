@@ -12,7 +12,7 @@ from .config_utils import cfg_get, detect_model_type, extract_base_config, extra
 from .weight_patterns import (
     EMBED_NAMES, OUTPUT_NAMES, OUTPUT_NORM_NAMES, LAYER_PREFIXES,
     VISION_ITEMS, PROJECTOR_WEIGHTS, WHISPER_GLOBAL_WEIGHTS, MOONSHINE_GLOBAL_WEIGHTS,
-    ADAPTER_GLOBAL_WEIGHTS, get_layer_weight_patterns, get_vision_layer_weights
+    get_layer_weight_patterns, get_vision_layer_weights
 )
 
 
@@ -47,11 +47,16 @@ def convert_hf_model_weights(model, output_dir, precision='INT8', args=None):
     if is_vlm and vision_cfg is not None:
         model_config.update(extract_vision_config(config, vision_cfg))
 
-    if model_type_str in ('adapter', 'adapter_mlp', 'moonshine_adapter'):
-        detected_model_type = 'adapter_mlp'
-        model_type_str = 'adapter_mlp'
-        model_config['model_type'] = detected_model_type
-        model_config['num_layers'] = 0
+    if model_type_str in (
+        'cloud_handoff',
+        'cloud-handoff',
+        'moonshine_cloud_handoff',
+        'moonshine-cloud-handoff',
+        'cloudhandoff',
+    ) or detected_model_type == 'cloud_handoff':
+        raise ValueError(
+            "cloud_handoff is not an LLM. Use `cactus convert-cloud-handoff <repo>`."
+        )
     elif detected_model_type == 'lfm2':
         model_config.update(extract_lfm2_config(cfg))
     elif detected_model_type == 'moonshine':
@@ -99,14 +104,6 @@ def convert_hf_model_weights(model, output_dir, precision='INT8', args=None):
         model_config['enc_hidden_act'] = cfg.encoder_hidden_act
         model_config['num_encoder_layers'] = cfg.encoder_num_hidden_layers
         model_config['num_decoder_layers'] = cfg.decoder_num_hidden_layers
-
-    elif model_type_str == 'adapter_mlp':
-        for name, save_name in ADAPTER_GLOBAL_WEIGHTS:
-            if name in state_dict:
-                tensor = state_dict[name]
-                save_tensor_with_header(tensor, output_dir / save_name, precision, transpose=False, stats_tracker=quantization_stats, args=args, model_type=detected_model_type)
-                saved_tensor_full_names.add(name)
-        embedding_found = True
 
     if embedding_found:
         embedding_norm_names = {'emb_ln.weight': 'embedding_layernorm.weight', 'emb_ln.bias': 'embedding_layernorm.bias'}

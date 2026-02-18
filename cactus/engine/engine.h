@@ -729,6 +729,33 @@ public:
         const std::vector<float>& stft_power,
         size_t num_frames) const;
 
+    float overlap_pitch_lag_cv(
+        const std::vector<float>& waveform,
+        size_t sample_rate,
+        size_t frame_length = 512,
+        size_t hop_length = 128,
+        float fmin = 80.0f,
+        float fmax = 300.0f,
+        float energy_gate = 0.01f) const;
+
+    float overlap_spectral_peak_spacing_cv_mean(
+        const std::vector<float>& waveform,
+        size_t sample_rate,
+        size_t frame_length = 512,
+        size_t hop_length = 128,
+        size_t n_fft = 512,
+        float peak_prominence = 6.0f,
+        float energy_gate = 0.01f) const;
+
+    float overlap_yin_conf_p95(
+        const std::vector<float>& waveform,
+        size_t sample_rate,
+        size_t frame_length = 512,
+        size_t hop_length = 128,
+        float fmin = 80.0f,
+        float fmax = 300.0f,
+        float energy_gate = 0.01f) const;
+
     const std::vector<float>& get_mel_filters() const { return mel_filters_; }
 
     size_t get_num_mel_filters() const { return num_mel_filters_; }
