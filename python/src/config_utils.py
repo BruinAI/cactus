@@ -61,10 +61,10 @@ def detect_model_type(cfg, config, output_dir=None):
         return 'lfm2'
     elif 'qwen' in model_type_str:
         return 'qwen'
+    elif 'cloud_handoff' in model_type_str or 'cloud-handoff' in model_type_str or 'handoff' in model_type_str:
+        return 'cloud_handoff'
     elif 'moonshine' in model_type_str:
         return 'moonshine'
-    elif 'adapter' in model_type_str:
-        return 'adapter_mlp'
     elif 'llama' in model_type_str:
         if output_dir and 'smol' in str(output_dir):
             return 'smol'
