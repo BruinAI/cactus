@@ -615,6 +615,71 @@ std::vector<float> AudioProcessor::compute_spectrogram(
     return output;
 }
 
+void AudioProcessor::compute_stft_power(
+    const std::vector<float>& waveform,
+    size_t sampling_rate,
+    const SpectrogramConfig& config,
+    std::vector<float>& stft_power,
+    std::vector<float>& freqs_hz,
+    size_t& num_frames) const {
+
+    stft_power.clear();
+    freqs_hz.clear();
+    num_frames = 0;
+
+    if (waveform.empty()) {
+        return;
+    }
+    if (config.hop_length == 0 || config.frame_length == 0 || config.n_fft == 0) {
+        throw std::invalid_argument("Invalid STFT config: n_fft, frame_length, and hop_length must be > 0");
+    }
+
+    const size_t n_samples = waveform.size();
+    const size_t pad_length = config.center ? config.frame_length / 2 : 0;
+    const size_t padded_length = n_samples + 2 * pad_length;
+    if (padded_length < config.frame_length) {
+        return;
+    }
+
+    num_frames = 1 + (padded_length - config.frame_length) / config.hop_length;
+    const size_t num_frequency_bins = config.n_fft / 2 + 1;
+    if (num_frames == 0 || num_frequency_bins == 0) {
+        return;
+    }
+
+    stft_power.resize(num_frequency_bins * num_frames, 0.0f);
+    compute_spectrogram_f32(
+        waveform.data(),
+        waveform.size(),
+        nullptr,
+        0,
+        config.frame_length,
+        config.hop_length,
+        &config.n_fft,
+        stft_power.data(),
+        config.power,
+        config.center,
+        config.pad_mode,
+        config.onesided,
+        config.dither,
+        nullptr,
+        nullptr,
+        0,
+        config.mel_floor,
+        nullptr,
+        config.reference,
+        config.min_value,
+        nullptr,
+        config.remove_dc_offset
+    );
+
+    freqs_hz.resize(num_frequency_bins, 0.0f);
+    const float fft_hz = static_cast<float>(sampling_rate) / static_cast<float>(config.n_fft);
+    for (size_t i = 0; i < num_frequency_bins; i++) {
+        freqs_hz[i] = static_cast<float>(i) * fft_hz;
+    }
+}
+
 static void high_freq_energy_ratio_sequence(
     const std::vector<float>& stft_power,
     const std::vector<float>& freqs_hz,
