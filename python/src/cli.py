@@ -1485,8 +1485,7 @@ def cmd_convert_cloud_handoff(args):
         print("Install with: pip install huggingface_hub safetensors torch")
         return 1
 
-    from .converter_cloud_handoff import convert_hf_cloud_handoff_weights
-    from .tensor_io import format_config_value
+    from .converter import convert_cloud_handoff_weights
 
     repo_id = args.repo_id
     if args.output_dir is None:
@@ -1548,7 +1547,7 @@ def cmd_convert_cloud_handoff(args):
             print_color(YELLOW, "Warning: Could not parse classifier_meta.json; continuing.")
 
     try:
-        config = convert_hf_cloud_handoff_weights(
+        config = convert_cloud_handoff_weights(
             state_dict=state_dict,
             output_dir=output_dir,
             precision=args.precision,
@@ -1558,16 +1557,6 @@ def cmd_convert_cloud_handoff(args):
     except Exception as e:
         print_color(RED, f"Error converting Cloud Handoff weights: {e}")
         return 1
-
-    if args.precision in ("INT8", "INT4"):
-        config["precision"] = "FP16"
-    else:
-        config["precision"] = args.precision
-
-    config_path = output_dir / "config.txt"
-    with open(config_path, "w") as f:
-        for key, value in config.items():
-            f.write(f"{key}={format_config_value(value)}\n")
 
     for filename in ("classifier_meta.json", "classifier_features.json"):
         src = local_dir / filename
