@@ -1488,11 +1488,7 @@ def cmd_convert_cloud_handoff(args):
     from .converter import convert_cloud_handoff_weights
 
     repo_id = args.repo_id
-    if args.output_dir is None:
-        output_dir = get_weights_dir(repo_id)
-    else:
-        output_dir = Path(args.output_dir)
-    output_dir.mkdir(parents=True, exist_ok=True)
+    output_dir = Path(args.output_dir) if args.output_dir is not None else None
 
     snapshot_kwargs = {
         "repo_id": repo_id,
@@ -1545,6 +1541,16 @@ def cmd_convert_cloud_handoff(args):
             meta = json.loads(meta_path.read_text())
         except Exception:
             print_color(YELLOW, "Warning: Could not parse classifier_meta.json; continuing.")
+
+    if output_dir is None:
+        base_model_id = meta.get("base_model_id") if isinstance(meta, dict) else None
+        if isinstance(base_model_id, str) and base_model_id.strip():
+            output_dir = get_weights_dir(base_model_id) / "cloud_handoff"
+        else:
+            output_dir = get_weights_dir(repo_id)
+        print_color(BLUE, f"Using output directory: {output_dir}")
+
+    output_dir.mkdir(parents=True, exist_ok=True)
 
     try:
         config = convert_cloud_handoff_weights(
@@ -1826,7 +1832,7 @@ def create_parser():
     )
     cloud_handoff_parser.add_argument('repo_id', help='HuggingFace model repo ID')
     cloud_handoff_parser.add_argument('output_dir', nargs='?', default=None,
-                                      help='Output directory (default: weights/<repo_name>)')
+                                      help='Output directory (default: weights/<base_model>/cloud_handoff)')
     cloud_handoff_parser.add_argument('--precision', choices=['INT4', 'INT8', 'FP16'], default='FP16',
                                       help='Quantization precision (default: FP16)')
     cloud_handoff_parser.add_argument('--cache-dir', help='Cache directory for HuggingFace models')

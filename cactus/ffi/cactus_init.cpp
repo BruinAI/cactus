@@ -10,6 +10,7 @@
 #include <sys/stat.h>
 #include <cstdlib>
 #include <chrono>
+#include <filesystem>
 
 using namespace cactus::engine;
 using namespace cactus::ffi;
@@ -413,6 +414,19 @@ cactus_model_t cactus_init(const char* model_path, const char* corpus_dir, bool 
                 CACTUS_LOG_ERROR("init", last_error_message);
                 delete handle;
                 return nullptr;
+            }
+
+            const std::string cloud_handoff_path = model_path_str + "/cloud_handoff";
+            if (std::filesystem::exists(cloud_handoff_path) && std::filesystem::is_directory(cloud_handoff_path)) {
+                handle->cloud_handoff_model = std::make_unique<WhisperCloudHandoffModel>();
+                std::string cloud_handoff_error;
+                if (!handle->cloud_handoff_model->init(cloud_handoff_path, &cloud_handoff_error)) {
+                    last_error_message = "Failed to initialize cloud_handoff model at " + cloud_handoff_path + ": " + cloud_handoff_error;
+                    CACTUS_LOG_ERROR("init", last_error_message);
+                    delete handle;
+                    return nullptr;
+                }
+                CACTUS_LOG_INFO("init", "Loaded cloud_handoff sidecar model from: " << cloud_handoff_path);
             }
         }
 

@@ -928,6 +928,54 @@ private:
     size_t last_token_count_ = 0;
 };
 
+class WhisperCloudHandoffModel {
+public:
+    WhisperCloudHandoffModel() = default;
+    ~WhisperCloudHandoffModel() = default;
+
+    bool init(const std::string& model_folder, std::string* error = nullptr);
+    bool ready() const { return initialized_; }
+
+    const std::vector<std::string>& feature_names() const { return feature_names_; }
+    size_t input_dim() const { return input_dim_; }
+    float threshold() const { return threshold_; }
+    float high_freq_cutoff_hz() const { return high_freq_cutoff_hz_; }
+
+    float predict_probability(const std::vector<float>& features) const;
+    bool predict_handoff(const std::vector<float>& features, float* out_probability = nullptr) const;
+
+private:
+    static float gelu_tanh(float x);
+    static bool parse_json_float(const std::string& json, const std::string& key, float& out_value);
+    static bool parse_json_string(const std::string& json, const std::string& key, std::string& out_value);
+
+    bool load_tensor_f32(
+        const std::string& path,
+        std::vector<float>& out_data,
+        std::vector<size_t>& out_shape,
+        std::string* error);
+
+    void set_error(std::string* error, const std::string& message) const;
+
+    bool initialized_ = false;
+    std::string activation_ = "relu";
+    float threshold_ = 0.5f;
+    float high_freq_cutoff_hz_ = 3000.0f;
+
+    size_t input_dim_ = 0;
+    size_t hidden_dim_ = 0;
+    size_t output_dim_ = 0;
+
+    std::vector<float> fc1_weight_;  // [hidden_dim, input_dim]
+    std::vector<float> fc1_bias_;    // [hidden_dim]
+    std::vector<float> fc2_weight_;  // [output_dim, hidden_dim]
+    std::vector<float> fc2_bias_;    // [output_dim]
+
+    std::vector<float> feature_mean_;
+    std::vector<float> feature_std_;
+    std::vector<std::string> feature_names_;
+};
+
 class SileroVADModel : public Model {
 public:
     static constexpr size_t CONTEXT_SIZE = 64;

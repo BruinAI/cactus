@@ -701,6 +701,14 @@ public:
         const std::vector<float>& waveform,
         const SpectrogramConfig& config);
 
+    void compute_stft_power(
+        const std::vector<float>& waveform,
+        size_t sampling_rate,
+        const SpectrogramConfig& config,
+        std::vector<float>& stft_power,
+        std::vector<float>& freqs_hz,
+        size_t& num_frames) const;
+
     float high_freq_energy_ratio_mean(
         const std::vector<float>& stft_power,
         const std::vector<float>& freqs_hz,

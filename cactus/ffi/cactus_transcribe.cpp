@@ -9,6 +9,7 @@
 #include <cmath>
 #include <algorithm>
 #include <cctype>
+#include <unordered_map>
 
 using namespace cactus::engine;
 using namespace cactus::ffi;
@@ -103,7 +104,9 @@ int cactus_transcribe(
         size_t top_k, max_tokens, tool_rag_top_k;
         std::vector<std::string> stop_sequences;
         bool force_tools, include_stop_sequences, use_vad, telemetry_enabled;
+        bool require_cloud_handoff = false;
         float cloud_handoff_threshold = handle->model->get_config().default_cloud_handoff_threshold;
+        const std::string opts = options_json ? options_json : "";
         parse_options_json(
             options_json ? options_json : "", temperature,
             top_p, top_k, max_tokens, stop_sequences,
@@ -111,7 +114,6 @@ int cactus_transcribe(
             include_stop_sequences, use_vad, telemetry_enabled
         );
         {
-            const std::string opts = options_json ? options_json : "";
             size_t pos = opts.find("\"cloud_handoff_threshold\"");
             if (pos != std::string::npos) {
                 pos = opts.find(':', pos);
@@ -121,6 +123,16 @@ int cactus_transcribe(
                     try {
                         cloud_handoff_threshold = std::stof(opts.substr(pos));
                     } catch (...) {}
+                }
+            }
+
+            pos = opts.find("\"require_cloud_handoff\"");
+            if (pos != std::string::npos) {
+                pos = opts.find(':', pos);
+                if (pos != std::string::npos) {
+                    ++pos;
+                    while (pos < opts.size() && std::isspace(static_cast<unsigned char>(opts[pos]))) ++pos;
+                    require_cloud_handoff = (opts.substr(pos, 4) == "true");
                 }
             }
         }
@@ -133,6 +145,22 @@ int cactus_transcribe(
         (void)telemetry_enabled;
 
         bool is_moonshine = handle->model->get_config().model_type == cactus::engine::Config::ModelType::MOONSHINE;
+        WhisperCloudHandoffModel* cloud_handoff_model = handle->cloud_handoff_model.get();
+        bool use_cloud_handoff_model = (!is_moonshine && cloud_handoff_model != nullptr && cloud_handoff_model->ready());
+        if (!use_cloud_handoff_model) {
+            if (is_moonshine) {
+                CACTUS_LOG_WARN("cloud_handoff", "Cloud handoff classifier currently supports Whisper path only");
+            } else {
+                CACTUS_LOG_WARN("cloud_handoff", "Cloud handoff sidecar not loaded; classifier gate disabled");
+            }
+            if (require_cloud_handoff) {
+                const std::string err = "require_cloud_handoff=true but cloud_handoff classifier is unavailable";
+                CACTUS_LOG_ERROR("cloud_handoff", err);
+                handle_error_response(err, response_buffer, buffer_size);
+                cactus::telemetry::recordTranscription(handle->model_name.c_str(), false, 0.0, 0.0, 0.0, 0, err.c_str());
+                return -1;
+            }
+        }
 
         std::vector<float> audio_buffer;
         if (audio_file_path == nullptr) {
@@ -183,6 +211,57 @@ int cactus_transcribe(
             }
         }
 
+        std::vector<float> waveform_features = audio_buffer;
+        float overlap_pitch_lag_cv = 0.0f;
+        float overlap_spectral_peak_spacing_cv_mean = 0.0f;
+        float overlap_yin_conf_p95 = 0.0f;
+        float noise_hf_energy_ratio_mean = 0.0f;
+        float noise_spectral_entropy_std = 0.0f;
+
+        if (use_cloud_handoff_model) {
+            AudioProcessor feature_ap;
+            overlap_pitch_lag_cv = feature_ap.overlap_pitch_lag_cv(waveform_features, WHISPER_SAMPLE_RATE);
+            overlap_spectral_peak_spacing_cv_mean = feature_ap.overlap_spectral_peak_spacing_cv_mean(
+                waveform_features, WHISPER_SAMPLE_RATE);
+            overlap_yin_conf_p95 = feature_ap.overlap_yin_conf_p95(waveform_features, WHISPER_SAMPLE_RATE);
+
+            AudioProcessor::SpectrogramConfig stft_cfg{};
+            stft_cfg.n_fft = 512;
+            stft_cfg.frame_length = 512;
+            stft_cfg.hop_length = 128;
+            stft_cfg.power = 2.0f;
+            stft_cfg.center = true;
+            stft_cfg.pad_mode = "reflect";
+            stft_cfg.onesided = true;
+            stft_cfg.dither = 0.0f;
+            stft_cfg.mel_floor = 1e-10f;
+            stft_cfg.log_mel = nullptr;
+            stft_cfg.reference = 1.0f;
+            stft_cfg.min_value = 1e-10f;
+            stft_cfg.remove_dc_offset = false;
+
+            std::vector<float> stft_power;
+            std::vector<float> stft_freqs_hz;
+            size_t stft_num_frames = 0;
+            feature_ap.compute_stft_power(
+                waveform_features,
+                WHISPER_SAMPLE_RATE,
+                stft_cfg,
+                stft_power,
+                stft_freqs_hz,
+                stft_num_frames);
+            if (stft_num_frames > 0) {
+                noise_hf_energy_ratio_mean = feature_ap.high_freq_energy_ratio_mean(
+                    stft_power,
+                    stft_freqs_hz,
+                    stft_num_frames,
+                    cloud_handoff_model->high_freq_cutoff_hz());
+                noise_spectral_entropy_std = feature_ap.spectral_entropy_std(
+                    stft_power,
+                    stft_num_frames);
+            }
+        }
+
         if (!is_moonshine) {
             auto cfg = get_whisper_spectrogram_config();
             AudioProcessor ap;
@@ -199,6 +278,69 @@ int cactus_transcribe(
         }
 
         CACTUS_LOG_DEBUG("transcribe", "Audio features prepared, size: " << audio_buffer.size());
+
+        float cloud_handoff_classifier_prob = 0.0f;
+        bool cloud_handoff_classifier_fire = false;
+        bool cloud_handoff_classifier_used = false;
+        if (use_cloud_handoff_model) {
+            std::vector<float> encoder_mean_features;
+            try {
+                encoder_mean_features = handle->model->get_audio_embeddings(audio_buffer);
+            } catch (const std::exception& e) {
+                CACTUS_LOG_WARN("cloud_handoff", "Failed to compute encoder mean features: " << e.what());
+                use_cloud_handoff_model = false;
+                if (require_cloud_handoff) {
+                    const std::string err = "require_cloud_handoff=true but failed to compute encoder features";
+                    CACTUS_LOG_ERROR("cloud_handoff", err << ": " << e.what());
+                    handle_error_response(err, response_buffer, buffer_size);
+                    cactus::telemetry::recordTranscription(handle->model_name.c_str(), false, 0.0, 0.0, 0.0, 0, err.c_str());
+                    return -1;
+                }
+            }
+
+            if (use_cloud_handoff_model) {
+                std::unordered_map<std::string, float> feature_values;
+                feature_values.reserve(encoder_mean_features.size() + 8);
+                for (size_t i = 0; i < encoder_mean_features.size(); i++) {
+                    feature_values["whisper_encoder_mean_" + std::to_string(i)] = encoder_mean_features[i];
+                }
+                feature_values["overlap::pitch_lag_cv"] = overlap_pitch_lag_cv;
+                feature_values["overlap::spectral_peak_spacing_cv_mean"] = overlap_spectral_peak_spacing_cv_mean;
+                feature_values["overlap::yin_conf_p95"] = overlap_yin_conf_p95;
+                feature_values["noise::hf_energy_ratio_mean"] = noise_hf_energy_ratio_mean;
+                feature_values["noise::spectral_entropy_std"] = noise_spectral_entropy_std;
+
+                const auto& feature_order = cloud_handoff_model->feature_names();
+                std::vector<float> classifier_input;
+                classifier_input.reserve(feature_order.size());
+                for (const auto& feature_name : feature_order) {
+                    const auto it = feature_values.find(feature_name);
+                    classifier_input.push_back(it != feature_values.end() ? it->second : 0.0f);
+                }
+
+                if (classifier_input.size() != cloud_handoff_model->input_dim()) {
+                    classifier_input.resize(cloud_handoff_model->input_dim(), 0.0f);
+                }
+
+                cloud_handoff_classifier_fire = cloud_handoff_model->predict_handoff(
+                    classifier_input,
+                    &cloud_handoff_classifier_prob);
+                cloud_handoff_classifier_used = true;
+
+                CACTUS_LOG_DEBUG(
+                    "cloud_handoff",
+                    "classifier_prob=" << cloud_handoff_classifier_prob
+                        << ", threshold=" << cloud_handoff_model->threshold()
+                        << ", fire=" << (cloud_handoff_classifier_fire ? "true" : "false"));
+            }
+        }
+        if (require_cloud_handoff && !cloud_handoff_classifier_used) {
+            const std::string err = "require_cloud_handoff=true but classifier inference did not run";
+            CACTUS_LOG_ERROR("cloud_handoff", err);
+            handle_error_response(err, response_buffer, buffer_size);
+            cactus::telemetry::recordTranscription(handle->model_name.c_str(), false, 0.0, 0.0, 0.0, 0, err.c_str());
+            return -1;
+        }
 
         auto* tokenizer = handle->model->get_tokenizer();
         if (!tokenizer) {
@@ -317,14 +459,26 @@ int cactus_transcribe(
             cleaned_text.erase(0, 1);
         }
 
-        bool cloud_handoff = false;
+        bool cloud_handoff = cloud_handoff_classifier_fire;
         if (!cleaned_text.empty() && cleaned_text.length() > 5) {
              if (cloud_handoff_threshold > 0.0f && max_token_entropy_norm > cloud_handoff_threshold) {
                  cloud_handoff = true;
              }
         }
 
-        std::string json = construct_response_json(cleaned_text, {}, time_to_first_token, total_time_ms, prefill_tps, decode_tps, prompt_tokens, completion_tokens, confidence, cloud_handoff);
+        std::string json = construct_response_json(
+            cleaned_text,
+            {},
+            time_to_first_token,
+            total_time_ms,
+            prefill_tps,
+            decode_tps,
+            prompt_tokens,
+            completion_tokens,
+            confidence,
+            cloud_handoff,
+            cloud_handoff_classifier_used,
+            cloud_handoff_classifier_prob);
 
         if (json.size() >= buffer_size) {
             handle_error_response("Response buffer too small", response_buffer, buffer_size);

@@ -105,11 +105,11 @@ std::string extract_json_number(const std::string& json, const std::string& key)
     if (start == std::string::npos) return "";
     start += pattern.length();
     while (start < json.length() && std::isspace(json[start])) start++;
-    size_t end = start;
-    while (end < json.length() && (isdigit(json[end]) || json[end] == '.' || json[end] == '-')) {
-        end++;
-    }
-    return json.substr(start, end - start);
+    const char* begin = json.c_str() + start;
+    char* end_ptr = nullptr;
+    std::strtod(begin, &end_ptr);
+    if (end_ptr == begin) return "";
+    return std::string(begin, static_cast<size_t>(end_ptr - begin));
 }
 
 size_t visible_length(const std::string& s) {
@@ -213,6 +213,8 @@ int transcribe_file(cactus_model_t model, const std::string& audio_path, const s
 
     std::string json_str(response_buffer.data());
     bool cloud_handoff = json_str.find("\"cloud_handoff\":true") != std::string::npos;
+    bool classifier_used = json_str.find("\"cloud_handoff_classifier_used\":true") != std::string::npos;
+    std::string classifier_prob = extract_json_number(json_str, "cloud_handoff_classifier_prob");
 
     std::string time_str;
     size_t time_pos = json_str.find("\"total_time_ms\":");
@@ -234,6 +236,14 @@ int transcribe_file(cactus_model_t model, const std::string& audio_path, const s
     stats << "\n" << colored("[cloud_handoff: ", Color::GRAY)
           << (cloud_handoff ? colored("true", Color::YELLOW) : colored("false", Color::GREEN))
           << colored("]", Color::GRAY);
+    stats << "\n" << colored("[cloud_handoff_classifier_used: ", Color::GRAY)
+          << (classifier_used ? colored("true", Color::CYAN) : colored("false", Color::GRAY))
+          << colored("]", Color::GRAY);
+    if (classifier_used && !classifier_prob.empty()) {
+        stats << "\n" << colored("[cloud_handoff_classifier_prob: ", Color::GRAY)
+              << colored(classifier_prob, Color::CYAN)
+              << colored("]", Color::GRAY);
+    }
 
     std::cout << stats.str() << "\n";
 
