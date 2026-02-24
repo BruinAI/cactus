@@ -1,11 +1,16 @@
 import os
+import json
 import re
+import shutil
 from pathlib import Path
 
 try:
     import torch
 except ImportError:
     torch = None
+
+from huggingface_hub import snapshot_download
+from safetensors.torch import load_file
 
 from .tensor_io import save_tensor_with_header, create_quantization_stats, print_quantization_summary, format_config_value
 from .config_utils import cfg_get, detect_model_type, extract_base_config, extract_vision_config, extract_lfm2_config, is_vlm_model, extract_moonshine_config
@@ -56,7 +61,8 @@ def convert_hf_model_weights(model, output_dir, precision='INT8', args=None):
         'cloudhandoff',
     ) or detected_model_type == 'cloud_handoff':
         raise ValueError(
-            "cloud_handoff is not an LLM. Use `cactus convert-cloud-handoff <repo>`."
+            "cloud_handoff is not an LLM checkpoint. Convert a Whisper model instead; "
+            "Whisper conversion bundles cloud_handoff automatically."
         )
     elif detected_model_type == 'lfm2':
         model_config.update(extract_lfm2_config(cfg))
@@ -398,6 +404,16 @@ def convert_hf_model_weights(model, output_dir, precision='INT8', args=None):
             except Exception as e:
                 print(f"Warning: Failed to bundle VAD weights: {e}")
 
+    if detected_model_type == 'whisper':
+        cloud_precision = "FP16" if precision in ("INT8", "INT4") else precision
+        print("Bundling Whisper cloud_handoff weights...")
+        if bundle_whisper_cloud_handoff_weights(
+            output_dir=output_dir,
+            precision=cloud_precision,
+            args=args,
+        ):
+            print("Whisper cloud_handoff weights bundled successfully")
+
     return model_config
 
 
@@ -549,3 +565,87 @@ def convert_cloud_handoff_weights(state_dict, output_dir, precision="FP16", args
 
     print_quantization_summary(quantization_stats, args)
     return config
+
+
+def bundle_whisper_cloud_handoff_weights(output_dir, precision="FP16", args=None):
+    """Download and bundle Whisper cloud_handoff sidecar weights."""
+    if snapshot_download is None or load_file is None:
+        print("Warning: huggingface_hub/safetensors missing, skipping cloud_handoff bundling")
+        return False
+
+    repo_id = "Cactus-Compute/whisper-cloud-handoff"
+
+    snapshot_kwargs = {
+        "repo_id": repo_id,
+        "repo_type": "model",
+        "allow_patterns": [
+            "classifier_head.safetensors",
+            "classifier_meta.json",
+            "classifier_features.json",
+            "feature_stats.safetensors",
+        ],
+    }
+    if args is not None:
+        token = getattr(args, "token", None)
+        cache_dir = getattr(args, "cache_dir", None)
+        revision = getattr(args, "revision", None)
+        if token:
+            snapshot_kwargs["token"] = token
+        if cache_dir:
+            snapshot_kwargs["cache_dir"] = cache_dir
+        if revision:
+            snapshot_kwargs["revision"] = revision
+
+    try:
+        local_dir = Path(snapshot_download(**snapshot_kwargs))
+    except Exception as e:
+        print(f"Warning: Failed to download cloud_handoff repo {repo_id}: {e}")
+        return False
+
+    head_path = local_dir / "classifier_head.safetensors"
+    if not head_path.exists():
+        print(f"Warning: Missing classifier_head.safetensors in {repo_id}, skipping")
+        return False
+
+    state_dict = {}
+    try:
+        state_dict.update(load_file(str(head_path)))
+    except Exception as e:
+        print(f"Warning: Failed to load cloud_handoff head from {repo_id}: {e}")
+        return False
+
+    stats_path = local_dir / "feature_stats.safetensors"
+    if stats_path.exists():
+        try:
+            state_dict.update(load_file(str(stats_path)))
+        except Exception as e:
+            print(f"Warning: Failed to load cloud_handoff feature stats from {repo_id}: {e}")
+            return False
+
+    meta = {}
+    meta_path = local_dir / "classifier_meta.json"
+    if meta_path.exists():
+        try:
+            meta = json.loads(meta_path.read_text())
+        except Exception:
+            print("Warning: Could not parse classifier_meta.json for cloud_handoff; continuing")
+
+    cloud_handoff_output_dir = Path(output_dir) / "cloud_handoff"
+    try:
+        convert_cloud_handoff_weights(
+            state_dict=state_dict,
+            output_dir=cloud_handoff_output_dir,
+            precision=precision,
+            args=args,
+            meta=meta,
+        )
+    except Exception as e:
+        print(f"Warning: Failed to convert cloud_handoff weights from {repo_id}: {e}")
+        return False
+
+    for filename in ("classifier_meta.json", "classifier_features.json"):
+        src = local_dir / filename
+        if src.exists():
+            shutil.copy2(src, cloud_handoff_output_dir / filename)
+
+    return True

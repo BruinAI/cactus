@@ -163,7 +163,8 @@ def cmd_download(args):
     if "cloud-handoff" in model_id.lower() or "cloud_handoff" in model_id.lower():
         print_color(
             RED,
-            "Cloud Handoff repos are not LLM checkpoints. Use: cactus convert-cloud-handoff <repo>",
+            "Cloud Handoff repos are sidecar classifiers. Convert a Whisper model; "
+            "cloud_handoff is bundled automatically.",
         )
         return 1
 
@@ -1475,104 +1476,6 @@ def cmd_convert(args):
             shutil.rmtree(temp_merged_dir)
 
 
-def cmd_convert_cloud_handoff(args):
-    """Convert a Cloud Handoff classifier repo into Cactus format."""
-    try:
-        from huggingface_hub import snapshot_download
-        from safetensors.torch import load_file
-    except ImportError:
-        print_color(RED, "Error: Required Python packages not found.")
-        print("Install with: pip install huggingface_hub safetensors torch")
-        return 1
-
-    from .converter import convert_cloud_handoff_weights
-
-    repo_id = args.repo_id
-    output_dir = Path(args.output_dir) if args.output_dir is not None else None
-
-    snapshot_kwargs = {
-        "repo_id": repo_id,
-        "repo_type": "model",
-        "allow_patterns": [
-            "classifier_head.safetensors",
-            "classifier_meta.json",
-            "classifier_features.json",
-            "feature_stats.safetensors",
-        ],
-    }
-    if getattr(args, "token", None):
-        snapshot_kwargs["token"] = args.token
-    if getattr(args, "revision", None):
-        snapshot_kwargs["revision"] = args.revision
-    if getattr(args, "cache_dir", None):
-        snapshot_kwargs["cache_dir"] = args.cache_dir
-
-    print_color(YELLOW, f"Downloading Cloud Handoff artifacts from {repo_id}...")
-    try:
-        local_dir = Path(snapshot_download(**snapshot_kwargs))
-    except Exception as e:
-        print_color(RED, f"Error downloading model artifacts: {e}")
-        return 1
-
-    head_path = local_dir / "classifier_head.safetensors"
-    if not head_path.exists():
-        print_color(RED, "Error: classifier_head.safetensors not found in repo.")
-        return 1
-
-    state_dict = {}
-    try:
-        state_dict.update(load_file(str(head_path)))
-    except Exception as e:
-        print_color(RED, f"Error loading classifier head: {e}")
-        return 1
-
-    stats_path = local_dir / "feature_stats.safetensors"
-    if stats_path.exists():
-        try:
-            state_dict.update(load_file(str(stats_path)))
-        except Exception as e:
-            print_color(RED, f"Error loading feature stats: {e}")
-            return 1
-
-    meta = {}
-    meta_path = local_dir / "classifier_meta.json"
-    if meta_path.exists():
-        try:
-            meta = json.loads(meta_path.read_text())
-        except Exception:
-            print_color(YELLOW, "Warning: Could not parse classifier_meta.json; continuing.")
-
-    if output_dir is None:
-        base_model_id = meta.get("base_model_id") if isinstance(meta, dict) else None
-        if isinstance(base_model_id, str) and base_model_id.strip():
-            output_dir = get_weights_dir(base_model_id) / "cloud_handoff"
-        else:
-            output_dir = get_weights_dir(repo_id)
-        print_color(BLUE, f"Using output directory: {output_dir}")
-
-    output_dir.mkdir(parents=True, exist_ok=True)
-
-    try:
-        config = convert_cloud_handoff_weights(
-            state_dict=state_dict,
-            output_dir=output_dir,
-            precision=args.precision,
-            args=args,
-            meta=meta,
-        )
-    except Exception as e:
-        print_color(RED, f"Error converting Cloud Handoff weights: {e}")
-        return 1
-
-    for filename in ("classifier_meta.json", "classifier_features.json"):
-        src = local_dir / filename
-        if src.exists():
-            shutil.copy2(src, output_dir / filename)
-
-    print_color(GREEN, f"Cloud Handoff conversion complete: {output_dir}")
-    return 0
-
-
 def create_parser():
     """Create the argument parser with all subcommands."""
     parser = argparse.ArgumentParser(
@@ -1639,16 +1542,6 @@ def create_parser():
     --precision INT4|INT8|FP16   quantization (default: INT8)
     --lora <path>                      LoRA adapter path to merge
     --token <token>                    HuggingFace API token
-
-  -----------------------------------------------------------------
-
-  cactus convert-cloud-handoff <repo> [output_dir]
-                                       converts cloud handoff classifier weights
-
-    Optional flags:
-    --precision INT4|INT8|FP16         quantization (default: FP16)
-    --token <token>                    HuggingFace API token
-    --revision <tag/sha>               optional HF revision
 
   -----------------------------------------------------------------
 
@@ -1826,19 +1719,6 @@ def create_parser():
     convert_parser.add_argument('--token', help='HuggingFace API token')
     convert_parser.add_argument('--lora', help='Path to LoRA adapter (local path or HuggingFace ID) to merge before conversion')
 
-    cloud_handoff_parser = subparsers.add_parser(
-        'convert-cloud-handoff',
-        help='Convert Cloud Handoff classifier repo to Cactus weights',
-    )
-    cloud_handoff_parser.add_argument('repo_id', help='HuggingFace model repo ID')
-    cloud_handoff_parser.add_argument('output_dir', nargs='?', default=None,
-                                      help='Output directory (default: weights/<base_model>/cloud_handoff)')
-    cloud_handoff_parser.add_argument('--precision', choices=['INT4', 'INT8', 'FP16'], default='FP16',
-                                      help='Quantization precision (default: FP16)')
-    cloud_handoff_parser.add_argument('--cache-dir', help='Cache directory for HuggingFace models')
-    cloud_handoff_parser.add_argument('--token', help='HuggingFace API token')
-    cloud_handoff_parser.add_argument('--revision', help='Model revision (branch, tag, or commit SHA)')
-
     return parser
 
 
@@ -1880,8 +1760,6 @@ def main():
         sys.exit(cmd_clean(args))
     elif args.command == 'convert':
         sys.exit(cmd_convert(args))
-    elif args.command == 'convert-cloud-handoff':
-        sys.exit(cmd_convert_cloud_handoff(args))
     else:
         parser.print_help()
         sys.exit(1)
