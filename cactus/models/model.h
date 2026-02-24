@@ -928,12 +928,17 @@ private:
     size_t last_token_count_ = 0;
 };
 
-class WhisperCloudHandoffModel {
+class WhisperCloudHandoffModel : public Model {
 public:
-    WhisperCloudHandoffModel() = default;
-    ~WhisperCloudHandoffModel() = default;
+    using Model::init;
 
-    bool init(const std::string& model_folder, std::string* error = nullptr);
+    WhisperCloudHandoffModel();
+    explicit WhisperCloudHandoffModel(const Config& config);
+    ~WhisperCloudHandoffModel() override;
+
+    bool init(const std::string& model_folder, size_t context_size = 0,
+              const std::string& system_prompt = "", bool do_warmup = false) override;
+    bool init(const std::string& model_folder, std::string* error);
     bool ready() const { return initialized_; }
 
     const std::vector<std::string>& feature_names() const { return feature_names_; }
@@ -943,22 +948,57 @@ public:
 
     float predict_probability(const std::vector<float>& features) const;
     bool predict_handoff(const std::vector<float>& features, float* out_probability = nullptr) const;
+    bool predict_handoff_from_audio(
+        const std::vector<float>& waveform_features,
+        const std::vector<float>& encoder_mean_features,
+        const AudioProcessor::SpectrogramConfig& spectrogram_config,
+        bool* out_handoff,
+        float* out_probability = nullptr,
+        std::string* error = nullptr) const;
+
+protected:
+    size_t build_attention(CactusGraph*, size_t, uint32_t, ComputeBackend, bool, size_t) override {
+        throw std::runtime_error("WhisperCloudHandoffModel: build_attention unused");
+    }
+
+    size_t build_mlp(CactusGraph*, size_t, uint32_t, ComputeBackend) const override {
+        throw std::runtime_error("WhisperCloudHandoffModel: build_mlp unused");
+    }
+
+    size_t build_transformer_block(CactusGraph*, size_t, uint32_t, ComputeBackend, bool, size_t) override {
+        throw std::runtime_error("WhisperCloudHandoffModel: build_transformer_block unused");
+    }
+
+    size_t forward(const std::vector<uint32_t>&, bool = false) override {
+        throw std::runtime_error("WhisperCloudHandoffModel: forward unused");
+    }
+
+    size_t forward(const std::vector<float>& audio_features, const std::vector<uint32_t>& tokens, bool use_cache = false) override;
+
+    void load_weights_to_graph(CactusGraph* gb) override;
 
 private:
-    static float gelu_tanh(float x);
     static bool parse_json_float(const std::string& json, const std::string& key, float& out_value);
-    static bool parse_json_string(const std::string& json, const std::string& key, std::string& out_value);
-
-    bool load_tensor_f32(
-        const std::string& path,
-        std::vector<float>& out_data,
-        std::vector<size_t>& out_shape,
-        std::string* error);
+    void build_graph();
 
     void set_error(std::string* error, const std::string& message) const;
 
-    bool initialized_ = false;
-    std::string activation_ = "relu";
+    struct HandoffWeightNodes {
+        size_t fc1_weight = 0;
+        size_t fc1_bias = 0;
+        size_t fc2_weight = 0;
+        size_t fc2_bias = 0;
+        size_t norm_mean = 0;
+        size_t norm_std = 0;
+    } weight_nodes_;
+
+    struct HandoffGraphNodes {
+        size_t input = 0;
+        size_t output = 0;
+    } graph_nodes_;
+
+    mutable CactusGraph graph_;
+
     float threshold_ = 0.5f;
     float high_freq_cutoff_hz_ = 3000.0f;
 
@@ -966,13 +1006,6 @@ private:
     size_t hidden_dim_ = 0;
     size_t output_dim_ = 0;
 
-    std::vector<float> fc1_weight_;  // [hidden_dim, input_dim]
-    std::vector<float> fc1_bias_;    // [hidden_dim]
-    std::vector<float> fc2_weight_;  // [output_dim, hidden_dim]
-    std::vector<float> fc2_bias_;    // [output_dim]
-
-    std::vector<float> feature_mean_;
-    std::vector<float> feature_std_;
     std::vector<std::string> feature_names_;
 };
 
