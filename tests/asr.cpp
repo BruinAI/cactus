@@ -213,7 +213,6 @@ int transcribe_file(cactus_model_t model, const std::string& audio_path, const s
 
     std::string json_str(response_buffer.data());
     bool cloud_handoff = json_str.find("\"cloud_handoff\":true") != std::string::npos;
-    bool classifier_used = json_str.find("\"cloud_handoff_classifier_used\":true") != std::string::npos;
     std::string classifier_prob = extract_json_number(json_str, "cloud_handoff_classifier_prob");
 
     std::string time_str;
@@ -236,10 +235,7 @@ int transcribe_file(cactus_model_t model, const std::string& audio_path, const s
     stats << "\n" << colored("[cloud_handoff: ", Color::GRAY)
           << (cloud_handoff ? colored("true", Color::YELLOW) : colored("false", Color::GREEN))
           << colored("]", Color::GRAY);
-    stats << "\n" << colored("[cloud_handoff_classifier_used: ", Color::GRAY)
-          << (classifier_used ? colored("true", Color::CYAN) : colored("false", Color::GRAY))
-          << colored("]", Color::GRAY);
-    if (classifier_used && !classifier_prob.empty()) {
+    if (!classifier_prob.empty()) {
         stats << "\n" << colored("[cloud_handoff_classifier_prob: ", Color::GRAY)
               << colored(classifier_prob, Color::CYAN)
               << colored("]", Color::GRAY);

@@ -648,7 +648,7 @@ inline std::string construct_response_json(const std::string& regular_response,
                                            size_t completion_tokens,
                                            float confidence = 0.0f,
                                            bool cloud_handoff = false,
-                                           bool cloud_handoff_classifier_used = false,
+                                           bool cloud_handoff_classifier_ran = false,
                                            float cloud_handoff_classifier_prob = 0.0f) {
     std::ostringstream json;
     json << "{";
@@ -663,9 +663,8 @@ inline std::string construct_response_json(const std::string& regular_response,
     }
     json << "],";
     json << "\"confidence\":" << std::fixed << std::setprecision(4) << confidence << ",";
-    json << "\"cloud_handoff_classifier_used\":" << (cloud_handoff_classifier_used ? "true" : "false") << ",";
     json << "\"cloud_handoff_classifier_prob\":";
-    if (cloud_handoff_classifier_used) {
+    if (cloud_handoff_classifier_ran) {
         json << std::scientific << std::setprecision(6) << cloud_handoff_classifier_prob << ",";
         json << std::fixed;
     } else {

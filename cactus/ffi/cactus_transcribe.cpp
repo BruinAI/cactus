@@ -104,7 +104,6 @@ int cactus_transcribe(
         size_t top_k, max_tokens, tool_rag_top_k;
         std::vector<std::string> stop_sequences;
         bool force_tools, include_stop_sequences, use_vad, telemetry_enabled;
-        bool require_cloud_handoff = false;
         bool use_cloud_handoff_classifier = true;
         float cloud_handoff_threshold = handle->model->get_config().default_cloud_handoff_threshold;
         const std::string opts = options_json ? options_json : "";
@@ -124,16 +123,6 @@ int cactus_transcribe(
                     try {
                         cloud_handoff_threshold = std::stof(opts.substr(pos));
                     } catch (...) {}
-                }
-            }
-
-            pos = opts.find("\"require_cloud_handoff\"");
-            if (pos != std::string::npos) {
-                pos = opts.find(':', pos);
-                if (pos != std::string::npos) {
-                    ++pos;
-                    while (pos < opts.size() && std::isspace(static_cast<unsigned char>(opts[pos]))) ++pos;
-                    require_cloud_handoff = (opts.substr(pos, 4) == "true");
                 }
             }
 
@@ -167,13 +156,6 @@ int cactus_transcribe(
                 CACTUS_LOG_WARN("cloud_handoff", "Cloud handoff classifier currently supports Whisper path only");
             } else {
                 CACTUS_LOG_WARN("cloud_handoff", "Cloud handoff sidecar not loaded; classifier gate disabled");
-            }
-            if (require_cloud_handoff) {
-                const std::string err = "require_cloud_handoff=true but cloud_handoff classifier is unavailable";
-                CACTUS_LOG_ERROR("cloud_handoff", err);
-                handle_error_response(err, response_buffer, buffer_size);
-                cactus::telemetry::recordTranscription(handle->model_name.c_str(), false, 0.0, 0.0, 0.0, 0, err.c_str());
-                return -1;
             }
         }
 
@@ -227,9 +209,8 @@ int cactus_transcribe(
         }
 
         std::vector<float> waveform_features = audio_buffer;
-        const AudioProcessor::SpectrogramConfig whisper_spectrogram_cfg = get_whisper_spectrogram_config();
-
         if (!is_moonshine) {
+            const AudioProcessor::SpectrogramConfig whisper_spectrogram_cfg = get_whisper_spectrogram_config();
             AudioProcessor ap;
             ap.init_mel_filters(whisper_spectrogram_cfg.n_fft / 2 + 1, 80, 0.0f, 8000.0f, WHISPER_SAMPLE_RATE);
             std::vector<float> mel = ap.compute_spectrogram(audio_buffer, whisper_spectrogram_cfg);
@@ -247,7 +228,7 @@ int cactus_transcribe(
 
         float cloud_handoff_classifier_prob = 0.0f;
         bool cloud_handoff_classifier_fire = false;
-        bool cloud_handoff_classifier_used = false;
+        bool cloud_handoff_classifier_ran = false;
         std::vector<float> encoder_mean_features;
         if (use_cloud_handoff_model) {
             try {
@@ -256,13 +237,6 @@ int cactus_transcribe(
                 std::string cloud_handoff_error = "failed to compute encoder mean features: " + std::string(e.what());
                 CACTUS_LOG_WARN("cloud_handoff", "Failed to run cloud_handoff classifier: " << cloud_handoff_error);
                 use_cloud_handoff_model = false;
-                if (require_cloud_handoff) {
-                    const std::string err = "require_cloud_handoff=true but failed to run cloud_handoff classifier";
-                    CACTUS_LOG_ERROR("cloud_handoff", err << ": " << cloud_handoff_error);
-                    handle_error_response(err, response_buffer, buffer_size);
-                    cactus::telemetry::recordTranscription(handle->model_name.c_str(), false, 0.0, 0.0, 0.0, 0, err.c_str());
-                    return -1;
-                }
             }
         }
 
@@ -271,34 +245,19 @@ int cactus_transcribe(
             if (!cloud_handoff_model->predict_handoff_from_audio(
                     waveform_features,
                     encoder_mean_features,
-                    whisper_spectrogram_cfg,
                     &cloud_handoff_classifier_fire,
                     &cloud_handoff_classifier_prob,
                     &cloud_handoff_error)) {
                 CACTUS_LOG_WARN("cloud_handoff", "Failed to run cloud_handoff classifier: " << cloud_handoff_error);
                 use_cloud_handoff_model = false;
-                if (require_cloud_handoff) {
-                    const std::string err = "require_cloud_handoff=true but failed to run cloud_handoff classifier";
-                    CACTUS_LOG_ERROR("cloud_handoff", err << ": " << cloud_handoff_error);
-                    handle_error_response(err, response_buffer, buffer_size);
-                    cactus::telemetry::recordTranscription(handle->model_name.c_str(), false, 0.0, 0.0, 0.0, 0, err.c_str());
-                    return -1;
-                }
             } else {
-                cloud_handoff_classifier_used = true;
+                cloud_handoff_classifier_ran = true;
                 CACTUS_LOG_DEBUG(
                     "cloud_handoff",
                     "classifier_prob=" << cloud_handoff_classifier_prob
                         << ", threshold=" << cloud_handoff_model->threshold()
                         << ", fire=" << (cloud_handoff_classifier_fire ? "true" : "false"));
             }
-        }
-        if (require_cloud_handoff && !cloud_handoff_classifier_used) {
-            const std::string err = "require_cloud_handoff=true but classifier inference did not run";
-            CACTUS_LOG_ERROR("cloud_handoff", err);
-            handle_error_response(err, response_buffer, buffer_size);
-            cactus::telemetry::recordTranscription(handle->model_name.c_str(), false, 0.0, 0.0, 0.0, 0, err.c_str());
-            return -1;
         }
 
         auto* tokenizer = handle->model->get_tokenizer();
@@ -439,7 +398,7 @@ int cactus_transcribe(
             completion_tokens,
             confidence,
             cloud_handoff,
-            cloud_handoff_classifier_used,
+            cloud_handoff_classifier_ran,
             cloud_handoff_classifier_prob);
 
         if (json.size() >= buffer_size) {

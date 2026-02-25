@@ -494,8 +494,6 @@ def convert_cloud_handoff_weights(state_dict, output_dir, precision="FP16", args
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    quantization_stats = create_quantization_stats()
-
     required = {"classifier.fc1.weight", "classifier.fc2.weight"}
     missing = [name for name in required if name not in state_dict]
     if missing:
