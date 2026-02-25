@@ -56,8 +56,8 @@ def convert_hf_model_weights(model, output_dir, precision='INT8', args=None):
 
     if normalized_model_type in {'cloud_handoff', 'moonshine_cloud_handoff'} or detected_model_type == 'cloud_handoff':
         raise ValueError(
-            "cloud_handoff is not an LLM checkpoint. Convert a Whisper model instead; "
-            "Whisper conversion bundles cloud_handoff automatically."
+            "cloud-handoff is not an LLM checkpoint. Convert a Whisper model instead; "
+            "Whisper conversion bundles cloud-handoff automatically."
         )
     elif detected_model_type == 'lfm2':
         model_config.update(extract_lfm2_config(cfg))
@@ -401,13 +401,13 @@ def convert_hf_model_weights(model, output_dir, precision='INT8', args=None):
 
     if detected_model_type == 'whisper':
         cloud_precision = "FP16" if precision in ("INT8", "INT4") else precision
-        print("Bundling Whisper cloud_handoff weights...")
+        print("Bundling Whisper cloud-handoff weights...")
         if bundle_whisper_cloud_handoff_weights(
             output_dir=output_dir,
             precision=cloud_precision,
             args=args,
         ):
-            print("Whisper cloud_handoff weights bundled successfully")
+            print("Whisper cloud-handoff weights bundled successfully")
 
     return model_config
 
@@ -529,8 +529,8 @@ def convert_cloud_handoff_weights(state_dict, output_dir, precision="FP16", args
     fc2 = state_dict["classifier.fc2.weight"]
 
     config = {
-        "model_type": "cloud_handoff",
-        "model_variant": "cloud_handoff",
+        "model_type": "cloud-handoff",
+        "model_variant": "cloud-handoff",
         "num_layers": 0,
         "tie_word_embeddings": False,
         "cloud_handoff_enabled": True,
@@ -563,9 +563,9 @@ def convert_cloud_handoff_weights(state_dict, output_dir, precision="FP16", args
 
 
 def bundle_whisper_cloud_handoff_weights(output_dir, precision="FP16", args=None):
-    """Download and bundle Whisper cloud_handoff sidecar weights."""
+    """Download and bundle Whisper cloud-handoff sidecar weights."""
     if snapshot_download is None or load_file is None:
-        print("Warning: huggingface_hub/safetensors missing, skipping cloud_handoff bundling")
+        print("Warning: huggingface_hub/safetensors missing, skipping cloud-handoff bundling")
         return False
 
     repo_id = "Cactus-Compute/whisper-cloud-handoff"
@@ -594,7 +594,7 @@ def bundle_whisper_cloud_handoff_weights(output_dir, precision="FP16", args=None
     try:
         local_dir = Path(snapshot_download(**snapshot_kwargs))
     except Exception as e:
-        print(f"Warning: Failed to download cloud_handoff repo {repo_id}: {e}")
+        print(f"Warning: Failed to download cloud-handoff repo {repo_id}: {e}")
         return False
 
     head_path = local_dir / "classifier_head.safetensors"
@@ -606,7 +606,7 @@ def bundle_whisper_cloud_handoff_weights(output_dir, precision="FP16", args=None
     try:
         state_dict.update(load_file(str(head_path)))
     except Exception as e:
-        print(f"Warning: Failed to load cloud_handoff head from {repo_id}: {e}")
+        print(f"Warning: Failed to load cloud-handoff head from {repo_id}: {e}")
         return False
 
     stats_path = local_dir / "feature_stats.safetensors"
@@ -614,7 +614,7 @@ def bundle_whisper_cloud_handoff_weights(output_dir, precision="FP16", args=None
         try:
             state_dict.update(load_file(str(stats_path)))
         except Exception as e:
-            print(f"Warning: Failed to load cloud_handoff feature stats from {repo_id}: {e}")
+            print(f"Warning: Failed to load cloud-handoff feature stats from {repo_id}: {e}")
             return False
 
     meta = {}
@@ -623,9 +623,9 @@ def bundle_whisper_cloud_handoff_weights(output_dir, precision="FP16", args=None
         try:
             meta = json.loads(meta_path.read_text())
         except Exception:
-            print("Warning: Could not parse classifier_meta.json for cloud_handoff; continuing")
+            print("Warning: Could not parse classifier_meta.json for cloud-handoff; continuing")
 
-    cloud_handoff_output_dir = Path(output_dir) / "cloud_handoff"
+    cloud_handoff_output_dir = Path(output_dir) / "cloud-handoff"
     try:
         convert_cloud_handoff_weights(
             state_dict=state_dict,
@@ -635,7 +635,7 @@ def bundle_whisper_cloud_handoff_weights(output_dir, precision="FP16", args=None
             meta=meta,
         )
     except Exception as e:
-        print(f"Warning: Failed to convert cloud_handoff weights from {repo_id}: {e}")
+        print(f"Warning: Failed to convert cloud-handoff weights from {repo_id}: {e}")
         return False
 
     for filename in ("classifier_meta.json", "classifier_features.json"):

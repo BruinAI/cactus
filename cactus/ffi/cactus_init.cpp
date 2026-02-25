@@ -416,7 +416,7 @@ cactus_model_t cactus_init(const char* model_path, const char* corpus_dir, bool 
                 return nullptr;
             }
 
-            const std::string cloud_handoff_path = model_path_str + "/cloud_handoff";
+            const std::string cloud_handoff_path = model_path_str + "/cloud-handoff";
             if (std::filesystem::exists(cloud_handoff_path) && std::filesystem::is_directory(cloud_handoff_path)) {
                 std::unique_ptr<Model> sidecar_base_model = create_model(cloud_handoff_path);
                 if (sidecar_base_model != nullptr) {
@@ -426,7 +426,7 @@ cactus_model_t cactus_init(const char* model_path, const char* corpus_dir, bool 
                     } else {
                         CACTUS_LOG_WARN(
                             "init",
-                            "cloud_handoff create_model() returned non-sidecar model; falling back to direct loader");
+                            "cloud-handoff create_model() returned non-sidecar model; falling back to direct loader");
                     }
                 }
                 if (!handle->cloud_handoff_model) {
@@ -434,12 +434,12 @@ cactus_model_t cactus_init(const char* model_path, const char* corpus_dir, bool 
                 }
                 std::string cloud_handoff_error;
                 if (!handle->cloud_handoff_model->init(cloud_handoff_path, &cloud_handoff_error)) {
-                    last_error_message = "Failed to initialize cloud_handoff model at " + cloud_handoff_path + ": " + cloud_handoff_error;
+                    last_error_message = "Failed to initialize cloud-handoff model at " + cloud_handoff_path + ": " + cloud_handoff_error;
                     CACTUS_LOG_ERROR("init", last_error_message);
                     delete handle;
                     return nullptr;
                 }
-                CACTUS_LOG_INFO("init", "Loaded cloud_handoff sidecar model from: " << cloud_handoff_path);
+                CACTUS_LOG_INFO("init", "Loaded cloud-handoff sidecar model from: " << cloud_handoff_path);
             }
         }
 

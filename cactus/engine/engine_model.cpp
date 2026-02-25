@@ -477,7 +477,7 @@ bool Config::from_json(const std::string& config_path) {
             else if (value == "whisper" || value == "WHISPER") model_type = ModelType::WHISPER;
             else if (value == "moonshine" || value == "MOONSHINE") model_type = ModelType::MOONSHINE;
             else if (value == "silero_vad" || value == "SILERO_VAD") model_type = ModelType::SILERO_VAD;
-            else if (value == "cloud_handoff" || value == "CLOUD_HANDOFF" || value == "cloud-handoff" || value == "CLOUD-HANDOFF") model_type = ModelType::CLOUD_HANDOFF;
+            else if (value == "cloud-handoff" || value == "CLOUD-HANDOFF") model_type = ModelType::CLOUD_HANDOFF;
             else model_type = ModelType::QWEN;
         }
         else if (key == "model_variant") {
