@@ -506,7 +506,6 @@ def convert_cloud_handoff_weights(state_dict, output_dir, precision="FP16", args
                 output_dir / save_name,
                 precision=precision,
                 transpose=False,
-                stats_tracker=quantization_stats,
                 args=args,
                 model_type="cloud_handoff",
             )
@@ -516,9 +515,8 @@ def convert_cloud_handoff_weights(state_dict, output_dir, precision="FP16", args
             save_tensor_with_header(
                 state_dict[name],
                 output_dir / save_name,
-                precision="FP32",
+                precision=precision,
                 transpose=False,
-                stats_tracker=quantization_stats,
                 args=args,
                 model_type="cloud_handoff",
             )
@@ -556,7 +554,6 @@ def convert_cloud_handoff_weights(state_dict, output_dir, precision="FP16", args
         for key, value in config.items():
             f.write(f"{key}={format_config_value(value)}\n")
 
-    print_quantization_summary(quantization_stats, args)
     return config
 
 
