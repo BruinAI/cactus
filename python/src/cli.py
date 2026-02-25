@@ -160,7 +160,8 @@ def cmd_download(args):
     """Download model weights. By default downloads pre-converted weights from Cactus-Compute."""
     model_id = args.model_id
 
-    if "cloud-handoff" in model_id.lower() or "cloud_handoff" in model_id.lower():
+    normalized_model_id = model_id.lower().replace("-", "_")
+    if "cloud_handoff" in normalized_model_id:
         print_color(
             RED,
             "Cloud Handoff repos are sidecar classifiers. Convert a Whisper model; "

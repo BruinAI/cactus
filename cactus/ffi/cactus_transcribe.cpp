@@ -159,8 +159,7 @@ int cactus_transcribe(
         WhisperCloudHandoffModel* cloud_handoff_model = handle->cloud_handoff_model.get();
         bool use_cloud_handoff_model = (!is_moonshine &&
                                         use_cloud_handoff_classifier &&
-                                        cloud_handoff_model != nullptr &&
-                                        cloud_handoff_model->ready());
+                                        cloud_handoff_model != nullptr);
         if (!use_cloud_handoff_model) {
             if (!use_cloud_handoff_classifier) {
                 CACTUS_LOG_INFO("cloud_handoff", "Cloud handoff classifier disabled by use_cloud_handoff_classifier=false");
@@ -419,11 +418,14 @@ int cactus_transcribe(
             cleaned_text.erase(0, 1);
         }
 
-        bool cloud_handoff = cloud_handoff_classifier_fire;
-        if (!cleaned_text.empty() && cleaned_text.length() > 5) {
-             if (cloud_handoff_threshold > 0.0f && max_token_entropy_norm > cloud_handoff_threshold) {
-                 cloud_handoff = true;
-             }
+        bool cloud_handoff = false;
+        if (use_cloud_handoff_classifier) {
+            cloud_handoff = cloud_handoff_classifier_fire;
+            if (!cleaned_text.empty() && cleaned_text.length() > 5) {
+                if (cloud_handoff_threshold > 0.0f && max_token_entropy_norm > cloud_handoff_threshold) {
+                    cloud_handoff = true;
+                }
+            }
         }
 
         std::string json = construct_response_json(

@@ -37,6 +37,7 @@ def convert_hf_model_weights(model, output_dir, precision='INT8', args=None):
     cfg = text_cfg if text_cfg is not None else config
 
     model_type_str = cfg_get(cfg, 'model_type', cfg_get(config, 'model_type', '')).lower()
+    normalized_model_type = model_type_str.replace('-', '_')
     tie_word_embeddings = cfg_get(config, 'tie_word_embeddings', None)
     if tie_word_embeddings is None:
         # HF snapshots for lfm2_moe may omit this field; runtime expects tied embeddings by default.
@@ -53,13 +54,7 @@ def convert_hf_model_weights(model, output_dir, precision='INT8', args=None):
     if is_vlm and vision_cfg is not None:
         model_config.update(extract_vision_config(config, vision_cfg))
 
-    if model_type_str in (
-        'cloud_handoff',
-        'cloud-handoff',
-        'moonshine_cloud_handoff',
-        'moonshine-cloud-handoff',
-        'cloudhandoff',
-    ) or detected_model_type == 'cloud_handoff':
+    if normalized_model_type in {'cloud_handoff', 'moonshine_cloud_handoff'} or detected_model_type == 'cloud_handoff':
         raise ValueError(
             "cloud_handoff is not an LLM checkpoint. Convert a Whisper model instead; "
             "Whisper conversion bundles cloud_handoff automatically."

@@ -54,6 +54,7 @@ def cfg_get(c, key, default=None):
 def detect_model_type(cfg, config, output_dir=None):
     """Detect the model architecture type from config."""
     model_type_str = cfg_get(cfg, 'model_type', cfg_get(config, 'model_type', '')).lower()
+    normalized_model_type = model_type_str.replace('-', '_')
 
     if 'gemma' in model_type_str:
         return 'gemma'
@@ -61,7 +62,7 @@ def detect_model_type(cfg, config, output_dir=None):
         return 'lfm2'
     elif 'qwen' in model_type_str:
         return 'qwen'
-    elif 'cloud_handoff' in model_type_str or 'cloud-handoff' in model_type_str or 'handoff' in model_type_str:
+    elif normalized_model_type in {'cloud_handoff', 'moonshine_cloud_handoff'}:
         return 'cloud_handoff'
     elif 'moonshine' in model_type_str:
         return 'moonshine'

@@ -100,7 +100,7 @@ struct Config {
     uint32_t num_decoder_layers = 0;
     float partial_rotary_factor = 0.0f;
 
-    enum class ModelType {QWEN = 0, GEMMA = 1, NOMIC = 3, LFM2 = 5, SIGLIP2 = 6, WHISPER = 7, MOONSHINE = 8, SILERO_VAD = 9};
+    enum class ModelType {QWEN = 0, GEMMA = 1, NOMIC = 3, LFM2 = 5, SIGLIP2 = 6, WHISPER = 7, MOONSHINE = 8, SILERO_VAD = 9, CLOUD_HANDOFF = 10};
     ModelType model_type = ModelType::QWEN;
 
     enum class ModelVariant {DEFAULT = 0, VLM = 1, EXTRACT = 2, RAG = 3};
@@ -714,24 +714,6 @@ public:
         const std::vector<float>& freqs_hz,
         size_t num_frames,
         float cutoff_hz) const;
-
-    float high_freq_energy_ratio_std(
-        const std::vector<float>& stft_power,
-        const std::vector<float>& freqs_hz,
-        size_t num_frames,
-        float cutoff_hz) const;
-
-    float spectral_flatness_mean(
-        const std::vector<float>& stft_power,
-        size_t num_frames) const;
-
-    float spectral_flatness_std(
-        const std::vector<float>& stft_power,
-        size_t num_frames) const;
-
-    float spectral_entropy_mean(
-        const std::vector<float>& stft_power,
-        size_t num_frames) const;
 
     float spectral_entropy_std(
         const std::vector<float>& stft_power,
