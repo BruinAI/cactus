@@ -29,6 +29,34 @@ size_t tensor_numel(const std::vector<size_t>& shape) {
     return count;
 }
 
+constexpr int kCloudHandoffSampleRate = 16000;
+constexpr size_t kOverlapNfft = 512;
+constexpr size_t kOverlapHopLength = 128;
+constexpr size_t kOverlapFrameLength = 512;
+constexpr size_t kNoiseNfft = 1024;
+constexpr size_t kNoiseHopLength = 256;
+constexpr size_t kNoiseFrameLength = 1024;
+
+void compute_noise_stft_power(
+    const AudioProcessor& audio_processor,
+    const std::vector<float>& waveform,
+    std::vector<float>& stft_power,
+    std::vector<float>& stft_freqs_hz,
+    size_t& stft_num_frames) {
+
+    AudioProcessor::SpectrogramConfig cfg;
+    cfg.n_fft = kNoiseNfft;
+    cfg.hop_length = kNoiseHopLength;
+    cfg.frame_length = kNoiseFrameLength;
+    audio_processor.compute_stft_power(
+        waveform,
+        kCloudHandoffSampleRate,
+        cfg,
+        stft_power,
+        stft_freqs_hz,
+        stft_num_frames);
+}
+
 } // namespace
 
 WhisperCloudHandoffModel::WhisperCloudHandoffModel() : Model() {}
@@ -269,7 +297,6 @@ bool WhisperCloudHandoffModel::predict_handoff(const std::vector<float>& feature
 bool WhisperCloudHandoffModel::predict_handoff_from_audio(
     const std::vector<float>& waveform_features,
     const std::vector<float>& encoder_mean_features,
-    const AudioProcessor::SpectrogramConfig& spectrogram_config,
     bool* out_handoff,
     float* out_probability,
     std::string* error) const {
@@ -292,7 +319,6 @@ bool WhisperCloudHandoffModel::predict_handoff_from_audio(
         return false;
     }
 
-    constexpr int kSampleRate = 16000;
     float overlap_pitch_lag_cv = 0.0f;
     float overlap_spectral_peak_spacing_cv_mean = 0.0f;
     float overlap_yin_conf_p95 = 0.0f;
@@ -300,18 +326,29 @@ bool WhisperCloudHandoffModel::predict_handoff_from_audio(
     float noise_spectral_entropy_std = 0.0f;
 
     AudioProcessor feature_ap;
-    overlap_pitch_lag_cv = feature_ap.overlap_pitch_lag_cv(waveform_features, kSampleRate);
+    overlap_pitch_lag_cv = feature_ap.overlap_pitch_lag_cv(
+        waveform_features,
+        kCloudHandoffSampleRate,
+        kOverlapFrameLength,
+        kOverlapHopLength);
     overlap_spectral_peak_spacing_cv_mean = feature_ap.overlap_spectral_peak_spacing_cv_mean(
-        waveform_features, kSampleRate);
-    overlap_yin_conf_p95 = feature_ap.overlap_yin_conf_p95(waveform_features, kSampleRate);
+        waveform_features,
+        kCloudHandoffSampleRate,
+        kOverlapFrameLength,
+        kOverlapHopLength,
+        kOverlapNfft);
+    overlap_yin_conf_p95 = feature_ap.overlap_yin_conf_p95(
+        waveform_features,
+        kCloudHandoffSampleRate,
+        kOverlapFrameLength,
+        kOverlapHopLength);
 
     std::vector<float> stft_power;
     std::vector<float> stft_freqs_hz;
     size_t stft_num_frames = 0;
-    feature_ap.compute_stft_power(
+    compute_noise_stft_power(
+        feature_ap,
         waveform_features,
-        kSampleRate,
-        spectrogram_config,
         stft_power,
         stft_freqs_hz,
         stft_num_frames);

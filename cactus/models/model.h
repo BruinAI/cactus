@@ -951,7 +951,6 @@ public:
     bool predict_handoff_from_audio(
         const std::vector<float>& waveform_features,
         const std::vector<float>& encoder_mean_features,
-        const AudioProcessor::SpectrogramConfig& spectrogram_config,
         bool* out_handoff,
         float* out_probability = nullptr,
         std::string* error = nullptr) const;
